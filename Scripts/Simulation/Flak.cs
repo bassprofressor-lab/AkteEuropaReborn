@@ -85,6 +85,11 @@ public partial class MapEntityLayer
     /// 4 (Startvorgang).</summary>
     public static bool FlakUkAlt;
 
+    /// <summary>⭐⭐ 20.09.2026 — <c>--flak-drehung-alt</c>: eine nachladende
+    /// Flak dreht sich NICHT mit, wie bis zum 20.09. Darunter MUSS
+    /// <see cref="FlakDrehungOhneSchuss"/> auf 0 fallen.</summary>
+    public static bool FlakDrehungAlt;
+
     /// <summary><c>--flak-treffer-aus</c> — Aufträge werden angelegt, aber nie
     /// abgearbeitet. Damit ist der Kegel (Stück 1) OHNE die Station (Stück 3)
     /// messbar: <c>Aufträge &gt; 0</c> bei <c>Schüsse 0</c>.</summary>
@@ -112,6 +117,29 @@ public partial class MapEntityLayer
     // oder dass gar keine Flak steht — und das sind drei verschiedene Befunde.
     public int FlakAuftraege, FlakSchuesse, FlakAbschuesse, FlakNegativSchaden;
     public int FlakKegelProben, FlakRingTreffer;
+
+    /// <summary>Wie oft ein Rohr gedreht wurde, und wie oft davon OHNE einen
+    /// Auftrag anzulegen — das ist der sichtbare Unterschied: die Flak zuckt
+    /// dem Flieger nach, waehrend sie nachlaedt.</summary>
+    public int FlakGedreht, FlakDrehungOhneSchuss;
+
+    /// <summary>⭐⭐ 20.09.2026 — <b>DER ABGLEICH DER SCHUSSFOLGE</b> mit den drei
+    /// gelesenen Zahlen. Bis heute stand im STATUS »unsere Kette liefert
+    /// 8 Auftraege / 27 Schuesse / 2 Abschuesse — mit dem Original nicht
+    /// abgeglichen«. Das waren ZAEHLER, keine Pruefung: ohne ein SOLL sagt eine
+    /// Zahl nichts.
+    ///
+    /// <para>Geprueft wird jetzt gegen das, was gelesen ist:</para>
+    /// <list type="bullet">
+    ///   <item><b>Hoechstens 4 Schuesse je Auftrag</b> — der Zuteiler schreibt
+    ///   <c>+0x07 = 4</c> und vier Rohre (@0x4285C1..0x4285D9).</item>
+    ///   <item><b>Rund 2 Takte je Schuss</b> — <c>test al,1</c> @0x42862D ist
+    ///   <c>P = ½</c>, der Erwartungswert der geometrischen Verteilung ist 2.</item>
+    ///   <item><b>Nachladen 12…17, im Mittel 14,5</b> — <c>rand%6 + 12</c>
+    ///   @0x4284EE.</item>
+    /// </list></summary>
+    public int FlakSchuesseMax, FlakAuftragTakte;
+    public int FlakNachladeSumme, FlakNachladeZahl, FlakNachladeMin = int.MaxValue, FlakNachladeMax;
 
     /// <summary>⚠ 19.09.2026 — die SPANNEN von dz und d, und wie oft dz null war.
     /// Ein »im Ring 0« ohne diese Zahlen ist nicht auswertbar: es kann heissen,
@@ -220,7 +248,23 @@ public partial class MapEntityLayer
             if (s.IsProp || s.Dead || s.Weapon != FlakAufsatz) continue;
             if (s.Owner is < 0 or > 7) continue;
             if (_flak.Count >= FlakPlaetze) break;          // »Cannot add« des Originals
-            if (s.Reload > 0) { s.Reload--; continue; }
+            // ⭐⭐ 20.09.2026 — DIE DREHUNG STEHT VOR DER NACHLADEPRUEFUNG.
+            // Hier sprang der Takt beim Nachladen ganz aus der Schleife, und
+            // damit drehte sich ein nachladendes Rohr nicht. Das Original
+            // schreibt OTOC_HLAVEN (+0x17) @0x4284CB und PRUEFT ERST DANACH
+            // NABYTO (+0x32) @0x4284D1 — es zuckt also jeden Takt dem ersten
+            // Flugzeug im Ring nach, auch waehrend es nachlaedt. Selbst
+            // nachgelesen am 20.09. (byte-genau, C).
+            //
+            // Gebaut ist es als Fahne: die Kegelschleife laeuft auch beim
+            // Nachladen, dreht das Rohr und bricht dann ab, statt einen
+            // Auftrag anzulegen. Gegenschalter --flak-drehung-alt.
+            bool laedt = s.Reload > 0;
+            if (laedt)
+            {
+                s.Reload--;
+                if (FlakDrehungAlt) continue;
+            }
 
             int g = ElevOf(s.Col, s.Row) * 15;
 
@@ -234,10 +278,41 @@ public partial class MapEntityLayer
                 if (a.Absturz) continue;                     // uk 100
                 // ⭐ 19.09.2026 — die Liste des Originals ist uk ∉ {0, 2, 4, 100}
                 // (C 0x428405..0x428419 / F 0x4275F5..0x427609). Wir hatten nur
-                // 0 (ueber `Stored`) und 100. **uk 2 und uk 4** fehlten: 4 ist
-                // der STARTVORGANG, 2 ist ungelesen. Ein Flugzeug, das gerade
-                // startet, ist im Original also kein Ziel — bei uns war es
-                // eines. Gegenschalter --flak-uk-alt.
+                // 0 (ueber `Stored`) und 100. Ein Flugzeug, das gerade startet,
+                // ist im Original kein Ziel — bei uns war es eines.
+                // Gegenschalter --flak-uk-alt.
+                //
+                // ⭐⭐ 20.09.2026 — **UND JETZT IST AUCH uk 2 GELESEN.** Es stand
+                // hier als »ungelesen«; damit war die ganze Ausschlussliste eine
+                // Abschrift ohne Bedeutung. Eingekreist wurde es so:
+                //
+                //   * uk (+0x10) hat 27 Schreiber. **22 schreiben LITERALE** —
+                //     0, 1, 3, 4, 7, 10, 11, 100. **Keines ist 2.**
+                //   * Von den fuenf Registerschreibern setzen 0x427E9E und
+                //     0x427F4E feste 10 bzw. 11, 0x4B30EE rechnet `arg + 10`.
+                //     Bleibt **0x4235D8: `uk := byte[+0x11]`, also uk := m_uk**,
+                //     am Ende des Steigflugs (Startzweig uk 4).
+                //   * m_uk (+0x11) hat 26 Schreiber; **genau EINER** schreibt
+                //     das Literal 2: **0x426350**, und das ist der HELI-Zweig
+                //     von `air_back_to_airport` (Sollhoehe Gelaende*15 + 8,
+                //     also Muster 10..12).
+                //   * `launch_aircraft` hat **sechs** Rufer; ihre Modi sind
+                //     7 (guard 0x428C52), 10 und 11 (die zwei Nachschubhelis
+                //     0x4B16EA/0x4B1721), 7 (0x4BDC2A), 1-oder-7 (0x4C2B02:
+                //     `cmp ax,1; sbb cl,cl; and cl,0xFA; add cl,7`) und der
+                //     Modus aus der Meldung (Befehl 502, 0x4C3773).
+                //     **Keiner uebergibt 2.**
+                //
+                // ⇒ **uk 2 heisst »heimfliegen und landen«**, und es kann nur
+                // einen KAMPF- oder TRANSPORTHUBSCHRAUBER treffen. Damit ist die
+                // Liste {0, 2, 4, 100} eine Einheit: im Hangar, im Landeanflug,
+                // im Startvorgang, im Absturz — **alles vier ist »nicht richtig
+                // in der Luft«**. Die Flak schiesst darauf nicht.
+                //
+                // ⚠ OFFEN (?): welcher Takt aus `uk 1 + m_uk 2` das `uk 2`
+                // macht. `air_back_to_airport` setzt fuer ALLE `uk := 1`
+                // (@0x4261E0); die Uebergabe `uk := m_uk` steht nur im
+                // Startzweig. Der Weg dazwischen ist nicht gelesen.
                 if (!FlakUkAlt && (a.Order == 2 || a.Order == 4)) continue;
                 if (a.Owner is < 0 or > 7 || Allied(s.Owner, a.Owner)) continue;
 
@@ -272,12 +347,19 @@ public partial class MapEntityLayer
                 if (!FlakImRing(a.Alt, g, d)) continue;      // NICHT im Ring
                 FlakRingTreffer++;
 
-                // angemeldet — und der Schütze dreht sich hin
+                // Der Schuetze dreht sich hin — IMMER, auch beim Nachladen
+                // (@0x4284CB vor @0x4284D1).
                 s.AimFacing = DirToFacing(a.Pos - s.Pos);
+                FlakGedreht++;
+                // …aber angelegt wird nur, wenn er geladen hat (@0x4284D9).
+                if (laedt) { FlakDrehungOhneSchuss++; break; }
                 _flak.Add(new FlakAuftrag { Schuetze = i, Flugzeug = a.Slot });
                 FlakAuftraege++;
                 // Nachladen: Roll(6) + 12 Takte, ein deterministischer Würfel
                 s.Reload = Simulation.Determinism.Roll(6) + 12;
+                FlakNachladeSumme += s.Reload; FlakNachladeZahl++;
+                FlakNachladeMin = Mathf.Min(FlakNachladeMin, s.Reload);
+                FlakNachladeMax = Mathf.Max(FlakNachladeMax, s.Reload);
                 break;                                       // erster Treffer, fertig
             }
         }
@@ -314,6 +396,10 @@ public partial class MapEntityLayer
             var s = _entities[auf.Schuetze];
             if (s.Dead || s.IsProp) { _flak.RemoveAt(k); continue; }
 
+            // Je Takt, in dem ein Auftrag OFFEN steht, eine Strichliste — daraus
+            // wird unten »Takte je Schuss« (Soll ~2, weil P = ½).
+            FlakAuftragTakte++;
+
             // »Roll(2) == 0 -> weiter«: die Haelfte der Takte fällt aus
             if (Simulation.Determinism.Roll(2) == 0) continue;
 
@@ -328,6 +414,7 @@ public partial class MapEntityLayer
             auf.Rohr[rohr] = true;
             auf.Schuesse--;
             FlakSchuesse++;
+            FlakSchuesseMax = Mathf.Max(FlakSchuesseMax, FlakRohre - auf.Schuesse);
 
             // die Sprengwolke am Flugzeug, verstreut um ±30 Feineinheiten
             var wolke = ziel.Pos + new Vector2(30 - Simulation.Determinism.Roll(60),
@@ -395,6 +482,29 @@ public partial class MapEntityLayer
             : "dz nie gerechnet, ");
         sb.Append(FlakDMin <= FlakDMax ? $"d {FlakDMin}..{FlakDMax} Zellen, " : "d nie gerechnet, ");
         sb.Append($"Auftraege {FlakAuftraege} (offen {_flak.Count}), ");
+        // ⭐⭐ 20.09.2026 — die Drehung. Die ZWEITE Zahl ist die interessante:
+        // sie zaehlt die Takte, in denen das Rohr nachzuckt, OHNE zu schiessen.
+        // Genau die gab es bei uns bis heute nicht.
+        sb.Append($"gedreht {FlakGedreht}x (davon {FlakDrehungOhneSchuss}x beim "
+                + "NACHLADEN, also ohne Schuss)"
+                + (FlakDrehungAlt ? " [--flak-drehung-alt: die zweite Zahl MUSS 0 sein]" : "")
+                + ", ");
+        // ⭐⭐ DER ABGLEICH: drei Zahlen, jede gegen ihr gelesenes SOLL.
+        if (FlakSchuesse > 0)
+        {
+            float takte = (float)FlakAuftragTakte / FlakSchuesse;
+            sb.Append($"ABGLEICH: hoechstens {FlakSchuesseMax} Schuesse je Auftrag "
+                    + $"(Soll <= {FlakRohre}) {(FlakSchuesseMax <= FlakRohre ? "ok" : "⚠ ZU VIEL")}, "
+                    + $"{takte:0.00} Takte je Schuss (Soll ~2,00 bei P=1/2) "
+                    + $"{(takte > 1.5f && takte < 2.8f ? "ok" : "⚠ DANEBEN")}, ");
+        }
+        if (FlakNachladeZahl > 0)
+        {
+            float m = (float)FlakNachladeSumme / FlakNachladeZahl;
+            bool spanne = FlakNachladeMin >= 12 && FlakNachladeMax <= 17;
+            sb.Append($"Nachladen {FlakNachladeMin}..{FlakNachladeMax} Mittel {m:0.0} "
+                    + $"(Soll 12..17, Mittel 14,5) {(spanne && m > 13f && m < 16f ? "ok" : "⚠ DANEBEN")}, ");
+        }
         sb.Append($"Schuesse {FlakSchuesse}, Abschuesse {FlakAbschuesse}");
         if (FlakNegativSchaden > 0)
             sb.Append($", negativer Schaden {FlakNegativSchaden}x " +
