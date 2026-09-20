@@ -3952,6 +3952,8 @@ public partial class MapViewer : Node2D
             else if (a == "--flak-abstand-alt") MapEntityLayer.FlakAbstandAlt = true;
             else if (a == "--flak-uk-alt") MapEntityLayer.FlakUkAlt = true;
             else if (a == "--flak-drehung-alt") MapEntityLayer.FlakDrehungAlt = true;
+            else if (a == "--gleisschaden-tafelwert")
+                MapEntityLayer.GleisschadenTafelwert = true;
             else if (a == "--zielwahl-check") _zielwahlCheck = true;
             else if (a == "--frachter-aus") Campaign.MissionScript.FrachterAus = true;
             else if (a == "--marktanker-alt") MapEntityLayer.MarktankerAlt = true;
@@ -5136,6 +5138,16 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.LuftschussLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
             // ein Gebaeude gefallen ist: eine 0 ohne Ruine ist kein Befund.
+            // ⭐⭐ 20.09.2026 — der GLEISSCHADEN auch im gespielten Lauf. Der
+            // gestellte --rail-hit-check liefert genau EINEN Einschlag; die
+            // Frage, ob Formel und Tafelwert im Gefecht auseinandergehen,
+            // beantwortet nur ein Lauf mit vielen.
+            if (_entities.GleisschadenGerechnet > 0 || _entities.GleisschadenSummeTafel > 0)
+                GD.Print($"gleisschaden: {_entities.GleisschadenGerechnet}x nach der Formel, "
+                       + $"Summe Formel {_entities.GleisschadenSummeFormel} gegen Tafelwert "
+                       + $"{_entities.GleisschadenSummeTafel}"
+                       + (MapEntityLayer.GleisschadenTafelwert
+                           ? "   [--gleisschaden-tafelwert: 0x ist das SOLL]" : ""));
             if (_entities.GebaeudeSprengungen > 0)
                 GD.Print($"ruine-gleis: {_entities.GebaeudeSprengungen} Gebaeude gesprengt, " +
                          $"{_entities.RuineGleisbrueche} Gleiszellen dabei gebrochen" +

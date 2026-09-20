@@ -13264,7 +13264,19 @@ public partial class MapEntityLayer : Node2D
                 // Ein Einschlag trifft auch das GLEIS auf dieser Zelle — die
                 // Einschlagsroutine des Originals @0x40D799 laeuft ueber alle
                 // 3000 Gleisplaetze und vergleicht genau diese Zelle.
-                RailHit(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y), p.Damage);
+                // ⭐⭐ 20.09.2026 — UND SIE RECHNET IHREN EIGENEN SCHADEN.
+                // Hier stand `p.Damage`, also der Wert aus der Waffentafel. Das
+                // Original nimmt @0x40D755 die Zasah-Formel aus RANG und
+                // ANGRIFF des Schuetzen, mit eigenem Wurf — dieselbe, die
+                // Gebaeude und Bauwerke bekommen. Siehe RailFreight.RailTreffer.
+                // Rang und Angriff werden wie bei BauwerkTreffer geholt
+                // (@12739): Angriff = Attack + 2 * Gelaendestufe des Schuetzen.
+                var gs = p.Shooter >= 0 && p.Shooter < _entities.Count
+                       ? _entities[p.Shooter] : null;
+                RailTreffer(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y),
+                            gs?.Rating28 ?? 0,
+                            gs != null ? gs.Attack + 2 * ElevOf(gs.Col, gs.Row) : p.Damage,
+                            p.Damage);
                 // ⭐ 31.08.2026 — und was SONST auf der Zelle steht: Wald und
                 // zerstoerbare Objekte. Im Original macht Zasah die Baender an
                 // der getroffenen Zelle, gleich woher der Schuss kam — ein

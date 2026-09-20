@@ -2749,6 +2749,20 @@ public partial class MapEntityLayer : Node2D
                                      : "  ⚠ laeuft an, obwohl noch etwas kaputt ist")
                        : (faze2 == 0 ? "  laeuft wieder an (@0x409AB5)"
                                      : "  ⚠ bleibt still, obwohl alles heil ist")));
+        // ⭐⭐ 20.09.2026 — DER GLEISSCHADEN nach der Zasah-Formel. Die
+        // interessante Zahl ist der VERGLEICH: wenn Formel und Tafelwert
+        // dieselbe Summe ergeben, hat die Aenderung nichts bewirkt und die
+        // A/B ist blind.
+        if (GleisschadenGerechnet > 0 || GleisschadenSummeTafel > 0)
+            sb.Append($"  Gleisschaden: {GleisschadenGerechnet}x nach der Formel "
+                    + $"gerechnet; Summe Formel {GleisschadenSummeFormel} gegen "
+                    + $"Tafelwert {GleisschadenSummeTafel}"
+                    + (GleisschadenSummeFormel == GleisschadenSummeTafel
+                        ? "  ⚠ GLEICH — die A/B kann hier nichts zeigen"
+                        : "  (sie gehen auseinander, die A/B traegt)")
+                    + (GleisschadenTafelwert
+                        ? "   [--gleisschaden-tafelwert: 0x gerechnet ist das SOLL]" : "")
+                    + "\n");
         return sb.ToString();
     }
 
@@ -2777,6 +2791,65 @@ public partial class MapEntityLayer : Node2D
     /// Splitter. Wir zeigen nur die Explosion, die der Einschlag ohnehin
     /// erzeugt — der eigene Effekt ist nicht nachgebaut.</para></summary>
     public bool RailHit(int col, int row, int damage) => RailHit(col, row, damage, true);
+
+    /// <summary>⚠ <c>--gleisschaden-tafelwert</c> — der Gleiseinschlag nimmt
+    /// wieder den Schaden des GESCHOSSES aus der Waffentafel statt der
+    /// Zasah-Formel. Das ist der Stand bis zum 20.09.2026. Darunter MUSS
+    /// <see cref="GleisschadenGerechnet"/> auf 0 fallen.</summary>
+    public static bool GleisschadenTafelwert;
+
+    /// <summary>Wie oft der Gleisschaden nach der Formel gerechnet wurde, und
+    /// die Summe der beiden Werte — daran sieht man, ob sie ueberhaupt
+    /// auseinandergehen.</summary>
+    public int GleisschadenGerechnet, GleisschadenSummeFormel, GleisschadenSummeTafel;
+
+    /// <summary>
+    /// <b>Der Gleiseinschlag mit der ZASAH-FORMEL</b> (20.09.2026).
+    ///
+    /// <para>Bis heute bekam <see cref="RailHit"/> den <b>Geschossschaden</b>
+    /// gereicht. Das Original rechnet an dieser Stelle aber seine eigene Zahl,
+    /// und zwar dieselbe wie fuer Gebaeude und Bauwerke:</para>
+    /// <code>
+    ///   0x40D755  eax = (short)[esp+0x18]      ; RANG des Schuetzen
+    ///   0x40D75A  eax += 0x80                  ; + 128
+    ///   0x40D75F  ecx = (short)[esp+0x1A]      ; ANGRIFF
+    ///   0x40D764  eax *= ecx
+    ///   0x40D76D  eax >>= 7                    ; / 128, gegen 0 gerundet
+    ///   0x40D772  esi -= zufall % 5            ; ERSTER Wurf
+    ///   0x40D784  ebx = esi + zufall % 5       ; ZWEITER Wurf
+    /// </code>
+    ///
+    /// <para>⚠ <b>Es sind ZWEI unabhaengige Wuerfe, nicht ein ±.</b> Die Spanne
+    /// ist zwar −4…+4, aber die Verteilung ist dreieckig: 0 kommt fuenfmal so
+    /// oft wie −4. Wer <c>Roll(9) − 4</c> schreibt, trifft die Spanne und
+    /// verfehlt die Verteilung.</para>
+    ///
+    /// <para>⚠ Dass <c>[esp+0x18]</c> der Rang und <c>[esp+0x1A]</c> der Angriff
+    /// ist, steht nicht neu hier: <b>dieselben zwei Stapelplaetze</b> mit
+    /// <b>derselben Befehlsfolge</b> stehen 254 Byte frueher bei
+    /// <c>0x40D65B</c>, und die ist als <see cref="Bodenangriff"/> gelesen und
+    /// gebaut.</para>
+    ///
+    /// <para>⭐ <b>NEU GELESEN und hier NICHT gebaut:</b> der Gleiszweig laeuft
+    /// im Original ueberhaupt nur, wenn die <b>sec20-Lage</b> der getroffenen
+    /// Zelle zwischen <b>1 und 59</b> liegt (@0x40D73D..0x40D74F:
+    /// <c>bl = byte[0x542E18 + 256*Spalte + Zeile]</c>, raus bei 0 und ab 0x3C).
+    /// Wir fuehren die Lagentafel nicht je Zelle — <c>_rampen</c> haelt nur die
+    /// Bauwerke (100…249). Unsere Entsprechung ist »auf dieser Zelle steht ein
+    /// Gleissatz«, und das ist <b>vermutlich</b> dasselbe. ⚠ <b>Gemessen ist es
+    /// nicht.</b> Wer die Lage je Zelle einmal backt, kann es nachpruefen.</para>
+    /// </summary>
+    public bool RailTreffer(int col, int row, int rang, int angriff, int tafelSchaden)
+    {
+        int formel = ((rang + 128) * angriff >> 7)
+                   - Simulation.Determinism.Roll(5)
+                   + Simulation.Determinism.Roll(5);
+        GleisschadenSummeFormel += formel;
+        GleisschadenSummeTafel += tafelSchaden;
+        if (GleisschadenTafelwert) return RailHit(col, row, tafelSchaden, true);
+        GleisschadenGerechnet++;
+        return RailHit(col, row, formel, true);
+    }
 
     /// <summary>Die vier orthogonalen Nachbarn, die ein Bruch mitreisst —
     /// Tabelle @0x504428: (0,−1), (−1,0), (1,0), (0,1).</summary>
