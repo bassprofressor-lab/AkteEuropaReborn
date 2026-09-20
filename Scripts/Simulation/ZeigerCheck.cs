@@ -77,6 +77,10 @@ public partial class MapEntityLayer
         // Preis einer Eroberungskarte und war hier bisher mit der 255 in einem
         // Topf — auf map_NET02 sind das ALLE 52 Gebaeude mit Tuer.
         int zivilTuer = 0, zivilTuerFalsch = 0;
+        // ⭐ bug-353: wie viele Tueren nicht beurteilbar waren, weil etwas
+        // darauf stand. ⚠ Die Zahl GEHOERT in die Meldung — sonst sieht ein
+        // Lauf, in dem fast nichts geprueft wurde, aus wie ein bestandener.
+        int tuerBesetzt = 0;
         // ⭐ 14.09.2026: das VERBUENDETE Gebaeude hat eine eigene Zeile — ueber ihm steht
         // im Original die Fahrt (Zeigerart 3), weder Einnahme noch Angriff
         // (berichte/verbuendete-fable.md §1). Bis heute zaehlte es als »fremd«.
@@ -102,6 +106,7 @@ public partial class MapEntityLayer
                 // Einnahmezeiger gar nicht bekommen, siehe EinnahmezeigerGilt.
                 if (b.Doors != 0 && b.Built != 0)
                 {
+                    if (TuerBesetzt(b)) { tuerBesetzt++; goto koerper; }
                     fremdTuer++;
                     if (hTuer != Hint.Einnahme)
                     {
@@ -122,6 +127,7 @@ public partial class MapEntityLayer
                             + $"Nebel {ImNebelVerborgen(b)}");
                     }
                 }
+                koerper:
                 // ⭐⭐ 17.09.2026 RICHTIGGESTELLT (berichte/zeiger-klickfeld-fable.md):
                 // hier stand `hMitte != Hint.Enemy` — der Prüfstand verlangte also den
                 // ANGRIFFSZEIGER über der Mitte eines fremden Gebäudes. Das Original
@@ -143,8 +149,12 @@ public partial class MapEntityLayer
                 // greift weiter an).
                 if (b.Doors != 0 && b.Built != 0)
                 {
-                    zivilTuer++;
-                    if (hTuer != Hint.Einnahme) zivilTuerFalsch++;
+                    if (TuerBesetzt(b)) tuerBesetzt++;
+                    else
+                    {
+                        zivilTuer++;
+                        if (hTuer != Hint.Einnahme) zivilTuerFalsch++;
+                    }
                 }
                 if (hMitte == Hint.Enemy) zivilTuerFalsch++;
             }
@@ -170,7 +180,7 @@ public partial class MapEntityLayer
         // Zweck (der Pruefstand darf die Frage nicht nachbauen), macht ihn aber
         // zu einem Eingriff und nicht zu einer blossen Ablesung.
         bool klickOk = true;
-        Entity? probe = null;
+        Entity? probe = null, probeBesetzt = null;
         foreach (var b in _entities)
         {
             if (!b.IsBuilding || b.IsProp || b.Dead) continue;
@@ -180,20 +190,53 @@ public partial class MapEntityLayer
             if (b.Owner != NeutralOwner && b.Owner is < 0 or > 7) continue;
             if (b.Owner is >= 0 and <= 7 && Allied(ViewPlayer, b.Owner)) continue;   // 14.09.: kein Einnahmeziel
             if (b.Doors == 0 || b.Built == 0) continue;
+            // ⭐⭐ 20.09.2026, bug-353 — DIE TUERZELLE MUSS FREI SEIN.
+            //
+            // Hier stand `probe = b; break;`, also: nimm das ERSTE. Auf K16 ist
+            // das Gebaeude 0, und auf dessen Tuerzelle steht eine unserer
+            // eigenen Starteinheiten. Der Zeiger sagt dort voellig richtig
+            // »Own« — der Pruefstand las das als »Einnahmezeiger fehlt« und
+            // fiel durch. Ein Pruefstandsartefakt, das wie ein Zeigerfehler
+            // aussah, und es hat einen halben Tag als offener Fehler im STATUS
+            // gestanden.
+            //
+            // Jetzt wird das erste Gebaeude genommen, dessen Tuerzelle FREI
+            // ist. Findet sich keines, sagt die Zeile das — statt einen Fall zu
+            // messen, den sie gar nicht stellen kann.
+            // ⚠ »Besetzt« heisst: dort steht etwas ANDERES als dieses Gebaeude.
+            // Pick findet auf der Tuerzelle sonst das Gebaeude selbst (seit
+            // bug-298 laeuft der Gebaeudetreffer ueber die Zellen), und mit
+            // `>= 0` waere JEDE Tuer besetzt — gemessen: dann meldeten K10,
+            // K13 und K14 »nicht stellbar«, obwohl sie den Fall stellen.
+            int daraufB = Pick(MitteVon(b.Col + b.DoorCol, b.Row + b.DoorRow));
+            if (daraufB >= 0 && !ReferenceEquals(_entities[daraufB], b))
+            { probeBesetzt ??= b; continue; }
             probe = b; break;
         }
-        if (probe == null)
+        if (probe == null && probeBesetzt != null)
+            sb.AppendLine($"  Klickweg NICHT STELLBAR: auf der Tuerzelle jedes in Frage "
+                        + $"kommenden Gebaeudes steht etwas (zuerst Gebaeude "
+                        + $"{probeBesetzt.Slot}) — NICHT GEMESSEN");
+        else if (probe == null)
             sb.AppendLine("  kein fremdes Gebaeude mit Tuer — der Klickweg bleibt ungeprueft");
         else
         {
             var tuer = MitteVon(probe.Col + probe.DoorCol, probe.Row + probe.DoorRow);
+            // ⭐ 20.09.2026, bug-353 — WER STEHT AUF DER TUER? Auf K16 sagte der
+            // Zeiger dort »Own«, und das heisst nicht »falscher Zeiger«, sondern
+            // »hier steht etwas Eigenes«. Ohne diese Zeile sieht ein
+            // Pruefstandsartefakt aus wie ein Zeigerfehler.
+            int aufTuer = Pick(tuer);
+            string wer = aufTuer < 0 ? "nichts"
+                : $"Platz {_entities[aufTuer].Slot} (Besitzer {_entities[aufTuer].Owner}"
+                  + $"{(_entities[aufTuer].IsBuilding ? ", Gebaeude" : ", Einheit")})";
             bool zeigt = EinnahmezeigerHier(tuer);
             bool nimmt = zeigt && PostCapture(tuer);
             klickOk = zeigt && nimmt;
             sb.AppendLine($"  Klick auf die Tuer von Gebaeude {probe.Slot}: "
                         + $"Zeiger sagt einnehmen {(zeigt ? "ja" : "NEIN")}, "
                         + $"PostCapture nimmt an {(nimmt ? "ja" : "NEIN")} "
-                        + $"— »{_order}«");
+                        + $"— »{_order}«; auf der Tuerzelle steht {wer}");
         }
 
         // ---- 5) UND DAS TUERLOSE GEBAEUDE ------------------------------
@@ -276,6 +319,8 @@ public partial class MapEntityLayer
                     + $"{herrenlosFalsch}");
         sb.AppendLine($"  ZIVILE Gebaeude mit Tuer (Besitzer {NeutralOwner}, der Preis der "
                     + $"Eroberungskarte): {zivilTuer}, davon falsch: {zivilTuerFalsch}");
+        sb.AppendLine($"  Tueren nicht beurteilt, weil etwas darauf stand: {tuerBesetzt} "
+                    + "(bug-353 — der Zeiger sagt dort richtig, was dort steht)");
         if (MapEntityLayer.GebaeudezeigerAlt)
             sb.AppendLine("  ⚠ NULLMODELL --gebaeudezeiger-alt: die Zeilen MUESSEN hier "
                         + "durchfallen, sonst misst der Pruefstand nichts");
@@ -293,7 +338,35 @@ public partial class MapEntityLayer
     /// <summary>Der Name einer Gebaeudeart aus der Tafel <c>0x4FDCC4</c>
     /// (Schrittweite 20, 16 Eintraege). ⭐ <b>Index 0 ist »Basis«</b> — Art 0 ist
     /// eine ECHTE Gebaeudeart und keine Leermarke.</summary>
-    private static string BTypeWort(int t) => t == 0 ? "Basis" : $"Art {t}";
+    /// <summary>
+    /// ⭐⭐ 20.09.2026, bug-353 — <b>STEHT AUF DER TUERZELLE ETWAS ANDERES?</b>
+    ///
+    /// <para>Dann sagt der Zeiger dort <c>Own</c> (oder was sonst dort steht),
+    /// und das ist <b>richtig</b> — es ist kein fehlender Einnahmezeiger. Auf
+    /// K16 stehen drei unserer Starteinheiten auf den Tueren der zivilen
+    /// Gebaeude 0, 1 und 2; der Pruefstand las das als drei Fehler und fiel
+    /// durch. Ein Pruefstandsartefakt, das einen halben Tag als offener Fehler
+    /// im STATUS stand.</para>
+    ///
+    /// <para>⚠ »Etwas anderes« ist woertlich zu nehmen: <see cref="Pick"/>
+    /// findet auf der Tuerzelle sonst <b>das Gebaeude selbst</b> (seit bug-298
+    /// laeuft der Gebaeudetreffer ueber die Zellen). Wer nur auf
+    /// <c>Pick(...) >= 0</c> prueft, erklaert JEDE Tuer fuer besetzt — gemessen:
+    /// dann melden K10, K13 und K14 »nicht stellbar«, obwohl sie den Fall
+    /// stellen.</para></summary>
+    private bool TuerBesetzt(Entity b)
+    {
+        int d = Pick(MitteVon(b.Col + b.DoorCol, b.Row + b.DoorRow));
+        return d >= 0 && !ReferenceEquals(_entities[d], b);
+    }
+
+    /// <summary>⚠ Die Namenstafel <c>0x4FDCC4</c> ist NULLbasiert, <c>BType</c>
+    /// aber EINSbasiert: Index 0 »Basis« ist unser BType 1, Index 8
+    /// »Flughafen« unser BType 9 (daran haengt die Flughafenwache). <b>Art 0
+    /// liegt unter der Tafel und hat keinen Namen</b> — genau darum geht es bei
+    /// bug-302.</summary>
+    private static string BTypeWort(int t) => t <= 0 ? "OHNE NAMEN (unter der Tafel)"
+                                                     : $"Art {t}";
 
     /// <summary>Die Bildmitte einer Zelle — der Zeiger wird in Kartenpunkten
     /// gefragt, nicht in Zellen.</summary>
