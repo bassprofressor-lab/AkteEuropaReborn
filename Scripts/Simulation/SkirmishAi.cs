@@ -2380,6 +2380,12 @@ public partial class MapEntityLayer : Node2D
         // Die Sollhoehe kommt nicht aus air_takeoff, sondern aus air_order
         // @0x425E6B: 0x87 = 135. Der KI-Start IST ein Auftrag (m_uk 7).
         flz.Sollhoehe = FlughoeheMax;
+        // ⭐⭐ 20.09.2026, bug-348 — dir := 180 und sp := 0 (@0x426095/@0x42609E).
+        // Die KI nimmt DIESELBE Routine wie der Spieler (spawn_aircraft
+        // 0x4B1380), also auch dieselben zwei Anfangswerte. Ohne diese Zeile
+        // startete das KI-Flugzeug mit dem Tempo und der Richtung, die zufaellig
+        // im Satz standen. Siehe Simulation/Flugtempo.cs.
+        FlugtempoStart(flz);
 
         flz.Target = zielIdx;                 // word[+0x2E] := kunde
         flz.Goal = ziel.Pos;                  // Flugziel := (x, y)

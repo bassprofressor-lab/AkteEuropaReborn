@@ -159,6 +159,12 @@ public static class CwmExtra
         public int Fuel, FuelMax, Payload, Airframe, Attack, Defence, Sight;
         public int Owner, Cargo, Customer;
 
+        /// <summary>⭐⭐ 20.09.2026, bug-348 — die GESCHWINDIGKEITSSTUFE <c>sp</c>
+        /// (+0x0C) und ihre untere Grenze <c>sp_unten</c> (+0x18). <c>Speed</c>
+        /// daneben ist <c>sp_oben</c> (+0x0D), der DECKEL — nicht das gefahrene
+        /// Tempo. Siehe <c>MapEntityLayer.Special.Stufe</c>.</summary>
+        public int Stufe, StufeUnten;
+
         /// <summary>
         /// <b>Was ein Flugzeug fliegen lässt</b> — bis zum 16.08.2026 gar nicht
         /// gelesen, und deshalb standen die Flugzeuge der Menü-Demos still
@@ -169,11 +175,20 @@ public static class CwmExtra
         /// <c>move_airplanes</c> (@0x425050…0x425120), also HINTER dem Verteiler
         /// und damit für jedes Kind:</para>
         /// <code>
-        ///   al = byte[+0x6ddf7c]        ; die RICHTUNG
+        ///   eax = word[+0x6ddf7a]       ; die RICHTUNG — ein WORT bei +0x0A
+        ///   al  = byte[+0x6ddf7c]       ; sp, die GESCHWINDIGKEITSSTUFE (+0x0C)
         ///   fdiv [0x4f9208]             ; die Konstante ist 57,2958 = 180/pi,
         ///                               ;   der Winkel ist also in GRAD
-        ///   fsin * Geschwindigkeit      ; dx
-        ///   fcos * Geschwindigkeit      ; dy
+        ///   fsin * sp                   ; dx
+        ///   fcos * sp                   ; dy
+        /// </code>
+        /// <para>⚠⚠ <b>BERICHTIGT am 20.09.2026 (bug-348).</b> Hier stand
+        /// »al = byte[+0x6ddf7c] ; die RICHTUNG«, und das war eine Verwechslung:
+        /// <c>0x6ddf7c</c> ist <c>sp</c>, die Richtung ist das <b>Wort</b> bei
+        /// <c>0x6ddf7a</c>. Nullmodell an 190 Flugzeugen aus 13 Leveldateien:
+        /// +0x0A liegt 190/190 in 0..359 und ist 190/190 ein Vielfaches von 6;
+        /// +0x0C als Winkel trifft die 6 nur 23/190 und kommt nie über 25.</para>
+        /// <code>
         ///   feinX += dx  @0x42508C   bei &gt;= 40: feinX -= 40, col++, Sprit--
         ///   feinY += dy  @0x4250E1   bei &gt;= 40: feinY -= 40, row++, Sprit--
         /// </code>
@@ -353,6 +368,9 @@ public static class CwmExtra
                 Slot = i, Col = col, Row = row, Kind = s[o + 0x08],
                 Name = Cp437.GetString(s, o + 0x3b, SpecialStride - 0x3b),
                 Stored = col == 0 && row == 0,
+                // ⚠ +0x0D ist NICHT das Tempo, sondern SP_OBEN — der Deckel,
+                // gegen den die Regelung (@0x424EC9) und die Handsteuerung
+                // (@0x4C2C9B) klemmen. Gefahren wird mit Stufe (+0x0C).
                 Speed = s[o + 0x0d], Hp = s[o + 0x19], HpMax = s[o + 0x1a],
                 Ammo = s[o + 0x16], AmmoMax = s[o + 0x17],
                 Fuel = BitConverter.ToUInt16(s, o + 0x1c),
@@ -362,11 +380,38 @@ public static class CwmExtra
                 Owner = s[o + 0x09], Cargo = s[o + 0x31],
                 Customer = BitConverter.ToUInt16(s, o + 0x2e),
                 // ⚠ Siehe Special.FineX: ohne diese fünf steht jedes Flugzeug
-                // still. Speed liegt bei +0x0d — die Richtung DIREKT DANEBEN
-                // bei +0x0c, und genau die fehlte.
+                // still.
                 FineX = BitConverter.ToUInt16(s, o + 0x04),
                 FineY = BitConverter.ToUInt16(s, o + 0x06),
-                Dir = s[o + 0x0c],
+                // ⚠⚠ 20.09.2026, bug-348 — HIER STAND `Dir = s[o + 0x0c]`, UND
+                // DAS WAR DIE GESCHWINDIGKEITSSTUFE. Der Kommentar daneben
+                // behauptete »die Richtung DIREKT NEBEN Speed bei +0x0c«; das
+                // war geraten und hat sich zwei Jahrzehnte lang plausibel
+                // angefühlt, weil die Werte (0, 2..10, 25) einem Winkel nicht
+                // WIDERSPRECHEN. Sie stützen ihn nur eben auch nicht.
+                //
+                // GELESEN im gemeinsamen Abschluss von move_airplanes
+                // (@0x425047..0x425080, C; byte-genau):
+                //     movsx eax, word ptr [0x6ddf7a]   ; dir = WORT bei +0x0A
+                //     mov   al,  byte ptr [0x6ddf7c]   ; sp  = BYTE bei +0x0C
+                //     fdiv  [0x4f9208]                 ; dir / 57,2958 -> Radiant
+                //     fsin * sp -> dx      fcos * sp -> dy
+                // Die Handsteuerung bestätigt beide Offsets ein zweites Mal
+                // (@0x4C2C22 `dir` als Wort gegen 0x168 = 360, @0x4C2C8F `sp`
+                // als Byte gegen den Deckel byte[+0x0D]).
+                //
+                // NULLMODELL an den Daten, 190 Flugzeuge aus 13 Leveldateien:
+                //   dir als WORT bei +0x0A in 0..359            190/190
+                //   ...und Vielfaches von 6 (der ±6°-Schritt)   190/190
+                //   sp (+0x0C) <= sp_oben (+0x0D)               190/190
+                //   ALT, +0x0C als Winkel: Vielfaches von 6      23/190,
+                //   Höchstwert 25 — das sind 7 % des Kreises. Jedes Flugzeug
+                //   des Spiels zeigte in denselben schmalen Keil.
+                // Das High-Byte von +0x0A ist bei 43 der 190 gesetzt: es ist
+                // wirklich ein Wort und kein Byte.
+                Dir = BitConverter.ToUInt16(s, o + 0x0a),
+                Stufe = s[o + 0x0c],
+                StufeUnten = s[o + 0x18],
                 Order = s[o + 0x10], Order2 = s[o + 0x11],
             });
         }

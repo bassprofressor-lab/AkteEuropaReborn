@@ -226,6 +226,7 @@ public partial class MapEntityLayer : Node2D
                 a.Col = home.Col; a.Row = home.Row;
                 a.Alt = ElevOf(a.Col, a.Row) * 15;      // air_takeoff @0x4260B9
                 a.Sollhoehe = FlughoeheMax;             // air_order @0x425E6B
+                FlugtempoStart(a);                      // dir 180, sp 0 (bug-348)
                 home.Hangar?.Remove(a.Slot);
             }
             a.Target = ziel;                            // +0x2E

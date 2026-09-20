@@ -293,6 +293,12 @@ public static class EntitiesJson
             // ⚠ Ohne diese fünf steht jedes Flugzeug still — siehe
             // CwmExtra.Special.FineX für die gelesene Flugbewegung (D6).
             w.Num("fine_x", s.FineX).Num("fine_y", s.FineY).Num("dir", s.Dir);
+            // ⭐⭐ 20.09.2026, bug-348 — sp (+0x0C) und sp_unten (+0x18). `speed`
+            // daneben ist sp_oben (+0x0D), der Deckel. ⚠ WER DIESE ZWEI HIER
+            // ERGAENZT, MUSS DIE KARTEN NEU BACKEN (--reexport-maps), sonst
+            // stehen sie in jeder gebackenen Karte auf 0 — und eine Stufe 0
+            // heisst: das Flugzeug bewegt sich nicht.
+            w.Num("stufe", s.Stufe).Num("stufe_unten", s.StufeUnten);
             w.Num("order", s.Order).Num("order2", s.Order2);
             w.End();
         }

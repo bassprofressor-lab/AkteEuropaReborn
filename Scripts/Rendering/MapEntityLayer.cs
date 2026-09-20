@@ -1275,7 +1275,12 @@ public partial class MapEntityLayer : Node2D
         public bool Stored;
         public Rect2 Footprint;
         // instance values straight out of the record
-        public int Speed, Hp, HpMax, Ammo, AmmoMax, Fuel, FuelMax;
+        /// <summary>⚠ <b><c>Speed</c> ist <c>sp_oben</c></b>, Satzfeld +0x0D —
+        /// der DECKEL der Geschwindigkeitsstufe (@0x424EC9, @0x4C2C9B), nicht
+        /// das gefahrene Tempo. Das ist <see cref="Stufe"/>. Der Name bleibt,
+        /// weil ihn ein Dutzend Stellen lesen; die Bedeutung steht hier.</summary>
+        public int Speed;
+        public int Hp, HpMax, Ammo, AmmoMax, Fuel, FuelMax;
         public int Payload, Airframe, Attack, Defence, Sight;
 
         /// <summary>Feinlage innerhalb der Zelle, <b>0..39</b> — Satz +0x04/+0x06.
@@ -1284,10 +1289,53 @@ public partial class MapEntityLayer : Node2D
         /// <see cref="Import.CwmExtra.Special"/>.</summary>
         public int FineX, FineY;
 
-        /// <summary>Die Flugrichtung, Satz +0x0c — <b>in Grad</b> (die Konstante
-        /// @0x4f9208 ist 57,2958 = 180/π). ⚠ Die schwächste der importierten
-        /// Grössen: hergeleitet, an den Daten nicht bestätigt.</summary>
+        /// <summary>
+        /// ⭐⭐⭐ 20.09.2026, <b>bug-348</b> — <b>DIE FLUGRICHTUNG, Satzfeld
+        /// +0x0A</b> (absolut <c>0x6DDF7A</c>), ein <b>WORT</b> in Grad
+        /// (0..359).
+        ///
+        /// <para>⚠⚠ <b>Bis heute stand hier +0x0c, und das ist die
+        /// GESCHWINDIGKEITSSTUFE.</b> Die alte Notiz nannte sich selbst »die
+        /// schwächste der importierten Grössen: hergeleitet, an den Daten
+        /// nicht bestätigt« — sie war nicht schwach, sie war falsch. Jedes
+        /// Flugzeug des Spiels flog mit einer Stufenzahl als Winkel.</para>
+        ///
+        /// <para><b>Gelesen</b>, byte-genau, an zwei unabhängigen Stellen:</para>
+        /// <code>
+        ///   move_airplanes @0x425047:  movsx eax, word ptr [0x6ddf7a]   ; dir
+        ///                  @0x425058:  mov   al,  byte ptr [0x6ddf7c]   ; sp
+        ///                  @0x425068:  fdiv  [0x4f9208]                 ; /57,2958
+        ///                              fsin * sp -> dx ; fcos * sp -> dy
+        ///   Handsteuerung  @0x4C2C22:  dir als WORT, Umlauf gegen 0x168 = 360
+        ///                  @0x4C2C8F:  sp als BYTE, Deckel byte[+0x0D]
+        /// </code>
+        ///
+        /// <para><b>Nullmodell</b> (190 Flugzeuge aus 13 Leveldateien):
+        /// <c>dir</c> als Wort bei +0x0A liegt <b>190/190</b> in 0..359 und ist
+        /// <b>190/190</b> ein Vielfaches von <b>6</b> — genau der Schritt, den
+        /// die Handsteuerung je Takt gibt (60 Richtungen). Die alte Lesung
+        /// (+0x0C als Winkel) trifft die 6 nur <b>23/190</b> und hat als
+        /// Höchstwert 25: <b>7 % des Kreises</b>.</para>
+        ///
+        /// <para><c>air_takeoff</c> @0x426095 setzt sie beim Start fest auf
+        /// <b>180</b> (0xB4).</para></summary>
         public int Dir;
+
+        /// <summary>
+        /// ⭐⭐ 20.09.2026 — <b>DIE GESCHWINDIGKEITSSTUFE <c>sp</c></b>, Satzfeld
+        /// <b>+0x0C</b> (absolut <c>0x6DDF7C</c>). <b>Sie ist der Faktor im
+        /// Flugschritt</b> (<c>sin(dir)·sp</c>, <c>cos(dir)·sp</c>
+        /// @0x425072/0x42507E) — nicht <see cref="Speed"/>.
+        ///
+        /// <para>Ein startendes Flugzeug bekommt <b>sp := 0</b>
+        /// (@0x42609E, <c>bl</c> ist dort 0) und wird von der Regelung
+        /// hochgefahren; siehe <c>FlugtempoTakt</c>.</para></summary>
+        public int Stufe;
+
+        /// <summary>Die untere Tempogrenze <c>sp_unten</c>, Satzfeld
+        /// <b>+0x18</b> (absolut <c>0x6DDF88</c>). Unter sie bremst weder die
+        /// Regelung (@0x424E7A) noch die Handsteuerung (@0x4C2C62).</summary>
+        public int StufeUnten;
 
         /// <summary>Angesammelter Weg seit dem letzten Spritabzug, in Pixeln —
         /// siehe <c>AirDrift</c>. Rein unsere Buchhaltung.</summary>
@@ -4447,6 +4495,15 @@ public partial class MapEntityLayer : Node2D
                     // (restlos 0..39), Dir ist die schwaechste der drei.
                     FineX = GetI(sp2, "fine_x"), FineY = GetI(sp2, "fine_y"),
                     Dir = GetI(sp2, "dir"),
+                    // ⭐⭐ bug-348. ⚠ RUECKFALL: eine Karte, die VOR dem
+                    // 20.09.2026 gebacken wurde, kennt die zwei Schluessel
+                    // nicht und liefert 0 — und Stufe 0 heisst STILLSTAND.
+                    // Darum faellt `stufe` auf `speed` (= sp_oben) zurueck,
+                    // solange die Karten nicht neu gebacken sind. Das ist genau
+                    // das alte Verhalten, also kein neuer Fehler, aber auch
+                    // nicht die Lesung: --reexport-maps fehlt dann noch.
+                    Stufe = GetI(sp2, "stufe", GetI(sp2, "speed")),
+                    StufeUnten = GetI(sp2, "stufe_unten"),
                     Order = GetI(sp2, "order"), Order2 = GetI(sp2, "order2"),
                     Footprint = CellRect(ox, oy, col, row, el),
                 };
@@ -33441,6 +33498,9 @@ public partial class MapEntityLayer : Node2D
         // Zahlen der Pruefstaende vergleichbar.
         DebugClock += dt;
         DebugTicks++;
+        // Im Original steht der Sender 0x433460 im Taktrumpf (@0x41685C), also
+        // genau hier und nicht im Bildtakt — und das ist kein Schoenheitsfehler:
+        // der Stufenschritt haengt an `dword[0x4FA240] & 1`, also am TAKT.
         bool moved = false;
 
         _acquireTimer -= dt;
@@ -37997,7 +38057,15 @@ public partial class MapEntityLayer : Node2D
             // und der Sturz waere ein Steigflug.
             if (a.Absturz) continue;
 
+
             FlughoeheTakt(a);
+            // ⭐⭐ 20.09.2026, bug-348 — DAS TEMPO WIRD GEREGELT, es ist keine
+            // Konstante. Siehe Simulation/Flugtempo.cs.
+            // ⚠ Das zweite Argument ist das verfolgte FLUGZEUG. Wir kennen
+            // keine Luft-Luft-Verfolgung (Target zeigt in die Einheiten-
+            // liste, nicht in _special), darum steht hier null — der Zweig
+            // @0x424E31 ist damit ungebaut und NICHT etwa gemessen.
+            FlugtempoTakt(a, null);
 
             // ⚠ Der Versorgungszweig sprang bis zum 14.08.2026 mit `goto move`
             // an der Heimkehr VORBEI — deshalb kam ein Nachschubheli nie nach
@@ -38212,7 +38280,10 @@ public partial class MapEntityLayer : Node2D
             if (a.Goal is null) { AirDrift(a, dt); continue; }
             if (a.Goal is not { } g) continue;
             var delta = g - a.Pos;
-            float step = Mathf.Max(1, a.Speed) * AirPxPerSpeed * dt;
+            // ⚠ bug-348: geflogen wird mit der STUFE sp (+0x0C), nicht mit
+            // sp_oben (+0x0D, bei uns `Speed`). --flugtempo-alt gibt das alte
+            // Verhalten zurueck.
+            float step = FlugStufe(a) * AirPxPerSpeed * dt;
             if (delta.Length() <= step)
             {
                 // ⚠ 14.08.2026 — DIE BLICKRICHTUNG FEHLTE IM LETZTEN SCHRITT.
@@ -38373,7 +38444,7 @@ public partial class MapEntityLayer : Node2D
         float rad = Mathf.DegToRad(a.Dir);
         // Das Original nimmt sin für x und cos für y — nicht umgekehrt.
         var step = new Vector2(Mathf.Sin(rad), Mathf.Cos(rad))
-                 * Mathf.Max(1, a.Speed) * AirPxPerSpeed * dt;
+                 * FlugStufe(a) * AirPxPerSpeed * dt;   // bug-348: sp, nicht sp_oben
         if (step.LengthSquared() <= 0.000001f) return;
         a.Pos += step;
         a.Facing = AirDirToFacing(step);
@@ -38446,6 +38517,7 @@ public partial class MapEntityLayer : Node2D
                 // der Spielerstart ist ein Auftrag. Siehe Special.Alt.
                 a.Alt = ElevOf(a.Col, a.Row) * 15;
                 a.Sollhoehe = FlughoeheMax;
+                FlugtempoStart(a);          // dir := 180, sp := 0 (bug-348)
                 // ⚠⚠ 18.08.2026 — DIESE ZEILE FEHLTE, und der Hangar blieb
                 // stehen. `SendOutFromPanel` (der Reiter »Depot«) räumt den
                 // Platz ordentlich weg, dieser Weg hier tat es nicht: das

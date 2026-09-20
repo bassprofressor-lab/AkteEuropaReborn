@@ -3978,6 +3978,8 @@ public partial class MapViewer : Node2D
             else if (a == "--bombenetikett-kaputt") MapEntityLayer.BombenetikettKaputt = true;
             else if (a == "--bombe-check") _bombeCheck = true;
             else if (a == "--staffel-aus") MapEntityLayer.StaffelAus = true;
+            else if (a == "--flugtempo-alt") MapEntityLayer.FlugtempoAlt = true;
+            else if (a == "--flugtempo-check") _flugtempoCheck = true;
             else if (a == "--flughafenfenster-alt") UI.BuildingWindow.FlughafenfensterAlt = true;
             else if (a == "--luftnachladen-alt") MapEntityLayer.LuftnachladenAlt = true;
             else if (a == "--ruine-ohne-gleisschnitt")
@@ -5103,6 +5105,7 @@ public partial class MapViewer : Node2D
             BombeAusgeben();
             ZielwahlAusgeben();
             LuftbildAusgeben();
+            FlugtempoAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
@@ -5319,7 +5322,8 @@ public partial class MapViewer : Node2D
     /// passiert hier nichts.</para></summary>
     private bool _flakGedruckt, _bombeCheck, _bombeGedruckt,
                  _zielwahlCheck, _zielwahlGedruckt,
-                 _luftbildCheck, _luftbildGedruckt;
+                 _luftbildCheck, _luftbildGedruckt,
+                 _flugtempoCheck, _flugtempoGedruckt;
 
     private void FlakAusgeben()
     {
@@ -5354,6 +5358,16 @@ public partial class MapViewer : Node2D
             : "zielwahl-check: keine Zielwahl benutzt — NICHT GEMESSEN");
     }
 
+    /// <summary><c>--flugtempo-check</c> — die Tempostufe und ihre Regelung
+    /// (bug-348). Sie laeuft in JEDEM Lauf mit, darum darf sie auch ohne
+    /// Handsteuerung eine Zahl haben.</summary>
+    private void FlugtempoAusgeben()
+    {
+        if (_flugtempoGedruckt || !_flugtempoCheck) return;
+        _flugtempoGedruckt = true;
+        GD.Print(_entities.FlugtempoAuskunft());
+    }
+
     /// <summary><c>--luftbild-check</c> — welche Flugzeugmuster ohne Bild als
     /// RAUTE flogen. Am Ausstieg, wie die anderen drei.</summary>
     private void LuftbildAusgeben()
@@ -5371,6 +5385,7 @@ public partial class MapViewer : Node2D
         BombeAusgeben();
         ZielwahlAusgeben();
         LuftbildAusgeben();
+        FlugtempoAusgeben();
         // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
         // Menue (ChangeSceneToFile) landen beide hier.
