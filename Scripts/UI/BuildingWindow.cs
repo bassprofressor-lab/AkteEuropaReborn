@@ -488,6 +488,10 @@ public sealed partial class BuildingWindow : PanelContainer
     /// nicht auf die Staffel.</summary>
     public System.Action<int>? OnHandsteuerung;
 
+    /// <summary>⭐⭐ »Recycle« (Taste 7, Befehl 535) — bekommt den SATZPLATZ der
+    /// gewaehlten Hangarzeile.</summary>
+    public System.Action<int>? OnRecycleFlugzeug;
+
     private readonly VBoxContainer _mitte = new();
     private readonly HBoxContainer _knoepfe = new();
     private readonly Button _zu = new();
@@ -608,6 +612,12 @@ public sealed partial class BuildingWindow : PanelContainer
         {
             int platz = GewaehlterPlatz();
             if (platz >= 0) OnHandsteuerung?.Invoke(platz);
+            Refresh();
+        };
+        _flughafen.OnRecycle = () =>
+        {
+            int platz = GewaehlterPlatz();
+            if (platz >= 0) OnRecycleFlugzeug?.Invoke(platz);
             Refresh();
         };
         _flughafen.OnPatrouille = () => { OnPatrouille?.Invoke(); Refresh(); };

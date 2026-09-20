@@ -785,6 +785,8 @@ public partial class MapViewer : Node2D
         if (_handLuftProbe) GD.Print(_entities.HandsteuerungLuftProbe());
         // ⭐⭐ 20.09.2026 — der Kartenschirm (Fensterart 3), Bauaufgabe 2.
         if (_kartenschirmProbe) GD.Print(KartenschirmProbeLauf());
+        // ⭐⭐ 20.09.2026 — Recycle und `guard:`.
+        if (_wacheProbe) GD.Print(_entities.FlughafenwacheProbe());
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -3993,6 +3995,13 @@ public partial class MapViewer : Node2D
             else if (a == "--handsteuerung-luft-check") _handLuftCheck = true;
             else if (a == "--handsteuerung-luft-probe") _handLuftProbe = true;
             else if (a == "--flugtempo-alt") MapEntityLayer.FlugtempoAlt = true;
+            // ⭐⭐ 20.09.2026 — Recycle und die Flughafenwache (`guard:`),
+            // Simulation/Flughafenwache.cs
+            else if (a == "--recycle-aus") MapEntityLayer.RecycleAus = true;
+            else if (a == "--flughafenwache-aus")
+                MapEntityLayer.FlughafenwacheAus = true;
+            else if (a == "--flughafenwache-check") _wacheCheck = true;
+            else if (a == "--flughafenwache-probe") _wacheProbe = true;
             else if (a == "--flugtempo-check") _flugtempoCheck = true;
             else if (a == "--flughafenfenster-alt") UI.BuildingWindow.FlughafenfensterAlt = true;
             else if (a == "--luftnachladen-alt") MapEntityLayer.LuftnachladenAlt = true;
@@ -5121,6 +5130,7 @@ public partial class MapViewer : Node2D
             LuftbildAusgeben();
             HandLuftAusgeben();
             FlugtempoAusgeben();
+            WacheAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
@@ -5339,7 +5349,7 @@ public partial class MapViewer : Node2D
                  _zielwahlCheck, _zielwahlGedruckt,
                  _luftbildCheck, _luftbildGedruckt,
                  _handLuftCheck, _handLuftGedruckt, _handLuftProbe,
-                 _kartenschirmProbe,
+                 _kartenschirmProbe, _wacheCheck, _wacheGedruckt, _wacheProbe,
                  _flugtempoCheck, _flugtempoGedruckt;
 
     private void FlakAusgeben()
@@ -5398,6 +5408,16 @@ public partial class MapViewer : Node2D
         GD.Print(_entities.FlugtempoAuskunft());
     }
 
+    /// <summary><c>--flughafenwache-check</c> — Recycle und die Wache am
+    /// Ausstieg, aus demselben Grund wie die anderen: beide sieht man erst,
+    /// wenn sie gelaufen sind.</summary>
+    private void WacheAusgeben()
+    {
+        if (_wacheGedruckt || !_wacheCheck) return;
+        _wacheGedruckt = true;
+        GD.Print(_entities.FlughafenwacheAuskunft());
+    }
+
     /// <summary><c>--luftbild-check</c> — welche Flugzeugmuster ohne Bild als
     /// RAUTE flogen. Am Ausstieg, wie die anderen drei.</summary>
     private void LuftbildAusgeben()
@@ -5417,6 +5437,7 @@ public partial class MapViewer : Node2D
         LuftbildAusgeben();
         HandLuftAusgeben();
         FlugtempoAusgeben();
+        WacheAusgeben();
         // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
         // Menue (ChangeSceneToFile) landen beide hier.
@@ -6651,6 +6672,9 @@ public partial class MapViewer : Node2D
         // Simulation/HandsteuerungLuft.cs.
         _gebaeudeFenster.OnHandsteuerung = platz =>
             _entities.HandsteuerungLuftBeginnen(platz);
+        // ⭐⭐ 20.09.2026 — Recycle (Befehl 535, Arm 0x4B27D0).
+        _gebaeudeFenster.OnRecycleFlugzeug = platz =>
+            _entities.RecycleAmFlughafen(_entities.Fenstergebaeudeplatz(), platz);
         // Das Original nimmt beim Eintritt die Fenster weg (0x44FE10(0)) und
         // schaltet den Zeiger aus (byte[0xA182D0] := 0xFF @0x4315D3). Beim
         // Austritt kommt der Zeiger zurueck; das Fenster nicht — es ist zu.

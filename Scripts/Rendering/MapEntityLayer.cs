@@ -18913,8 +18913,11 @@ public partial class MapEntityLayer : Node2D
     /// Satz Wahrheiten ueber den Preis.</para>
     ///
     /// <para>⚠ <b>Der Flughafen zahlt in TEILEN, nicht in Geld</b>
-    /// (<c>build_in_airport</c> @0x4BB3D0: Lager +0x3C/+0x3E/+0x40 gegen
-    /// Entwurf +0x1F/+0x20/+0x21) — darum <c>PreisText</c> und kein »$«. Beides
+    /// (<c>build_in_airport</c> @0x4BB3D0: Lager <b>+0x2C/+0x2E/+0x30</b> gegen
+    /// Entwurf +0x1F/+0x20/+0x21 — ⚠ hier stand bis zum 20.09.2026
+    /// »+0x3C/+0x3E/+0x40«, und das war falsch: DREI Stellen lesen dieselben
+    /// drei Woerter, @0x4BB438/460 (build_in_airport), @0x449DE2/E03/E24
+    /// (Kaufpruefung) und @0x4B286C/81/96 (Recycle)) — darum <c>PreisText</c> und kein »$«. Beides
     /// zu verlangen hiesse doppelt zahlen, und genau daran ist der Flughafen am
     /// 17.08.2026 schon einmal gescheitert (Fehler C12).</para>
     ///
@@ -18944,7 +18947,7 @@ public partial class MapEntityLayer : Node2D
                          && d.CostW <= e.StockW && d.CostF <= e.StockF && d.CostS <= e.StockS,
                 PreisQuelle = hangarVoll
                     ? "Leider kein Platz im Hangar vorhanden!"
-                    : "Entwurf +0x1F/+0x20/+0x21 gegen Lager +0x3C/+0x3E/+0x40 (@0x4BB3D0)",
+                    : "Entwurf +0x1F/+0x20/+0x21 gegen Lager +0x2C/+0x2E/+0x30 (@0x4BB3D0)",
                 Kaufen = () => BuildPanelPick(k),
             });
         }
@@ -19860,8 +19863,8 @@ public partial class MapEntityLayer : Node2D
         // Kontostand, also auch für den Flughafen — und dort wird gar nicht mit
         // Geld bezahlt: `BuyAircraft` (:10360) prüft die drei TEILELAGER DES
         // FLUGHAFENGEBÄUDES gegen den Entwurfspreis, genau wie
-        // `build_in_airport` @0x4BB3D0 (Lager +0x3C/+0x3E/+0x40 gegen Entwurf
-        // +0x1F/+0x20/+0x21). Die Zeilenliste darunter (BuildPanelRows) hat die
+        // `build_in_airport` @0x4BB3D0 (Lager +0x2C/+0x2E/+0x30 gegen Entwurf
+        // +0x1F/+0x20/+0x21 — ⚠ BERICHTIGT 20.09.2026, hier stand +0x3C). Die Zeilenliste darunter (BuildPanelRows) hat die
         // Teile die ganze Zeit richtig ausgewiesen — nur die Kopfzeile log.
         //
         // ⚠ Woher die Teile am Flughafen kommen, ist die zweite Hälfte der
@@ -23184,7 +23187,9 @@ public partial class MapEntityLayer : Node2D
         // prüft ZWEI Dinge, und zwar in DIESER Reihenfolge — erst den Hangar
         // (sec27 `+0x04 belegt == +0x03 Plätze` → »Leider kein Platz im Hangar
         // vorhanden!«), dann die drei Teilelager DES FLUGHAFENGEBÄUDES
-        // (`+0x3C/+0x3E/+0x40` gegen Entwurf `+0x1F/+0x20/+0x21` →
+        // (`+0x2C/+0x2E/+0x30` gegen Entwurf `+0x1F/+0x20/+0x21` → ⚠ hier
+        // stand bis zum 20.09.2026 `+0x3C/+0x3E/+0x40`; die Kaufpruefung liest
+        // @0x449DE2/E03/E24 die Woerter 0xC0693C/3E/40, also +0x2C/+0x2E/+0x30 →
         // »Sie besitzen nicht genügend Einzelteile!«) — und setzt dann Befehl
         // 501, der in `spawn_aircraft` @0x4B1380 mündet: buchstäblich dieselbe
         // Routine, die auch die KI benutzt. Kein Bauzähler, keine Warteschlange.
@@ -33518,6 +33523,12 @@ public partial class MapEntityLayer : Node2D
                                   HandTasteHoch, HandTasteRunter,
                                   HandTasteSteigen, HandTasteSinken,
                                   HandTasteSchuss);
+
+        // ⭐⭐ 20.09.2026 — DIE FLUGHAFENWACHE (`guard:`), die Wirkung der
+        // Patrouille-Flagge. Sie sitzt im Gebaeudetakt des Originals
+        // (@0x43EB11) und nimmt sich je Takt die Flughaefen vor, die an der
+        // Reihe sind. Siehe Simulation/Flughafenwache.cs.
+        WacheTakt();
 
         bool moved = false;
 

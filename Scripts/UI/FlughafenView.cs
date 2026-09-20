@@ -490,9 +490,15 @@ public sealed partial class FlughafenView : Control
                   + "freie. Ein ZWEITER Klick auf die gewaehlte Zeile nimmt die "
                   + "Maschine auf oder heraus."
                   : "Es steht keine Maschine im Hangar.");
-        Knopf(font, 5, KnopfY[5], "Recycle", false,
-              "Befehl 535 ist gelesen, sein Arm (0x40163B) nicht — deshalb nicht "
-              + "gebaut.");
+        // ⭐⭐ 20.09.2026 — GEBAUT, der Arm ist gelesen (0x4B27D0).
+        Knopf(font, 5, KnopfY[5], "Recycle", hat && !MapEntityLayerRecycleAus,
+              MapEntityLayerRecycleAus
+                  ? "--recycle-aus: der Knopf ist gesperrt."
+                  : hat
+                      ? "Verwertet die gewaehlte Maschine: die drei Teilekosten "
+                      + "ihres Entwurfs, MAL IHRER GESUNDHEIT, zurueck ins Lager "
+                      + "des Flughafens. Halb zerschossen gibt halb."
+                      : "Es steht keine Maschine im Hangar.");
     }
 
     // ===================== Reiter »Produktion« =============================
@@ -739,7 +745,8 @@ public sealed partial class FlughafenView : Control
         13 => "45 Gasbombe -> 46 Loeschmittel -> 47 Bombe, staffelweit.",
         14 => "Staffelmarke weiterdrehen; zweiter Klick auf die Zeile nimmt auf "
             + "oder heraus.",
-        15 => "Recycle — der Arm ist ungelesen, deshalb nicht gebaut.",
+        15 => "Verwerten: Teilekosten des Entwurfs mal Gesundheit zurueck ins "
+            + "Lager des Flughafens; die Maschine ist danach weg.",
         20 => "Der Lagerausbau des Flughafens ist bei uns nicht gebaut.",
         _ => "",
     };
@@ -748,6 +755,10 @@ public sealed partial class FlughafenView : Control
     /// <c>--handsteuerung-luft-aus</c>.</summary>
     private static bool MapEntityLayerHandLuftAus
         => Rendering.MapEntityLayer.HandsteuerungLuftAus;
+
+    /// <summary>Gespiegelt wie die anderen: <c>--recycle-aus</c>.</summary>
+    private static bool MapEntityLayerRecycleAus
+        => Rendering.MapEntityLayer.RecycleAus;
 
     // Die zwei Schalter liegen am Betrachter; hierher gespiegelt, damit der
     // Zeichner nicht in Rendering greifen muss.
