@@ -14,6 +14,106 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.5 — 20.09.2026 · Kampagne 17 und 20: der Flughafen, die Flak und ein Feld, das jahrelang falsch gelesen wurde
+
+> Zwei Missionen, und ein Fund, der jedes Flugzeug im Spiel betrifft. Jeder Punkt
+> unten ist ein Befund aus diesen Läufen.
+
+### ⚠ Wichtig: die Karten müssen einmal neu eingelesen werden
+
+Diese Fassung liest zwei Werte mehr aus dem Flugzeugsatz. Wer von 0.6.4 kommt,
+lässt einmal den Karteneinleser laufen — sonst wirkt der wichtigste Fund unten
+nur halb. Ohne das fallen die Flugzeuge auf ihr altes Verhalten zurück; kaputt
+geht nichts.
+
+### ⭐ Der grösste Fund: Flugzeuge flogen mit der falschen Zahl als Winkel
+
+- **Jedes Flugzeug flog in die falsche Richtung — und immer mit Höchsttempo.**
+  Im Satz eines Flugzeugs stehen Richtung und Geschwindigkeitsstufe direkt
+  nebeneinander, und wir hatten die beiden **vertauscht**: als »Richtung« lasen
+  wir die Geschwindigkeitsstufe. Weil deren Werte klein sind (0 bis 25), zeigten
+  **alle** Flugzeuge des Spiels in denselben schmalen Keil von 25 Grad. Die
+  richtige Richtung steht zwei Bytes früher und geht über volle 360 Grad.
+  Gegenprobe an 190 Flugzeugen aus 13 Kartendateien: die richtige Stelle liegt
+  190 von 190 Mal im gültigen Bereich **und** ist 190 von 190 Mal ein Vielfaches
+  von 6 — genau der Schritt, in dem sich ein handgesteuertes Flugzeug dreht. Die
+  alte Stelle trifft diesen Schritt nur 23 von 190 Mal.
+- **Ein startendes Flugzeug steht und fährt hoch**, statt sofort mit Vollgas
+  loszufliegen. Das Original setzt die Stufe beim Start auf null und regelt sie
+  dann um eins je Takt herauf, bis zum Höchstwert des Musters; beim Anflug
+  bremst es wieder ab. Das sieht nicht nur anders aus, es ändert auch den
+  Ausgang eines Gefechts.
+- **Was wir »Tempo« nannten, ist die Obergrenze**, nicht das gefahrene Tempo.
+
+### Kampagne 20 — der Flughafen, zum ersten Mal
+
+- **»Handsteuerung« geht.** Der Knopf im Flughafenfenster (und die Taste **H**
+  über einer fliegenden Maschine) gibt das Flugzeug in die eigene Hand: die
+  Pfeiltasten drehen es und regeln seine Geschwindigkeitsstufe, **A** und **Z**
+  ändern die Höhe, **Strg** schiesst. **H**, ein Rechtsklick oder **Esc** geben
+  es wieder ab — dann fliegt es heim und landet.
+- ⚠ **Zwei Dinge daran sehen aus wie Fehler und sind das Original:** es gibt
+  **keine untere Höhengrenze**, man kann sich also in einen Hügel fliegen; und
+  wer weiter sinkt, als es geht, landet schlagartig ganz oben. Beides steht so
+  im Spiel von 1997.
+- ⚠ Die Taste **H** war bisher unser Schalter für die Übersichtskarte. Sie
+  gehört im Original der Handsteuerung, also tritt unsere Zutat zurück und
+  greift nur noch, wenn gerade nichts zu steuern ist.
+- **»Angriff« öffnet einen eigenen Kartenschirm** — das Fenster
+  »Luft-Einsatzplan« geht an der Mausstelle auf, und der Klick darin schickt die
+  Staffel los. Bisher musste man dafür die ständige Übersichtskarte benutzen.
+  Grösse, Rand, Zoomstufen und die Umrechnung des Klicks in eine Kartenzelle
+  sind die des Originals.
+- **»Recycle« geht** und gibt die Teile des Entwurfs zurück — **mal der
+  Gesundheit der Maschine**. Ein halb zerschossener Jagdflieger bringt also die
+  Hälfte. Die Teile gehen an den Flughafen, nicht auf ein Konto; Geld gibt es
+  dafür nicht.
+- **»Patrouille AN« tut zum ersten Mal etwas.** Die Flagge wurde bisher nur
+  angezeigt. Jetzt steigen alle bereiten **Jagdflieger** eines Flughafens auf,
+  sobald ein feindliches Flugzeug näher als 60 Zellen herankommt. ⚠ Geprüft wird
+  nur alle zehn Takte — es dauert also einen Moment, bis sie reagieren. Auch das
+  ist so gelesen.
+
+### Kampagne 17 — die Flugabwehr und die Bahn
+
+- **Die Bahnstrecke hält viel länger.** Ein Einschlag auf ein Gleis bekam bei uns
+  den vollen Schaden des Geschosses; das Original rechnet dort seine eigene,
+  deutlich kleinere Zahl aus Rang und Angriffswert des Schützen. Über 300
+  gespielte Sekunden gemessen: 246 Einschläge, die bisher zusammen **fünfmal so
+  viel** Schaden angerichtet haben wie jetzt.
+- **Die Flak dreht ihr Rohr auch beim Nachladen** und zuckt damit jedem Flugzeug
+  nach, das in ihren Ring kommt. Das ändert am Gefecht nichts — sie schiesst
+  deswegen nicht öfter —, sieht aber lebendig statt starr aus.
+- **Die Flak schiesst nicht auf eine Maschine, die gerade landet.** Sie
+  verschont vier Zustände: im Hangar, im Startvorgang, im Absturz und — das war
+  bis jetzt unklar — **im Landeanflug**. Zusammen ergibt das eine einfache
+  Regel: sie schiesst nur auf etwas, das richtig fliegt.
+- **Die Schussfolge ist gegen das Original nachgerechnet:** höchstens vier
+  Schüsse je Auftrag, im Mittel zwei Takte zwischen zwei Schüssen, und zwölf bis
+  siebzehn Takte Nachladezeit. Alle drei gemessenen Werte liegen in ihrer
+  Spanne.
+
+### Kleineres und Genaueres
+
+- **Die Gas- und die Löschbombe haben ihr Einschlagbild.** Es fehlte bisher in
+  den eingelesenen Daten.
+- **Die drei Teilelager eines Flughafens** wurden an der falschen Stelle im
+  Gebäudesatz gesucht. Drei unabhängige Stellen im Spiel von 1997 lesen
+  dieselben drei Werte — der Fehler war eine alte Notiz von uns.
+- **Der Prüfstand für die Mauszeiger** hielt eigene Einheiten für einen Fehler:
+  stand eine davon auf der Tür eines fremden Gebäudes, zeigte der Zeiger richtig
+  »eigene Einheit«, und der Prüfstand meldete trotzdem einen fehlenden
+  Einnahmezeiger. Am Spiel ändert das nichts; es war unsere Messung, die log.
+
+### Was bekannt und noch offen ist
+
+- Auf einzelnen Karten gibt es Bauwerke einer Art, die unsere Namensliste nicht
+  kennt (144 Stück auf 18 Karten, mit Ortsnamen wie »Lebork« und »Reda«). Sie
+  sind bei uns weder anklickbar noch zerstörbar. Ob sie es sein sollten, ist
+  noch nicht entschieden.
+- Ein Hilfetext, der im Spiel angefordert wird, fehlt in den Daten — das
+  Hilfefenster bleibt dann aus.
+
 ## 0.6.4 — 15.09.2026 · Kampagne 10 bis 14: Fenster, Frachter und Verbündete
 
 > Fünf Missionen, jede einzeln durchgespielt. Jeder Punkt unten ist ein Befund

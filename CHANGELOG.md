@@ -12,6 +12,97 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.5 — 2026-09-20 · missions 17 and 20: the airfield, the flak, and a field we had read wrong for a year
+
+> Two missions, and one finding that affects every aircraft in the game. Every
+> point below is a finding from those runs.
+
+### ⚠ Important: the maps need to be re-read once
+
+This release reads two more values out of the aircraft record. Coming from
+0.6.4, run the map importer once — otherwise the main finding below only works
+by half. Without it aircraft fall back to their old behaviour; nothing breaks.
+
+### ⭐ The biggest finding: aircraft flew with the wrong number as their heading
+
+- **Every aircraft flew in the wrong direction — and always at top speed.** In an
+  aircraft's record the heading and the speed step sit right next to each other,
+  and we had **swapped them**: what we read as "heading" was the speed step.
+  Because those values are small (0 to 25), **every** aircraft in the game
+  pointed into the same narrow 25-degree wedge. The real heading sits two bytes
+  earlier and covers the full 360 degrees. Cross-checked against 190 aircraft
+  from 13 map files: the correct field is in range 190 out of 190 times **and**
+  is a multiple of 6 in 190 out of 190 — exactly the step by which a
+  hand-flown aircraft turns. The old field hits that step only 23 out of 190.
+- **An aircraft taking off stands still and spins up**, instead of leaving at
+  full throttle. The original sets the speed step to zero on take-off and raises
+  it by one per tick up to the type's maximum, braking again on approach. This
+  does not just look different, it changes how a fight goes.
+- **What we called "speed" is the upper limit**, not the speed actually flown.
+
+### Mission 20 — the airfield, for the first time
+
+- **"Hand control" works.** The button in the airfield window (and the **H** key
+  over a flying machine) hands the aircraft to you: the arrow keys turn it and
+  set its speed step, **A** and **Z** change altitude, **Ctrl** fires. **H**, a
+  right-click or **Esc** hand it back — it then flies home and lands.
+- ⚠ **Two things about it look like bugs and are the original:** there is **no
+  lower altitude limit**, so you can fly yourself into a hill; and sinking past
+  the bottom puts you abruptly at the very top. Both are in the 1997 game.
+- ⚠ **H** used to be our overview-map toggle. In the original it belongs to hand
+  control, so our addition steps back and only applies when there is nothing to
+  steer.
+- **"Attack" opens its own map screen** — the "Luft-Einsatzplan" window opens at
+  the mouse, and clicking in it sends the flight off. Until now you had to use
+  the permanent overview map. Size, margin, zoom steps and the conversion from
+  click to map cell are the original's.
+- **"Recycle" works** and returns the design's parts — **scaled by the machine's
+  health**. A half-wrecked fighter returns half. The parts go to the airfield,
+  not to an account; there is no money for it.
+- **"Patrol ON" finally does something.** The flag was only ever displayed.
+  Now every ready **fighter** at an airfield scrambles as soon as a hostile
+  aircraft comes within 60 cells. ⚠ This is only checked every ten ticks, so it
+  takes a moment. That, too, is as read.
+
+### Mission 17 — anti-aircraft fire and the railway
+
+- **The railway survives much longer.** A hit on a rail cell used to take the
+  projectile's full damage; the original computes its own, much smaller number
+  there from the shooter's rank and attack value. Measured over 300 played
+  seconds: 246 hits, which together used to do **five times** the damage they do
+  now.
+- **The flak turns its barrel while reloading**, tracking any aircraft that
+  enters its ring. This changes nothing about the fight — it does not fire more
+  often — but it looks alive instead of frozen.
+- **The flak does not fire at a machine that is landing.** It spares four
+  states: in the hangar, taking off, crashing, and — this was the open one —
+  **on approach to land**. Together that is one simple rule: it only fires at
+  something that is properly airborne.
+- **The firing sequence is now checked against the original:** at most four
+  shots per order, on average two ticks between shots, and twelve to seventeen
+  ticks to reload. All three measured values land inside their range.
+
+### Smaller and more precise
+
+- **The gas bomb and the extinguisher bomb have their impact graphic.** It was
+  missing from the imported data.
+- **The three part stores of an airfield** were being looked up at the wrong
+  offset in the building record. Three independent places in the 1997 game read
+  the same three values — the error was an old note of ours.
+- **The mouse-cursor test bench** mistook our own units for a fault: with one of
+  them standing on a foreign building's door, the cursor correctly said "own
+  unit", and the bench still reported a missing capture cursor. This changes
+  nothing in the game; it was our measurement that lied.
+
+### Known and still open
+
+- On some maps there are structures of a type our name list does not know (144
+  of them across 18 maps, with place names like "Lebork" and "Reda"). They can
+  neither be clicked nor destroyed here. Whether they should be is not decided
+  yet.
+- A help text requested in game is missing from the data — the help window then
+  stays away.
+
 ## 0.6.4 — 2026-09-15 · missions 10 to 14: windows, freighters and allies
 
 > Five missions, each played through on its own. Every point below is a finding
