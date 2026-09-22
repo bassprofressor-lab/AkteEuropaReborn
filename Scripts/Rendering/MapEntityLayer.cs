@@ -284,7 +284,7 @@ public partial class MapEntityLayer : Node2D
         /// Typ 0.
         ///
         /// <b>Typ 0 heisst im Original woertlich »kein Gebaeude«.</b>
-        /// <c>obj_owner(platz)</c> @0x4D076D:</para>
+        /// <c>obj_owner(platz)</c> @0x4D0780 (F 0x4D0330; bis 22.09.2026 hier falsch als 0x4D076D zitiert, bug-302):</para>
         /// <code>
         ///   ecx = platz * 19
         ///   bl  = byte[ecx*4 + 0xC06914]     ; Satz +0x00
@@ -4107,7 +4107,7 @@ public partial class MapEntityLayer : Node2D
                 // ⚠ WAS EIN SATZ OHNE BAUWERK IST, sagt der TYP, nicht `built`:
                 // der Zerstoerer stempelt die Ruine und setzt danach
                 // `byte[typ] = 0` (@0x4C9A8E), und `obj_owner` liest genau
-                // diese Null als »zerstoert/leer« (@0x4D076D -> 12). 75 der 589
+                // diese Null als »zerstoert/leer« (@0x4D0780 -> 12, `mov al,0xC` @0x4D079F). 75 der 589
                 // Saetze tragen Typ 0; sie behalten darum ihre Null, obwohl
                 // auch in ihrem Satz 700 steht — ein freier Satz hat kein
                 // Bauwerk, das man treffen koennte. Gegenschalter
@@ -10809,6 +10809,11 @@ public partial class MapEntityLayer : Node2D
     /// 16 Zellen weit.</summary>
     public static bool ReichweiteAlt;
 
+    /// <summary>GEGENPROBE <c>--rakete-selbstziel</c>: die Mittelstreckenrakete
+    /// nimmt wieder selbst Ziele auf (Kampagne und Gefecht), der Stand vor dem
+    /// 22.09.2026 (K21-Meldung). Das Original tut es nicht (@0x40DDF6).</summary>
+    public static bool RaketeSelbstziel;
+
     /// <summary>Der eigene Wert der Einheit, <c>byte[+0x2B] · 40</c> — in
     /// Zellen, so wie wir Entfernungen fuehren.</summary>
     private static float RangeOfEigen(Entity e)
@@ -11780,6 +11785,27 @@ public partial class MapEntityLayer : Node2D
                                   + $"Ziel ({e.Goal.X},{e.Goal.Y})) — Infanterie schiesst nur im Stand";
                 continue;
             }
+            // ⭐⭐ 22.09.2026 — DIE MITTELSTRECKENRAKETE SUCHT SICH NIE SELBST EIN ZIEL.
+            //
+            // Gemeldet (K21): »ich werde direkt von einer langstrecken rakete
+            // beschossen permanent, wobei die mich garnicht sehen dürften« — und
+            // die Druckwelle zerlegte dabei seine Fabriken. Gemessen: die Rakete
+            // von Spieler 6 auf (195,138) nahm hier von selbst Einheiten in 188
+            // bis 195 Zellen Abstand, 12 Schuesse in 57 s, Mission verloren.
+            //
+            // Das Original: die Schiessuhr kehrt bei Waffe 8 VOR jeder Suche
+            // zurueck — C @0x40DDF6 `cmp al,8 / je 0x40E7F6`, F @0x40DC26
+            // (selbst nachgelesen). Gefeuert wird sie nur ueber den Verteiler
+            // 0x40C8C0: Skript-fire_at (K21: EIN Schuss auf Darkov, Regel 37)
+            // oder Befehl 9 aus Maus/Fenster — die KI sendet ihn nie.
+            // berichte/k21-rakete-sicht-opus.md. Dieselbe Sperre steht schon im
+            // Selbstverteidiger (@0x40FD1D).
+            //
+            // Gilt in Kampagne UND Gefecht — seine Entscheidung vom 22.09.: »das
+            // mit der rakete soll auch so im gefecht sein, wie im original halt«.
+            // Die Gefechts-KI feuert sie weiter ueber ihren Angriffsbefehl (AiSend),
+            // so wie ein Spieler es mit Befehl 9 tut. Gegenschalter --rakete-selbstziel.
+            if (!RaketeSelbstziel && WeaponRowOf(e.Weapon) == 8) continue;
             float range = RangeOf(e);
             int best = -1;
             float bestDist = range;
@@ -14229,7 +14255,7 @@ public partial class MapEntityLayer : Node2D
                 {
                     foreach (var e in _entities)
                         if (e.IsBuilding && e.Slot == slot)
-                            // obj_owner @0x4D076D, woertlich: TYP null (Satz
+                            // obj_owner @0x4D0780, woertlich: TYP null (Satz
                             // +0x00) -> 12, sonst der Besitzer (+0x01). Ein
                             // Satz ohne Bauwerk (NoStructure) antwortet also
                             // NICHT pauschal 12 — Platz 4 auf map_02 hat Typ 51

@@ -81,6 +81,7 @@ public partial class MapEntityLayer
         // darauf stand. ⚠ Die Zahl GEHOERT in die Meldung — sonst sieht ein
         // Lauf, in dem fast nichts geprueft wurde, aus wie ein bestandener.
         int tuerBesetzt = 0;
+        int artNullReste = 0;
         // ⭐ 14.09.2026: das VERBUENDETE Gebaeude hat eine eigene Zeile — ueber ihm steht
         // im Original die Fahrt (Zeigerart 3), weder Einnahme noch Angriff
         // (berichte/verbuendete-fable.md §1). Bis heute zaehlte es als »fremd«.
@@ -88,6 +89,16 @@ public partial class MapEntityLayer
         foreach (var b in _entities)
         {
             if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            // ⭐ 22.09.2026, bug-302 GESCHLOSSEN — ein Satz mit ART 0 ist im
+            // Original KEIN Gebaeude: der Zeichner springt weg (@0x42FCEF),
+            // der Gebaeudetakt auch (@0x43CA6D), die Info-Routine prueft die
+            // Art vor dem Namen (@0x447FFC), und Anwahl/Treffer laufen ueber
+            // den Rastergriff 60000+Platz, den 0 von 121 Art-0-Saetzen tragen
+            // (echte 1138/1138). Es sind Editorreste (K4 Platz 9-11 = die
+            // Stadt »Rome« aus K5). Kein Zeiger dort ist also RICHTIG — sie
+            // werden gezaehlt, nicht beurteilt.
+            // berichte/art0-bauwerke-exe-opus.md, -daten-opus.md
+            if (b.BType == 0) { artNullReste++; continue; }
             var tuer = MitteVon(b.Col + b.DoorCol, b.Row + b.DoorRow);
             var mitte = MitteVon(b.Col + Mathf.Max(1, b.FootW) / 2,
                                  b.Row + Mathf.Max(1, b.FootH) / 2);
@@ -319,6 +330,7 @@ public partial class MapEntityLayer
                     + $"{herrenlosFalsch}");
         sb.AppendLine($"  ZIVILE Gebaeude mit Tuer (Besitzer {NeutralOwner}, der Preis der "
                     + $"Eroberungskarte): {zivilTuer}, davon falsch: {zivilTuerFalsch}");
+        sb.AppendLine($"  Art-0-Reste nicht beurteilt (im Original kein Gebaeude, bug-302): {artNullReste}");
         sb.AppendLine($"  Tueren nicht beurteilt, weil etwas darauf stand: {tuerBesetzt} "
                     + "(bug-353 — der Zeiger sagt dort richtig, was dort steht)");
         if (MapEntityLayer.GebaeudezeigerAlt)
@@ -335,9 +347,6 @@ public partial class MapEntityLayer
         return sb.ToString();
     }
 
-    /// <summary>Der Name einer Gebaeudeart aus der Tafel <c>0x4FDCC4</c>
-    /// (Schrittweite 20, 16 Eintraege). ⭐ <b>Index 0 ist »Basis«</b> — Art 0 ist
-    /// eine ECHTE Gebaeudeart und keine Leermarke.</summary>
     /// <summary>
     /// ⭐⭐ 20.09.2026, bug-353 — <b>STEHT AUF DER TUERZELLE ETWAS ANDERES?</b>
     ///
@@ -362,9 +371,10 @@ public partial class MapEntityLayer
 
     /// <summary>⚠ Die Namenstafel <c>0x4FDCC4</c> ist NULLbasiert, <c>BType</c>
     /// aber EINSbasiert: Index 0 »Basis« ist unser BType 1, Index 8
-    /// »Flughafen« unser BType 9 (daran haengt die Flughafenwache). <b>Art 0
-    /// liegt unter der Tafel und hat keinen Namen</b> — genau darum geht es bei
-    /// bug-302.</summary>
+    /// »Flughafen« unser BType 9 (daran haengt die Flughafenwache). Gelesen wird
+    /// sie als <c>0x4FDCB0 + 20·Art</c> (@0x448086) — der Eintrag fuer Art 0 ist
+    /// leer (20 Nullbytes), und die Info-Routine bricht bei Art 0 ohnehin vorher
+    /// ab (@0x447FFC). bug-302, 22.09.2026.</summary>
     private static string BTypeWort(int t) => t <= 0 ? "OHNE NAMEN (unter der Tafel)"
                                                      : $"Art {t}";
 

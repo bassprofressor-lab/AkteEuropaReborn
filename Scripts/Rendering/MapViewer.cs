@@ -3595,6 +3595,7 @@ public partial class MapViewer : Node2D
             else if (a == "--druckwelle-check") _dwCheck = true;
             // Die Aufklaerung der Gefechts-KI, siehe Simulation/KiAufklaerung.cs.
             else if (a == "--ki-sieht-alles") MapEntityLayer.KiSiehtAlles = true;
+            else if (a == "--rakete-selbstziel") MapEntityLayer.RaketeSelbstziel = true;
             else if (a == "--ki-sicht-check") _kiSichtCheck = true;
             else if (a == "--ki-stufen-aus") MapEntityLayer.KiStufenAus = true;
             else if (a == "--ki-stufen-check") _kiStufenCheck = true;

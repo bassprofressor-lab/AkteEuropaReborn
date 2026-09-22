@@ -227,8 +227,10 @@ public static class CwmData
             //
             // ⚠ Deshalb wird die Pruefung STRENGER und nicht ANDERS: haenge man
             // sie allein an `hp_max`, kaemen die 70 neu herein, und ob die echt
-            // sind, ist ungelesen — das Original nennt einen Satz mit Typ 0
-            // woertlich »kein Gebaeude« (`obj_owner` @0x4D076D gibt dafuer 12
+            // sind, war ungelesen — ⭐ 22.09.2026 GELESEN (bug-302): sie sind es
+            // NICHT, das Original zeichnet, trifft und benennt Art 0 nie
+            // (berichte/art0-bauwerke-exe-opus.md). Das Original nennt einen Satz mit Typ 0
+            // woertlich »kein Gebaeude« (`obj_owner` @0x4D0780, F 0x4D0330, gibt dafuer 12
             // zurueck). Ein Satz ohne Typ UND ohne Trefferpunkte ist dagegen
             // unter jeder Lesart leer.
             if (s3[k + 0x04] == 0 &&
