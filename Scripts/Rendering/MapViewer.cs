@@ -3596,6 +3596,8 @@ public partial class MapViewer : Node2D
             // Die Aufklaerung der Gefechts-KI, siehe Simulation/KiAufklaerung.cs.
             else if (a == "--ki-sieht-alles") MapEntityLayer.KiSiehtAlles = true;
             else if (a == "--rakete-selbstziel") MapEntityLayer.RaketeSelbstziel = true;
+            else if (a == "--antiradar-aus") MapEntityLayer.AntiradarAus = true;
+            else if (a == "--antiradar-probe") MapEntityLayer.AntiradarProbeAn = true;
             else if (a == "--ki-sicht-check") _kiSichtCheck = true;
             else if (a == "--ki-stufen-aus") MapEntityLayer.KiStufenAus = true;
             else if (a == "--ki-stufen-check") _kiStufenCheck = true;
@@ -5242,6 +5244,8 @@ public partial class MapViewer : Node2D
             if (_angriffProbe) GD.Print(_entities.AngriffProbe());
             if (_fussvolkProbe) GD.Print(_entities.FussvolkProbe());
             if (_zeigerCheck) GD.Print(_entities.ZeigerCheckLine());
+            GD.Print(_entities.AntiradarZeile());
+            if (MapEntityLayer.AntiradarProbeAn) GD.Print(_entities.AntiradarProbeZeile());
             if (_schiffsentwurfCheck) GD.Print(_entities.SchiffsentwurfCheckLine());
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_teilespendeCheck) GD.Print(_entities.TeilespendeCheckLine());

@@ -352,10 +352,42 @@ public sealed class FogGrid
     /// 11.08.2026 nimmt (die alte Notiz »nothing calls this yet« war
     /// ueberholt).</para></summary>
     public void Update(IEnumerable<(int Col, int Row, int Sight, int Elev)> watchers)
+        => Update(watchers, null, null);
+
+    /// <summary>Wie viele gerade offene Zellen der ANTIRADAR im letzten
+    /// <see cref="Update"/> geschlossen hat. Nur wenn es mehr als 0 sind, setzt
+    /// das Original die Klangmarke 0x677E28 (@0x420500) — siehe
+    /// <c>MapEntityLayer.Antiradar</c>.</summary>
+    public int AntiradarZu { get; private set; }
+
+    /// <summary>
+    /// ⭐ 22.09.2026 — die Nebelrunde MIT dem ANTIRADAR (C @0x420A5C..0x420C55,
+    /// F @0x41FC4A). Nach allen Oeffnern:
+    /// <list type="number">
+    /// <item><paramref name="stoerer"/>: um jeden wird die Sicht im Radius 8
+    ///   GESCHLOSSEN (`push 8` @0x420AB3, Schliesser 0x4203A0 — dieselbe
+    ///   Kreistafel 0x4F8A48 wie der Oeffner, Deckel 19). Geschlossen wird nur,
+    ///   was offen war (`test cl,cl / je` @0x4204FC); das Aufgedeckte bleibt.</item>
+    /// <item><paramref name="wiederAuf"/>: nur wenn es mindestens einen Stoerer
+    ///   gab (`test cl,cl / je 0x420C57` @0x420AE5), oeffnen die eigenen und
+    ///   verbuendeten Einheiten ihre EIGENE Zelle (Radius 0, @0x420BA6) und die
+    ///   Flugzeuge Radius 3 (@0x420C3B) — Gebaeude und Radarmasten nicht mehr.</item>
+    /// </list>
+    /// </summary>
+    public void Update(IEnumerable<(int Col, int Row, int Sight, int Elev)> watchers,
+                       IReadOnlyList<(int Col, int Row)>? stoerer,
+                       IEnumerable<(int Col, int Row, int R)>? wiederAuf)
     {
         Zuruecksetzen();
         foreach (var (col, row, sight, elev) in watchers)
             Stamp(col, row, UnitRadius(sight, elev));
+        AntiradarZu = 0;
+        if (stoerer is { Count: > 0 })
+        {
+            foreach (var (col, row) in stoerer) Stamp(col, row, AntiradarRadius, schliessen: true);
+            if (wiederAuf != null)
+                foreach (var (col, row, r) in wiederAuf) Stamp(col, row, r);
+        }
         MarkCorners();
         SaumSetzen();
         Version++;
@@ -364,7 +396,11 @@ public sealed class FogGrid
     /// <summary>@0x4200c0: clamp the radius, then open each row by the span the
     /// table gives. `d` counts in from the rim, which is how the table is
     /// indexed — the centre row is the widest.</summary>
-    private void Stamp(int col, int row, int sight)
+    /// <summary>Radius, in dem ein feindlicher Antiradar die Sicht schliesst —
+    /// das Literal `push 8` @0x420AB3.</summary>
+    public const int AntiradarRadius = 8;
+
+    private void Stamp(int col, int row, int sight, bool schliessen = false)
     {
         int max = _radii > 0 ? _radii - 1 : MaxRadius;
         // The original clamps on the HIGH side only (@0x4200c8, `cmp si,0x13`).
@@ -405,7 +441,13 @@ public sealed class FogGrid
             int arm = dy == 0 ? half - 1 : half;
             int x0 = Mathf.Max(0, col - arm), x1 = Mathf.Min(Width - 1, col + arm);
             int at = y * Width;
-            for (int x = x0; x <= x1; x++) _cells[at + x] = Watched;
+            if (schliessen)
+            {
+                for (int x = x0; x <= x1; x++)
+                    if (_cells[at + x] == Watched) { _cells[at + x] = Seen; AntiradarZu++; }
+            }
+            else
+                for (int x = x0; x <= x1; x++) _cells[at + x] = Watched;
         }
     }
 

@@ -2167,8 +2167,96 @@ public partial class MapEntityLayer : Node2D
         // through FogActive, not the setting: otherwise a run with `--fog` would
         // filter the dots against a grid that RevealAll had just wiped
         if (!FogActive) { _fog.RevealAll(); return; }
-        _fog.Update(Watchers());
+        AntiradarProbeSetzen();          // --antiradar-probe, auch im Nullmodell
+        if (AntiradarAus) _fog.Update(Watchers());
+        else AntiradarNebel();
         KiNebelAktualisieren();          // ⭐ 11.09.2026, Simulation/KiAufklaerung.cs
+    }
+
+    /// <summary><c>--antiradar-aus</c> — der Stand vor dem 22.09.2026: der
+    /// Antiradar (Bauteilzeile 77) hat keine Wirkung.</summary>
+    public static bool AntiradarAus;
+
+    /// <summary>Bauteilzeile des Antiradars (+0x0E == 0x4D, @0x420A8A).</summary>
+    public const int AntiradarPart = 77;
+
+    /// <summary>Messwerte fuer <c>--antiradar-check</c>: Stoerer im letzten
+    /// Nebelschritt, geschlossene Zellen, Klaenge.</summary>
+    public int AntiradarStoerer, AntiradarZellen, AntiradarKlaenge, AntiradarRunden, AntiradarZellenMax, AntiradarStoererMax;
+    private bool _antiradarWirkte;
+
+    /// <summary>
+    /// ⭐ 22.09.2026 — DER ANTIRADAR. Gefragt: »und funktioniert bei uns der
+    /// antiradar korrekt?« — er hatte gar keine Wirkung, das Bauteil 77 stand
+    /// nur in Namenslisten.
+    ///
+    /// <para>Das Original, C selbst nachgelesen (berichte/radar-fable.md §4):
+    /// am Ende der Nebelrunde laeuft eine Schleife ueber alle 8000 Einheiten
+    /// (@0x420A68..0x420AE3, F @0x41FC4A). Jede lebende (+0x09 != 0xFF) mit
+    /// Bauteilzeile 77, deren Spieler dem Betrachter NICHT verbuendet ist
+    /// (Buendnistafel 0x87B155, @0x420AA8), schliesst die Sicht im Radius 8 um
+    /// sich. Gab es einen, oeffnen danach nur noch die Einheiten der Seite
+    /// ihre eigene Zelle (UKOL &lt; 50) und Flugzeuge Radius 3 — ein
+    /// Stoerer macht also ein Loch, in dem man nur noch sieht, worauf man
+    /// steht. Hat er etwas geschlossen (0x677E28, gesetzt @0x420500), Klang 47
+    /// an seiner Lage (@0x420B22, Modus 2).</para>
+    ///
+    /// <para>⚠ UNSERE SETZUNG: das Original ruft Klang 47 in JEDER Nebelrunde,
+    /// in der etwas zugeht — bei uns 5-mal je Sekunde. Wir spielen ihn nur,
+    /// wenn der Stoerer neu zu wirken beginnt. Ungelesen ist die Pruefung
+    /// @0x420B60 (byte[0xB38D38 + Spieler], dword 0x539234) beim Wiederoeffnen;
+    /// sie ist hier weggelassen. Nur fuer den Nebel des BETRACHTERS, wie im
+    /// Original (0x4FA284) — die KI-Nebel des Gefechts bleiben unberuehrt.</para>
+    /// </summary>
+    private void AntiradarNebel()
+    {
+        var stoerer = new List<(int Col, int Row)>();
+        foreach (var e in _entities)
+            if (!e.Dead && !e.IsProp && !e.IsBuilding && e.Part == AntiradarPart
+                && e.Owner is >= 0 and <= 7 && !DecktAuf(e.Owner, ViewPlayer))
+                stoerer.Add((e.Col, e.Row));
+        AntiradarStoerer = stoerer.Count;
+        AntiradarStoererMax = Mathf.Max(AntiradarStoererMax, stoerer.Count);
+        _fog!.Update(Watchers(), stoerer, stoerer.Count > 0 ? AntiradarWiederAuf() : null);
+        AntiradarZellen = _fog.AntiradarZu;
+        bool wirkt = _fog.AntiradarZu > 0;
+        if (wirkt) { AntiradarRunden++; AntiradarZellenMax = Mathf.Max(AntiradarZellenMax, _fog.AntiradarZu); }
+        if (wirkt != _antiradarWirkte)
+            GD.Print(wirkt
+                ? $"antiradar: {stoerer.Count} feindliche(r) Stoerer, schliesst {_fog.AntiradarZu} offene Zellen (Radius 8), zuletzt bei ({stoerer[^1].Col},{stoerer[^1].Row})"
+                : "antiradar: schliesst nichts mehr");
+        if (wirkt && !_antiradarWirkte)
+        {
+            var (c, r) = stoerer[^1];                    // der letzte, wie @0x420AD2
+            Audio.GameSounds.PlayAt(47, c, r);
+            AntiradarKlaenge++;
+        }
+        _antiradarWirkte = wirkt;
+    }
+
+    /// <summary>Schlusszeile jedes Laufs: hat ein Antiradar gewirkt?</summary>
+    public string AntiradarZeile()
+        => AntiradarAus ? "antiradar: AUS (--antiradar-aus) — Nullmodell, muss 0 Runden zeigen"
+         : $"antiradar: {AntiradarRunden} Nebelrunden mit Wirkung, hoechstens {AntiradarZellenMax} Zellen zu, Klang 47 {AntiradarKlaenge}x; "
+           + $"Stoerer hoechstens {AntiradarStoererMax}, Nebel {(FogActive ? "an" : "AUS")}; Einheiten namens Antiradar: "
+           + string.Join(" ", _entities.Where(e => !e.Dead && LabelOf(e).Contains("Antiradar"))
+                                       .Select(e => $"P{e.Owner}@({e.Col},{e.Row}) Part {e.Part} Waffe {e.Weapon}"));
+
+    private IEnumerable<(int Col, int Row, int R)> AntiradarWiederAuf()
+    {
+        foreach (var e in _entities)
+        {
+            if (e.Dead || e.IsProp || e.IsBuilding) continue;
+            if (!DecktAuf(e.Owner, ViewPlayer)) continue;
+            if (Untergestellt(e) || e.Ukol >= 50) continue;   // @0x420BA2
+            yield return (e.Col, e.Row, 0);
+        }
+        foreach (var sp in _special)
+        {
+            if (sp.Stored || sp.Dead || sp.Owner is < 0 or > 7) continue;
+            if (!DecktAuf(sp.Owner, ViewPlayer)) continue;
+            yield return (sp.Col, sp.Row, 3);                  // push 3 @0x420C3B
+        }
     }
 
     /// <summary>
