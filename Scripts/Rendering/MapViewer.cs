@@ -912,6 +912,7 @@ public partial class MapViewer : Node2D
         }
         if (_minenfensterCheck) { _ = MinenfensterLauf(); return; }
         if (_depotfensterCheck) { _ = DepotfensterLauf(); return; }
+        if (_bahnhoffensterCheck) { _ = BahnhoffensterLauf(); return; }
         if (_marktfensterCheck) { _ = MarktfensterLauf(); return; }
         if (_mitnahmefensterCheck) { _ = MitnahmeLauf(); return; }
         if (_generatorCheck) { _ = GeneratorLauf(); return; }
@@ -3519,6 +3520,7 @@ public partial class MapViewer : Node2D
             else if (a == "--depotfenster-aus") MapEntityLayer.DepotfensterAus = true;
             else if (a == "--aussenden-sofort") MapEntityLayer.AussendenSofort = true;
             else if (a == "--depotfenster-check") _depotfensterCheck = true;
+            else if (a == "--bahnhoffenster-check") _bahnhoffensterCheck = true;
             else if (a == "--fabrikfenster-check") _fabrikfensterCheck = true;
             else if (a == "--einheiteninfo-check") _einheiteninfoCheck = true;
             else if (a == "--einheiteninfo-alt") MapEntityLayer.EinheiteninfoAlt = true;
@@ -3598,6 +3600,13 @@ public partial class MapViewer : Node2D
             else if (a == "--rakete-selbstziel") MapEntityLayer.RaketeSelbstziel = true;
             else if (a == "--antiradar-aus") MapEntityLayer.AntiradarAus = true;
             else if (a == "--antiradar-probe") MapEntityLayer.AntiradarProbeAn = true;
+            else if (a == "--bahnschalter-matrix-alt") MapEntityLayer.BahnschalterMatrixAlt = true;
+            else if (a == "--bahnhoffenster-alt") UI.BuildingWindow.BahnhoffensterAlt = true;
+            else if (a == "--transportsystem-aus") MapEntityLayer.TransportsystemAus = true;
+            else if (a == "--verlegung-depot-alt") MapEntityLayer.VerlegungDepotAlt = true;
+            else if (a == "--zugfarbe-alt") MapEntityLayer.ZugfarbeAlt = true;
+            else if (a == "--leiste-alt") MapEntityLayer.LeisteAlt = true;
+            else if (a == "--k21-lager-check" || a == "--k21-lager-check=schalter") { MapEntityLayer.K21LagerCheckAn = true; MapEntityLayer.K21LagerSchalter = a.EndsWith("=schalter"); }
             else if (a == "--ki-sicht-check") _kiSichtCheck = true;
             else if (a == "--ki-stufen-aus") MapEntityLayer.KiStufenAus = true;
             else if (a == "--ki-stufen-check") _kiStufenCheck = true;
@@ -5246,6 +5255,7 @@ public partial class MapViewer : Node2D
             if (_zeigerCheck) GD.Print(_entities.ZeigerCheckLine());
             GD.Print(_entities.AntiradarZeile());
             if (MapEntityLayer.AntiradarProbeAn) GD.Print(_entities.AntiradarProbeZeile());
+            if (MapEntityLayer.K21LagerCheckAn) GD.Print(_entities.K21LagerCheckLine());
             if (_schiffsentwurfCheck) GD.Print(_entities.SchiffsentwurfCheckLine());
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_teilespendeCheck) GD.Print(_entities.TeilespendeCheckLine());
@@ -6585,12 +6595,13 @@ public partial class MapViewer : Node2D
     /// <summary>Den Kartenschirm an dieser Bildschirmstelle oeffnen. Das
     /// Original nimmt die Mausstelle minus 3 in beiden Achsen
     /// (@0x449A97/@0x449AA3).</summary>
-    private void KartenschirmAuf(Vector2 stelle, int zoom, int flughafen)
+    private void KartenschirmAuf(Vector2 stelle, int zoom, int flughafen, int betriebsart = 2)
     {
         if (_kartenschirm == null) return;
         var zellen = _entities.MapZellSize();
         if (zellen.X <= 0 || zellen.Y <= 0) return;
-        _kartenschirm.Zeige(zellen, zoom, flughafen);
+        _transportsystemLinie = -1;
+        _kartenschirm.Zeige(zellen, zoom, flughafen, betriebsart);
         // ⚠ Auf dem Schirm halten. Das Original oeffnet stur an der Maus; bei
         // uns ist der Schirm groesser und das Fenster kleiner, aber ein Fenster,
         // das halb draussen aufgeht, waere kein originalgetreues Fenster,
@@ -6637,6 +6648,9 @@ public partial class MapViewer : Node2D
         _kartenschirm.Fuellen = FuelleKartenschirm;
         _kartenschirm.OnZelle = (c, r) =>
         {
+            // ⭐ 22.09.2026 — Betriebsart 1 (Transportsystem) und 5
+            // (Einheiten-Transport) gehen ihren eigenen Weg, BahnhofFenster.cs.
+            if (KartenschirmKlickBahn(c, r)) return;
             // Das Fenster schliesst NACH dem Klick (Bericht §6, Bauaufgabe 2).
             // ⚠ Erst schliessen, dann den Klick: ZielwahlKlick ruft OnZielwahl
             // (false) und wuerde sonst auf ein Fenster treffen, das der eigene
@@ -6646,8 +6660,9 @@ public partial class MapViewer : Node2D
         };
         _kartenschirm.OnClose = () =>
         {
+            bool zielwahl = _kartenschirm.Betriebsart == 2;
             KartenschirmZu();
-            _entities.ZielwahlAbbrechen();     // Schliessen IST der Abbruch
+            if (zielwahl) _entities.ZielwahlAbbrechen();     // Schliessen IST der Abbruch
         };
         // Zoom: das Original SCHLIESST und oeffnet mit neuem Index neu
         // (@0x448F84), unter Mitnahme von Modus und Flughafenfenster.
@@ -6660,8 +6675,9 @@ public partial class MapViewer : Node2D
         {
             var wo = _kartenschirm.Position;
             int fh = _kartenschirm.Flughafen;
+            int ba = _kartenschirm.Betriebsart;
             KartenschirmZu();
-            KartenschirmAuf(wo, z, fh);
+            KartenschirmAuf(wo, z, fh, ba);
         };
         _gebaeudeFenster.Daten = _entities.BuildingWindowData;
         _gebaeudeFenster.OnStart = _entities.BuildingWindowStart;
@@ -6729,6 +6745,8 @@ public partial class MapViewer : Node2D
         _gebaeudeFenster.OnStaffelUmschalten = _entities.StaffelUmschalten;
         // ⭐ 13.09.2026: »Aussenden« im Depotfenster (Befehl 504, @0x44C083).
         _gebaeudeFenster.OnDepotAussenden = _entities.DepotAussenden;
+        // ⭐ 22.09.2026 — Bahnhofsfenster, Transportsystem, Einheiten-Transport.
+        BahnhofFensterVerdrahten(layer);
         // ⭐ 13.09.2026: die vier Knöpfe des Fabrikfensters (Klickarm 0x44ACF1),
         // und »Anhalten« der Mine — 517 ist derselbe Umschalter wie 511.
         _gebaeudeFenster.OnFabrikKnopf = _entities.FabrikKnopf;

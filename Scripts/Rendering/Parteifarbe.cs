@@ -143,6 +143,14 @@ public partial class MapEntityLayer
     /// Einheitenfeld Tausenderblöcke hat.</summary>
     public const int Parteien = 8;
 
+    /// <summary>⭐ 22.09.2026 — <b>Farbe 10, die NEUTRALE Gruppe</b>: Besitzer 11
+    /// geht als 10 in den Blitter (@0x42B6A0, <c>push 0xa</c>), und
+    /// <c>4·10 + 1</c> landet auf den Palettenplätzen <b>41…44</b> — in allen
+    /// 28 NN.PAL dieselben vier dunklen Grautöne (selbst gelesen). Bisher nur
+    /// für die Züge benutzt.</summary>
+    public const int NeutralFarbe = 10;
+    private static readonly uint[] Neutralband = { 0x6f6363, 0x5b5353, 0x4b3f3f, 0x372f2f };
+
     private static readonly Dictionary<(ulong, int), Texture2D?> _parteiTex = new();
 
     /// <summary>Wie viele Bilder umgefärbt wurden, wie viele Bildpunkte dabei
@@ -185,7 +193,7 @@ public partial class MapEntityLayer
         // Ruempfe 12, 144 und 145 haben gar keine blauen. Der Spieler blieb
         // damit gruen. Das Original nimmt Besitzer 0 nicht aus - seine Rechnung
         // (Quelle-1)>>1 + 4*Besitzer ergibt fuer 0 genau die blaue Vierergruppe.
-        if (besitzer < 0 || besitzer >= Parteien) return tex;    // 255 = herrenlos
+        if ((besitzer < 0 || besitzer >= Parteien) && besitzer != NeutralFarbe) return tex;    // 255 = herrenlos
 
         var key = (tex.GetRid().Id, besitzer);
         if (_parteiTex.TryGetValue(key, out var fertig)) return fertig;
@@ -210,7 +218,8 @@ public partial class MapEntityLayer
                 if (Bandquelle[q] != rgb) continue;
                 // ⭐ Genau die Rechnung des Blitters: (Quelle-1)>>1 + 4·Besitzer,
                 // hier schon als Platz IN der Vierergruppe.
-                uint z = Bandziel[besitzer * 4 + (q >> 1)];
+                uint z = besitzer == NeutralFarbe ? Neutralband[q >> 1]
+                                                  : Bandziel[besitzer * 4 + (q >> 1)];
                 d[i] = (byte)(z >> 16); d[i + 1] = (byte)(z >> 8); d[i + 2] = (byte)z;
                 treffer++;
                 break;

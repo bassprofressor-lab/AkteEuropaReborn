@@ -2116,7 +2116,7 @@ public partial class MapEntityLayer
     /// Anker dagegen nicht. Gemessen an <c>04.CWM</c>: die fuenf Kraftwerke
     /// haben auf ihren Ankern <c>0xFFFE</c>, und die fuenf Zellen, auf die das
     /// Missionsskript zielt, tragen genau <c>60000..60004</c>.</para></summary>
-    private int GebaeudeAufZelle(int c, int r)
+    public int GebaeudeAufZelle(int c, int r)
     {
         for (int i = 0; i < _entities.Count; i++)
         {

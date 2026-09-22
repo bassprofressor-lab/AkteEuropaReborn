@@ -402,7 +402,11 @@ public partial class MapEntityLayer : Node2D
         for (int bi = 0; bi < _entities.Count; bi++)
         {
             var b = _entities[bi];
-            if (b.BType != 5 || !b.IsBuilding || b.IsProp || b.Dead || b.Garage.Count == 0) continue;
+            // ⚠ 22.09.2026 — auch Bahnhof (6) und Feldbahnhof (12): »Aussenden«
+            // gibt dort denselben Befehl 504 (0x448D5B). WER sie dort herauslaesst,
+            // ist UNGELESEN — wir nehmen denselben Auslass wie beim Depot.
+            // Benannte Setzung (berichte/bahnhof-transport-fable.md §7.7).
+            if (b.BType is not (5 or 6 or 12) || !b.IsBuilding || b.IsProp || b.Dead || b.Garage.Count == 0) continue;
             int grenze = System.Math.Min(b.Garage.Count, 5);
             for (int k = 0; k < grenze; k++)
             {

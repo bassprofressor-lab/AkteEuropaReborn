@@ -371,6 +371,22 @@ public sealed partial class BuildingWindow : PanelContainer
     /// <summary>⭐ Fensterart 23 mit den Möbeln des Originals.</summary>
     private DepotView? _depot;
 
+    /// <summary>⭐ 22.09.2026 — Fensterart 2 (Bahnhof) mit den Möbeln des
+    /// Originals. Siehe <see cref="BahnhofView"/>.</summary>
+    private BahnhofView? _bahnhof;
+    public BahnhofView? BahnhofAnsicht => _bahnhof;
+    public bool ZeigtOriginalBahnhof { get; private set; }
+
+    /// <summary><c>--bahnhoffenster-alt</c> — der Godot-Eigenbau vom 21.08.2026.</summary>
+    public static bool BahnhoffensterAlt;
+
+    /// <summary>Bahnhof: Knopf »Transportsystem« (Karte, Betriebsart 1).</summary>
+    public System.Action? OnTransportsystem;
+    /// <summary>Bahnhof: »Transportieren« mit den markierten Griffen (Karte, Betriebsart 5).</summary>
+    public System.Action<List<int>>? OnTransportieren;
+    /// <summary>Bahnhof: Meldungsfenster (»Sie haben keine Einheit gewählt!«).</summary>
+    public System.Action<string>? OnMeldungText;
+
     /// <summary>Für den Prüfstand.</summary>
     public DepotView? DepotAnsicht => _depot;
 
@@ -637,6 +653,16 @@ public sealed partial class BuildingWindow : PanelContainer
         _depot.OnAussenden = griffe => OnDepotAussenden?.Invoke(griffe);
         AddChild(_depot);
 
+        // ⭐ 22.09.2026 — DER BAHNHOF (Fensterart 2), dieselbe Bauart wie das Depot.
+        _bahnhof = new BahnhofView { Visible = false };
+        _bahnhof.OnClose = Schliessen;
+        _bahnhof.OnChanged = Refresh;
+        _bahnhof.OnAussenden = griffe => OnDepotAussenden?.Invoke(griffe);
+        _bahnhof.OnTransportsystem = () => OnTransportsystem?.Invoke();
+        _bahnhof.OnTransportieren = griffe => OnTransportieren?.Invoke(griffe);
+        _bahnhof.OnMeldung = t => OnMeldungText?.Invoke(t);
+        AddChild(_bahnhof);
+
         // ⭐ 13.09.2026 — DIE FABRIK (Fensterart 8), dieselbe Bauart wie die Mine.
         _fabrik = new FabrikView { Visible = false };
         _fabrik.OnClose = Schliessen;
@@ -743,6 +769,7 @@ public sealed partial class BuildingWindow : PanelContainer
         _kennung = kennung;
         // Ein frisch angelegtes Depotfenster hat keine Markierung (0x459E5F).
         if (art == Art.Depot) _depot?.Neu();
+        if (art == Art.Bahnhof) _bahnhof?.Neu();
         if (art == Art.Fabrik) _fabrik?.Neu();
         if (art == Art.Geschaeftszentrum) _markt?.Neu();
         Refresh();
@@ -789,6 +816,30 @@ public sealed partial class BuildingWindow : PanelContainer
         bool mineOriginal = _art == Art.Mine && _mine != null && MineView.Usable
                             && !MinenfensterAlt;
         bool depotOriginal = _art == Art.Depot && _depot != null && DepotView.Usable;
+        bool bahnhofOriginal = _art == Art.Bahnhof && _bahnhof != null && BahnhofView.Usable
+                               && !BahnhoffensterAlt;
+        if (_bahnhof != null) _bahnhof.Visible = bahnhofOriginal;
+        ZeigtOriginalBahnhof = bahnhofOriginal;
+        if (bahnhofOriginal)
+        {
+            if (_posten != null) _posten.Visible = false;
+            if (_mine != null) _mine.Visible = false;
+            if (_flughafen != null) _flughafen.Visible = false;
+            if (_depot != null) _depot.Visible = false;
+            if (_fabrik != null) _fabrik.Visible = false;
+            if (_generator != null) _generator.Visible = false;
+            if (_markt != null) _markt.Visible = false;
+            _senk.Visible = false;
+            AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+            CustomMinimumSize = new Vector2(
+                BahnhofView.WTiles * WindowChrome.Cell * BahnhofView.Scale,
+                BahnhofView.HTiles * WindowChrome.Cell * BahnhofView.Scale);
+            Size = CustomMinimumSize;
+            _bahnhof!.Zeige(s);
+            _titel.Text = s.Name + " Bahnhof";
+            _knopfZahl = 3;
+            return;
+        }
         // ⭐⭐ 19.09.2026 — und dasselbe fuer den FLUGHAFEN (Fensterart 5).
         bool flughafenOriginal = _art == Art.Flughafen && _flughafen != null
                                  && FlughafenView.Usable && !FlughafenfensterAlt;

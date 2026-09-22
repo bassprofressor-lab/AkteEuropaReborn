@@ -162,12 +162,26 @@ public partial class MapEntityLayer
         foreach (var t in RailTransfers)
         {
             w.ItemStart();
-            w.Num("design", t.Design).Num("at", t.At).Num("dest", t.DestNode)
+            w.Num("design", t.Design).Num("unit", t.Einheit != null ? _entities.IndexOf(t.Einheit) : -1)
+             .Num("at", t.At).Num("dest", t.DestNode)
              .Num("owner", t.Owner).Num("line", t.Line).Bool("riding", t.Riding);
             var r = new System.Text.StringBuilder("[");
             for (int i = 0; i < t.Route.Length; i++)
             { if (i > 0) r.Append(','); r.Append(t.Route[i]); }
             w.Raw("route", r.Append(']').ToString());
+            w.ItemEnd();
+        }
+        w.ArrayEnd();
+
+        // ---- die WARENSCHALTER der Bahnlinien (22.09.2026) ------------------
+        // ⚠ Seit sie von Hand gesetzt werden (Befehl 500), sind sie Zustand —
+        // ohne diese Zeilen setzte das Laden sie auf die Matrix zurueck.
+        w.ArrayStart("rail_modes");
+        foreach (var (slot, mode, ownA, ownB) in RailModesForSave())
+        {
+            w.ItemStart();
+            w.Num("line", slot).Num("m0", mode[0]).Num("m1", mode[1]).Num("m2", mode[2]).Num("m3", mode[3])
+             .Num("own_a", ownA).Num("own_b", ownB);
             w.ItemEnd();
         }
         w.ArrayEnd();
@@ -375,6 +389,16 @@ public partial class MapEntityLayer
         if (root.TryGetValue("help_texts_shown", out var htv) && htv.VariantType == Variant.Type.Array)
             foreach (var q in htv.AsGodotArray()) UI.HelpWindow.MerkeGezeigt(q.AsInt32());
 
+        if (root.TryGetValue("rail_modes", out var rmv) && rmv.VariantType == Variant.Type.Array)
+            foreach (var item in rmv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var d = item.AsGodotDictionary<string, Variant>();
+                RailModeRestore(GetI(d, "line", -1),
+                    new[] { (byte)GetI(d, "m0", 2), (byte)GetI(d, "m1", 2), (byte)GetI(d, "m2", 2), (byte)GetI(d, "m3", 2) },
+                    GetI(d, "own_a", -99), GetI(d, "own_b", -99));
+            }
+
         RailTransfersClear();
         if (root.TryGetValue("rail_transfers", out var rt) && rt.VariantType == Variant.Type.Array)
             foreach (var item in rt.AsGodotArray())
@@ -387,7 +411,8 @@ public partial class MapEntityLayer
                 if (route.Count == 0) continue;
                 RailTransferRestore(GetI(d, "design"), route, GetI(d, "at"),
                                     GetB(d, "riding"), GetI(d, "dest", -1),
-                                    GetI(d, "owner", -1), GetI(d, "line", -1));
+                                    GetI(d, "owner", -1), GetI(d, "line", -1),
+                                    GetI(d, "unit", -1));
             }
 
         if (root.TryGetValue("marks", out var kv2) && kv2.VariantType == Variant.Type.Array)

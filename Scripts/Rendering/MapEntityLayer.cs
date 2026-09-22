@@ -4336,6 +4336,7 @@ public partial class MapEntityLayer : Node2D
         _lineRoute.Clear();
         _linePiece.Clear();
         _lineCell.Clear();
+        _linieJeZelle = null;             // BahnTransportsystem.cs
         _lineCellFrame.Clear();
         _linePath.Clear();
         _lineCellPiece.Clear();
@@ -16202,6 +16203,10 @@ public partial class MapEntityLayer : Node2D
     /// Damit man das sieht statt es zu erraten, schreibt die Leiste jetzt
     /// »gesamt« und die Zahl der gezählten Gebäude dazu (UI/GameHud.cs).</para>
     /// </remarks>
+    /// <summary><c>--leiste-alt</c> — die Leiste ohne Bahnhöfe und Zugladung
+    /// (Stand vor dem 22.09.2026).</summary>
+    public static bool LeisteAlt;
+
     private bool CountsForStocks(Entity e, int player) =>
         e.IsBuilding && !e.Dead && e.Owner == player &&
         (IsFactory(e) || e.BType is 1 or 9 or 16);
@@ -16223,10 +16228,28 @@ public partial class MapEntityLayer : Node2D
         int t = 0, w = 0, f = 0, s = 0, n = 0;
         foreach (var e in _entities)
         {
-            if (!CountsForStocks(e, player)) continue;
+            // ⭐ 22.09.2026 — auch die BAHNHOEFE (6/12). Gemeldet: »da rohstoffwerte
+            // immer wieder fallen sobald sie gewisse werte erreichen«. Die Leiste
+            // zaehlte Fabriken und Basis, aber nicht, wohin der Zug die Ware
+            // bringt: eine Fabrik fuellt sich bis 80, der Zug laedt alles, und
+            // die Leiste fiel um 80 (berichte/bahnhof-transport-fable.md §1.4).
+            // Seine Entscheidung: »wenn unsere leiste korrekte werte bekommt, kann
+            // sie bleiben«. Gegenschalter --leiste-alt.
+            bool bahnhof = !LeisteAlt && e.IsBuilding && !e.Dead && e.Owner == player
+                           && e.BType is 6 or 12;
+            if (!CountsForStocks(e, player) && !bahnhof) continue;
             t += e.StockT; w += e.StockW; f += e.StockF; s += e.StockS;
             n++;
         }
+        // ... und die LADUNG im Zug, solange beide Enden ihm gehoeren (nur dann
+        // faehrt die Linie ueberhaupt, @0x4C789D).
+        if (!LeisteAlt)
+            foreach (var l in _railLines)
+            {
+                var a = RailBuilding(l.Bud1); var b = RailBuilding(l.Bud2);
+                if (a == null || b == null || a.Owner != player || b.Owner != player) continue;
+                w += l.Cargo[GoodW]; f += l.Cargo[GoodF]; s += l.Cargo[GoodS]; t += l.Cargo[GoodT];
+            }
         return (t, w, f, s, _money[Mathf.Clamp(player, 0, 7)], n);
     }
 
@@ -18869,7 +18892,8 @@ public partial class MapEntityLayer : Node2D
     public void DepotAussenden(List<int> griffe)
     {
         var b = Fenstergebaeude();
-        if (b == null || b.BType != 5) return;
+        // ⭐ 22.09.2026 — auch aus dem BAHNHOF (Druckarm 0x448CBE, Befehl 504).
+        if (b == null || b.BType is not (5 or 6 or 12)) return;
         foreach (int g in griffe)
         {
             if (g < 0 || g >= _entities.Count) continue;
@@ -18996,7 +19020,8 @@ public partial class MapEntityLayer : Node2D
         if (e.BType == 9) FuelleHangar(e, st);
         if (IsSupplyDepot(e)) FuelleAngebot(e, st);
         if (e.BType == 9) FuelleFlughafenAngebot(e, st);
-        if (e.BType == 5) FuelleDepot(e, st);
+        // ⭐ 22.09.2026 — auch der Bahnhof zeigt seine Insassen (sec30, bis 6).
+        if (e.BType is 5 or 6 or 12) FuelleDepot(e, st);
         if (e.BType is 2 or 3 or 4) FuelleFabrik(e, st);
         if (e.BType == 7)
         {
@@ -30895,6 +30920,20 @@ public partial class MapEntityLayer : Node2D
             || (dy < 0.5f && Mathf.Abs(dx - TileW) < 0.5f);
     }
 
+    /// <summary><c>--zugfarbe-alt</c> — Waggons ungefärbt (Stand vor dem 22.09.2026).</summary>
+    public static bool ZugfarbeAlt;
+
+    /// <summary>Der Farbparameter eines Waggons: Besitzer des Gebäudes an Knoten 1
+    /// (<c>SPOJ +0x00 → 0xA8D508 → Geb+0x05</c>), 11 → 10. -1 = ungefärbt.</summary>
+    public int ZugBesitzerFarbe(int linie)
+    {
+        var (b1, _) = RailEndsOf(linie);
+        var e = RailBuilding(b1);
+        if (e == null) return -1;
+        if (e.Owner == NeutralOwner) return NeutralFarbe;        // 11 -> 10, @0x42B68F/0x42B6A0
+        return e.Owner is >= 0 and < Parteien ? e.Owner : -1;
+    }
+
     /// <summary>Nur noch die WAGGONS — die Strecke unter ihnen liegt jetzt bei
     /// den Gebäuden, siehe <see cref="DrawRailAndBuildings"/>.</summary>
     private void DrawTrains()
@@ -30907,6 +30946,11 @@ public partial class MapEntityLayer : Node2D
             int part = WagonPart.TryGetValue(w.Index, out var pp) ? pp : 58;
             int piece = w.Index == 3 ? (w.Piece + 4) & 7 : w.Piece;   // @0x42b52a
             var tex = GetTrainTexture(part, piece);
+            // ⭐ 22.09.2026 — DIE ZUGFARBE (C 0x42B673..0x42B6D4, F 0x42A860):
+            // der Besitzer des Gebaeudes an KNOTEN 1 der Linie; 11 (neutral) als
+            // Farbe 10. Gemeldet: »züge passen wohl auch ihre farbe an, von
+            // neutral bishin welcher spieler«. Gegenschalter --zugfarbe-alt.
+            if (!ZugfarbeAlt) tex = Parteifarbe(tex, ZugBesitzerFarbe(w.Line));
             // ⚠ 17.08.2026 — MIT DER HÖHE AUS DEM GLEISBILD (Fehler C17). Hier
             // stand `RailPoint(...)` allein, und das zieht die Höhe der
             // GERUNDETEN Zelle ab — eine Treppe je Zelle, während die Rampe im

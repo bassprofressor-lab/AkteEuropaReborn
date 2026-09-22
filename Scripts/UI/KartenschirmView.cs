@@ -4,7 +4,7 @@ using Godot;
 using System;
 
 /// <summary>
-/// <b>FENSTERART 3 — DER KARTENSCHIRM »Luft-Einsatzplan«</b> (20.09.2026,
+/// <b>FENSTERART 3 — DER KARTENSCHIRM »Luft-Einsatzplanung«</b> (20.09.2026,
 /// Bauaufgabe 2 aus <c>berichte/flughafenfenster-k20-fable.md</c> §3.3).
 ///
 /// <para>Das ist das Fenster, das der Spieler meint, wenn er sagt, man setze
@@ -18,7 +18,7 @@ using System;
 ///     gibt es schon ein Art-3-Fenster im Modus 2 -> nach vorn holen, Ende   @0x444DA0
 ///     W = dword[0x542DC4] ; H = dword[0x542DF8]                            (in ZELLEN)
 ///     Kacheln_breit = ceil(s*W / 20) + 2 ; Kacheln_hoch = ceil(s*H / 20) + 2  @0x444EE4..0x444F06
-///     Titel 0x4FC668 = "Luft-Einsatzplan"                                   @0x444EC2
+///     Titel 0x4FC668 = "Luft-Einsatzplanung"                                @0x444EC2
 ///     +0xA223 := Zoomindex ; +0xA1A0 := 2 (Zielwahl) ; +0xA1A2 := Flughafenfenster
 ///     Kartenbild bei ((Breite - s*W)/2, (Hoehe - s*H)/2)                    @0x444F9D
 ///
@@ -66,8 +66,10 @@ public sealed partial class KartenschirmView : Control
     /// Zelle. Der vierte Eintrag ist 0 und damit das Ende.</summary>
     public static readonly int[] Zoomtafel = { 1, 2, 3 };
 
-    /// <summary>Der Titel, <c>0x4FC668</c> — selbst aus der EXE gelesen.</summary>
-    public const string Titel = "Luft-Einsatzplan";
+    /// <summary>Der Titel, <c>0x4FC668</c>. ⚠ 22.09.2026 berichtigt: hier stand
+    /// »Luft-Einsatzplan« — die EXE traegt »Luft-Einsatzplanung« (Tafel 100 Byte
+    /// je Betriebsart ab 0x4FC5A0, nachgelesen).</summary>
+    public const string Titel = "Luft-Einsatzplanung";
 
     /// <summary>Der Rand: <b>eine Kachel</b> auf jeder Seite (die <c>+2</c> in
     /// <c>ceil(s·W/20) + 2</c> @0x444EED).</summary>
@@ -78,6 +80,41 @@ public sealed partial class KartenschirmView : Control
     public const int MausVersatz = 3;
 
     public const int Scale = 2;
+
+    /// <summary>
+    /// ⭐ 22.09.2026 — <b>die Betriebsart</b>, <c>+0x8C3CD8</c>. Die Titel stehen
+    /// in einer Tafel zu 100 Byte je Art ab <c>0x4FC5A0</c> (selbst gelesen):
+    /// 1 »Verknüpfungskarte« (0x4FC604, das TRANSPORTSYSTEM, Öffner 0x444A30),
+    /// 2 »Luft-Einsatzplanung« (0x4FC668), 3 »Raketen-Einsatzplanung«,
+    /// 4 »Materialtransport Planung«, 5 »Einheiten-Transport Planung« (0x4FC794,
+    /// Öffner 0x4459F0). Gebaut sind 1, 2 und 5.
+    /// </summary>
+    public int Betriebsart { get; private set; } = 2;
+
+    /// <summary>Farbe 0x99 aus <c>01.PAL</c> — die hervorgehobene Linie
+    /// (@0x4B825F).</summary>
+    public static readonly Color LinienFarbe = Color.Color8(240, 81, 49);
+
+    /// <summary>Betriebsart 1: die Maus steht über einer Zelle (Mausbewegung
+    /// <c>0x447B3C</c>); der Halter sucht die Linie und setzt die Hervorhebung.</summary>
+    public Action<int, int>? OnZelleUeber;
+
+    private Control? _hervor;
+    private System.Collections.Generic.List<Vector2>? _hervorZellen;
+
+    /// <summary>Die Zellen der hervorgehobenen Linie, oder null.</summary>
+    public void Hervorheben(System.Collections.Generic.List<Vector2>? zellen)
+    {
+        _hervorZellen = zellen;
+        _hervor?.QueueRedraw();
+    }
+
+    public string TitelText => Betriebsart switch
+    {
+        1 => "Verknüpfungskarte",
+        5 => "Einheiten-Transport Planung",
+        _ => Titel,
+    };
 
     private const int TitleX = 10, TitleY = 2;
 
@@ -161,8 +198,10 @@ public sealed partial class KartenschirmView : Control
             && k.Y * WindowChrome.Cell * Scale < schirm.Y;
     }
 
-    public void Zeige(Vector2I zellen, int zoomindex, int flughafen)
+    public void Zeige(Vector2I zellen, int zoomindex, int flughafen, int betriebsart = 2)
     {
+        Betriebsart = betriebsart;
+        _hervorZellen = null;
         _zellen = zellen;
         _zoom = Mathf.Clamp(zoomindex, 0, Zoomtafel.Length - 1);
         Flughafen = flughafen;
@@ -180,7 +219,26 @@ public sealed partial class KartenschirmView : Control
         _karte.Position = ((Size - bild) * 0.5f).Round();
         _karte.Visible = true;
         _karte.QueueRedraw();
+        if (_hervor == null)
+        {
+            // Die Hervorhebung liegt UEBER dem Koerper — eine eigene Flaeche,
+            // weil _Draw dieses Fensters unter seinen Kindern malt.
+            _hervor = new Control { MouseFilter = MouseFilterEnum.Ignore };
+            AddChild(_hervor);
+            _hervor.Draw += MaleHervorhebung;
+        }
+        _hervor.Position = _karte.Position;
+        _hervor.Size = _karte.Size;
+        _hervor.QueueRedraw();
         QueueRedraw();
+    }
+
+    private void MaleHervorhebung()
+    {
+        if (_hervor == null || _hervorZellen == null) return;
+        float s = Massstab * Scale;
+        foreach (var z in _hervorZellen)
+            _hervor.DrawRect(new Rect2(z.X * s, z.Y * s, s, s), LinienFarbe, true);
     }
 
     private Rendering.Minimap NeueKarte()
@@ -215,7 +273,7 @@ public sealed partial class KartenschirmView : Control
         var k = KachelMass(_zellen, _zoom);
         WindowChrome.Paint(this, k.X, k.Y, Scale);
         var font = ThemeDB.FallbackFont;
-        DrawString(font, new Vector2(TitleX, TitleY + 12) * Scale, Titel,
+        DrawString(font, new Vector2(TitleX, TitleY + 12) * Scale, TitelText,
                    HorizontalAlignment.Left, -1, 12 * Scale, WindowChrome.TitleColour);
 
         // Die zwei Zoomknoepfe. ⚠ Lage und Groesse sind UNSERE Setzung (siehe
@@ -286,6 +344,10 @@ public sealed partial class KartenschirmView : Control
         {
             Position += mm.Relative;
             AcceptEvent();
+        }
+        else if (@event is InputEventMouseMotion mo && Betriebsart == 1)
+        {
+            if (ZelleUnter(mo.Position) is { } z) OnZelleUeber?.Invoke(z.X, z.Y);
         }
     }
 }

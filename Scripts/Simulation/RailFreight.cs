@@ -132,6 +132,10 @@ public partial class MapEntityLayer : Node2D
         public long Moved;
         public bool WasFaze4;
 
+        /// <summary>Die Besitzer beider Enden, als die Schalter zuletzt aus
+        /// der Matrix gesetzt wurden. -99 = noch nie (Laden der Karte).</summary>
+        public int OwnA = -99, OwnB = -99;
+
         /// <summary>true = die Waggons dieser Linie hat der Automat selbst
         /// angelegt (die Karte brachte keine mit) und räumt sie am Ziel wieder
         /// weg. false = von der Karte übernommen, die bleiben stehen.</summary>
@@ -139,6 +143,72 @@ public partial class MapEntityLayer : Node2D
     }
 
     private readonly List<RailLine> _railLines = new();
+
+    /// <summary><c>--bahnschalter-matrix-alt</c> — der Stand vor dem 22.09.2026:
+    /// die Warenschalter jede Runde neu aus der Matrix, Handschalter gehen
+    /// verloren.</summary>
+    public static bool BahnschalterMatrixAlt;
+
+    /// <summary>Wie oft Befehl 500 kam (fuer die Pruefstaende).</summary>
+    public int BahnschalterBefehle;
+
+    /// <summary>
+    /// <b>Befehl 500 = <c>spoj_set_flag</c></b> (Verteiler 0x4C26E0
+    /// <c>cmp eax,0x1F4</c> -> 0x4C3701 -> 0x4B0220, F 0x4AFB50):
+    /// <c>byte[0xA89228 + 214·Linie + Ware] := Wert</c>. Wert 0 = faehrt zu
+    /// Knoten 1, 1 = zu Knoten 2, 2 = angehalten (Ladewerk
+    /// <c>Schalter + Richtung == 1</c> @0x4C65BA). Keine Besitzerpruefung im
+    /// Befehl selbst — die macht die Karte, die nur Linien mit zwei eigenen
+    /// Enden anbietet (@0x447C02/0x447C23).
+    /// </summary>
+    public bool RailSetFlag(int lineSlot, int ware, int wert)
+    {
+        if (ware is < 0 or > 3 || wert is < 0 or > 2) return false;
+        foreach (var l in _railLines)
+            if (l.Slot == lineSlot)
+            {
+                l.Mode[ware] = (byte)wert;
+                BahnschalterBefehle++;
+                BahnschalterGeaendert?.Invoke(lineSlot);   // 0x44FD70: Art-4-Fenster neu
+                return true;
+            }
+        return false;
+    }
+
+    /// <summary>Wird nach jedem Befehl 500 gerufen — die Fenster der Linie
+    /// malen sich neu (0x44FD70).</summary>
+    public event System.Action<int>? BahnschalterGeaendert;
+
+    /// <summary>Die vier Schalter einer Linie (Kopie), oder null.</summary>
+    public byte[]? RailModeOf(int lineSlot)
+    {
+        foreach (var l in _railLines) if (l.Slot == lineSlot) return (byte[])l.Mode.Clone();
+        return null;
+    }
+
+    /// <summary>Knoten-1- und Knoten-2-Gebaeude einer Linie (Plaetze), oder (-1,-1).</summary>
+    public (int Bud1, int Bud2) RailEndsOf(int lineSlot)
+    {
+        foreach (var l in _railLines) if (l.Slot == lineSlot) return (l.Bud1, l.Bud2);
+        return (-1, -1);
+    }
+
+    /// <summary>Fuer den Spielstand: je Linie Schalter und die Besitzer, bei
+    /// denen sie gesetzt wurden.</summary>
+    public IEnumerable<(int Slot, byte[] Mode, int OwnA, int OwnB)> RailModesForSave()
+    {
+        foreach (var l in _railLines) yield return (l.Slot, l.Mode, l.OwnA, l.OwnB);
+    }
+
+    public void RailModeRestore(int slot, byte[] mode, int ownA, int ownB)
+    {
+        foreach (var l in _railLines)
+            if (l.Slot == slot)
+            {
+                for (int k = 0; k < 4 && k < mode.Length; k++) l.Mode[k] = mode[k];
+                l.OwnA = ownA; l.OwnB = ownB;
+            }
+    }
 
     // ==== DIE VERLEGTE EINHEIT FAEHRT MIT ===================================
 
@@ -181,6 +251,9 @@ public partial class MapEntityLayer : Node2D
     public sealed class RailTransfer
     {
         public int Design;          // was verlegt wird (unsere Depotnummer)
+        /// <summary>⭐ 22.09.2026 — die EINHEIT selbst (Befehl 518 aus dem
+        /// Bahnhof, +0x02 des Satzes). null = alte Entwurfs-Verlegung.</summary>
+        public Entity? Einheit;
         public int[] Route = System.Array.Empty<int>();
         public int At;              // +0x2C
         public bool Riding;         // +0x2D
@@ -217,8 +290,29 @@ public partial class MapEntityLayer : Node2D
         });
     }
 
+    /// <summary>CreateConvoy 0x4CEA90 fuer eine EINHEIT (Befehl 518).</summary>
+    public void RailTransferStartEinheit(Entity u, List<int> route, int owner)
+    {
+        _railTransfers.Add(new RailTransfer
+        {
+            Design = -1,
+            Einheit = u,
+            Route = route.ToArray(),
+            At = 0,
+            Riding = false,
+            DestNode = route[^1],
+            Owner = owner,
+        });
+    }
+
+    /// <summary>Eine verlegte Einheit geht verloren — einheit_entfernen 0x410E60.</summary>
+    private static void VerlegteEinheitWeg(RailTransfer t)
+    {
+        if (t.Einheit != null) t.Einheit.Dead = true;
+    }
+
     /// <summary>Alle Sätze wegwerfen — der Spielstand baut sie neu auf.</summary>
-    public void RailTransfersClear() => _railTransfers.Clear();
+    public void RailTransfersClear() { _railTransfers.Clear(); _ankunftTuer.Clear(); }
 
     /// <summary>Wie viele Mitfahrer mit einem Zug untergegangen sind.</summary>
     public int RailTransfersKilled;
@@ -252,6 +346,7 @@ public partial class MapEntityLayer : Node2D
             if (t.Riding) continue;                       // +0x2D != 0
             if (t.At < 0 || t.At >= t.Route.Length) continue;
             if (t.Route[t.At] != node) continue;          // +4 + +0x2C
+            VerlegteEinheitWeg(t);
             _railTransfers.RemoveAt(i);
             n++;
         }
@@ -292,6 +387,7 @@ public partial class MapEntityLayer : Node2D
         {
             var t = _railTransfers[i];
             if (!t.Riding || t.Line != lineSlot) continue;
+            VerlegteEinheitWeg(t);
             _railTransfers.RemoveAt(i);
             n++;
         }
@@ -340,11 +436,12 @@ public partial class MapEntityLayer : Node2D
     /// eine verlegte Einheit beim Speichern weg: aus dem Quelldepot heraus,
     /// im Zieldepot noch nicht.</summary>
     public void RailTransferRestore(int design, List<int> route, int at, bool riding,
-                                    int destNode, int owner, int line)
+                                    int destNode, int owner, int line, int unit = -1)
     {
         _railTransfers.Add(new RailTransfer
         {
             Design = design,
+            Einheit = unit >= 0 && unit < _entities.Count ? _entities[unit] : null,
             Route = route.ToArray(),
             At = Mathf.Clamp(at, 0, route.Count - 1),
             Riding = riding,
@@ -411,11 +508,13 @@ public partial class MapEntityLayer : Node2D
             _railTransfers.RemoveAt(i);
             if (ziel is { IsBuilding: true, Dead: false })
             {
-                ziel.Depot.Add(t.Design);
+                if (t.Einheit != null) BahnAnkunftEinheit(t.Einheit, ziel);   // 0x410DF0
+                else ziel.Depot.Add(t.Design);
                 RailTransfersDone++;
             }
             else
             {
+                VerlegteEinheitWeg(t);
                 RailTransfersLost++;
                 GD.Print("verlegen: das Zielgebaeude steht nicht mehr — die Einheit ist weg");
             }
@@ -620,6 +719,8 @@ public partial class MapEntityLayer : Node2D
         _railLastDt = dt;
         if (_railLines.Count == 0) return;
         if (_bldBySlot.Count == 0) RebuildRailIndex();
+        K21LagerTakt(dt);                 // --k21-lager-check (22.09.2026)
+        BahnAnkunftTakt();                // UKOL-0x38-Arm 0x409E4D (22.09.2026)
         // ⚠ 11.08.2026 — die FAHRT laeuft je Bild, der AUTOMAT weiter im Takt.
         //
         // Vorher zog RailStep die Fahrzeit in Stufen von RailTickSeconds
@@ -684,10 +785,24 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
 
-            // @0x43CEA2: die Schalter werden bei jedem Besitzerwechsel neu aus
-            // der Matrix gesetzt. Wir rechnen sie jede Runde nach — dasselbe
-            // Ergebnis, ohne den Wechsel abfangen zu müssen.
-            SpojModeFor(a.BType, b.BType, l.Mode);
+            // ⭐⭐ 22.09.2026 — DIE SCHALTER BLEIBEN STEHEN.
+            //
+            // Hier stand: »Wir rechnen sie jede Runde nach — dasselbe Ergebnis,
+            // ohne den Wechsel abfangen zu müssen.« Dasselbe Ergebnis war es nur,
+            // solange niemand einen Schalter von Hand setzt — und genau das tut
+            // der Spieler im Original mit dem Transportsystem (Befehl 500,
+            // spoj_set_flag 0x4B0220). In K21 kommen Fahrwerk und Spezial NUR so
+            // zur Basis: zwischen zwei Bahnhoefen faehrt die Matrix nichts.
+            // Gemeldet: »ich kann nach wie vor keine einheiten bauen trotz das
+            // die züge schon mehrmals gefahren sind« (berichte/bahnhof-transport-
+            // fable.md §1). Das Original setzt die Matrix nur beim Laden
+            // (0x41F2A2) und beim BESITZERWECHSEL eines Endes (0x43CEA2).
+            // Gegenschalter --bahnschalter-matrix-alt.
+            if (BahnschalterMatrixAlt || a.Owner != l.OwnA || b.Owner != l.OwnB)
+            {
+                SpojModeFor(a.BType, b.BType, l.Mode);
+                l.OwnA = a.Owner; l.OwnB = b.Owner;
+            }
 
             if (l.Faze == 0)
             {
