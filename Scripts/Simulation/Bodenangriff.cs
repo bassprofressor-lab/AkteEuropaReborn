@@ -382,6 +382,9 @@ public partial class MapEntityLayer : Node2D
     /// derselben Stelle <c>word[0x4FA0C8] != 0xFFFF</c> (@0x432023), bevor es
     /// den Angriffszeiger setzt.</summary>
     public bool HasSelection => _sel.Count > 0;
+    /// <summary>Ist ein Flugzeug gewaehlt? (_selAir, getrennt von _sel) — fuer den
+    /// Linksklick nach Original, MapViewer.LinksklickBefiehlt.</summary>
+    public bool HasAirSelection => _selAir >= 0;
 
     /// <summary>Die Mitte einer Zelle in Kartenpunkten — der Zielpunkt eines
     /// Bodenschusses.</summary>

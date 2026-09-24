@@ -921,6 +921,7 @@ public partial class MapViewer : Node2D
         if (_hauptmenueCheck) { _ = HauptmenueLauf(); return; }
         if (_gebaeudelisteCheck) { _ = GebaeudelisteLauf(); return; }
         if (_einheitenlisteCheck) { _ = EinheitenlisteLauf(); return; }
+        if (_mausCheck) { _ = MausLauf(); return; }
         if (_forschungslisteCheck) { _ = ForschungslisteLauf(); return; }
         if (_zeigerfensterCheck) { _ = ZeigerfensterLauf(); return; }
         if (_cdspielerCheck) { _ = CdSpielerLauf(); return; }
@@ -2404,6 +2405,75 @@ public partial class MapViewer : Node2D
         return -1;
     }
 
+    private bool _mausCheck;
+
+    /// <summary><c>--maus-check</c> — die Maustasten nach Original (Simulation/
+    /// MausProbe.cs), mit ECHTEN Ereignissen an _UnhandledInput.
+    /// Soll neu: links auf leeres Gelaende = Fahrt (Auswahl bleibt), links auf
+    /// eigene Einheit = Anwahl, rechts = Abwahl ohne Fahrt.
+    /// Nullmodell --maus-alt: links auf Gelaende faehrt NICHT, rechts faehrt.</summary>
+    private async System.Threading.Tasks.Task MausLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder($"maus-check{(MausAlt ? " (--maus-alt)" : "")}\n");
+        var auf = _entities.MausProbeAufbau();
+        if (auf == null)
+        {
+            GD.Print(sb.Append("  keine zwei eigenen Landfahrzeuge mit freiem Nachbarfeld — DURCHGEFALLEN").ToString());
+            GetTree().Quit(0);
+            return;
+        }
+        var (a, b, posA, posB, frei, posFrei) = auf.Value;
+        _camera.Position = posA;
+        for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        async System.Threading.Tasks.Task Klick(Vector2 karte, MouseButton knopf)
+        {
+            var p = GetViewport().GetCanvasTransform() * karte;
+            GetViewport().PushInput(new InputEventMouseMotion { Position = p, GlobalPosition = p }, true);
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = knopf, Pressed = true, Position = p, GlobalPosition = p }, true);
+_mausProbePunkt = karte;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = knopf, Pressed = false, Position = p, GlobalPosition = p }, true);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            _mausProbePunkt = null;
+            for (int t = 0; t < 3; t++) _entities.SimTickFuerProbe();
+        }
+        string Wahl() => string.Join(",", _entities.Selection);
+
+        // 1. links auf leeres Gelaende
+        _entities.MausProbeWaehle(a);
+        var ziel0 = _entities.MausProbeZiel(a);
+        await Klick(posFrei, MouseButton.Left);
+        bool faehrtL = _entities.MausProbeZiel(a) != ziel0;
+        bool bleibtL = System.Linq.Enumerable.Contains(_entities.Selection, a);
+        sb.Append($"  links auf Gelaende ({frei.X},{frei.Y}): Ziel {ziel0} -> {_entities.MausProbeZiel(a)}, Auswahl [{Wahl()}]\n");
+
+        // 2. links auf die zweite eigene Einheit
+        _entities.MausProbeWaehle(a);
+        await Klick(posB, MouseButton.Left);
+        bool waehltB = System.Linq.Enumerable.Contains(_entities.Selection, b) && !System.Linq.Enumerable.Contains(_entities.Selection, a);
+        sb.Append($"  links auf eigene Einheit {b}: Auswahl [{Wahl()}]\n");
+
+        // 3. rechts auf leeres Gelaende
+        _entities.MausProbeWaehle(a);
+        _entities.MausProbeHalt(a);
+        var ziel1 = _entities.MausProbeZiel(a);
+        await Klick(posFrei + new Vector2(0, 1), MouseButton.Right);
+        bool faehrtR = _entities.MausProbeZiel(a) != ziel1;
+        bool leerR = _entities.Selection.Count == 0;
+        sb.Append($"  rechts auf Gelaende: Ziel {ziel1} -> {_entities.MausProbeZiel(a)}, Auswahl [{Wahl()}]\n");
+
+        bool ok = MausAlt
+            ? !faehrtL && waehltB && faehrtR
+            : faehrtL && bleibtL && waehltB && !faehrtR && leerR;
+        sb.Append($"  Gegenschalter --maus-alt: {MausAlt}\n");
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
+        GetTree().Quit(0);
+    }
+
     private async System.Threading.Tasks.Task EinheitenlisteLauf()
     {
         for (int i = 0; i < 5; i++)
@@ -3538,6 +3608,8 @@ public partial class MapViewer : Node2D
             else if (a == "--einheitenliste-check") _einheitenlisteCheck = true;
             else if (a == "--zeilenklick-aus") UI.BuildingListView.ZeilenklickAus = true;
             else if (a == "--zeiger-ueberall-alt") ZeigerUeberallAlt = true;
+            else if (a == "--maus-alt") MausAlt = true;
+            else if (a == "--maus-check") _mausCheck = true;
             else if (a == "--neubaustrom-alt") MapEntityLayer.NeubaustromAlt = true;
             else if (a == "--neubaufeld-alt") MapEntityLayer.NeubauFeldAlt = true;
             else if (a == "--cdspieler-alt") UI.CdPlayerView.Alt = true;
@@ -8047,7 +8119,7 @@ public partial class MapViewer : Node2D
             {
                 var drunter = GetViewport().GuiGetHoveredControl();
                 GD.Print($"klick-log: KARTE bekommt {(mb.Pressed ? "DRUCK " : "LOS   ")} "
-                       + $"bei {mb.Position} (global {GetGlobalMousePosition()}) | "
+                       + $"bei {mb.Position} (global {KartenMaus()}) | "
                        + $"unter dem Zeiger: {(drunter == null ? "NICHTS" : drunter.Name + " " + drunter.GetType().Name)} | "
                        + $"Gebaeudefenster {(_gebaeudeFenster == null ? "fehlt" : (_gebaeudeFenster.Visible ? "offen " + _gebaeudeFenster.GetGlobalRect() : "zu"))} | "
                        + $"Leinwand {GetViewport().GetVisibleRect().Size} Fenster {GetWindow().Size}");
@@ -8076,7 +8148,7 @@ public partial class MapViewer : Node2D
                         // ist Original (Zustand 7 -> 0x437994[7]). Er kommt VOR
                         // allem anderen, sonst raeumt die Karte die Anwahl.
                         if (_entities.ZielwahlSchwebt
-                            && _entities.CellAt(GetGlobalMousePosition()) is { } zw
+                            && _entities.CellAt(KartenMaus()) is { } zw
                             && _entities.ZielwahlKlick(zw.X, zw.Y))
                         {
                             _leftDown = false;
@@ -8094,7 +8166,7 @@ public partial class MapViewer : Node2D
                         _leftDown = true;
                         _boxSelect = false;
                         _leftStart = mb.Position;
-                        _bandStart = GetGlobalMousePosition();
+                        _bandStart = KartenMaus();
                     }
                     else
                     {
@@ -8118,21 +8190,24 @@ public partial class MapViewer : Node2D
                         // Klick eine Einheit an und der Menuedruck verfiele.
                         // Siehe Simulation/Zeigermerker.cs.
                         if (_leftDown && !_boxSelect && _entities.Zeigermerker >= 0
-                            && _entities.MerkerKlick(GetGlobalMousePosition()))
+                            && _entities.MerkerKlick(KartenMaus()))
                         {
                             if (_entities.ZeigerNote.Length > 0)
                                 _entities.Say(_entities.ZeigerNote);
                         }
                         else if (_leftDown && !_boxSelect && _entities.RouteWahlModus != 0)
-                            _entities.RouteKlickAufGebaeude(GetGlobalMousePosition());
+                            _entities.RouteKlickAufGebaeude(KartenMaus());
                         else if (_leftDown && !_boxSelect && _entities.PlacementMode != 0 &&
-                            _entities.CellAt(GetGlobalMousePosition()) is { } bc)
+                            _entities.CellAt(KartenMaus()) is { } bc)
                             _entities.PlacementClick(bc.X, bc.Y);
                         else if (_leftDown && _boxSelect)
-                            _entities.BoxSelect(RectFrom(_bandStart, GetGlobalMousePosition()),
+                            _entities.BoxSelect(RectFrom(_bandStart, KartenMaus()),
                                                 mb.ShiftPressed);
+                        else if (_leftDown && !MausAlt
+                                 && LinksklickBefiehlt(KartenMaus(), mb.CtrlPressed))
+                            KartenBefehl(mb.ShiftPressed, mb.CtrlPressed);
                         else if (_leftDown)
-                            _entities.SelectAt(GetGlobalMousePosition(), mb.ShiftPressed);
+                            _entities.SelectAt(KartenMaus(), mb.ShiftPressed);
                         _leftDown = false;
                         _boxSelect = false;
                         _entities.SetBand(null);
@@ -8195,146 +8270,15 @@ public partial class MapViewer : Node2D
                         }
                         if (_rightDown && !_rightDrag)
                         {
-                            // ⚠ EINGABEN WERDEN DATEN. Der Klick setzt einen
-                            // Befehl ab; gewirkt wird am nächsten Taktanfang
-                            // (MapEntityLayer.SimTick → CommandTick). Vorher
-                            // schrieb ein Mausklick mitten im Bildlauf direkt in
-                            // die Einheiten — für ein Netzspiel nicht
-                            // reparierbar, weil der zweite Rechner den Klick
-                            // nicht hat und der Zeitpunkt an der Leitung hängt.
-                            //
-                            // Das Original macht es genauso: post() @0x4C1C50
-                            // schickt auch den EIGENEN Befehl über DirectPlay und
-                            // führt ihn erst aus, wenn er über Receive im Ring
-                            // (0xB4FA38, 1000 Plätze) zurückkommt. Satzlänge
-                            // 236 Byte, dreifach belegt. Siehe
-                            // Simulation/Commands/CommandBridge.cs.
-                            //
-                            // PostAttack gibt wie IssueAttack false zurück, wenn
-                            // der Klick kein Ziel getroffen hat — die Weiche
-                            // bleibt dieselbe.
-                            // ⚠ 17.08.2026 — STRG MACHT DARAUS »EINNEHMEN«
-                            // (Fehler C9 und C11). Ohne diese Weiche gewinnt
-                            // immer der Angriff: ein feindliches Gebaeude IST
-                            // ein Ziel, also kam PostMove nie dran und die
-                            // Einheit konnte die Tuerzelle gar nicht erreichen.
-                            // Neutrale Gebaeude griff niemand an, deshalb ging
-                            // es dort und nur dort. Die ganze Herleitung samt
-                            // Messung steht bei PostCapture.
-                            // ⚠ 18.08.2026 — EIN ANGEWÄHLTES FLUGZEUG BEKOMMT
-                            // EIN FLUGZIEL. Gemeldet als »im Gefecht wäre es
-                            // doch sinnvoll die Einheiten eigenständig zu
-                            // steuern«. Die Weiche steht ganz vorn, weil ein
-                            // Flugzeug und eine Bodenauswahl sich ausschliessen
-                            // (SetPrimary) — es kann also nichts anderes meinen.
-                            //
-                            // Ob der Befehl überhaupt angenommen wird, entscheidet
-                            // der BEHANDLER (nur ausserhalb der Kampagne, siehe
-                            // CommandBridge.ApplyAirMove) — nicht diese Stelle.
-                            // Eine Sperre in der Eingabe wäre auf der zweiten
-                            // Maschine nicht vorhanden.
-                            if (_entities.PostAirMove(GetGlobalMousePosition(),
-                                                      mb.ShiftPressed) > 0)
+                            // ⭐ 24.09.2026 — im Original gibt die rechte Taste NIE
+                            // einen Zielbefehl: sie waehlt ab (0x4144CC -> 0x433010).
+                            // Der Befehl kommt links, siehe KartenBefehl.
+                            if (MausAlt) KartenBefehl(mb.ShiftPressed, mb.CtrlPressed);
+                            else
                             {
-                                _rightDown = false; _rightDrag = false;
-                                break;
+                                _entities.ClearSelection();
+                                UpdateUnitOrderBar();
                             }
-                            // ⭐ 23.09.2026, bug-368 — WO DER SCHRAUBENSCHLUESSEL
-                            // STEHT, REPARIERT DER KLICK (Zeigerart 22 -> Klickarm
-                            // 0x437836 -> Befehl 29). Vor Strg, wie der Zeiger.
-                            if (_entities.PostGleisreparaturKlick(GetGlobalMousePosition()))
-                            {
-                                _rightDown = false; _rightDrag = false;
-                                break;
-                            }
-                            if (mb.CtrlPressed)
-                            {
-                                // ⚠ Reihenfolge mit Bedacht: EINNEHMEN behaelt
-                                // den Vortritt (Fehler C9/C11 vom 17.08.2026),
-                                // danach der BODENANGRIFF des Originals
-                                // (@0x437417, UTOK_NA = 30000 + Spalte). Wer
-                                // gar nicht schiessen kann, faehrt hin.
-                                // ⭐⭐ 08.09.2026 — ERST DAS ZIEL, DANN DIE
-                                // ZELLE. Seine Meldung: »ich kann mit Strg
-                                // immer noch nicht Kraftwerke angreifen«.
-                                //
-                                // Die Zieluebersetzung des Originals
-                                // (`UTOK_NA` @0x4353F0) nimmt, was unter dem
-                                // Zeiger LIEGT: unter 8000 die Einheit selbst
-                                // (@0x435433), 60000..60299 ein GEBAEUDE
-                                // (@0x435465), dann Bruecke/Rampe, und erst
-                                // sonst die blosse Bodenzelle. Der Bodenangriff
-                                // ist der LETZTE Zweig, nicht der erste.
-                                //
-                                // Bei uns stand er vor PostAttack und griff die
-                                // Zelle unter dem Gebaeude an — und ein
-                                // Bodenangriff tut einem GEBAEUDE nichts (er
-                                // kennt nur Wald, Objekte und Einheiten). Strg
-                                // auf ein Kraftwerk hiess damit: Befehl
-                                // angenommen, Wirkung keine.
-                                //
-                                // ⭐⭐ 15.09.2026 — STRG NIMMT NICHT MEHR EIN, und
-                                // Strg greift Verbuendete an wie im Original (seine
-                                // Entscheidungen a und b). Die Kette steht jetzt in
-                                // MapEntityLayer.StrgRechtsklick, damit der
-                                // Pruefstand denselben Weg geht. Gegenschalter
-                                // --strg-einnahme-alt, --kein-angriff-auf-verbuendete.
-                                _entities.StrgRechtsklick(GetGlobalMousePosition(), mb.ShiftPressed);
-                            }
-                            // ⭐⭐⭐ 08.09.2026 — WO DER EINNAHMEZEIGER STEHT,
-                            // NIMMT DER KLICK EIN. Seine Meldung: »das einnahme
-                            // icon fuehrt aber nicht zur einnahme, sondern die
-                            // sagen angriff, schiessen aber nicht«.
-                            //
-                            // ⭐ Und damit faellt der Einwand, der bei
-                            // PostCapture seit dem 17.08.2026 stand (»eine
-                            // Weiche, die das fuer den Spieler entscheidet,
-                            // laege in der Haelfte der Faelle falsch«): DAS
-                            // ORIGINAL HAT DIESE WEICHE SELBST, und sie ist die
-                            // ZELLE. Auf der Tuerzelle steht Zeigerart 6
-                            // (@0x4323F5), auf dem Rest des Gebaeudes Art 10 —
-                            // also Einnehmen dort, Angriff hier. Der Spieler
-                            // zielt sie mit der Maus, und er sieht vorher, was
-                            // er bekommt. Strg bleibt, wo es war.
-                            //
-                            // ⚠ Dass 0x63 in 0x542E18 wirklich die TUERZELLE
-                            // ist, steht im Bauabschluss selbst: @0x43CB08
-                            // schreibt `word[0xBDEA80 + 2*Zelle] := 0xFFFE` und
-                            // gleich darauf @0x43CB12 `byte[0x542E18 + Zelle]
-                            // := 0x63` — dieselbe Zelle, aus den Tuerfeldern
-                            // des Gebaeudesatzes gerechnet.
-                            //
-                            // Gegenschalter --einnahmeklick-alt.
-                            //
-                            // ⭐ 07.09.2026 — ABSETZEN geht vor Angriff und Fahrt:
-                            // auf einer Rampe mit beladenem Traeger meint der
-                            // Rechtsklick nichts anderes (seine Meldung C).
-                            // ⭐⭐ 08.09.2026 — UND WO KEIN ANGRIFFSZEIGER
-                            // STEHT, GREIFT DER EINFACHE KLICK AUCH NICHT AN.
-                            // Seine Meldung: »wenn ich normalen wegpunkt auf
-                            // das Nachschubdepot lege, und da erscheint kein
-                            // Attack Icon, ballern die trotzdem drauf los«.
-                            //
-                            // Ein herrenloses Gebaeude bekommt im Original
-                            // Zeigerart 1 (@0x43253A) — kein Fadenkreuz, also
-                            // auch kein Angriff. Der Befehl bleibt erreichbar:
-                            // Strg greift weiter alles an.
-                            else if (!(_entities.EinnahmezeigerHier(GetGlobalMousePosition())
-                                       && _entities.PostCapture(GetGlobalMousePosition(),
-                                                                mb.ShiftPressed))
-                                  && !_entities.PostUnloadKlick(GetGlobalMousePosition(), mb.ShiftPressed)
-                                  && !_entities.PostBoardKlick(GetGlobalMousePosition(), mb.ShiftPressed)
-                                  // ⭐ 15.09.2026 — ueber einem Verbuendeten ist der
-                                  // gewoehnliche Klick die Fahrt (Zeigerart 3, C 0x4378CB);
-                                  // angegriffen wird er nur mit Strg.
-                                  // ⭐ 19.09.2026, bug-301 — die beiden Ausnahmen sind zu
-                                  // FadenkreuzHier zusammengezogen: der gewoehnliche Klick
-                                  // greift genau dort an, wo auch das Fadenkreuz steht.
-                                  // Damit faellt auch das tuerlose fremde Gebaeude darunter.
-                                  && !(_entities.FadenkreuzHier(GetGlobalMousePosition())
-                                       && _entities.PostAttack(GetGlobalMousePosition(),
-                                                               mb.ShiftPressed)))
-                                _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                         }
                         _rightDown = false;
                         _rightDrag = false;
@@ -8359,7 +8303,7 @@ public partial class MapViewer : Node2D
             // ihrem Ja/Nein nach 0xA32188 schreibt. Unsere Vorschau war schon
             // da (Simulation/Construction.cs), sie hatte nur nie einen Bediener.
             if (_entities.PlacementMode != 0 &&
-                _entities.CellAt(GetGlobalMousePosition()) is { } hover)
+                _entities.CellAt(KartenMaus()) is { } hover)
                 _entities.PlacementHover(hover.X, hover.Y);
 
             // A held left button with enough travel becomes a selection box
@@ -8382,12 +8326,12 @@ public partial class MapViewer : Node2D
             }
             else if (_boxSelect)
             {
-                _entities.SetBand(RectFrom(_bandStart, GetGlobalMousePosition()));
+                _entities.SetBand(RectFrom(_bandStart, KartenMaus()));
             }
             else if (!_leftDown)
             {
-                _entities.HoverAt(GetGlobalMousePosition());
-                _lastMapPos = GetGlobalMousePosition();
+                _entities.HoverAt(KartenMaus());
+                _lastMapPos = KartenMaus();
                 UpdateCursor(_lastMapPos.Value);
             }
         }
@@ -8762,6 +8706,180 @@ public partial class MapViewer : Node2D
     /// Systemzeiger von vorher zurück — ein halb gesetzter Zeiger wäre
     /// schlimmer als gar keiner.</para>
     /// </summary>
+    /// <summary>Die Befehlskette auf der Karte — Einnahme, Absetzen, Einsteigen,
+    /// Angriff, Fahrt, Reparatur. Bis zum 24.09.2026 lag sie im Rechtsklick; im
+    /// Original ist es der LINKSKLICK beim Loslassen (WM_LBUTTONUP 0x414119 ->
+    /// 0x414182 -> Verteiler 0x437060, der allein nach der Zeigerart 0x502AD4
+    /// weiterverteilt). Mit <c>--maus-alt</c> wieder rechts.
+    /// Beleg: berichte/gleisreparatur-klick-fable.md.</summary>
+    private void KartenBefehl(bool shift, bool ctrl)
+    {
+        // ⚠ EINGABEN WERDEN DATEN. Der Klick setzt einen
+        // Befehl ab; gewirkt wird am nächsten Taktanfang
+        // (MapEntityLayer.SimTick → CommandTick). Vorher
+        // schrieb ein Mausklick mitten im Bildlauf direkt in
+        // die Einheiten — für ein Netzspiel nicht
+        // reparierbar, weil der zweite Rechner den Klick
+        // nicht hat und der Zeitpunkt an der Leitung hängt.
+        //
+        // Das Original macht es genauso: post() @0x4C1C50
+        // schickt auch den EIGENEN Befehl über DirectPlay und
+        // führt ihn erst aus, wenn er über Receive im Ring
+        // (0xB4FA38, 1000 Plätze) zurückkommt. Satzlänge
+        // 236 Byte, dreifach belegt. Siehe
+        // Simulation/Commands/CommandBridge.cs.
+        //
+        // PostAttack gibt wie IssueAttack false zurück, wenn
+        // der Klick kein Ziel getroffen hat — die Weiche
+        // bleibt dieselbe.
+        // ⚠ 17.08.2026 — STRG MACHT DARAUS »EINNEHMEN«
+        // (Fehler C9 und C11). Ohne diese Weiche gewinnt
+        // immer der Angriff: ein feindliches Gebaeude IST
+        // ein Ziel, also kam PostMove nie dran und die
+        // Einheit konnte die Tuerzelle gar nicht erreichen.
+        // Neutrale Gebaeude griff niemand an, deshalb ging
+        // es dort und nur dort. Die ganze Herleitung samt
+        // Messung steht bei PostCapture.
+        // ⚠ 18.08.2026 — EIN ANGEWÄHLTES FLUGZEUG BEKOMMT
+        // EIN FLUGZIEL. Gemeldet als »im Gefecht wäre es
+        // doch sinnvoll die Einheiten eigenständig zu
+        // steuern«. Die Weiche steht ganz vorn, weil ein
+        // Flugzeug und eine Bodenauswahl sich ausschliessen
+        // (SetPrimary) — es kann also nichts anderes meinen.
+        //
+        // Ob der Befehl überhaupt angenommen wird, entscheidet
+        // der BEHANDLER (nur ausserhalb der Kampagne, siehe
+        // CommandBridge.ApplyAirMove) — nicht diese Stelle.
+        // Eine Sperre in der Eingabe wäre auf der zweiten
+        // Maschine nicht vorhanden.
+        if (_entities.PostAirMove(KartenMaus(),
+                                  shift) > 0)
+        {
+            return;
+        }
+        // ⭐ 23.09.2026, bug-368 — WO DER SCHRAUBENSCHLUESSEL
+        // STEHT, REPARIERT DER KLICK (Zeigerart 22 -> Klickarm
+        // 0x437836 -> Befehl 29). Vor Strg, wie der Zeiger.
+        if (_entities.PostGleisreparaturKlick(KartenMaus()))
+        {
+            return;
+        }
+        if (ctrl)
+        {
+            // ⚠ Reihenfolge mit Bedacht: EINNEHMEN behaelt
+            // den Vortritt (Fehler C9/C11 vom 17.08.2026),
+            // danach der BODENANGRIFF des Originals
+            // (@0x437417, UTOK_NA = 30000 + Spalte). Wer
+            // gar nicht schiessen kann, faehrt hin.
+            // ⭐⭐ 08.09.2026 — ERST DAS ZIEL, DANN DIE
+            // ZELLE. Seine Meldung: »ich kann mit Strg
+            // immer noch nicht Kraftwerke angreifen«.
+            //
+            // Die Zieluebersetzung des Originals
+            // (`UTOK_NA` @0x4353F0) nimmt, was unter dem
+            // Zeiger LIEGT: unter 8000 die Einheit selbst
+            // (@0x435433), 60000..60299 ein GEBAEUDE
+            // (@0x435465), dann Bruecke/Rampe, und erst
+            // sonst die blosse Bodenzelle. Der Bodenangriff
+            // ist der LETZTE Zweig, nicht der erste.
+            //
+            // Bei uns stand er vor PostAttack und griff die
+            // Zelle unter dem Gebaeude an — und ein
+            // Bodenangriff tut einem GEBAEUDE nichts (er
+            // kennt nur Wald, Objekte und Einheiten). Strg
+            // auf ein Kraftwerk hiess damit: Befehl
+            // angenommen, Wirkung keine.
+            //
+            // ⭐⭐ 15.09.2026 — STRG NIMMT NICHT MEHR EIN, und
+            // Strg greift Verbuendete an wie im Original (seine
+            // Entscheidungen a und b). Die Kette steht jetzt in
+            // MapEntityLayer.StrgRechtsklick, damit der
+            // Pruefstand denselben Weg geht. Gegenschalter
+            // --strg-einnahme-alt, --kein-angriff-auf-verbuendete.
+            _entities.StrgRechtsklick(KartenMaus(), shift);
+        }
+        // ⭐⭐⭐ 08.09.2026 — WO DER EINNAHMEZEIGER STEHT,
+        // NIMMT DER KLICK EIN. Seine Meldung: »das einnahme
+        // icon fuehrt aber nicht zur einnahme, sondern die
+        // sagen angriff, schiessen aber nicht«.
+        //
+        // ⭐ Und damit faellt der Einwand, der bei
+        // PostCapture seit dem 17.08.2026 stand (»eine
+        // Weiche, die das fuer den Spieler entscheidet,
+        // laege in der Haelfte der Faelle falsch«): DAS
+        // ORIGINAL HAT DIESE WEICHE SELBST, und sie ist die
+        // ZELLE. Auf der Tuerzelle steht Zeigerart 6
+        // (@0x4323F5), auf dem Rest des Gebaeudes Art 10 —
+        // also Einnehmen dort, Angriff hier. Der Spieler
+        // zielt sie mit der Maus, und er sieht vorher, was
+        // er bekommt. Strg bleibt, wo es war.
+        //
+        // ⚠ Dass 0x63 in 0x542E18 wirklich die TUERZELLE
+        // ist, steht im Bauabschluss selbst: @0x43CB08
+        // schreibt `word[0xBDEA80 + 2*Zelle] := 0xFFFE` und
+        // gleich darauf @0x43CB12 `byte[0x542E18 + Zelle]
+        // := 0x63` — dieselbe Zelle, aus den Tuerfeldern
+        // des Gebaeudesatzes gerechnet.
+        //
+        // Gegenschalter --einnahmeklick-alt.
+        //
+        // ⭐ 07.09.2026 — ABSETZEN geht vor Angriff und Fahrt:
+        // auf einer Rampe mit beladenem Traeger meint der
+        // Rechtsklick nichts anderes (seine Meldung C).
+        // ⭐⭐ 08.09.2026 — UND WO KEIN ANGRIFFSZEIGER
+        // STEHT, GREIFT DER EINFACHE KLICK AUCH NICHT AN.
+        // Seine Meldung: »wenn ich normalen wegpunkt auf
+        // das Nachschubdepot lege, und da erscheint kein
+        // Attack Icon, ballern die trotzdem drauf los«.
+        //
+        // Ein herrenloses Gebaeude bekommt im Original
+        // Zeigerart 1 (@0x43253A) — kein Fadenkreuz, also
+        // auch kein Angriff. Der Befehl bleibt erreichbar:
+        // Strg greift weiter alles an.
+        else if (!(_entities.EinnahmezeigerHier(KartenMaus())
+                   && _entities.PostCapture(KartenMaus(),
+                                            shift))
+              && !_entities.PostUnloadKlick(KartenMaus(), shift)
+              && !_entities.PostBoardKlick(KartenMaus(), shift)
+              // ⭐ 15.09.2026 — ueber einem Verbuendeten ist der
+              // gewoehnliche Klick die Fahrt (Zeigerart 3, C 0x4378CB);
+              // angegriffen wird er nur mit Strg.
+              // ⭐ 19.09.2026, bug-301 — die beiden Ausnahmen sind zu
+              // FadenkreuzHier zusammengezogen: der gewoehnliche Klick
+              // greift genau dort an, wo auch das Fadenkreuz steht.
+              // Damit faellt auch das tuerlose fremde Gebaeude darunter.
+              && !(_entities.FadenkreuzHier(KartenMaus())
+                   && _entities.PostAttack(KartenMaus(),
+                                           shift)))
+            _entities.PostMove(KartenMaus(), shift);
+    }
+
+    /// <summary>Gibt der Linksklick hier einen Befehl statt einer Anwahl? Das
+    /// Original entscheidet es an der ZEIGERART (0x437994[Art]): die Anwahlzeiger
+    /// (Art 1, Bild Anwahl/Fussvolk) waehlen, alle anderen befehlen. Wir fragen
+    /// dieselbe Kette wie UpdateCursor, damit Bild und Klick dasselbe sagen.
+    /// ⚠ Ohne Auswahl waehlt der Klick immer (es gibt niemanden zu befehligen).</summary>
+    private bool LinksklickBefiehlt(Vector2 mapPos, bool ctrl)
+    {
+        if (_entities.HasAirSelection) return true;   // Flugziel, PostAirMove
+        if (!_entities.HasSelection) return false;
+        if (_entities.ReparaturzeigerHier(mapPos)) return true;
+        if (ctrl) return true;
+        return _entities.CursorHintAt(mapPos) is not (MapEntityLayer.Hint.Own
+            or MapEntityLayer.Hint.OwnFoot or MapEntityLayer.Hint.Neutral);
+    }
+
+    /// <summary><c>--maus-alt</c> — die Belegung vor dem 24.09.2026: links waehlen,
+    /// rechts befehlen. Ohne den Schalter gilt das Original: links waehlt UND
+    /// befiehlt (je nach Zeiger), rechts waehlt ab / bricht ab / rollt.</summary>
+    public static bool MausAlt;
+
+    /// <summary>Nur fuer --maus-check: kopflos ist das Fenster 64x64 und
+    /// GetGlobalMousePosition liest nicht, was PushInput schickt. Im Spiel leer.</summary>
+    private Vector2? _mausProbePunkt;
+
+    private Vector2 KartenMaus() => _mausProbePunkt ?? GetGlobalMousePosition();
+
     private void UpdateCursor(Vector2 mapPos)
     {
         if (!UI.Settings.CursorHints)

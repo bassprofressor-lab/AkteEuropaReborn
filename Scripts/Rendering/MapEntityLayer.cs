@@ -39528,7 +39528,7 @@ public partial class MapEntityLayer : Node2D
                 : e.Path != null
                 ? $"moving -> ({e.Goal.X},{e.Goal.Y}), {e.Path.Count - e.PathIdx} steps left"
                 : stranded ? "stranded (standing off its domain)"
-                : e.Mobile ? "idle (right-click = move / attack)" : "immobile";
+                : e.Mobile ? (MapViewer.MausAlt ? "idle (right-click = move / attack)" : "idle (left-click = move / attack)") : "immobile";
             var wp = WeaponOf(e.Weapon);
             string weapon = e.Weapon == 0 ? "unarmed"
                 : $"{wp.Name} (comp {e.Weapon}, dmg {wp.Damage}, range {wp.RangeTiles:0.#})";

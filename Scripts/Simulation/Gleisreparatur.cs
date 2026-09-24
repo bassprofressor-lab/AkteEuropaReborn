@@ -40,8 +40,10 @@ using AkteEuropaReborn.Simulation.Commands;
 /// <item>Der Befehl geht an ALLE gewaehlten eigenen Boden-Techniker, nicht nur
 ///   an die eine gewaehlte Einheit des Originals — bei uns kann man mehrere
 ///   waehlen. Der ZEIGER fragt wie das Original nur die erste (<c>_selected</c>).</item>
-/// <item>Geklickt wird mit rechts wie jeder Befehl bei uns (derselbe Klickarm
-///   0x4370BF traegt auch das Absetzen, Zeigerart 12).</item>
+/// <item>Geklickt wird mit rechts wie jeder Befehl bei uns. Original: LINKE Taste
+///   beim Loslassen, WM_LBUTTONUP 0x414119 -> 0x414182 (setzt 0x502AB8) ->
+///   Verteiler 0x437060; die rechte Taste gibt dort nie einen Zielbefehl
+///   (Abwahl/Abbruch/Rollen). Beleg: berichte/gleisreparatur-klick-fable.md.</item>
 /// <item>faze := 0 bleibt bei uns an »war 3« gebunden (RailFreight.RailRepair):
 ///   unser Automat startet bei 0 sofort einen Zug, auch wenn noch einer rollt.</item>
 /// <item>Ohne den Befehl beginnt die Arbeit bei uns NICHT mehr von selbst, wenn
