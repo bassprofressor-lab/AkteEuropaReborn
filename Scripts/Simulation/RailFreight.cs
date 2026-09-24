@@ -132,6 +132,16 @@ public partial class MapEntityLayer : Node2D
         public long Moved;
         public bool WasFaze4;
 
+        /// <summary>⭐ 23.09.2026 (Gleisbruch.cs) — ein Zug dieser Linie ist
+        /// UNTERWEGS: gesetzt von <c>RailLaunch</c>, geloescht von Ankunft und
+        /// Vernichtung. ⚠ UNSERE Buchfuehrung: das Original fragt die Waggonsaetze
+        /// selbst (Feld 0xB95F48); wir haben nur die Fahrzeit, und die ist am
+        /// Bahnsteig wie am Ziel 0.</summary>
+        public bool Rollt;
+
+        /// <summary>Wie oft diese Linie einen Zug abgeschickt hat (Pruefstand).</summary>
+        public int Starts;
+
         /// <summary>Die Besitzer beider Enden, als die Schalter zuletzt aus
         /// der Matrix gesetzt wurden. -99 = noch nie (Laden der Karte).</summary>
         public int OwnA = -99, OwnB = -99;
@@ -169,6 +179,12 @@ public partial class MapEntityLayer : Node2D
             {
                 l.Mode[ware] = (byte)wert;
                 BahnschalterBefehle++;
+                // ⭐ 23.09.2026 — eine Zeile je Schalter: ohne sie sagte sein
+                // Protokoll nicht, ob er die Linie ueberhaupt umgestellt hatte
+                // (»Spezialteile liegen im Bahnhof«, berichte/k21-gleisreparatur.md).
+                GD.Print($"bahnschalter: Linie {lineSlot} {GoodName[ware]} -> " +
+                         (wert == 2 ? "angehalten" : $"zu Knoten {wert + 1} (Platz {(wert == 0 ? l.Bud1 : l.Bud2)})") +
+                         $", faze {l.Faze} (Befehl 500, 0x4B0220)");
                 BahnschalterGeaendert?.Invoke(lineSlot);   // 0x44FD70: Art-4-Fenster neu
                 return true;
             }
@@ -429,6 +445,7 @@ public partial class MapEntityLayer : Node2D
             for (int k = 0; k < 4; k++) l.Cargo[k] = 0;
             RailClearWagons(l);
             l.Travel = 0f;
+            l.Rollt = false;
         }
     }
 
@@ -730,6 +747,9 @@ public partial class MapEntityLayer : Node2D
         foreach (var l in _railLines)
             if (l.Faze is >= 1 and <= 9 && l.Travel > 0f) l.Travel -= dt;
 
+        GleisbruchTakt();                 // Waggon auf zerschossenem Gleis? (23.09.2026)
+        GleisreparaturCheckTakt(dt);      // --gleisreparatur-check (23.09.2026, bug-368)
+
         _railAcc += dt;
         int guard = 0;
         while (_railAcc >= RailTickSeconds && guard++ < 8)
@@ -804,6 +824,23 @@ public partial class MapEntityLayer : Node2D
                 l.OwnA = a.Owner; l.OwnB = b.Owner;
             }
 
+            // ⭐⭐ 23.09.2026 — FAZE 3 IST STILLSTAND (Gleisbruch.cs). spoj_tick
+            // @0x4C7840 tut bei 3 nichts: kein Hochzaehlen, kein neuer Zug, bis
+            // die Reparatur @0x409AB5 faze := 0 setzt. Hier stand der Zweig
+            // »faze <= 9 = unterwegs«, und der rief RailArrive auch fuer einen
+            // Zug, der am Bahnsteig STAND — die Linie lief nach 0,1 s weiter.
+            // Gemeldet: »AI sowie meine Züge fahren auch auf zerstörten
+            // strecken weiter«. Ein Zug, der beim Bruch schon FUHR, faehrt im
+            // Original im Waggontakt 0x4C69C0 weiter: trifft er den Bruch,
+            // explodiert er (Gleisbruch.cs); liegt der Bruch hinter ihm, kommt
+            // er an, und die Ankunft schreibt faze := 0x50 ueber die 3
+            // (@0x4C6C68). Gegenschalter --zug-faehrt-durch.
+            if (l.Faze == 3 && !ZugFaehrtDurch)
+            {
+                if (l.Rollt && l.Travel <= 0f) RailArrive(l, a, b);
+                continue;
+            }
+
             if (l.Faze == 0)
             {
                 l.Faze = 1;
@@ -856,6 +893,8 @@ public partial class MapEntityLayer : Node2D
 
         l.TravelFull = RailTravelSeconds(l);        // aus den Streckencodes, gerechnet
         l.Travel = l.TravelFull;
+        l.Rollt = true;
+        l.Starts++;
         RailSpawnWagons(l);
     }
 
@@ -880,6 +919,7 @@ public partial class MapEntityLayer : Node2D
         l.Trips++;
         RailTrips++;
         l.Travel = 0f;
+        l.Rollt = false;
         l.Faze = l.Dir == 0 ? 100 - RailDwellTicks : 200 - RailDwellTicks;
         RailClearWagons(l);
     }
@@ -3036,7 +3076,16 @@ public partial class MapEntityLayer : Node2D
             // Und die LINIE wird stillgelegt: faze := 3 (@0x4B06F9). spoj_tick
             // @0x4C7840 faellt bei 3 durch alle Zweige und zaehlt sie nicht
             // hoch -- es faehrt kein neuer Zug los, bis repariert ist.
-            foreach (var l in _railLines) if (l.Slot == c.Line) l.Faze = 3;
+            foreach (var l in _railLines)
+                if (l.Slot == c.Line)
+                {
+                    // ⭐ 23.09.2026 — eine Zeile je Stilllegung (bug-368): die Linie
+                    // steht jetzt, bis ein Boden-Techniker (Teil 73) repariert.
+                    if (l.Faze != 3)
+                        GD.Print($"gleis: Linie {l.Slot} bei ({col},{row}) zerschossen — faze {l.Faze} -> 3, " +
+                                 "steht bis zur Reparatur (Boden-Techniker, @0x4B06F9)");
+                    l.Faze = 3;
+                }
         }
         if (broke && spread) { RailPylonPass(); _railTiles = null; }
         return broke;

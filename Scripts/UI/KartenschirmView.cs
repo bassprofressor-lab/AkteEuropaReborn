@@ -91,6 +91,10 @@ public sealed partial class KartenschirmView : Control
     /// </summary>
     public int Betriebsart { get; private set; } = 2;
 
+    /// <summary>Gegenschalter <c>--schliesskreuz-alt</c>: das Kreuz zieht wieder
+    /// das Fenster statt es zu schliessen (bug-363).</summary>
+    public static bool SchliesskreuzAlt;
+
     /// <summary>Farbe 0x99 aus <c>01.PAL</c> — die hervorgehobene Linie
     /// (@0x4B825F).</summary>
     public static readonly Color LinienFarbe = Color.Color8(240, 81, 49);
@@ -331,6 +335,16 @@ public sealed partial class KartenschirmView : Control
                     AcceptEvent(); return;
                 }
             }
+
+            // ⭐ 23.09.2026 (bug-363) — das Schliesskreuz, Element −2 der
+            // Fenstermaschine: (B−20, 0, 20×20) (berichte/flughafenfenster-k20-
+            // fable.md §2, Tafel). WindowChrome.Paint MALT es, getroffen wurde
+            // es nie — ein Klick darauf zog das Fenster. Im Modus 2 fiel das
+            // nicht auf (ein Kartenklick schliesst), in Betriebsart 1 blieb nur
+            // der Rechtsklick. Seine Meldung: »kann man die nicht wegklicken«.
+            if (!SchliesskreuzAlt && p.Y < WindowChrome.Cell
+                && p.X >= KachelMass(_zellen, _zoom).X * WindowChrome.Cell - WindowChrome.Cell)
+            { OnClose?.Invoke(); AcceptEvent(); return; }
 
             // Die Titelzeile zieht das Fenster — wie bei den anderen Fenstern
             // auch (seine Meldung vom 19.09.: »kann es auch nicht verschieben«).

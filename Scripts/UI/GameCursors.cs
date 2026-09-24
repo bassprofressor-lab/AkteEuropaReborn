@@ -96,6 +96,12 @@ public static class GameCursors
     /// bestaetigt ist.</para></summary>
     public const int Entladen = 16;
 
+    /// <summary><b>Der SCHRAUBENSCHLUESSEL</b> ueber zerschossenem Gleis — Zeigerart
+    /// 22 (@0x431B93) fuehrt ueber die Tafel <c>0x4A9BEC</c> auf <c>0x4A9BA1
+    /// mov dl,0x11</c>, also <b>Bild 17</b> (fuenf Bilder, der Schluessel mit den
+    /// vier gelben Pfeilen). Selbst gelesen am 23.09.2026, bug-368.</summary>
+    public const int Reparatur = 17;
+
     /// <summary>⚠ UNSERE ZAHL: wie lange ein Bild der Folge steht. Das Original
     /// zählt die Phase, nennt aber keinen Takt.</summary>
     public const float FrameSeconds = 0.10f;

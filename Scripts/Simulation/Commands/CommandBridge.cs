@@ -802,6 +802,7 @@ public partial class MapEntityLayer
         CommandOp.PlaceGenerator => ApplyPlaceBuilding(c),
         CommandOp.Unload => ApplyUnload(c),
         CommandOp.Board => ApplyBoard(c),
+        CommandOp.RailRepairOrder => ApplyRailRepairOrder(c),
 
         // Die fünfzehn Gebäudebefehle — vier Tafeln, eine je Gebäudeart.
         // Siehe CommandOp und ApplyBuildingJob.

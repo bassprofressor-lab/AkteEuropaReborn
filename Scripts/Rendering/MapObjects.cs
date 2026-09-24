@@ -1862,6 +1862,18 @@ public partial class MapEntityLayer
     /// </summary>
     private void ZelleNachBrandFreigeben(Kartenobjekt e)
     {
+        // ⭐ 23.09.2026 (bug-367) — seine Frage »bleiben die Raketen an den
+        // abgebrannten Stuempfen haengen?«: ja, bei uns. Die Geschossschwelle 40
+        // wurde beim Laden gemerkt und nie wieder geloescht. Im Original fragt der
+        // Geschosstakt die BELEGUNGSKARTE (di = word[0xBDEA80 + zelle·2] @0x4528DF):
+        // Wald heisst 50000..55999 (@0x452C4E/0x452C59) -> Schwelle 40 (@0x452C71).
+        // Abgebrannt steht dort 0xFFFE (Stumpf) oder 0xFFFF (verkohlter Stamm) —
+        // BEIDE liegen in keinem Band und fallen in den Leer-Zweig @0x452EBE, der
+        // nur noch den Boden prueft. Also auch der stehende verkohlte Stamm haelt
+        // kein Geschoss mehr auf, obwohl er den Weg weiter sperrt.
+        // Gegenschalter --stumpf-haelt-geschoss.
+        if (e.IstWald && !StumpfHaeltGeschoss && _objSchwelle.Remove(e.Col * 1024 + e.Row))
+            SchwellenGeloescht++;
         if (e.Steht) return;                  // verkohlter Stamm: bleibt Sperre
         if (_nav != null && _nav.ZelleFreigeben(e.Col, e.Row)) ZellenFreigegeben++;
     }

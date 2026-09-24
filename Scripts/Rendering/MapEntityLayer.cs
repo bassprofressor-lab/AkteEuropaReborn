@@ -11932,6 +11932,9 @@ public partial class MapEntityLayer : Node2D
                 // Angriff geht bei uns weiterhin durch: er setzt `Ordered`.
                 // Gegenprobe `--auto-gebaeudeziel`.
                 if (!AutoGebaeudeziel && t.IsBuilding) continue;
+                // ⭐ 23.09.2026 — Plasma nimmt von selbst nie Fussvolk/Gebaeude
+                // (@0x40E069) und kein Ziel mit Tempo <= 2 (@0x40DFFD).
+                if (PlasmaSelbstzielVerboten(e, t)) continue;
                 float d = CellDistance(e, t);
                 // ⚠ Ein Ziel, das UNTER der Mindestreichweite liegt, ist kein
                 // Ziel: die Einheit wuerde es sich merken und dann nie
@@ -12092,6 +12095,17 @@ public partial class MapEntityLayer : Node2D
             FussVerbuendetFallengelassen++;
             if (Schussgruende) e.Schussgrund = "Fusssoldat schiesst nicht auf Verbuendete";
             e.Target = -1; return;
+        }
+        // ⭐ 23.09.2026 — DER PLASMAWERFER SCHIESST NICHT AUF FUSSVOLK, GEBAEUDE
+        // ODER EIN SCHON GELAEHMTES ZIEL (Tore @0x40E069 / @0x40DFFD der
+        // Schiessuhr, die auch das befohlene Ziel UKOL 4 durchlaeuft). Siehe
+        // Plasmawerfer.cs: ein selbstgewaehltes Ziel wird losgelassen, ein
+        // befohlenes gehalten, aber nicht beschossen. --plasma-zielwahl-alt.
+        if (PlasmaSelbstzielVerboten(e, t))
+        {
+            if (Schussgruende) e.Schussgrund = "Plasma: Ziel ist Fussvolk/Gebaeude oder hat Tempo <= 2";
+            if (!e.Ordered) { e.Target = -1; PlasmaZielFallen++; }
+            return;
         }
 
         var w = WeaponOf(e.Weapon);
@@ -13298,6 +13312,7 @@ public partial class MapEntityLayer : Node2D
                             p.Target = occ >= 0 && occ < _entities.Count
                                        && !_entities[occ].IsProp ? occ : -1;
                             GeschossGestoppt++;
+                            GeschossHaltZelle = new Vector2I(zc, zr);   // --stumpf-geschoss-probe
                             gestoppt = true;
                         }
                     }
@@ -13549,6 +13564,10 @@ public partial class MapEntityLayer : Node2D
         // Moerserzweig gar nicht erst zur Neigungsrechnung kommt.
         if (p.Art == ArtMoerser && !MoerserTaumelnAus)
             return Bildzaehler % 3;
+        // ⭐ 23.09.2026 — die Plasmakugel dreht ueber 6 Bilder (@0x452376),
+        // Plasmawerfer.cs, --plasma-drehen-aus.
+        int plasma = PlasmaBlock(p);
+        if (plasma >= 0) return plasma;
 
         if (NeigungsblockAlt)
         {
@@ -33510,6 +33529,7 @@ public partial class MapEntityLayer : Node2D
     public override void _Process(double delta)
     {
         if (_nav == null) return;
+        if (StumpfGeschossProbeTakt()) return;   // --stumpf-geschoss-probe, Simulation/StumpfGeschossProbe.cs
         float dt = (float)delta;
 
         // ⭐⭐ 19.09.2026 — DER BILDZAEHLER `word[0x4FA248]`, und er gehoert
@@ -37047,13 +37067,19 @@ public partial class MapEntityLayer : Node2D
     /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
     /// nimmt als bei allem anderen Eigenen — siehe
     /// <see cref="UI.GameCursors"/>.</summary>
-    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral, Einsteigen }
+    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral, Einsteigen, Reparatur }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
     /// one's own thing means it selects, anything else is open ground.</summary>
     public Hint CursorHintAt(Vector2 mapPos)
     {
+        // ⭐⭐ 23.09.2026, bug-368 — DER SCHRAUBENSCHLUESSEL ueber zerschossenem
+        // Gleis. Seine Meldung: »mit dem Bauer kann man normalerweise Schienen
+        // reparieren, da kommt dann so ein Reparatur Icon«. Er steht im
+        // Original VOR allem anderen (@0x431B44, nur die Bedienleiste geht
+        // vor) — siehe Simulation/Gleisreparatur.cs.
+        if (ReparaturzeigerHier(mapPos)) return Hint.Reparatur;
         // ⭐⭐ 07.09.2026 — DER ENTLADEZEIGER ueber einer RAMPE, auf seine
         // Meldung »ueber den Rampen kommt da so ein Entlade Icon und wenn man
         // es mit rechter Maustaste befaehigt, werden dort die Einheiten
@@ -38274,6 +38300,7 @@ public partial class MapEntityLayer : Node2D
 
     private void UpdateAircraft(float dt)
     {
+        HeliTempoProbeTakt();                // --heli-tempo-probe, Simulation/HeliTempoProbe.cs
         foreach (var a in _special)
         {
             if (a.Dead) continue;

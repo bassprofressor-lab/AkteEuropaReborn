@@ -125,6 +125,12 @@ public partial class MapEntityLayer
             // bekommt, ist ungelesen (der Bus hat dafuer keinen gelesenen
             // Opcode). »Steht drauf und faehrt nicht mehr« ist dieselbe Lage
             // ohne den ungelesenen Weg.
+            // ⭐ 23.09.2026, bug-368 — DER ERSTE AUFTRAG IST JETZT GELESEN: Befehl
+            // 29 (Simulation/Gleisreparatur.cs) schreibt ihn. 0x408267 faengt
+            // mit `cmp word[+0x40],0 / je` an — ohne Auftrag tut der Arm NICHTS,
+            // auch nicht auf einem kaputten Stueck. Der Selbststart gilt darum
+            // nur noch unter --reparaturzeiger-aus (der Stand davor).
+            if (!ReparaturzeigerAus) continue;
             if (e.Path != null || e.Reserved != null) continue;
             if (!RailBrokenAt(e.Col, e.Row)) continue;
             e.RailWork = RailWorkStart;             // @0x408292
@@ -320,6 +326,13 @@ public partial class MapEntityLayer
             _nav?.SetOccupant(e.Col, e.Row, i);
             GD.Print($"rail-repair: Fahrzeug {i} (Platz {e.Slot}) bekommt Aufsatz " +
                      $"{RailRepairPart} und steht auf ({e.Col},{e.Row})");
+            // ⭐ 23.09.2026, bug-368 — seit der Selbststart gefallen ist, braucht
+            // die Kette ihren gelesenen Anfang: Befehl 29 auf die eigene Zelle,
+            // wie ein Klick mit dem Schraubenschluessel. Unter
+            // --reparaturzeiger-aus bleibt es beim alten Stand.
+            if (!ReparaturzeigerAus)
+                Emit(Simulation.Commands.CommandRecord.Make(Simulation.Commands.CommandOp.RailRepairOrder, (byte)ViewPlayer,
+                                        (short)i, (short)e.Col, (short)e.Row));
             return e.Pos;
         }
         GD.Print("rail-repair: kein fahrbares Landfahrzeug zum Ausruesten gefunden");

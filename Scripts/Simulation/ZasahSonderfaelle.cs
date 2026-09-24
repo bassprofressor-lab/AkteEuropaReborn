@@ -60,8 +60,10 @@ public partial class MapEntityLayer : Node2D
 
         if (zbran == 14)                                           // @0x40CAA0 »Plasma«
         {
+            int vorher = victim.Speed;
             victim.Speed = Mathf.Max(2, victim.Speed / 2);         // sar 1, Untergrenze 2
             PlasmaTreffer++;
+            PlasmaTrefferZeile(shooter, victim, vorher);           // 23.09.2026, Plasmawerfer.cs
             return true;
         }
         if (zbran == 3)                                            // @0x40CAF2 »SchallKmp.«

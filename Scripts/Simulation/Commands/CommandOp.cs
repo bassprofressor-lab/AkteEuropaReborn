@@ -331,6 +331,17 @@ public static class CommandOp
     public const short Board = 17;
 
     /// <summary>
+    /// <b>29 = GLEIS REPARIEREN.</b> P1 = die Einheit, P2/P3 = die Zelle.
+    /// Absender <c>0x437836</c> — der Klickarm der Zeigerart 22 (Sprungtafel
+    /// <c>0x437994</c>), also der Schraubenschluessel ueber zerschossenem Gleis.
+    /// Der Behandler <c>0x4C3683</c> (Tafel <c>0x4C4D54</c>, Eintrag 28) ruft
+    /// <c>0x4103B0</c> (Auftrag <c>+0x14 := 0</c>, <c>+0x1A := 0xFF</c>) und
+    /// schreibt dann <c>+0x48/+0x49 := Zelle</c>, <c>word[+0x40] := 1</c> —
+    /// genau den AUFTRAG, den <c>0x408267</c> je Takt liest. Siehe
+    /// Simulation/Gleisreparatur.cs, bug-368.</summary>
+    public const short RailRepairOrder = 29;
+
+    /// <summary>
     /// <b>DIE FÜNFZEHN GEBÄUDEBEFEHLE — vier Tafeln, eine je Gebäudeart.</b>
     /// Gelesen am 21.08.2026, und die Zuordnung schliesst von beiden Seiten.
     ///
@@ -493,6 +504,7 @@ public static class CommandOp
         OursStop => "Anhalten (unsere Setzung)",
         Board => "Einsteigen",
         Unload => "Absetzen",
+        RailRepairOrder => "Gleis reparieren",
         _ when op >= UnitFirst && op <= UnitLast => "Einheitenbefehl (Bereich A, unbenannt)",
         _ when op >= BuildFirst && op <= BuildLast => "Bau/Kauf (Bereich B, unbenannt)",
         _ when op >= SystemFirst && op <= SystemLast => "System (Bereich C, unbenannt)",

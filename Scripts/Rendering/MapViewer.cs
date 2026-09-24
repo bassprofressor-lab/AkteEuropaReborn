@@ -3603,6 +3603,17 @@ public partial class MapViewer : Node2D
             else if (a == "--bahnschalter-matrix-alt") MapEntityLayer.BahnschalterMatrixAlt = true;
             else if (a == "--bahnhoffenster-alt") UI.BuildingWindow.BahnhoffensterAlt = true;
             else if (a == "--transportsystem-aus") MapEntityLayer.TransportsystemAus = true;
+            else if (a == "--schliesskreuz-alt") UI.KartenschirmView.SchliesskreuzAlt = true;
+            // ⭐ 23.09.2026 — K21-Meldungen: Gleisbruch, Heli-Tempo, Plasmawerfer.
+            else if (a == "--zug-faehrt-durch") MapEntityLayer.ZugFaehrtDurch = true;
+            else if (a == "--gleisbruch-zug-check") MapEntityLayer.GleisbruchZugCheckAn = true;
+            else if (a == "--reparaturzeiger-aus") MapEntityLayer.ReparaturzeigerAus = true;
+            else if (a == "--gleisreparatur-check") MapEntityLayer.GleisreparaturCheckAn = true;
+            else if (a == "--heli-stufe-alt") MapEntityLayer.HeliStufeAlt = true;
+            else if (a == "--plasma-drehen-aus") MapEntityLayer.PlasmaDrehenAus = true;
+            else if (a == "--plasma-zielwahl-alt") MapEntityLayer.PlasmaZielwahlAlt = true;
+            else if (a == "--stumpf-haelt-geschoss") MapEntityLayer.StumpfHaeltGeschoss = true;
+            else if (a == "--stumpf-geschoss-probe") MapEntityLayer.StumpfGeschossProbeAn = true;
             else if (a == "--verlegung-depot-alt") MapEntityLayer.VerlegungDepotAlt = true;
             else if (a == "--zugfarbe-alt") MapEntityLayer.ZugfarbeAlt = true;
             else if (a == "--leiste-alt") MapEntityLayer.LeisteAlt = true;
@@ -5253,9 +5264,11 @@ public partial class MapViewer : Node2D
             if (_angriffProbe) GD.Print(_entities.AngriffProbe());
             if (_fussvolkProbe) GD.Print(_entities.FussvolkProbe());
             if (_zeigerCheck) GD.Print(_entities.ZeigerCheckLine());
+            if (MapEntityLayer.PlasmaCheckAn) GD.Print(_entities.PlasmaCheckLine());
             GD.Print(_entities.AntiradarZeile());
             if (MapEntityLayer.AntiradarProbeAn) GD.Print(_entities.AntiradarProbeZeile());
             if (MapEntityLayer.K21LagerCheckAn) GD.Print(_entities.K21LagerCheckLine());
+            if (MapEntityLayer.GleisreparaturCheckAn) GD.Print(_entities.GleisreparaturCheckLine());
             if (_schiffsentwurfCheck) GD.Print(_entities.SchiffsentwurfCheckLine());
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_teilespendeCheck) GD.Print(_entities.TeilespendeCheckLine());
@@ -8226,6 +8239,14 @@ public partial class MapViewer : Node2D
                                 _rightDown = false; _rightDrag = false;
                                 break;
                             }
+                            // ⭐ 23.09.2026, bug-368 — WO DER SCHRAUBENSCHLUESSEL
+                            // STEHT, REPARIERT DER KLICK (Zeigerart 22 -> Klickarm
+                            // 0x437836 -> Befehl 29). Vor Strg, wie der Zeiger.
+                            if (_entities.PostGleisreparaturKlick(GetGlobalMousePosition()))
+                            {
+                                _rightDown = false; _rightDrag = false;
+                                break;
+                            }
                             if (mb.CtrlPressed)
                             {
                                 // ⚠ Reihenfolge mit Bedacht: EINNEHMEN behaelt
@@ -8791,6 +8812,10 @@ public partial class MapViewer : Node2D
         // setzt und keine Einheit waehlt. Simulation/Zielwahl.cs.
         var hint = _entities.ZielwahlSchwebt
                  ? MapEntityLayer.Hint.Enemy
+                 // ⭐ 23.09.2026, bug-368 — der Schraubenschluessel geht auch vor
+                 // Strg: @0x431B93 kehrt zurueck, bevor @0x43201A Strg ansieht.
+                 : _entities.ReparaturzeigerHier(mapPos)
+                 ? MapEntityLayer.Hint.Reparatur
                  : Input.IsKeyPressed(Key.Ctrl) && _entities.HasSelection
                  ? MapEntityLayer.Hint.Enemy
                  : _entities.CursorHintAt(mapPos);
@@ -8805,6 +8830,8 @@ public partial class MapViewer : Node2D
                 // ⭐ 07.09.2026 — Zeiger 12 des Originals (@0x432771) ueber
                 // einer Rampe, wenn ein beladener Traeger gewaehlt ist.
                 MapEntityLayer.Hint.Entladen => UI.GameCursors.Entladen,
+                // ⭐ 23.09.2026, bug-368 — Zeigerart 22 (@0x431B93), Bild 17.
+                MapEntityLayer.Hint.Reparatur => UI.GameCursors.Reparatur,
                 // ⭐ 12.09.2026 — das EINLADEN traegt kein eigenes Bild: Zeigerart 11
                 // fuehrt ueber die Tafel 0x4A9BEC auf Bild 11, dasselbe wie die
                 // Einfahrt (Art 5). Gelesen in beiden EXE, bug-233.
@@ -8826,7 +8853,7 @@ public partial class MapViewer : Node2D
             MapEntityLayer.Hint.Enemy => Input.CursorShape.Cross,
             MapEntityLayer.Hint.Own or MapEntityLayer.Hint.OwnFoot
                 or MapEntityLayer.Hint.Einfahrt or MapEntityLayer.Hint.Entladen
-                or MapEntityLayer.Hint.Einsteigen
+                or MapEntityLayer.Hint.Einsteigen or MapEntityLayer.Hint.Reparatur
                 or MapEntityLayer.Hint.Einnahme or MapEntityLayer.Hint.Neutral
                 => Input.CursorShape.PointingHand,
             _ => Input.CursorShape.Arrow,
