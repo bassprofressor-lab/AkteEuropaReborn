@@ -3680,6 +3680,7 @@ _mausProbePunkt = karte;
             else if (a == "--zug-faehrt-durch") MapEntityLayer.ZugFaehrtDurch = true;
             else if (a == "--gleisbruch-zug-check") MapEntityLayer.GleisbruchZugCheckAn = true;
             else if (a == "--reparaturzeiger-aus") MapEntityLayer.ReparaturzeigerAus = true;
+            else if (a == "--gleistechniker-feld-alt") MapEntityLayer.GleistechnikerFeldAlt = true;
             else if (a == "--gleisreparatur-check") MapEntityLayer.GleisreparaturCheckAn = true;
             else if (a == "--heli-stufe-alt") MapEntityLayer.HeliStufeAlt = true;
             else if (a == "--plasma-drehen-aus") MapEntityLayer.PlasmaDrehenAus = true;

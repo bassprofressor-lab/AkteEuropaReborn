@@ -38,4 +38,9 @@ public partial class MapEntityLayer
     /// <summary><c>--gleisreparatur-check</c>: der Pruefstand zu bug-368,
     /// Simulation/Gleisreparatur.cs.</summary>
     public static bool GleisreparaturCheckAn;
+
+    /// <summary><c>--gleistechniker-feld-alt</c>: der Boden-Techniker wird wieder an
+    /// <c>Equipment</c> (+0x10) erkannt statt an <c>Part</c> (+0x0E) — Stand vor
+    /// bug-370. Dort traegt ihn keine Einheit, also repariert niemand.</summary>
+    public static bool GleistechnikerFeldAlt;
 }

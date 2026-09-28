@@ -40,10 +40,13 @@ using AkteEuropaReborn.Simulation.Commands;
 /// <item>Der Befehl geht an ALLE gewaehlten eigenen Boden-Techniker, nicht nur
 ///   an die eine gewaehlte Einheit des Originals — bei uns kann man mehrere
 ///   waehlen. Der ZEIGER fragt wie das Original nur die erste (<c>_selected</c>).</item>
-/// <item>Geklickt wird mit rechts wie jeder Befehl bei uns. Original: LINKE Taste
-///   beim Loslassen, WM_LBUTTONUP 0x414119 -> 0x414182 (setzt 0x502AB8) ->
-///   Verteiler 0x437060; die rechte Taste gibt dort nie einen Zielbefehl
-///   (Abwahl/Abbruch/Rollen). Beleg: berichte/gleisreparatur-klick-fable.md.</item>
+/// <item>Geklickt wird seit bug-369 wie im Original mit der LINKEN Taste beim
+///   Loslassen, WM_LBUTTONUP 0x414119 -> 0x414182 (setzt 0x502AB8) ->
+///   Verteiler 0x437060; die rechte Taste gibt nie einen Zielbefehl
+///   (Abwahl/Abbruch/Rollen). Beleg: berichte/gleisreparatur-klick-fable.md.
+///   Unter <c>--maus-alt</c> rechts.</item>
+/// <item>⚠ bug-370 (28.09.2026): erkannt wird der Boden-Techniker an +0x0E
+///   (<c>Part</c>), nicht an <c>Equipment</c> — siehe RailRepair.TraegtGleisaufsatz.</item>
 /// <item>faze := 0 bleibt bei uns an »war 3« gebunden (RailFreight.RailRepair):
 ///   unser Automat startet bei 0 sofort einen Zug, auch wenn noch einer rollt.</item>
 /// <item>Ohne den Befehl beginnt die Arbeit bei uns NICHT mehr von selbst, wenn
@@ -66,7 +69,7 @@ public partial class MapEntityLayer
         if (_selected < 0 || _selected >= _entities.Count) return false;
         var e = _entities[_selected];
         if (e.Dead || e.IsBuilding || e.IsProp || e.Owner != ViewPlayer) return false;
-        if (e.Equipment != RailRepairPart) return false;
+        if (!TraegtGleisaufsatz(e)) return false;
         return CellAt(mapPos) is { } z && RailBrokenAt(z.X, z.Y);
     }
 
@@ -82,7 +85,7 @@ public partial class MapEntityLayer
             if (i < 0 || i >= _entities.Count) continue;
             var e = _entities[i];
             if (e.Dead || e.IsBuilding || e.IsProp || e.Owner != ViewPlayer) continue;
-            if (e.Equipment != RailRepairPart) continue;
+            if (!TraegtGleisaufsatz(e)) continue;
             if (Emit(CommandRecord.Make(CommandOp.RailRepairOrder, (byte)ViewPlayer,
                                         (short)i, (short)z.X, (short)z.Y))) n++;
         }
@@ -174,7 +177,7 @@ public partial class MapEntityLayer
             if (e.Move != Simulation.NavGrid.MoveClass.Vehicle) continue;
             var frei = _nav?.NearestFree(new Vector2I(ziel.Col + 6, ziel.Row), e.Move, i);
             if (frei == null) continue;
-            e.Equipment = RailRepairPart;       // Kruecke: auf K21 traegt keines Teil 73
+            GibGleisaufsatz(e);                 // Kruecke: auf K21 traegt keines Teil 73
             _nav?.ClearOccupant(e.Col, e.Row, i);
             e.Col = frei.Value.X; e.Row = frei.Value.Y;
             e.Pos = CellCenter(e.Col, e.Row);

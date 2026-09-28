@@ -59,6 +59,22 @@ public partial class MapEntityLayer
     /// Zweig 0x408267.</summary>
     public const int RailRepairPart = 73;
 
+    /// <summary>⭐ 28.09.2026, bug-370 — traegt die Einheit den Boden-Techniker?
+    /// Das Original fragt <c>byte[+0x0E] == 0x49</c> (@0x431B6E) — das ist bei uns
+    /// <see cref="Entity.Part"/>, wie beim Mechaniker (@0x40730B) und Antiradar.
+    /// Hier stand seit August <c>Equipment</c> (+0x10), und dort traegt ihn
+    /// KEINE Einheit, weder von der Karte (Aufsatz 48 -> Zeile 73 in +0x0E) noch
+    /// gebaut (PartRowOf). Die Pruefstaende schrieben 73 von Hand in dasselbe
+    /// falsche Feld und bestanden darum. Gemeldet K21: »reparieren von gleisen
+    /// geht weder mit Bauer noch Bodentechniker«.</summary>
+    private static bool TraegtGleisaufsatz(Entity e) =>
+        (GleistechnikerFeldAlt ? e.Equipment : e.Part) == RailRepairPart;
+
+    /// <summary>Die Kruecke der Pruefstaende: das Teil dorthin, wo es eine echte
+    /// Einheit traegt (+0x0E) — auch unter <c>--gleistechniker-feld-alt</c>, damit
+    /// das Nullmodell den gemeldeten Fehler zeigt statt ihn zu ueberdecken.</summary>
+    private static void GibGleisaufsatz(Entity e) => e.Part = RailRepairPart;
+
     /// <summary>Womit der Arbeitszähler anfängt (0x1E @0x408292) und ab wann
     /// das Stück heil ist (<c>ja</c> gegen 0xA @0x4099B9). Die Differenz ist
     /// die Arbeitszeit: <b>20 Takte</b>.</summary>
@@ -82,7 +98,7 @@ public partial class MapEntityLayer
         {
             var e = _entities[i];
             if (e.Dead || e.IsBuilding || e.IsProp) continue;
-            if (e.Equipment != RailRepairPart) continue;
+            if (!TraegtGleisaufsatz(e)) continue;
 
             // ---- arbeitet gerade -------------------------------------------
             if (e.RailWork > 0)
@@ -317,7 +333,7 @@ public partial class MapEntityLayer
             // aus, obwohl sie nur ueberschrieben wurde.
             // Regel 10: die Kruecke des Pruefstands ist selbst eine Annahme.
             if (e.Owner != ViewPlayer) continue;
-            e.Equipment = RailRepairPart;
+            GibGleisaufsatz(e);
             _nav?.ClearOccupant(e.Col, e.Row, i);
             e.Col = hit[0].C; e.Row = hit[0].R;
             e.Pos = CellCenter(e.Col, e.Row);
@@ -345,7 +361,7 @@ public partial class MapEntityLayer
         foreach (var c in _railCells) if (c.Broken) broken++;
         int crews = 0;
         foreach (var e in _entities)
-            if (!e.Dead && !e.IsBuilding && !e.IsProp && e.Equipment == RailRepairPart) crews++;
+            if (!e.Dead && !e.IsBuilding && !e.IsProp && TraegtGleisaufsatz(e)) crews++;
         if (crews == 0)
             return "rail-repair: kein Fahrzeug mit dem Gleisaufsatz (Teil 73) auf dieser " +
                    "Karte — der Zaehler kann hier NICHTS aussagen";
@@ -372,7 +388,7 @@ public partial class MapEntityLayer
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            if (e.Dead || e.IsBuilding || e.IsProp || e.Equipment != RailRepairPart) continue;
+            if (e.Dead || e.IsBuilding || e.IsProp || !TraegtGleisaufsatz(e)) continue;
             bool onBroken = RailBrokenAt(e.Col, e.Row);
             sb.Append($"\n   Fahrzeug {i} auf ({e.Col},{e.Row}): " +
                       $"Zaehler {e.RailWork}, Ziel " +
