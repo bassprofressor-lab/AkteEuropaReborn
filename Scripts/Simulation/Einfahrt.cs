@@ -479,6 +479,18 @@ public partial class MapEntityLayer : Node2D
         QueueRedraw();
     }
 
+    /// <summary>Wie oft das Ausdocken ein Tempo tatsaechlich geaendert hat (bug-371).</summary>
+    public int AusdockTempoNeu { get; private set; }
+
+    /// <summary>Entwurf +0x1D — das Tempo, das die Ausdockroutinen 0x43C120/0x43C6F0
+    /// schreiben. Dieselbe Zeile und Rechnung wie <see cref="NachziehenEiner"/>
+    /// (0x51CE20 + 46·(Mark + 200·Besitzer)); null ohne Entwurfszeile.</summary>
+    private int? EntwurfsTempo(Entity u)
+    {
+        if (u.Mark < 0 || !_designBySlot.TryGetValue(u.Mark + 200 * u.Owner, out var d)) return null;
+        return Simulation.DesignMath.Compute(d.Weapon, d.Propulsion, d.Equip, u.Owner).Speed;
+    }
+
     /// <summary>Wie eine untergestellte Einheit in der Depotliste heisst.</summary>
     private string EinheitenWort(Entity u)
         => LabelOf(u);
@@ -549,6 +561,28 @@ public partial class MapEntityLayer : Node2D
             if (u.AmmoMax > 0) u.Ammo = u.AmmoMax;     // +0x39 := +0x3A
         }
 
+        // ⭐⭐ 28.09.2026, bug-371 — DAS AUSDOCKEN HEBT DIE PLASMALAEHMUNG AUF.
+        // Seine Frage: »koennen sich Einheiten davon heilen durch Basis oder
+        // Reparatureinheit?« Die Ausdockroutinen des Originals schreiben das
+        // Tempo BEDINGUNGSLOS aus dem Entwurf neu (selbst nachgelesen, C-EXE):
+        //
+        //   0x43C120 »Robot not found«   (Basis)  0x43C1BC  mov word [ebp+0x6E26E8], ax
+        //   0x43C6F0 »Robot not found 3« (Depot)  0x43C79C  mov word [edi+0x6E26E8], ax
+        //   ax = byte [Entwurfstafel 0x51CE20 + 0x1D + 46·Zeile]   ; +0x20 := Entwurf +0x1D
+        //
+        // Anders als die Aufwertung (0x4B3B8F, nur wenn alt > 2) ohne Vergleich:
+        // wer ein- und wieder ausfaehrt, hat volles Tempo. Mechaniker (0x411E30),
+        // Reparateur (0x412060) und Gebaeudetakt fassen +0x20 NICHT an.
+        // Beleg: berichte/plasma-heilung-fable.md §1/§2.1.
+        // ⚠ UNSERE SETZUNG: eine Einheit ohne Entwurfszeile (Mark < 0) behaelt
+        // ihr Tempo — das Original liest dann eine Zeile, die wir nicht fuehren.
+        // Gegenschalter --ausdock-tempo-alt.
+        if (!AusdockTempoAlt && EntwurfsTempo(u) is { } tempo)
+        {
+            if (u.Speed != tempo) AusdockTempoNeu++;
+            u.Speed = tempo;
+        }
+
         int ui = _entities.IndexOf(u);
         if (ui >= 0)
         {
@@ -601,6 +635,7 @@ public partial class MapEntityLayer : Node2D
 
     private int _einfahrtCheck = -1, _einfahrtBau = -1, _einfahrtEinheit = -1;
     private int _einfahrtTakt0, _einfahrtVorher;
+    private int _heilHp0, _heilTicks0;
     private readonly List<string> _einfahrtLog = new();
 
     /// <summary><c>--einfahrt-check</c> starten.</summary>
@@ -628,12 +663,19 @@ public partial class MapEntityLayer : Node2D
                 }
                 var geb = _entities[_einfahrtBau];
                 geb.Owner = geb.Team = ViewPlayer;
-                for (int i = 0; i < _entities.Count; i++)
-                {
-                    var u = _entities[i];
-                    if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
-                    _einfahrtEinheit = i; u.Owner = u.Team = ViewPlayer; break;
-                }
+                // ⭐ 28.09.2026, bug-371 — bevorzugt ein FAHRZEUG mit Entwurfszeile
+                // und Leben >= 40: nur daran sind Heilrate und Plasmatempo messbar
+                // (der erste Lauf griff eine volle S-Infanterie mit 35 TP und
+                // bestand leer). Sonst wie bisher die erste fahrende Einheit.
+                for (int pass = 0; pass < 2 && _einfahrtEinheit < 0; pass++)
+                    for (int i = 0; i < _entities.Count; i++)
+                    {
+                        var u = _entities[i];
+                        if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+                        if (pass == 0 && (u.Move != Simulation.NavGrid.MoveClass.Vehicle
+                                          || u.HpMax < 40 || EntwurfsTempo(u) is not > 2)) continue;
+                        _einfahrtEinheit = i; u.Owner = u.Team = ViewPlayer; break;
+                    }
                 if (_einfahrtEinheit < 0)
                 { GD.Print("einfahrt-check: keine fahrende Einheit"); _einfahrtCheck = -1; return; }
 
@@ -717,8 +759,38 @@ public partial class MapEntityLayer : Node2D
 
             case 2:
             {
+                // ⭐ 28.09.2026, bug-371 — erst die HEILRATE im Gebaeude messen:
+                // Leben halbieren, dann 400 Originaltakte warten. Soll: +1 je 40
+                // Takte (0x43E9B2), also +10; --depotheilung-alt: +1 je Takt.
                 var geb = _entities[_einfahrtBau];
                 var e = _entities[_einfahrtEinheit];
+                if (e.HpMax >= 40) e.Hp = e.HpMax / 2;
+                _heilHp0 = e.Hp; _heilTicks0 = geb.Ticks;
+                _einfahrtCheck = 3;
+                return;
+            }
+
+            case 3:
+            {
+                var geb = _entities[_einfahrtBau];
+                var e = _entities[_einfahrtEinheit];
+                int takte = geb.Ticks - _heilTicks0;
+                if (takte < 400) return;
+                int soll = DepotheilungAlt ? takte : takte / DepotHeilPeriode;
+                int ist = e.Hp - _heilHp0;
+                bool heilOk = e.HpMax < 40 || System.Math.Abs(ist - soll) <= 1
+                           || (e.Hp == e.HpMax && ist <= soll);
+                GD.Print($"einfahrt-check: HEILUNG im Gebaeude {_heilHp0} -> {e.Hp}/{e.HpMax} "
+                       + $"in {takte} Takten, +{ist} (Soll +{soll}, "
+                       + $"{(DepotheilungAlt ? "--depotheilung-alt: je Takt" : "je 40 Takte, 0x43E9B2")}) "
+                       + $"{(heilOk ? "OK" : "ABWEICHUNG")}");
+
+                // ...dann die PLASMALAEHMUNG: Tempo 2 setzen, ausfahren.
+                // Soll: Tempo := Entwurf (0x43C1BC/0x43C79C); --ausdock-tempo-alt: bleibt 2.
+                int? entwurf = EntwurfsTempo(e);
+                int tempoVorher = e.Speed;
+                if (entwurf is { } ev && ev > 2) e.Speed = 2;
+                int gelaehmt = e.Speed;
                 int hp = e.Hp;
                 // ⭐ 03.09.2026 — SPRIT UND MUNITION MITMESSEN. Ohne diese zwei
                 // Zahlen ist »wer herausfaehrt, kommt voll heraus« (0x4104B6 /
@@ -736,6 +808,13 @@ public partial class MapEntityLayer : Node2D
                        + $"UKOL {e.Ukol} "
                        + $"(erwartet {UkolVerlaesst} = verlaesst gerade), "
                        + $"Schlange {GarageBelegt(geb)}/{DepotSlots}");
+                bool tempoOk = entwurf is not { } ew || ew <= 2
+                    || (AusdockTempoAlt ? e.Speed == gelaehmt : e.Speed == ew);
+                GD.Print($"einfahrt-check: TEMPO gelaehmt {gelaehmt} (vorher {tempoVorher}) -> "
+                       + $"ausgedockt {e.Speed}, Entwurf {(entwurf?.ToString() ?? "keiner")} "
+                       + $"{(AusdockTempoAlt ? "[--ausdock-tempo-alt, Soll bleibt]" : "(Soll := Entwurf, 0x43C1BC)")} "
+                       + $"{(tempoOk ? "OK" : "ABWEICHUNG")}");
+                GD.Print($"einfahrt-check: bug-371 {(heilOk && tempoOk ? "BESTANDEN" : "DURCHGEFALLEN")}");
                 _einfahrtCheck = -1;
                 return;
             }

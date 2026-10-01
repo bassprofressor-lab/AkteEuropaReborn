@@ -32,6 +32,9 @@ public partial class MapEntityLayer
 {
     public static bool VerlegungDepotAlt;
 
+    /// <summary>Wie oft eine Einheit aus der BASIS per Bahn verlegt wurde (bug-372).</summary>
+    public int BahnVerlegtAusBasis;
+
     /// <summary>UKOL der fahrenden (0x37) und der angekommenen (0x38) Einheit.</summary>
     public const int UkolImZug = 0x37, UkolAngekommen = 0x38;
 
@@ -45,9 +48,19 @@ public partial class MapEntityLayer
     /// Fahrten zurück; 0 = keine Verbindung (Meldung ist dann offen).
     /// </summary>
     public int TransportierenAusBahnhof(List<int> griffe, int zielIdx)
+        => VerlegePerBahn(Fenstergebaeude(), griffe, zielIdx);
+
+    /// <summary>Dasselbe mit ausdruecklicher Quelle — das Basisfenster haengt an
+    /// <c>Producer()</c>, nicht an <c>Fenstergebaeude()</c> (bug-372).</summary>
+    private int VerlegePerBahn(Entity? q, List<int> griffe, int zielIdx)
     {
-        var q = Fenstergebaeude();
-        if (q == null || q.BType is not (6 or 12)) return 0;
+        // ⭐ 30.09.2026, bug-372 — auch die BASIS (Typ 1) ist Quelle: das
+        // Basisfenster schickt denselben Befehl 518 (@0x44A32F -> 0x4498A3),
+        // und CreateConvoy 0x4CEA90 weicht erst @0x4CEB99 nach der Quelle ab
+        // (berichte/createconvoy-basis-fable.md §1). Gegenschalter
+        // --basis-verlegung-alt: nur Bahnhof und Feldbahnhof wie bisher.
+        if (q == null) return 0;
+        if (q.BType is not (6 or 12) && (BasisVerlegungAlt || q.BType != 1)) return 0;
         if (zielIdx < 0 || zielIdx >= _entities.Count) return 0;
         var ziel = _entities[zielIdx];
         if (!ziel.IsBuilding || ziel.Dead || ReferenceEquals(ziel, q)) return 0;
@@ -70,11 +83,29 @@ public partial class MapEntityLayer
         {
             if (g < 0 || g >= _entities.Count) continue;
             var u = _entities[g];
-            if (!q.Garage.Remove(u)) continue;               // 0x43C430
+            if (!q.Garage.Remove(u)) continue;               // 0x43C430 / Basis 0x43C120
             u.InGebaeude = null;
+            // ⭐⭐ 30.09.2026, bug-372 — DIE BASIS SCHREIBT DAS TEMPO NEU, der
+            // Bahnhof nicht. CreateConvoy 0x4CEA90 @0x4CEB99 (O, C und F):
+            //   al = byte [0xC06914 + 76·Quelle]   ; Gebaeudetyp
+            //   cmp al,1 / jbe -> 0x43C120 »Robot not found« (Basis ausdocken)
+            //                     0x43C1BC  +0x20 := Entwurf +0x1D, bedingungslos
+            //   sonst          -> 0x43C430 »Robot not found 2« (Bahnhofsliste),
+            //                     schreibt +0x20 NICHT
+            // Eine vom Plasma gelaehmte Einheit faehrt aus der Basis also geheilt
+            // los, aus dem Bahnhof gelaehmt. Tank und Munition schreibt 0x43C120
+            // hier NICHT (die fuellt nur der Aussende-Weg 0x410420).
+            // Gegenschalter: derselbe wie bug-371, --ausdock-tempo-alt — es ist
+            // dieselbe Routine 0x43C120.
+            if (q.BType == 1 && !AusdockTempoAlt && EntwurfsTempo(u) is { } tempo)
+            {
+                if (u.Speed != tempo) AusdockTempoNeu++;
+                u.Speed = tempo;
+            }
             u.Ukol = UkolImZug;                              // +0x14 := 0x37
             RailTransferStartEinheit(u, weg, q.Owner);
             BahnVerlegtEinheiten++;
+            if (q.BType == 1) BahnVerlegtAusBasis++;
             n++;
         }
         _order = n > 0 ? $"{n} Einheit(en) fahren nach {(ziel.Name.Length > 0 ? ziel.Name : "Gebaeude " + ziel.Slot)}" : _order;

@@ -805,8 +805,11 @@ public sealed partial class BaseWindow : PanelContainer
         // ⚠ Wartet gerade eine Zielwahl, sagt die Beschriftung das — sonst
         // steckt der Spieler in einem Modus, ohne es zu wissen.
         _transport.Visible = _recycle.Visible;
-        _transport.Disabled = OnTransport == null || _sheet.Selected < 0 ||
-                              _sheet.Selected >= rows.Count;
+        // ⭐ 01.10.2026: ohne markierte Zeile bleibt er drueckbar wie im Original
+        // (@0x44A301 meldet dann, siehe TransportArmFromPanel); nur unter
+        // --basis-ohne-wahl-alt wieder ausgegraut.
+        _transport.Disabled = OnTransport == null || _sheet.Selected >= rows.Count ||
+                              (_sheet.Selected < 0 && Rendering.MapEntityLayer.BasisOhneWahlAlt);
         _transport.Text = TransportArmed?.Invoke() == true
                           ? "Ziel anklicken…" : "Transportieren";
 

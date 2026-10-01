@@ -6922,13 +6922,9 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Der Zustand wird IMMER verlassen, auch bei einem Fehlklick ins
         // Leere. Ein Modus, den man nicht mehr los wird, ist schlimmer als ein
         // Klick, der nichts tut; und ESC ist hier nicht verdrahtet.
-        if (_transportWartet >= 0)
+        if (TransportArmed)
         {
-            int platz = _transportWartet;
-            _transportWartet = -1;
-            if (hit < 0) { _order = "Transport abgebrochen — kein Gebaeude getroffen"; }
-            else TransportFromPanel(platz, hit);
-            QueueRedraw();
+            TransportZielGewaehlt(hit);
             return;
         }
         // Ein FLUGZEUG gewinnt, wo nichts liegt, das der Spieler befehligen
@@ -21822,7 +21818,29 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Wartet gerade ein Transport auf sein Ziel? Für die
     /// Beschriftung des Knopfes.</summary>
-    public bool TransportArmed => _transportWartet >= 0;
+    public bool TransportArmed => _transportWartet >= 0 || _transportEinheit >= 0;
+
+    /// <summary>Welche EINGEFAHRENE Einheit (Listenindex) aus der Basis auf ihr
+    /// Ziel wartet, −1 = keine (30.09.2026, bug-372).</summary>
+    private int _transportEinheit = -1;
+
+    /// <summary>Der Klick nach »Transportieren«: das Zielgebaeude. Der Zustand
+    /// wird immer verlassen, auch bei einem Fehlklick.</summary>
+    private void TransportZielGewaehlt(int hit)
+    {
+        int platz = _transportWartet, einheit = _transportEinheit;
+        _transportWartet = _transportEinheit = -1;
+        if (hit < 0) _order = "Transport abgebrochen — kein Gebaeude getroffen";
+        else if (einheit >= 0)
+        {
+            if (VerlegePerBahn(Producer(), new List<int> { einheit }, hit) == 0
+                && _order.StartsWith("Zielgebaeude"))
+                _order = "kein gueltiges Zielgebaeude";
+            UpdatePanel();
+        }
+        else TransportFromPanel(platz, hit);
+        QueueRedraw();
+    }
 
     /// <summary>Den Knopf »Transportieren« drücken: den Platz merken und auf
     /// den nächsten Klick warten.</summary>
@@ -21832,18 +21850,55 @@ public partial class MapEntityLayer : Node2D
         if (e == null) { _order = "kein Gebaeude gewaehlt"; return; }
         if (e.Hangar is { Count: > 0 })
         { _order = "der Flughafen transportiert nicht ueber die Bahn"; return; }
+        // ⭐⭐ 30.09.2026, bug-372 — DIE BASIS VERLEGT IHRE EINGEFAHRENEN EINHEITEN.
+        // Hier stand die Absage »eine hereingefahrene Einheit laesst sich hier
+        // nicht verlegen«. Das Original (berichte/createconvoy-basis-fable.md
+        // §2.4/§3, O): Basisfenster Knopf 6 »Transportieren« @0x44A32F oeffnet
+        // dieselbe Planungskarte wie der Bahnhof, und der Absender @0x4498A3
+        // schickt je markierter Zeile die EINHEITENNUMMER aus sec23
+        // (0x878E5C+16·cis) als Befehl 518 -> CreateConvoy 0x4CEA90 -> Quelle
+        // Typ <= 1 -> 0x43C120. Also derselbe Weg wie der Bahnhof, siehe
+        // TransportierenAusBahnhof. NUR die Basis (Typ 1): Depot, Fabrik und
+        // Flughafen haben den Knopf nicht an diesem Weg.
+        // Gegenschalter --basis-verlegung-alt.
+        // ⭐ 01.10.2026 — KEINE ZEILE MARKIERT. Das Original laesst den Knopf
+        // drueckbar; die Schleife @0x44A2AB..0x44A2E3 findet keine Marke und
+        // meldet @0x44A301 den Text 0x4FBBDC — ein FEHLGRIFF des Originals (der
+        // Bahnhof sagt an dieser Stelle »Sie haben keine Einheit gewählt!«
+        // 0x4FBB78 @0x448E73). Auf seinen Wunsch wortgetreu uebernommen
+        // (berichte/createconvoy-basis-fable.md Tafel 5).
+        // Gegenschalter --basis-ohne-wahl-alt: Knopf wieder ausgegraut.
+        if (k < 0)
+        {
+            _order = BasisOhneWahlAlt ? "nichts gewaehlt"
+                                      : "Es besteht keine Verbindung zu diesem Gebaeude";
+            return;
+        }
+        if (k >= 0 && k < e.Garage.Count)
+        {
+            if (BasisVerlegungAlt || e.BType != 1)
+            { _order = "eine hereingefahrene Einheit laesst sich hier nicht verlegen"; return; }
+            if (_railNodes.Count == 0)
+            { _order = "auf dieser Karte gibt es kein Bahnnetz"; return; }
+            _transportWartet = -1;
+            _transportEinheit = _entities.IndexOf(e.Garage[k]);
+            _order = "Zielgebaeude anklicken (Klick ins Leere bricht ab)";
+            return;
+        }
         // ⚠ Wie beim Verwerten: die Bahn verlegt eine ENTWURFSNUMMER
         // (RailFreight.cs, `ziel.Depot.Add(t.Design)`), keinen Satz.
-        if (k >= 0 && k < e.Garage.Count)
-        { _order = "eine hereingefahrene Einheit laesst sich hier nicht verlegen"; return; }
         k -= e.Garage.Count;
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
         if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
         if (_railNodes.Count == 0)
         { _order = "auf dieser Karte gibt es kein Bahnnetz"; return; }
-        if (NodeOfBuilding(_entities.IndexOf(e)) < 0)
+        // ⚠ 01.10.2026: hier stand NodeOfBuilding(_entities.IndexOf(e)) — der
+        // LISTENINDEX in einem Zahlenraum von PLATZNUMMERN (siehe NodeOfBuilding,
+        // dieselbe Falle wie am 20.08.). Folge: falsches »kein Bahnanschluss«,
+        // oder ein Treffer auf ein fremdes Gebaeude.
+        if (NodeOfBuilding(e.Slot) < 0)
         { _order = "dieses Gebaeude hat keinen Bahnanschluss"; return; }
-        _transportWartet = k;
+        _transportWartet = k; _transportEinheit = -1;
         _order = "Zielgebaeude anklicken (Klick ins Leere bricht ab)";
     }
 
@@ -24878,7 +24933,9 @@ public partial class MapEntityLayer : Node2D
     ///   al++ ; byte[Einheit + 0x08] = al
     /// </code>
     ///
-    /// <para>⚠ <b>Ein Punkt je Takt, nicht je Sekunde</b>, und ohne jede
+    /// <para>⚠ <b>Ein Punkt je 40 Takte</b> (⚠ 28.09.2026 BERICHTIGT, bug-371 —
+    /// hier stand »je Takt«; das Tor <c>Takt % 40</c> @0x43E9B2 steht VOR der
+    /// Typweiche und war uebersehen), und ohne jede
     /// Bedingung an Geld, Vorrat oder Bauteil. Bei uns ist die Liste des
     /// Gebäudes <see cref="Entity.Depot"/> — dieselbe, aus der »Aussenden«
     /// holt.</para>
@@ -24900,20 +24957,40 @@ public partial class MapEntityLayer : Node2D
         // Aufgefallen beim Bau der EINFAHRT, nicht gemeldet.
         // ⭐ Seitdem gibt es echte Sätze im Gebäude: `Garage`. Ein frisch
         // PRODUZIERTES Stück (Depot) hat volles Leben und braucht nichts.
+        // ⭐ 28.09.2026, bug-371 — NUR JEDEN 40. TAKT. Vor der Typweiche steht im
+        // Original das Tor (selbst nachgelesen, C-EXE):
+        //   0x43E9AC  mov esi, [0x4FA240]     ; Takte seit Missionsbeginn
+        //   0x43E9B2  mov ecx, 0x28 / cdq / idiv ecx
+        //   0x43E9BC  test edx, edx / jne 0x43EB15   ; Rest != 0 -> kein Heilen
+        // Also +1 je 40 Takte (1,25/s bei 50 Takten/s) statt +1 je Takt — wir
+        // heilten rund 40x zu schnell (berichte/plasma-heilung-fable.md, Abw. E).
+        // ⚠ UNSERE SETZUNG: gezaehlt wird am eigenen Takt des Gebaeudes (b.Ticks),
+        // nicht an der Missionsuhr — gleiche Rate, andere Phase. Unser Schritt
+        // fasst TickScale Takte zusammen; es zaehlen die 40er-Grenzen darin.
+        // Gegenschalter --depotheilung-alt.
+        int punkte = DepotheilungAlt
+            ? TickScale / DepotRepairTick
+            : b.Ticks / DepotHeilPeriode - (b.Ticks - TickScale) / DepotHeilPeriode;
+        if (punkte <= 0) return;
         foreach (var e in b.Garage)
         {
             if (e.Dead || e.HpMax <= 0 || e.Hp >= e.HpMax) continue;
-            e.Hp = Mathf.Min(e.Hp + TickScale / DepotRepairTick, e.HpMax);
+            e.Hp = Mathf.Min(e.Hp + punkte, e.HpMax);
             DepotRepairs++;
         }
     }
+
+    /// <summary>0x43E9B2 <c>mov ecx, 0x28</c>: das Gebaeude heilt seine Insassen
+    /// nur bei <c>Takt % 40 == 0</c>.</summary>
+    private const int DepotHeilPeriode = 40;
 
     /// <summary>Wie oft ein Fahrzeug im Gebäude einen Trefferpunkt bekommen
     /// hat — für den Prüfstand.</summary>
     public int DepotRepairs { get; private set; }
 
-    /// <summary>Ein Punkt je ORIGINALTAKT (@0x43EA29 <c>inc al</c>, ohne jede
-    /// Periode). ⚠ Unsere Wirtschaft rechnet <see cref="TickScale"/> Takte je
+    /// <summary>Nur noch fuer <c>--depotheilung-alt</c>: ein Punkt je ORIGINALTAKT
+    /// (@0x43EA29 <c>inc al</c>) — ⚠ die Periode 40 steht davor, siehe
+    /// <see cref="DepotHeilPeriode"/>. ⚠ Unsere Wirtschaft rechnet <see cref="TickScale"/> Takte je
     /// Sekunde, also steht hier eine 1 und keine Umrechnung.</summary>
     private const int DepotRepairTick = 1;
 
@@ -33785,6 +33862,7 @@ public partial class MapEntityLayer : Node2D
         TuersperreTakt();
         PollBombenLog();
         PollEinfahrt();
+        if (BasisVerlegungCheckAn) PollBasisVerlegungCheck();   // --basis-verlegung-check
         PollKiProbe(dt);
         PollAusweichProbe(dt);
         PollAufgebenProbe(dt);

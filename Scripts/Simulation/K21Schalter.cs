@@ -43,4 +43,26 @@ public partial class MapEntityLayer
     /// <c>Equipment</c> (+0x10) erkannt statt an <c>Part</c> (+0x0E) — Stand vor
     /// bug-370. Dort traegt ihn keine Einheit, also repariert niemand.</summary>
     public static bool GleistechnikerFeldAlt;
+
+    /// <summary><c>--ausdock-tempo-alt</c>: wer aus Basis oder Depot ausfaehrt, behaelt sein
+    /// Tempo — eine vom Plasma gelaehmte Einheit bleibt gelaehmt (Stand vor bug-371).</summary>
+    public static bool AusdockTempoAlt;
+
+    /// <summary><c>--depotheilung-alt</c>: das Gebaeude heilt seine Insassen wieder jeden
+    /// Originaltakt statt nur bei <c>Takt % 40 == 0</c> (Stand vor bug-371).</summary>
+    public static bool DepotheilungAlt;
+
+    /// <summary><c>--basis-verlegung-alt</c>: das Basisfenster verlegt eingefahrene
+    /// Einheiten NICHT per Bahn, und <c>TransportierenAusBahnhof</c> nimmt nur
+    /// Bahnhof/Feldbahnhof als Quelle (Stand vor bug-372).</summary>
+    public static bool BasisVerlegungAlt;
+
+    /// <summary><c>--basis-ohne-wahl-alt</c>: »Transportieren« im Basisfenster ist ohne
+    /// markierte Zeile wieder ausgegraut, statt wie im Original die (falsche) Meldung
+    /// »Es besteht keine Verbindung zu diesem Gebäude« zu zeigen (Stand vor 01.10.2026).</summary>
+    public static bool BasisOhneWahlAlt;
+
+    /// <summary><c>--basis-verlegung-check</c>: gelaehmte Einheit aus der Basis per
+    /// Bahn verschicken, Tempo bei Abfahrt und Ankunft messen (bug-372).</summary>
+    public static bool BasisVerlegungCheckAn;
 }
