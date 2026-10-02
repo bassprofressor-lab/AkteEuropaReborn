@@ -188,6 +188,32 @@ public sealed partial class CampaignScreen : Control
             Style(legend, font);
             body.AddChild(legend);
 
+            // ⚠ 01.10.2026 (bug-379): wer nur CD 1 eingelesen hat, sah hier
+            // fuenfzehn Kacheln und nichts weiter — die Missionen 16–33 fehlten
+            // STILL. Jetzt steht es da, samt der CD, die sie traegt.
+            var fehlt = Core.DiscCoverage.MissingImported();
+            if (fehlt.Count > 0)
+            {
+                var warn = new Label
+                {
+                    Text = Core.DiscCoverage.Explain(fehlt),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    AutowrapMode = TextServer.AutowrapMode.WordSmart,
+                };
+                warn.AddThemeColorOverride("font_color", new Color(1f, 0.75f, 0.35f));
+                Style(warn, font);
+                body.AddChild(warn);
+                // der Weg zurueck in den Einleseschirm — sonst gaebe es ihn nur,
+                // solange GAR nichts eingelesen ist (MainMenu._Ready)
+                var nach = new Button { Text = "Fehlende CD einlesen …" };
+                Style(nach, font);
+                nach.Pressed += () =>
+                {
+                    if (GetParent() is MainMenu mm) { QueueFree(); mm.ShowImportForMissing(); }
+                };
+                body.AddChild(nach);
+            }
+
             var scroll = new ScrollContainer
             {
                 HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,

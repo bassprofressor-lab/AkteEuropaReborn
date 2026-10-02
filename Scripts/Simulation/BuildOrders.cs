@@ -199,6 +199,9 @@ public partial class MapEntityLayer
             SetMolePreview(col, row, ok);
             return;
         }
+        // ⭐ 01.10.2026, bug-381 — »Terranium suchen« (Modus 3): Zeigerart 0x0D
+        // OHNE Pruefung (@0x4317C9), also auch keine Vorschau.
+        if (PlacementMode == OrderTerraSuche) { ClearBuildPreview(); return; }
         // ⭐ 13.09.2026 — die BRUECKE ist 3 x (k+2) Zellen und hat ihre
         // eigene Gueltigkeit (Simulation/Pionierbruecke.cs, bug-245).
         if (PlacementMode == OrderBruecke)
@@ -250,6 +253,9 @@ public partial class MapEntityLayer
             return MoleKlick(idx, col, row, order);
         if (order == OrderBruecke)
             return BrueckeKlick(idx, col, row);
+        // ⭐ 01.10.2026, bug-381 — Klickarm 0x4377D0 -> Befehl 19 (Simulation/TerraSuche.cs).
+        if (order == OrderTerraSuche)
+            return TerraSucheKlick(idx, col, row);
 
         int vorkommen = -1;
         if (order == OrderFieldMine)
@@ -267,7 +273,7 @@ public partial class MapEntityLayer
 
     /// <summary>Die Nummer des Vorkommens, in dessen 3×3-Fenster diese Zelle
     /// liegt — <c>−1</c>, wenn keines. Dasselbe Fenster wie
-    /// <c>CellOnDeposit</c> (@0x4205C0).</summary>
+    /// <c>CellOnDeposit</c> (C @0x421400, F @0x4205C0).</summary>
     public int DepositIndexAt(int col, int row)
     {
         var ds = _deposits;
@@ -455,7 +461,7 @@ public partial class MapEntityLayer
             // sie liegt um (−1,−2) daneben.
             //
             // ⚠ Der Grundrisstest an der Ecke ist UNSERE Zutat: das Original
-            // sieht sich für eine Mine das Gelände gar nicht an (0x4205C0 fragt
+            // sieht sich für eine Mine das Gelände gar nicht an (C 0x421400 / F 0x4205C0 fragt
             // nur die Vorkommenstafel). Wir prüfen ihn trotzdem, weil unser
             // Belegungsraster sonst ein Gebäude über etwas anderes stempelte —
             // eine benannte Abweichung, keine stille.

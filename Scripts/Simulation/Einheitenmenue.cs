@@ -56,7 +56,9 @@ public partial class MapEntityLayer : Node2D
                      CodeEingraben = 7, CodeAusgraben = 8,
                      CodeTransportzyklus = 0x10, CodeDepot = 0x11,
                      CodeFeldmine = 0x12, CodeGenerator = 0x13,
-                     CodeRadar = 0x14, CodeAnhalten = 0x1A;
+                     CodeRadar = 0x14, CodeAnhalten = 0x1A,
+                     // ⭐ 01.10.2026, bug-381: »Terranium suchen« (Turm 0x35, Simulation/TerraSuche.cs)
+                     CodeTerraSuchen = 0x15;
 
     // ---- die Zeilen des FUSSVOLKS (12.09.2026, bug-219) ---------------------
     //
@@ -276,6 +278,11 @@ public partial class MapEntityLayer : Node2D
             case CodeGenerator:
                 BeginPlacementFromPanel(OrderGenerator);
                 return BuildOrderNote;
+            case CodeTerraSuchen:
+                // ⭐ 01.10.2026, bug-381 — @0x448A79: dword[0x502ACC] := 3, Menü zu.
+                // Gegenschalter --terrasuche-aus (dann wie bisher »noch nicht gebaut«).
+                if (TerrasucheAus) goto default;
+                return TerraSucheBeginnen();
             case CodeRadar:
                 PlaceRadarFromPanel();
                 return BuildOrderNote.Length > 0 ? BuildOrderNote : "";

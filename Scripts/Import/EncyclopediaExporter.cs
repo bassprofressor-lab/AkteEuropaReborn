@@ -65,7 +65,7 @@ public sealed class EncyclopediaExporter
 
     private sealed class Page
     {
-        public int Number, Picture = -1;
+        public int Number, Picture = -1, PictureTxt = -1;
         public string Title = "";
         public readonly StringBuilder Body = new();
         public readonly List<(int To, string Text)> Links = new();
@@ -136,11 +136,21 @@ public sealed class EncyclopediaExporter
             AppendBody(cur, line);
         }
 
+        // ⭐ 01.10.2026, bug-374 (berichte/enzyklopaedie-bilder-fable.md §2):
+        // die Zahl hinter dem Komma ist NICHT die Bildnummer. Das Spiel nimmt sie
+        // aus ENCYCLOG.DAT Block 2 (Lader 0x45AD10, fseek 3600·(n−1) in
+        // ENCYCLOG.PIC), und die ist die LAUFENDE Nummer der Marken mit Bild —
+        // 96/96 gleich; die Komma-Zahl trifft nur 50/96 (bug-121). Sie bleibt
+        // als picture_txt stehen.
+        int lauf = 0;
+        foreach (var pg in pages)
+            if (pg.Picture >= 0) { pg.PictureTxt = pg.Picture; pg.Picture = ++lauf; }
+
         Pages = pages.Count;
         Directory.CreateDirectory(_dst);
         File.WriteAllText(_dst + "/encyclopedia.json", ToJson(pages), new UTF8Encoding(false));
         say?.Invoke($"Enzyklopaedie: {Pages} Seiten, {Links} Verweise, " +
-                    $"{WithPicture} mit Bildnummer (Bild ungelesen)");
+                    $"{WithPicture} mit Bild (laufende Nummer = ENCYCLOG.DAT Block 2)");
     }
 
     /// <summary>Eine Zeile Rumpf anhängen: der feste Umbruch von 1997 wird ein
@@ -183,15 +193,15 @@ public sealed class EncyclopediaExporter
         var sb = new StringBuilder();
         sb.Append("{\"_source\":\"ENCYCLOG.TXT (Latin-1!), Enzyklopaedie des Originals\",");
         sb.Append("\"_note\":\"#pN,Bild | #c1 Ueberschrift | #c0 Text | #rN Verweis. ");
-        sb.Append("Die Bildnummer ist mitgeschrieben, aber UNGELESEN: ENCYCLOG.PIC ");
-        sb.Append("fasst bei 120x120 nur 24 Bilder, die Nummern laufen bis 97.\",");
+        sb.Append("picture = laufende Nummer der Marken mit Bild (= ENCYCLOG.DAT Block 2, ");
+        sb.Append("enc{nr:00}.png, 96 Bilder 60x60, einsbasiert); picture_txt = Komma-Zahl, falsch.\",");
         sb.Append("\"pages\":{");
         bool first = true;
         foreach (var p in pages)
         {
             if (!first) sb.Append(',');
             first = false;
-            sb.Append($"\"{p.Number}\":{{\"picture\":{p.Picture},");
+            sb.Append($"\"{p.Number}\":{{\"picture\":{p.Picture},\"picture_txt\":{p.PictureTxt},");
             sb.Append($"\"title\":\"{Esc(p.Title)}\",");
             sb.Append($"\"body\":\"{Esc(p.Body.ToString().Trim())}\",\"links\":[");
             for (int i = 0; i < p.Links.Count; i++)

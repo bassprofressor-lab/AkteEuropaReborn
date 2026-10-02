@@ -127,6 +127,13 @@ public partial class MapEntityLayer
     /// +2 row) and asks whether the cell lies in the <b>3x3 window</b>
     /// <c>fx ≤ x &lt; fx+3</c>, <c>fy ≤ y &lt; fy+3</c> of one of them. A mine
     /// goes on a deposit, not on flat ground.
+    /// <para>⚠ 01.10.2026, bug-381 — BERICHTIGT: <c>0x4205C0</c> und
+    /// <c>0x677448</c> sind die <b>F-Fassung</b>. In C liegt die Routine bei
+    /// <b>0x421400</b> und die Tafel (sec38) bei <b>0x6783E8</b>; an C 0x4205C0
+    /// steht eine Nebelroutine (beide Anfänge Byte für Byte verglichen). Die
+    /// Tafel ist sec38 — die AUFGESCHLOSSENEN Vorkommen —, NICHT die
+    /// terra_places des Skripts (sec78 <c>0xBC6D40</c>). Siehe
+    /// Simulation/Deposits.cs und Simulation/TerraSuche.cs.</para>
     ///
     /// <para>We have no deposit list yet — it is the "terra_places" behind
     /// "Cannot add more terra_places" @0x4D05E7 and is not exported. Until it
@@ -144,7 +151,10 @@ public partial class MapEntityLayer
     /// <summary>Whether we know where the deposits are at all.</summary>
     public bool HasDeposits => _deposits.Count > 0;
 
-    /// <summary>@0x4205C0 — the cell must lie in the 3x3 window of a deposit.
+    /// <summary>C @0x421400 (F @0x4205C0) — the cell must lie in the 3x3 window
+    /// of a deposit. ⚠ 01.10.2026, bug-381: gefragt wird NUR sec38 (aufgeschlossen);
+    /// das Erz des Skripts (sec78) kommt hier erst an, wenn ein Finder es
+    /// aufgeschlossen hat (Simulation/TerraSuche.cs, AddTerra).
     /// The deposit list itself is filled by the MISSION SCRIPT, not by the map:
     /// <c>add_terra_place(col, row, amount)</c> has its call sites in the script
     /// region 0x487000..0x492000, every one with constant arguments —

@@ -102,6 +102,12 @@ public static class GameCursors
     /// vier gelben Pfeilen). Selbst gelesen am 23.09.2026, bug-368.</summary>
     public const int Reparatur = 17;
 
+    /// <summary><b>»TERRANIUM SUCHEN«</b> — Modus 3 setzt in der Zeigerwahl
+    /// <c>0x4317C9</c> OHNE Pruefung die Zeigerart <c>0x0D</c>, und die Tafel
+    /// <c>0x4A9BEC[13]</c> fuehrt auf <c>0x4A9B9D mov dl,0x13</c>, also
+    /// <b>Bild 19</b>. Selbst gelesen am 01.10.2026, bug-381.</summary>
+    public const int TerraSuche = 19;
+
     /// <summary>⚠ UNSERE ZAHL: wie lange ein Bild der Folge steht. Das Original
     /// zählt die Phase, nennt aber keinen Takt.</summary>
     public const float FrameSeconds = 0.10f;

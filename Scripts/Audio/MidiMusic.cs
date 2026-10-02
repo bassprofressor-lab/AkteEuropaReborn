@@ -17,6 +17,11 @@ using Godot;
 /// <c>"play playerSnd from %d notify"</c>, with the name built from
 /// <c>"\%d.mid"</c> (@0x4f7918, used @0x416bfb). That is MCI, so this is MCI.</para>
 ///
+/// <para>⭐⭐ 01.10.2026 (bug-376) — <b>Vorgabe ist jetzt unser eigener
+/// Abspieler</b> (<see cref="MidiSequencer"/>), damit der Musikregler wirkt;
+/// der MCI-Weg unten ist der Gegenschalter <c>--musik-mci</c>
+/// (<see cref="MciWeg"/>).</para>
+///
 /// <para>Windows only, and it says so instead of pretending: on anything else
 /// every call returns quietly and <see cref="Available"/> is false.</para>
 ///
@@ -37,6 +42,27 @@ public static class MidiMusic
     private static extern int MidiOutSetVolume(IntPtr hmo, uint volume);
 
     private const string Alias = "aer_music";
+
+    /// <summary>
+    /// ⭐⭐ 01.10.2026 (bug-376) — <b>der Gegenschalter <c>--musik-mci</c></b>:
+    /// true = der alte Weg über den MCI-Sequenzer (Stand vor bug-376, wie das
+    /// Original), false = unser eigener <see cref="MidiSequencer"/>, Vorgabe.
+    ///
+    /// <para>Gesetzt von <c>MapViewer.ParseCmdline</c>; weil die Musik aber auch
+    /// im Hauptmenü läuft, bevor es einen MapViewer gibt, liest das Feld die
+    /// Befehlszeile beim ersten Zugriff außerdem selbst.</para>
+    /// </summary>
+    public static bool MciWeg
+    {
+        get => _mciWeg ??= Array.IndexOf(Core.CommandLine.Args, "--musik-mci") >= 0;
+        set => _mciWeg = value;
+    }
+
+    private static bool? _mciWeg;
+
+    /// <summary>Gelesene Stücke, je Nummer einmal — 11…61 KB Datei, das Lesen
+    /// kostet Millisekunden, aber nicht bei jedem Stückwechsel.</summary>
+    private static readonly System.Collections.Generic.Dictionary<int, MidiSequencer.MidiDatei> _gelesen = new();
 
     /// <summary>
     /// Windows, und es sind <b>genug</b> Stücke da.
@@ -123,9 +149,17 @@ public static class MidiMusic
     public static void Poll()
     {
         if (!Available || !UI.Settings.MusicOn || Track < 0 || !_open) return;
-        var sb = new StringBuilder(64);
-        if (MciSendString($"status {Alias} mode", sb, sb.Capacity, IntPtr.Zero) != 0) return;
-        if (sb.ToString().Trim() != "stopped") return;
+        if (!MciWeg)
+        {
+            // eigener Abspieler: der Faden meldet das Stückende selbst
+            if (!MidiSequencer.Beendet) return;
+        }
+        else
+        {
+            var sb = new StringBuilder(64);
+            if (MciSendString($"status {Alias} mode", sb, sb.Capacity, IntPtr.Zero) != 0) return;
+            if (sb.ToString().Trim() != "stopped") return;
+        }
         // ⭐ 22.08.2026 — das Folgestueck ist ZUFAELLIG, nicht das naechste.
         // 0x4D55C0 faengt MM_MCINOTIFY ab und ruft play(rand()%(Anzahl-1)+1).
         // Wir haben bisher der Reihe nach gespielt; das ist nach dem dritten
@@ -186,6 +220,34 @@ public static class MidiMusic
         string path = ProjectSettings.GlobalizePath(res);
 
         Stop();
+        if (!MciWeg)
+        {
+            // ⭐ 01.10.2026 (bug-376) — eigener Sequenzer, damit der Regler wirkt.
+            try
+            {
+                if (!_gelesen.TryGetValue(track, out var datei))
+                    _gelesen[track] = datei = MidiSequencer.Lies(FileAccess.GetFileAsBytes(res));
+                if (!MidiSequencer.Start(datei, UI.Settings.MusicVolume))
+                {
+                    LastCode = MidiSequencer.LastCode;
+                    LastError = MidiSequencer.LastError;
+                    return false;
+                }
+            }
+            catch (Exception e)
+            {
+                LastCode = -1;
+                LastError = $"{track}.mid nicht lesbar: {e.Message}";
+                return false;
+            }
+            LastCode = 0;
+            LastError = "";
+            _open = true;
+            Track = track;
+            _lastTrack = track;
+            Laeuft = true;
+            return true;
+        }
         // quotes, because the path runs through the player's own folders
         if (!Send($"open \"{path}\" type sequencer alias {Alias}")) return false;
         _open = true;
@@ -269,6 +331,23 @@ public static class MidiMusic
     public static void Volume(int percent)
     {
         int p = Math.Clamp(percent, 0, 100);
+        if (!MciWeg)
+        {
+            // ⭐⭐ 01.10.2026 (bug-376) — DER REGLER WIRKT, über CC 7 je Kanal,
+            // siehe MidiSequencer. Nur die Musik, nichts sonst; kein
+            // midiOutSetVolume.
+            //
+            // ⚠ UNSERE ZUTAT: das Original hat keinen Musikregler, nur
+            // »MIDI-Musik EIN/AUS« (Art 34).
+            //
+            // ⚠ UNSERE SETZUNG: 0 % hält hier NICHT mehr an (der Riegel unten
+            // gilt nur noch für den MCI-Weg). CC 7 = 0 ist schon stumm, und wer
+            // den Regler wieder hochzieht, hört die Musik sofort weiter — beim
+            // Anhalten käme sie erst mit der nächsten Mission zurück.
+            VolumeCode = -1;
+            MidiSequencer.SetVolume(p);
+            return;
+        }
         if (_open)
         {
             Send($"setaudio {Alias} volume to {p * 10}", quiet: true);
@@ -308,6 +387,9 @@ public static class MidiMusic
         // Abspielen selbst uebernimmt (MIDI-Datei lesen, midiOutShortMsg,
         // CC 7 je Kanal) statt MCI den Sequenzer fuehren zu lassen. Das ist
         // ein eigenes Stueck Arbeit und NICHT gebaut.
+        //
+        // ⭐ 01.10.2026 — jetzt GEBAUT (bug-376, MidiSequencer, oben). Dieser
+        // Zweig hier ist nur noch der Gegenschalter --musik-mci.
         if (p == 0 && _open) Stop();
     }
 
@@ -332,8 +414,15 @@ public static class MidiMusic
     public static void Stop()
     {
         if (!OperatingSystem.IsWindows() || !_open) return;
-        Send($"stop {Alias}", quiet: true);
-        Send($"close {Alias}", quiet: true);
+        // ⚠ Der eigene Abspieler wird IMMER angehalten, auch auf dem MCI-Weg:
+        // wird --musik-mci erst gesetzt, während er schon spielt, darf er nicht
+        // weiterlaufen. Ist er zu, tut der Aufruf nichts.
+        MidiSequencer.Stop();
+        if (MciWeg)
+        {
+            Send($"stop {Alias}", quiet: true);
+            Send($"close {Alias}", quiet: true);
+        }
         _open = false;
         Track = -1;
         Laeuft = false;

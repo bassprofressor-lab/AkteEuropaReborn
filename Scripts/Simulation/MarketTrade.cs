@@ -191,6 +191,10 @@ public partial class MapEntityLayer
             // keiner Modulo-Bedingung, er läuft, sobald der Fahrauftrag zu
             // Ende ist. Siehe Simulation/BuildOrders.cs.
             BuildArrivalTick();
+            // ⭐ 01.10.2026, bug-381 — und der TERRANIUM-FINDER (Teil 0x4E) im
+            // selben Verteiler: Tafel 0x40A16C Fall 4 -> 0x4083A4, jeden Takt.
+            // Simulation/TerraSuche.cs.
+            TerraSucheTakt();
             // ⭐ 08.09.2026 — UND DER TRANSPORTER haengt in DEMSELBEN
             // Leerlaufverteiler: Tafel 0x40A16C, Arm 0x47 -> 0x407F67, genau
             // neben dem Bauauftrag (0x48/0x4A). Siehe

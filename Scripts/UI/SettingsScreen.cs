@@ -197,6 +197,22 @@ public partial class SettingsScreen : Control
                 Modulate = new Color(0.6f, 0.64f, 0.7f),
             });
 
+        // ⚠ 01.10.2026 — UNSERE ZUTAT: der Grundtakt bremst die Spieluhr. Das
+        // Original hatte keine feste Rate; gemessen sind 42–50 Takte/s bei
+        // Stufe 1. Siehe MapEntityLayer.GrundtaktHz. Wirkt sofort.
+        var takt = new HSlider
+        {
+            MinValue = 20, MaxValue = 50, Step = 5, Value = Settings.Grundtakt,
+            CustomMinimumSize = new Vector2(220, 0),
+        };
+        var taktVal = new Label { Text = $"{Settings.Grundtakt} Takte/s" };
+        takt.ValueChanged += v => { Settings.Grundtakt = (int)v; taktVal.Text = $"{(int)v} Takte/s"; };
+        var taktRow = new HBoxContainer();
+        taktRow.AddChild(new Label { Text = "Grundtempo (50 = Original)", CustomMinimumSize = new Vector2(260, 0) });
+        taktRow.AddChild(takt);
+        taktRow.AddChild(taktVal);
+        box.AddChild(taktRow);
+
         // FogOfWarSetting und nicht FogOfWar: solange das Demo hinter dem
         // Startmenü läuft, ist der Nebel unterdrückt (Settings.FogSuppressed),
         // und der Haken soll trotzdem zeigen, was eingestellt ist.
@@ -260,13 +276,24 @@ public partial class SettingsScreen : Control
         // gehoert dazugeschrieben statt vorgetaeuscht. Gemeldet war: ihn
         // herunterzuziehen nahm AUCH die uebrigen Klaenge weg. Ursache und
         // Begruendung stehen in MidiMusic.Volume.
+        //
+        // ⭐⭐ 01.10.2026 (bug-376) — jetzt WIRKT er: eigener MIDI-Abspieler
+        // (Audio/MidiSequencer.cs), die Lautstaerke geht als CC 7 je Kanal an
+        // den Synthesizer und trifft nur die Musik. ⚠ Der Regler ist UNSERE
+        // ZUTAT — das Original hat nur »MIDI-Musik EIN/AUS« (Art 34). Mit
+        // --musik-mci laeuft der alte MCI-Weg, und dann gilt der alte Text.
         box.AddChild(new Label
         {
-            Text = "Der Regler schaltet die Musik auf 0 STUMM. Dazwischen regelt er nichts:\n"
+            Text = Audio.MidiMusic.MciWeg
+                 ? "Der Regler schaltet die Musik auf 0 STUMM. Dazwischen regelt er nichts:\n"
                  + "Windows spielt MIDI ueber einen Sequenzer, der den Lautstaerkebefehl nicht\n"
                  + "kennt (Rueckgabe 261, Unbekannter Befehl). Der fruehere Weg darum herum\n"
                  + "stellte das MIDI-Geraet SYSTEMWEIT leiser und nahm damit auch alle anderen\n"
-                 + "Klaenge mit — er ist entfernt.",
+                 + "Klaenge mit — er ist entfernt. (Gegenschalter --musik-mci ist gesetzt.)"
+                 : "Eigener MIDI-Abspieler: der Regler stellt nur die Musik leiser oder lauter\n"
+                 + "(MIDI-Kanallautstaerke), die uebrigen Klaenge bleiben unberuehrt.\n"
+                 + "Das Original hat keinen Musikregler, nur MIDI-Musik EIN/AUS —\n"
+                 + "dieser Regler ist eine Abweichung des Nachbaus.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             CustomMinimumSize = new Vector2(520, 0),
             Modulate = new Color(0.75f, 0.75f, 0.68f),

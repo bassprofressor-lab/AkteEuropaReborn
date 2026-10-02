@@ -7813,6 +7813,7 @@ public partial class MapEntityLayer : Node2D
         // Einheiten (bug-219).
         ZeichneMolen();
         ZeichneStege();
+        ZeichneTerramarken();       // bug-381, Simulation/TerraSuche.cs
         foreach (var b in BuildingsBackToFront())
             DrawBuildingTiles(b, flach: true);
         // ⚠ Regel 32/33: die eigene Zeile MUSS im Protokoll stehen, sonst ist
@@ -12356,7 +12357,7 @@ public partial class MapEntityLayer : Node2D
         int aim = TurmRichtung(e);
         return PictureAnchor(e) - EinheitenAnker(e)
              + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing)
-             + TurmBildMitte(e.Weapon, aim, TurmLadePose(e));
+             + TurmBildMitte(e.Weapon, aim, TurmGruppe(e));   // bug-378, Werferpose.cs
     }
 
     /// <summary>Wo in seiner eigenen Leinwand ein TURMBILD wirklich sitzt — die
@@ -14190,6 +14191,22 @@ public partial class MapEntityLayer : Node2D
     private void SetTerraPlaces(System.Collections.Generic.IReadOnlyList<(int Col, int Row, int Amount)> list)
     {
         _deposits.Clear();
+        _erz.Clear();
+        // ⭐⭐ 01.10.2026, bug-381 — add_terra_place 0x4D0A10 schreibt in sec78
+        // (0xBC6D40), NICHT in sec38: das ist ERZ IM BODEN, kein Bauplatz.
+        // Baubar wird es erst, wenn ein Terranium-Finder es aufschliesst
+        // (Simulation/TerraSuche.cs). Siehe Simulation/Deposits.cs.
+        if (!ErzSofortBaubar)
+        {
+            foreach (var (col, row, amount) in list)
+                _erz.Add(new ErzSatz { Col = col, Row = row, Amount = amount, Belegt = true });
+            foreach (var v in _karteTerra) _deposits.Add(v);
+            if (_erz.Count > 0 || _deposits.Count > 0)
+                GD.Print($"Vorkommen: {_deposits.Count} Bauplaetze (sec38, aus der Karte) — " +
+                         $"{_erz.Count} Erzplaetze aus dem Missionsaufbau liegen VERSTECKT im " +
+                         "Boden (sec78), ein Terranium-Finder muss sie erst aufschliessen");
+            return;
+        }
         foreach (var (col, row, amount) in list) _deposits.Add((col, row, amount));
         // Die Karte bringt eigene mit (sec38) — sie werden DAZUGELEGT, nicht
         // ersetzt. Warum, steht bei _karteTerra.
@@ -14198,7 +14215,8 @@ public partial class MapEntityLayer : Node2D
         if (_deposits.Count > 0)
             GD.Print($"Vorkommen: {_deposits.Count} Rohstoffstellen — {ausSkript} aus dem " +
                      $"Missionsaufbau, {_karteTerra.Count} aus der Karte (sec38); " +
-                     "die Feld-Rohstoffmine hat jetzt Bauplaetze");
+                     "die Feld-Rohstoffmine hat jetzt Bauplaetze" +
+                     " (--erz-sofort-baubar: Skriptvorkommen sofort baubar, alter Stand)");
     }
 
     /// <summary>
@@ -26113,6 +26131,16 @@ public partial class MapEntityLayer : Node2D
         /// — der Automat legt ihn beim Abfahren an.</summary>
         public bool Freight;
 
+        /// <summary>⭐ 01.10.2026 (V4, bug-377): true = dieser Waggon faehrt auf
+        /// einer Linie, die nie abfaehrt, EINMAL zu Ende und wird dann geloescht
+        /// (Simulation/ZugDemo.cs, <c>ZugAuslauf</c>). Die Stelle steht dann in
+        /// <see cref="LeadF"/>.</summary>
+        public bool Auslauf;
+
+        /// <summary>Lebensbyte +0x00 == 0 in der Karte (V1, bug-377) — nur mit
+        /// <c>--geisterwaggons</c> überhaupt geladen; der Prüfstand zählt sie.</summary>
+        public bool Geist;
+
         /// <summary><b>Es gibt diesen Waggon gerade nicht.</b> Im Original ist
         /// ein Waggon ein eigener Satz, der bei der Abfahrt ERZEUGT und am
         /// Streckenende einzeln GELÖSCHT wird (<c>+0x00 := 0</c>, danach
@@ -26433,6 +26461,14 @@ public partial class MapEntityLayer : Node2D
     private void LoadWagons(JObj root)
     {
         _wagons.Clear();
+        GeisterUebersprungen = 0;
+        WaggonsGeladen = 0;
+        try { LoadWagonsInnen(root); }
+        finally { WaggonsGeladen = _wagons.Count; }
+    }
+
+    private void LoadWagonsInnen(JObj root)
+    {
         if (root["trains"] is not JsonArray tv)
             return;
         foreach (var item in tv)
@@ -26440,11 +26476,21 @@ public partial class MapEntityLayer : Node2D
             if (item is not JObj w) continue;
             int col = GetI(w, "col"), yh = GetI(w, "y_half");
             if (col == 0 && yh == 0) continue;            // empty wagon slot
+            // ⭐ 01.10.2026 — V1, bug-377: DAS LEBENSBYTE +0x00. Das Original
+            // taktet (@0x4C768F test al,al) und zeichnet (@0x42E111) nur Saetze
+            // mit +0x00 != 0 und loescht beim Streckenende NUR dieses Byte
+            // (@0x4C6C47) — die Koordinaten bleiben als Leiche im Gebaeude
+            // liegen. Wir haben sie alle geladen: 713 Geisterwaggons ueber 9
+            // Demos, DM_8/DM_9 je 133 auf Karten ohne ein Gleis (Bericht §2.4).
+            // Das Byte steht im Export nur im `raw`-String (raw[0:2]).
+            // Gegenschalter --geisterwaggons.
+            if (!Geisterwaggons && WaggonLebensbyte(w) == 0) { GeisterUebersprungen++; continue; }
             _wagons.Add(new Wagon
             {
                 Line = GetI(w, "line", -1), Index = GetI(w, "wagon"),
                 Step = GetI(w, "step"), Piece = GetI(w, "piece"),
                 Col = col, Row = yh / 2f, Move = TrainStepSeconds,
+                Geist = WaggonLebensbyte(w) == 0,       // nur mit --geisterwaggons true
             });
         }
         // Which way a train faces is in the data, not a choice: the wagons
@@ -26493,6 +26539,11 @@ public partial class MapEntityLayer : Node2D
     private void UpdateTrains(float dt)
     {
         if (_wagons.Count == 0) return;
+        // ⭐ 01.10.2026 — V4, bug-377: der Waggontakt des Originals liest die
+        // Linien-faze NICHT (0 Lesezugriffe auf 0xA892F5 in 0x4C69C0..0x4C73C7).
+        // Ein Zug auf einer toten Linie faehrt EINMAL zu Ende und wird geloescht
+        // — er pendelt nicht. Simulation/ZugDemo.cs. Gegenschalter --zug-pendelt.
+        if (!ZugPendelt) { ZugAuslauf(dt); return; }
         bool moved = false;
         var flip = new HashSet<int>();
         foreach (var w in _wagons)
@@ -29262,6 +29313,17 @@ public partial class MapEntityLayer : Node2D
     /// <b>Um wieviele Zellzeilen SPÄTER als seine eigene Zelle wird ein
     /// Gleisstück gezeichnet? — <c>+2</c>, und das ist GELESEN.</b>
     ///
+    /// <para>⚠⚠ 01.10.2026 — bug-382 (E4): DIE DEUTUNG UNTEN IST ÜBERHOLT. Die 2 ist
+    /// richtig gelesen, aber sie ist der FELDVERSATZ der zwei Vorzeilen: der
+    /// Kartenzeichner 0x4B4150 läuft ab Zeile −2 und zeichnet je Zeile i erst das
+    /// Fach i+2 (@0x4B43F3), DANN die Kacheln der Zeile i — alle Einreiher (Gleis,
+    /// Waggon @0x42E1F2, Fahrzeug @0x4301B3, Tür 0x42FD47) tragen dieselbe 2. In
+    /// unserer Zeilenschleife ist das Versatz 0 (berichte/zug-einfahrt-fable.md §1).
+    /// Mit 2 lag das Gleis über den Körperkacheln der Zeilen R+1/R+2, über den
+    /// Einheiten dieser Zeilen — und seit E1 über dem Waggon. Gilt nur noch mit
+    /// <c>--gleisfach-alt</c>. Der Zähler »Anbindung« unterscheidet beide nicht
+    /// (DM_4: 48 von 48 Enden in beiden Fassungen).</para>
+    ///
     /// <para>⭐ 13.08.2026. Gemeldet war »oft fehlt die letzte Strecke zur
     /// Anbindung an ein Gebäude«. Der Grund ist die Reihenfolge, nicht ein
     /// fehlendes Stück: <see cref="DrawRailUpTo"/> zeichnet alle Stücke einer
@@ -29324,7 +29386,11 @@ public partial class MapEntityLayer : Node2D
         public RailTile(Vector2 at, int frame, int yoff, int row, int part)
         {
             At = at; Frame = frame; YOff = yoff; Row = row; Part = part;
-            DrawRow = row + (RailProbeBucket0 ? 0 : RailDrawRowBias);
+            // ⭐ 01.10.2026 — bug-382 (E4): Versatz 0. Der Kartenzeichner zeichnet
+            // Fach i+2 VOR den Kacheln der Zeile i (@0x4B43F3); die 2 von @0x42DFE9
+            // ist der Feldversatz der zwei Vorzeilen, kein Tiefenversatz (Bericht
+            // zug-einfahrt-fable.md §1/§5.1). --gleisfach-alt = Stand 13.08. (2).
+            DrawRow = row + (RailProbeBucket0 || !GleisfachAlt ? 0 : RailDrawRowBias);
         }
     }
 
@@ -29527,7 +29593,7 @@ public partial class MapEntityLayer : Node2D
         RailTilesUnderBuilding = 0;
         RailTilesUnderChecked = 0;
         RailUnderWorstWhere = "";
-        int bias = RailProbeBucket0 ? 0 : RailDrawRowBias;
+        int bias = RailProbeBucket0 || !GleisfachAlt ? 0 : RailDrawRowBias;   // bug-382 E4
         var bySlot = new Dictionary<int, Entity>();
         foreach (var e in _entities)
             if (e.IsBuilding && !e.Dead) bySlot[e.Slot] = e;
@@ -30130,11 +30196,21 @@ public partial class MapEntityLayer : Node2D
         // ⭐⭐ 15.09.2026 — DIE FAECHER JE ZEILE (Simulation/Tuerfach.cs). Seine Meldung
         // aus K16: »das Tor verdeckt die davorstehende Einheit«.
         var fach = FachKoerbe(gebaeude, letzteZeile);
+        // ⭐ 01.10.2026 — V2, bug-377: die WAGGONS bekommen ihr Fach wie im
+        // Original (Einreiher @0x42E100: Fach = Zeile + yoff + 2), je Fach nach
+        // Bild-Y aufsteigend (Sortierer @0x430C50). Simulation/ZugDemo.cs.
+        int wi = 0;
+        if (!ZugfachAlt) ZugfachVorbereiten();
         for (int r = 0; r <= letzteZeile; r++)
         {
             // (1) das Gleis dieser Zeile — es trägt seinen eigenen Versatz
             // schon in DrawRow (RailDrawRowBias, gelesen @0x42DFE9).
             DrawRailUpTo(r, ref at);
+            // (1b) die WAGGONS dieses Fachs, auf ihrem Gleis (V2, bug-377).
+            // ⭐ 01.10.2026 — bug-382 (E1): Fach i+2 VOR den Kacheln der Zeile i
+            // (@0x4B43F3), also r + 2 — sonst liegt der Waggon zwei Zeilen zu spät
+            // ÜBER Dachstreifen/Hallenfront. Gegenschalter --zug-einfahrt-alt.
+            if (!ZugfachAlt) ZugfachZeichnen(ZugEinfahrtAlt ? r : r + 2, ref wi);
             // (2) die EINHEITEN dieser Zeile. DrawUnitsUpTo nimmt `Row < row`,
             // also r+1 für »alle bis einschliesslich r«.
             DrawUnitsUpTo(r + 1, ref ui);
@@ -30216,6 +30292,7 @@ public partial class MapEntityLayer : Node2D
         // einer Zeilenschleife ist `DrawRow <= r` genau dieselbe Aussage, nur
         // ohne den Umweg über ein Gebäude, das zufällig in der Nähe steht.
         DrawRailUpTo(int.MaxValue, ref at);
+        if (!ZugfachAlt) ZugfachZeichnen(int.MaxValue, ref wi);
         DrawObjectsUpTo(int.MaxValue, ref oi);
         DrawUnitsUpTo(int.MaxValue, ref ui);
         // ⚠ Auch der Nachzuegler-Durchgang braucht seinen Flammenabschluss —
@@ -31034,11 +31111,18 @@ public partial class MapEntityLayer : Node2D
     /// den Gebäuden, siehe <see cref="DrawRailAndBuildings"/>.</summary>
     private void DrawTrains()
     {
-        foreach (var w in _wagons)
+        foreach (var w in _wagons) DrawWagon(w);
+    }
+
+    /// <summary>Einen Waggon zeichnen. ⭐ 01.10.2026 (V2, bug-377): gerufen aus dem
+    /// Zeilenfach (<c>ZugfachZeichnen</c>, Simulation/ZugDemo.cs) — nur mit
+    /// <c>--zugfach-alt</c> noch aus <see cref="DrawTrains"/> über allem.</summary>
+    private void DrawWagon(Wagon w)
+    {
         {
             // Am Streckenende loescht das Original jeden Waggon einzeln; bei
             // uns bleibt der Satz liegen und wird hier uebersprungen.
-            if (w.Hidden) continue;
+            if (w.Hidden) return;
             int part = WagonPart.TryGetValue(w.Index, out var pp) ? pp : 58;
             int piece = w.Index == 3 ? (w.Piece + 4) & 7 : w.Piece;   // @0x42b52a
             var tex = GetTrainTexture(part, piece);
@@ -31046,7 +31130,9 @@ public partial class MapEntityLayer : Node2D
             // der Besitzer des Gebaeudes an KNOTEN 1 der Linie; 11 (neutral) als
             // Farbe 10. Gemeldet: »züge passen wohl auch ihre farbe an, von
             // neutral bishin welcher spieler«. Gegenschalter --zugfarbe-alt.
-            if (!ZugfarbeAlt) tex = Parteifarbe(tex, ZugBesitzerFarbe(w.Line));
+            // ⭐ 01.10.2026 — V5, bug-377: NIE ROH. ZugZeichenFarbe macht aus −1
+            // die neutrale Gruppe 10 (Simulation/ZugDemo.cs); --zugfarbe-roh.
+            if (!ZugfarbeAlt) tex = Parteifarbe(tex, ZugZeichenFarbe(w.Line));
             // ⚠ 17.08.2026 — MIT DER HÖHE AUS DEM GLEISBILD (Fehler C17). Hier
             // stand `RailPoint(...)` allein, und das zieht die Höhe der
             // GERUNDETEN Zelle ab — eine Treppe je Zelle, während die Rampe im
@@ -31057,7 +31143,7 @@ public partial class MapEntityLayer : Node2D
             if (tex == null)
             {
                 DrawCircle(at, 3f, new Color(0.9f, 0.6f, 0.2f));
-                continue;
+                return;
             }
             // ⚠ 13.08.2026 — der Waggon sitzt gegen SEIN GLEISBILD versetzt,
             // und der Versatz ist gelesen: das Original reiht das Gleis bei
@@ -33542,6 +33628,29 @@ public partial class MapEntityLayer : Node2D
     public const int SpeedTurbo = 20;
 
     /// <summary>
+    /// <b>DER GRUNDTAKT</b> — wie viele Originaltakte bei Geschwindigkeit 1 auf
+    /// eine echte Sekunde gehen. Vorgabe <see cref="SimHz"/> = 50.
+    ///
+    /// <para>⚠⚠ <b>UNSERE ZUTAT, NICHT DAS ORIGINAL</b> (01.10.2026, seine Wahl
+    /// »50 bleibt, Regler langsamer«). Ein externer Spieler fand das Spiel zu
+    /// schnell (»Original lief mit 20 fps«). Dagegen steht die Messung vom
+    /// 21.08. (Nachfristzaehler im Let's Play, 250 Takte in 5–6 s = 42–50/s bei
+    /// Stufe 1). Darum bleibt 50 die Vorgabe, und der Regler in den Optionen
+    /// (Settings.Grundtakt, 20…50) BREMST nur. Das Original kannte statt dessen
+    /// keine feste Rate: Takte/s = Bilder/s × Stufe (Simulation/Zeitbasis.cs).</para>
+    ///
+    /// <para>Er dehnt die echte Zeit, die ein Takt braucht — jeder Takt rechnet
+    /// weiter mit <see cref="SimDt"/>, also bleibt die Spielmechanik Takt fuer Takt
+    /// gleich. ⚠ Was nach der Uhr des RECHNERS laeuft (Musik, Bildzaehler, Zeiger,
+    /// Fensteranimation), wird NICHT langsamer. Gegenschalter: Regler auf 50, oder
+    /// <c>--grundtakt=50</c>.</para></summary>
+    public static int GrundtaktHz = UI.Settings.Grundtakt;
+
+    /// <summary>Echte Bildzeit → Simulationszeit unter dem <see cref="GrundtaktHz"/>.</summary>
+    private static float SimZeit(float dt)
+        => dt * Mathf.Clamp(GrundtaktHz, 1, SimHz) / SimHz;
+
+    /// <summary>
     /// <c>--takt-check</c> — <b>läuft der Takt mit 50 Hz, und macht die
     /// Geschwindigkeit wirklich mehr Takte?</b>
     ///
@@ -33586,7 +33695,25 @@ public partial class MapEntityLayer : Node2D
             sb.AppendLine($"  50 je Sekunde: {(eins ? "ja" : "NEIN")}; " +
                           $"verdoppelt: {(zwei ? "ja" : "NEIN")}; " +
                           $"verdreifacht: {(drei ? "ja" : "NEIN")}");
-            sb.Append(pause && eins && zwei && drei ? "  BESTANDEN" : "  DURCHGEFALLEN");
+            // 01.10.2026: der Grundtakt. Eine echte Sekunde in 60 Bildern
+            // anbieten, dieselbe Rechnung wie _Process; bei 20 muessen 20
+            // Schritte herauskommen, bei 50 fuenfzig.
+            int merkG = GrundtaktHz;
+            var gt = new int[2];
+            int[] hz = { 20, SimHz };
+            for (int g = 0; g < 2; g++)
+            {
+                GrundtaktHz = hz[g];
+                float acc = 0f; int n = 0;
+                for (int f = 0; f < 60; f++)
+                { acc += SimZeit(1f / 60f); while (acc >= SimDt - 1e-5f) { acc -= SimDt; n++; } }
+                gt[g] = n;
+            }
+            GrundtaktHz = merkG;
+            bool grund = gt[0] is >= 19 and <= 21 && gt[1] is >= 49 and <= 51;
+            sb.AppendLine($"  Grundtakt 20 -> {gt[0]} Schritte/s, 50 -> {gt[1]} Schritte/s: "
+                        + (grund ? "ja" : "NEIN"));
+            sb.Append(pause && eins && zwei && drei && grund ? "  BESTANDEN" : "  DURCHGEFALLEN");
         }
         finally { GameSpeed = merk; }
         return sb.ToString();
@@ -33636,7 +33763,7 @@ public partial class MapEntityLayer : Node2D
         // gewarnt: »Wer das Feuer an den Wind haengt, MUSS den Takt vorher auf
         // die Simulation umstellen.« Er steht jetzt in SimTick.
 
-        _simAcc += dt;
+        _simAcc += SimZeit(dt);   // 01.10.2026: Grundtakt, siehe GrundtaktHz
         int steps = 0;
         bool moved = false;
         // ⚠ DIE GESCHWINDIGKEITSSCHLEIFE. Das Original laeuft je Zeitgeberschlag
@@ -33765,6 +33892,8 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 13.09.2026 — die Laufzeit der Radarmasten (Minen- und Fallentakt
         // 0x4216F0, jeden Takt). Simulation/RadarMast.cs.
         RadarMastTakt();
+        // ⭐ 01.10.2026 — der Prüfstand --werferpose-check (Simulation/Werferpose.cs).
+        WerferPoseTakt();
         // ⭐ Der Fenstertakt (BM.11, 0x4505F0 + 0x44FB10): die Blenden je Takt
         // ein Bild, die Lebensdauer alle 20 Takte. ⚠ Er gehoert HIERHER und
         // nicht in _Process: ein Meldungsfenster darf auf einem schnellen
@@ -33863,6 +33992,7 @@ public partial class MapEntityLayer : Node2D
         PollBombenLog();
         PollEinfahrt();
         if (BasisVerlegungCheckAn) PollBasisVerlegungCheck();   // --basis-verlegung-check
+        if (TerrasucheCheckAn) PollTerrasucheCheck(dt);          // --terrasuche-check, bug-381
         PollKiProbe(dt);
         PollAusweichProbe(dt);
         PollAufgebenProbe(dt);
@@ -33915,6 +34045,9 @@ public partial class MapEntityLayer : Node2D
         RailRepairTick();           // die Reparaturkette — Simulation/RailRepair.cs
         RailMoveWagons();
         UpdateTrains(dt);           // 'Trains'
+        // bug-382: die Einfahrt-Spur zuerst — V2/V3 des Demo-Pruefstands lesen sie.
+        if (ZugEinfahrtCheckAn || ZugDemoCheckAn) PollZugEinfahrtCheck(dt);   // Simulation/ZugEinfahrt.cs
+        if (ZugDemoCheckAn) PollZugDemoCheck(dt);   // --zug-demo-check, Simulation/ZugDemo.cs
 
         // ⚠⚠ ZWEI DURCHGÄNGE, NICHT EINER (20.08.2026).
         //
@@ -36138,10 +36271,19 @@ public partial class MapEntityLayer : Node2D
     /// ⭐⭐ <b>ZEIGT DIESER TURM SEINE RAKETE?</b> — <c>1</c> für die geladene
     /// Pose, <c>0</c> für die leere (24.08.2026).
     ///
-    /// <para>⚠ <b>Das ist UNSERE Regel, und sie ist es zweifach.</b> Das
-    /// Original zeichnet für einen Turm überhaupt nie eine Gruppe (im ganzen
-    /// Zeichenbereich gibt es genau ein <c>imul ax,ax,0x30</c>, und das gehört
-    /// dem Unterteil). Und dass die zweite Pose der GELADENE Werfer ist, ist an
+    /// <para>⚠⚠ <b>SEIT DEM 01.10.2026 NUR NOCH DER GEGENSCHALTER</b>
+    /// <c>--werferpose-alt</c>; gezeichnet wird mit <see cref="TurmGruppe"/>
+    /// (Simulation/Werferpose.cs, bug-378).</para>
+    ///
+    /// <para>⚠ <b>Das ist UNSERE Regel, und sie ist es zweifach.</b> Hier stand,
+    /// das Original zeichne für einen Turm nie eine Gruppe, weil im
+    /// Zeichenbereich nur ein <c>imul ax,ax,0x30</c> stehe (das des Unterteils).
+    /// <b>Das war falsch begründet:</b> die Turmgruppe ist kein <c>imul</c>,
+    /// sondern eine KONSTANTE — <c>mov dx,0x30</c> / <c>and dx,0x30</c> @0x429DB2,
+    /// 0x429E49, 0x42A22F, 0x42A2C6 —, gewählt aus NABYTO <c>+0x32</c> gegen
+    /// RELOAD <c>+0x3D</c> für die Bauteile 26/27/28/35/36
+    /// (berichte/raketenwerfer-animation-fable.md §2). Wer nach einem Befehl
+    /// sucht, findet die Konstante nicht. Und dass die zweite Pose der GELADENE Werfer ist, ist an
     /// den Bildern gemessen, nicht gelesen — siehe
     /// <c>Import.UnitsExporter.LadeSchwelle</c>. Gewählt hat es der Spieler am
     /// 24.08.2026: »nach Munition, geladen solange ammo &gt; 0«.</para>
@@ -37145,7 +37287,7 @@ public partial class MapEntityLayer : Node2D
     /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
     /// nimmt als bei allem anderen Eigenen — siehe
     /// <see cref="UI.GameCursors"/>.</summary>
-    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral, Einsteigen, Reparatur }
+    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral, Einsteigen, Reparatur, TerraSuche }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
@@ -37158,6 +37300,9 @@ public partial class MapEntityLayer : Node2D
         // Original VOR allem anderen (@0x431B44, nur die Bedienleiste geht
         // vor) — siehe Simulation/Gleisreparatur.cs.
         if (ReparaturzeigerHier(mapPos)) return Hint.Reparatur;
+        // ⭐ 01.10.2026, bug-381 — Modus 3 »Terranium suchen«: Zeigerart 0x0D
+        // ohne jede Pruefung (@0x4317C9). Simulation/TerraSuche.cs.
+        if (PlacementMode == OrderTerraSuche) return Hint.TerraSuche;
         // ⭐⭐ 07.09.2026 — DER ENTLADEZEIGER ueber einer RAMPE, auf seine
         // Meldung »ueber den Rampen kommt da so ein Entlade Icon und wenn man
         // es mit rechter Maustaste befaehigt, werden dort die Einheiten
@@ -40041,7 +40186,9 @@ public partial class MapEntityLayer : Node2D
                 if (hull != null)
                 {
                     DrawTexture(Parteifarbe(hull, e.Owner), picC - EinheitenAnker(e));
-                    var turret = GetTurretTexture(e.Weapon, aim, slope, TurmLadePose(e));
+                    // ⭐ 01.10.2026 — die Gruppe nach NABYTO/RELOAD wie 0x429D8F/0x429E37
+                    // (bug-378, Simulation/Werferpose.cs, --werferpose-alt).
+                    var turret = GetTurretTexture(e.Weapon, aim, slope, TurmGruppe(e));
                     if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
                         DrawTexture(Parteifarbe(turret, e.Owner), picC - EinheitenAnker(e)
                                             + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing));
@@ -40403,7 +40550,9 @@ public partial class MapEntityLayer : Node2D
         // the SPOJ rail network (key L) — each line follows its own recorded
         // track; only maps without routes fall back to straight connections
         // the trains ride on the rails whether or not the overlay is on
-        DrawTrains();
+        // ⭐ 01.10.2026 — V2, bug-377: die Waggons laufen jetzt im Zeilenfach mit
+        // (DrawRailAndBuildings → ZugfachZeichnen); hier nur noch --zugfach-alt.
+        if (ZugfachAlt) DrawTrains();
 
         if (_showRail && _railRoutes.Count > 0)
         {

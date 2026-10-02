@@ -98,16 +98,74 @@ public partial class MoviePlayer : CanvasLayer
     /// in <c>UI/MainMenu.StartMission</c>.</summary>
     public static bool FilmnummerAlt;
 
+    /// <summary><c>--filme-feste-pfade</c>: nur die drei festen <see cref="Places"/>
+    /// wie bis 0.6.5 (Stand vor bug-375).</summary>
+    public static bool FestePfade;
+
+    /// <summary><c>--filme=&lt;ordner&gt;</c> fuer einen Lauf; sonst
+    /// <c>settings.cfg: movies_dir</c>.</summary>
+    public static string? Ordner;
+
+    /// <summary>
+    /// ⭐ 01.10.2026, bug-375 (berichte/musik-video-fable.md) — WO DIE FILME
+    /// GESUCHT WERDEN. Bis hier nur <see cref="Places"/>: wer das Original nicht
+    /// unter <c>C:\Program Files (x86)\Akte Europa</c> liegen hatte und dessen
+    /// Laufwerk nicht D: oder E: hiess, sah NIE einen Film — und das ohne
+    /// Meldung. Das Original selbst liest von der CD (<c>X:\movies\…</c>
+    /// @0x4F75A4). Jetzt, in dieser Reihenfolge: eigener Ordner, beide
+    /// Program-Files, JEDES bereite Laufwerk (auch eingebundene Abbilder und
+    /// kopierte CDs) mit <c>MOVIES</c> und <c>Akte Europa\MOVIES</c>, zuletzt die
+    /// alten festen Pfade.
+    /// </summary>
+    public static System.Collections.Generic.List<string> Suchorte()
+    {
+        var l = new System.Collections.Generic.List<string>();
+        if (FestePfade) { l.AddRange(Places); return l; }
+        string? eigen = Ordner ?? Settings.MoviesDir;
+        if (!string.IsNullOrWhiteSpace(eigen))
+        { l.Add(eigen); l.Add(System.IO.Path.Combine(eigen, "MOVIES")); }
+        foreach (var env in new[] { "ProgramFiles(x86)", "ProgramFiles" })
+        {
+            string? pf = System.Environment.GetEnvironmentVariable(env);
+            if (!string.IsNullOrEmpty(pf)) l.Add(System.IO.Path.Combine(pf, "Akte Europa", "Movies"));
+        }
+        System.IO.DriveInfo[] drives;
+        try { drives = System.IO.DriveInfo.GetDrives(); }
+        catch (System.Exception) { drives = System.Array.Empty<System.IO.DriveInfo>(); }
+        foreach (var d in drives)
+        {
+            bool ready;
+            try { ready = d.IsReady; } catch (System.Exception) { continue; }
+            if (!ready) continue;
+            string root = d.RootDirectory.FullName;
+            l.Add(System.IO.Path.Combine(root, "MOVIES"));
+            l.Add(System.IO.Path.Combine(root, "Akte Europa", "MOVIES"));
+        }
+        foreach (string pl in Places) if (!l.Contains(pl)) l.Add(pl);
+        return l;
+    }
+
     public static string? Find(int nummer)
     {
         string name = nummer <= 0 ? "INTRO.RPL" : $"{nummer}.RPL";
-        foreach (string d in Places)
+        var orte = Suchorte();
+        foreach (string d in orte)
         {
             string p = System.IO.Path.Combine(d, name);
-            if (System.IO.File.Exists(p)) return p;
+            // ⚠ Windows unterscheidet keine Gross-/Kleinschreibung, aber ein
+            // Ordner von einer kopierten CD kann »movies« heissen — File.Exists
+            // trifft beides.
+            try { if (System.IO.File.Exists(p)) return p; } catch (System.Exception) { }
         }
+        LetzteSuche = $"Film {name} nicht gefunden ({orte.Count} Orte durchsucht" +
+                      (nummer >= 16 ? " — liegt nur auf CD 2" : "") +
+                      "). Eigener Ordner: Optionen-Datei movies_dir oder --filme=<ordner>";
+        Godot.GD.Print("film: " + LetzteSuche);
         return null;
     }
+
+    /// <summary>Warum der letzte Film fehlte — fuer eine sichtbare Meldung.</summary>
+    public static string LetzteSuche = "";
 
     /// <summary>
     /// <b>Den Film einer Mission spielen, dann <paramref name="weiter"/>.</b>

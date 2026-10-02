@@ -236,6 +236,10 @@ public partial class PauseMenu : Control
         GD.Print($"Musik: Available={Audio.MidiMusic.Available} Track={Audio.MidiMusic.Track}");
         GD.Print($"  MCI setaudio:             {Audio.MidiMusic.MciVolumeCode} \"{Audio.MidiMusic.LastError}\"");
         GD.Print($"  midiOutSetVolume:         {Audio.MidiMusic.VolumeCode} (0 = angenommen)");
+        // 01.10.2026 (bug-376): der eigene Abspieler — die Ankunft mitmessen
+        GD.Print($"  eigener Abspieler:        {(Audio.MidiMusic.MciWeg ? "aus (--musik-mci)" : "an")}, "
+                 + $"Geraet offen={Audio.MidiSequencer.Offen}, Rueckgabe {Audio.MidiSequencer.LastCode} "
+                 + $"\"{Audio.MidiSequencer.LastError}\", CC7 roh je Kanal [{string.Join(",", Audio.MidiSequencer.LetzterCc7)}]");
 
         // "MIDI-Musik an/aus" aus und wieder an, mitten im Spiel.
         Audio.MidiMusic.Stop();

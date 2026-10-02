@@ -83,7 +83,13 @@ public static class MapDeposits
 
     /// <summary>Nie mehr als so viele: das Original bricht mit »Cannot add more
     /// terra_places« @0x4D05E7 ab, und die Tafel bei 0x677448 hat 50 Plätze
-    /// (Schritt 14).</summary>
+    /// (Schritt 14).
+    /// <para>⚠ 01.10.2026, bug-381 — BERICHTIGT: zwei Tafeln, beide mit 50
+    /// Plätzen. <c>add_terra_place</c> (C 0x4D0A10, F 0x4D05C0) schreibt in
+    /// <b>sec78</b> (C <c>0xBC6D40</c>, Schritt 6) — das Erz im Boden. Die Tafel
+    /// bei 0x677448 (F; C <c>0x6783E8</c>, Schritt 14) ist <b>sec38</b>, die
+    /// aufgeschlossenen Vorkommen, die erst der Terranium-Finder füllt
+    /// (add_terra C 0x420E20). Die Obergrenze 50 gilt für beide.</para></summary>
     public const int Most = 50;
 
     /// <summary>Mindestabstand zum Kartenrand. GEMESSEN: min 5 von 50.</summary>
@@ -267,7 +273,7 @@ public static class MapDeposits
         && Zone(zone, w, h, c + 1, r + 1) >= MinCornerClass;
 
     /// <summary>Wieviele der neun Anker im 3x3-Fenster eines Vorkommens
-    /// (<c>CellOnDeposit</c> @0x4205C0) eine Mine TRAGEN — geprüft wird die ganze
+    /// (<c>CellOnDeposit</c> F @0x4205C0 = C @0x421400) eine Mine TRAGEN — geprüft wird die ganze
     /// Grundfläche <paramref name="foot"/>, Zelle für Zelle, wie
     /// <c>can_build_here</c> @0x4203C0 sie prüft.</summary>
     private static int Anchors(CwmFile m, byte[] imap, byte[] zone, int c, int r,

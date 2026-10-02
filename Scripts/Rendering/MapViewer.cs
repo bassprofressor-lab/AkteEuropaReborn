@@ -1029,9 +1029,41 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_filmsucheCheck)
+        {
+            // bug-375: wo liegt jeder Film? 0 = INTRO, 1..33.
+            int da = 0; var fehlt = new System.Collections.Generic.List<int>();
+            for (int n = 0; n <= 33; n++)
+            {
+                string? f = UI.MoviePlayer.Find(n);
+                if (f != null) da++; else fehlt.Add(n);
+                if (n is 0 or 1 or 16 or 32) GD.Print($"filmsuche-check: Film {n} -> {f ?? "FEHLT"}");
+            }
+            // Jeder Ort, an dem 16.RPL liegt — so sieht man, dass auch ein Ort
+            // gefunden wird, den die drei festen Pfade nie kannten.
+            foreach (string o in UI.MoviePlayer.Suchorte())
+                if (System.IO.File.Exists(System.IO.Path.Combine(o, "16.RPL")))
+                    GD.Print($"filmsuche-check: 16.RPL liegt auch in {o}");
+            GD.Print($"filmsuche-check: {UI.MoviePlayer.Suchorte().Count} Suchorte, {da}/34 Filme gefunden"
+                   + (fehlt.Count > 0 ? $", fehlen: {string.Join(",", fehlt)}" : ""));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_enzBildCheck)
+        {
+            GD.Print(UI.EncyclopediaScreen.PictureCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_hilfebildCheck)
         {
             GD.Print(UI.HelpWindow.PictureCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_musikCheck)
+        {
+            GD.Print(Audio.MidiSequencer.Pruefstand());
             GetTree().Quit(0);
             return;
         }
@@ -1244,6 +1276,8 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (MapEntityLayer.WerferPoseCheckAn && _shotPath.Length > 0) { _ = WerferPoseBildLauf(); return; }
+        if (MapEntityLayer.ZugEinfahrtCheckAn && _shotPath.Length > 0) { _ = ZugEinfahrtBildLauf(); return; }
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
         if (_hotelplazaCheck) { _ = HotelPlazaLauf(); return; }
         if (_lieferungCheck) { _ = LieferungLauf(); return; }
@@ -1856,6 +1890,83 @@ public partial class MapViewer : Node2D
     /// der Liste STEHT, dieser Lauf, ob es auf dem Schirm ANKOMMT.</summary>
     /// <summary><c>--spuren-check --shot=…</c> (15.09.2026): der Minenraeumer faehrt 5 Zellen,
     /// nach 2,5 s ein Bild mitten auf die Spur — Differenzbild gegen --spuren-unsichtbar.</summary>
+    /// <summary><c>--werferpose-check --shot=…</c> (01.10.2026, bug-378): Kamera auf
+    /// den ersten Probe-Werfer, je ein Bild in der flachen Phase (<c>_flach</c>) und
+    /// in der aufgerichteten vor dem nächsten Schuss (<c>_hoch</c>). Zum Abziehen wird
+    /// der Baum angehalten, damit Zeile und Bild denselben Takt zeigen.</summary>
+    private async System.Threading.Tasks.Task WerferPoseBildLauf()
+    {
+        MapEntityLayer.WerferPoseBildLaeuft = true;
+        _entities.EnsureMissionScript();
+        // erst flach (nach dem ersten Schuss), dann hoch (4 Takte vor dem nächsten);
+        // angehalten wird im Probe-Takt selbst (GameSpeed 0), nicht hier
+        foreach (int g in new[] { 0, 1 })
+        {
+            MapEntityLayer.WerferPoseHaltGruppe = g;
+            for (int bild = 0; bild < 60 * 120 && MapEntityLayer.GameSpeed != 0; bild++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var st = _entities.WerferPoseStand();
+                if (st != null) { _camera.Position = st.Value.pos; _camera.Zoom = new Vector2(4, 4); }
+            }
+            var s = _entities.WerferPoseStand();
+            if (s == null) break;
+            _entities.QueueRedraw();
+            for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string pfad = _shotPath.Replace(".png", g == 1 ? "_hoch.png" : "_flach.png");
+            GetViewport().GetTexture().GetImage().SavePng(pfad);
+            GD.Print($"werferpose-bild: Gruppe {s.Value.gruppe} (gewollt {g}) bei Kamera {s.Value.pos} -> {pfad}");
+            MapEntityLayer.GameSpeed = 1;
+        }
+        for (int bild = 0; bild < 60 * 120; bild++)
+        {
+            var s = _entities.WerferPoseStand();
+            if (s == null || s.Value.fertig) break;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--zug-einfahrt-check --shot=…</c> (01.10.2026, bug-382): sobald ein
+    /// Spitzenwaggon 1,2–2,5 Zellen vor seinem Endpunkt steht (bevorzugt Bahnstation),
+    /// Kamera auf den Endpunkt, Zoom 4, und zwölf Bilder im Abstand von 2 Takten
+    /// (<c>_00</c> … <c>_11</c>). Zum Abziehen wird der Baum angehalten (GameSpeed 0),
+    /// damit Zeile und Bild denselben Takt zeigen. Lauf OHNE --headless.</summary>
+    private async System.Threading.Tasks.Task ZugEinfahrtBildLauf()
+    {
+        Vector2? ziel = null;
+        for (int bild = 0; bild < 60 * 300 && ziel == null; bild++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            ziel = _entities.ZugEinfahrtBildZiel();
+        }
+        if (ziel == null) { GD.Print("zug-einfahrt-bild: KEINE EINFAHRT gefunden"); GetTree().Quit(0); return; }
+        MapEntityLayer.GameSpeed = 0;
+        _camera.Position = ziel.Value;
+        _camera.Zoom = new Vector2(4, 4);
+        for (int i = 0; i < 12; i++)
+        {
+            MapEntityLayer.GameSpeed = 0;
+            _entities.QueueRedraw();
+            for (int f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string pfad = _shotPath.Replace(".png", $"_{i:00}.png");
+            GetViewport().GetTexture().GetImage().SavePng(pfad);
+            GD.Print($"zug-einfahrt-bild: {pfad} — {_entities.ZugEinfahrtBildZeile()}");
+            // das Speichern dauert: das lange Bild danach muss im Halt verstreichen,
+            // sonst holt der Takt es in einem Schub nach (4 statt 2 Takte je Bild)
+            for (int f = 0; f < 3; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            MapEntityLayer.GameSpeed = 1;
+            int t0 = _entities.ZeTakt;
+            for (int f = 0; f < 600 && _entities.ZeTakt < t0 + 2; f++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (_entities.ZeTakt >= t0 + 2) MapEntityLayer.GameSpeed = 0;
+            }
+            MapEntityLayer.GameSpeed = 0;
+        }
+        GetTree().Quit(0);
+    }
+
     private async System.Threading.Tasks.Task SpurBildLauf()
     {
         _entities.EnsureMissionScript();
@@ -3680,17 +3791,45 @@ _mausProbePunkt = karte;
             else if (a == "--zug-faehrt-durch") MapEntityLayer.ZugFaehrtDurch = true;
             else if (a == "--gleisbruch-zug-check") MapEntityLayer.GleisbruchZugCheckAn = true;
             else if (a == "--reparaturzeiger-aus") MapEntityLayer.ReparaturzeigerAus = true;
+            // ⭐ 01.10.2026 — bug-381, der Terranium-Finder (Simulation/TerraSuche.cs, Deposits.cs).
+            else if (a == "--erz-sofort-baubar") MapEntityLayer.ErzSofortBaubar = true;
+            else if (a == "--terrasuche-aus") MapEntityLayer.TerrasucheAus = true;
+            else if (a == "--terrasuche-ohne-bohren") MapEntityLayer.TerrasucheOhneBohren = true;
+            else if (a == "--terramarke-aus") MapEntityLayer.TerramarkeAus = true;
+            else if (a == "--terrasuche-check") MapEntityLayer.TerrasucheCheckAn = true;
             else if (a == "--gleistechniker-feld-alt") MapEntityLayer.GleistechnikerFeldAlt = true;
             else if (a == "--ausdock-tempo-alt") MapEntityLayer.AusdockTempoAlt = true;
             else if (a == "--depotheilung-alt") MapEntityLayer.DepotheilungAlt = true;
             else if (a == "--basis-verlegung-alt") MapEntityLayer.BasisVerlegungAlt = true;
             else if (a == "--basis-ohne-wahl-alt") MapEntityLayer.BasisOhneWahlAlt = true;
             else if (a == "--basis-verlegung-check") MapEntityLayer.BasisVerlegungCheckAn = true;
+            else if (a == "--werferpose-alt") MapEntityLayer.WerferPoseAlt = true;          // bug-378
+            else if (a == "--werferpose-check") MapEntityLayer.WerferPoseCheckAn = true;
             else if (a == "--gleisreparatur-check") MapEntityLayer.GleisreparaturCheckAn = true;
             else if (a == "--heli-stufe-alt") MapEntityLayer.HeliStufeAlt = true;
             else if (a == "--plasma-drehen-aus") MapEntityLayer.PlasmaDrehenAus = true;
             else if (a == "--plasma-zielwahl-alt") MapEntityLayer.PlasmaZielwahlAlt = true;
             else if (a == "--stumpf-haelt-geschoss") MapEntityLayer.StumpfHaeltGeschoss = true;
+            // ⭐ 01.10.2026 — bug-377, die Zuege der Menue-Demos (Simulation/ZugSchalter.cs, ZugDemo.cs).
+            else if (a == "--geisterwaggons") MapEntityLayer.Geisterwaggons = true;
+            else if (a == "--zugfach-alt") MapEntityLayer.ZugfachAlt = true;
+            else if (a == "--zug-steht-am-bahnsteig") MapEntityLayer.ZugStehtAmBahnsteig = true;
+            else if (a == "--zug-pendelt") MapEntityLayer.ZugPendelt = true;
+            else if (a == "--zugfarbe-roh") MapEntityLayer.ZugfarbeRoh = true;
+            else if (a == "--zug-gekuppelt") MapEntityLayer.ZugGekuppelt = true;
+            // ⭐ 01.10.2026 — bug-382, die Zug-Einfahrt (Simulation/ZugEinfahrt.cs).
+            else if (a == "--zug-einfahrt-alt") MapEntityLayer.ZugEinfahrtAlt = true;
+            else if (a == "--gleisfach-alt") MapEntityLayer.GleisfachAlt = true;
+            else if (a == "--zug-einfahrt-check") MapEntityLayer.ZugEinfahrtCheckAn = true;
+            else if (a.StartsWith("--zug-einfahrt-check="))
+            { MapEntityLayer.ZugEinfahrtCheckAn = true;
+              MapEntityLayer.ZugEinfahrtCheckSekunden = Mathf.Max(1f, a["--zug-einfahrt-check=".Length..].ToFloat()); }
+            else if (a.StartsWith("--zug-einfahrt-linie="))
+                MapEntityLayer.ZugEinfahrtBildLinie = a["--zug-einfahrt-linie=".Length..].ToInt();
+            else if (a == "--zug-demo-check") MapEntityLayer.ZugDemoCheckAn = true;
+            else if (a.StartsWith("--zug-demo-check="))
+            { MapEntityLayer.ZugDemoCheckAn = true;
+              MapEntityLayer.ZugDemoCheckSekunden = Mathf.Max(1f, a["--zug-demo-check=".Length..].ToFloat()); }
             else if (a == "--stumpf-geschoss-probe") MapEntityLayer.StumpfGeschossProbeAn = true;
             else if (a == "--verlegung-depot-alt") MapEntityLayer.VerlegungDepotAlt = true;
             else if (a == "--zugfarbe-alt") MapEntityLayer.ZugfarbeAlt = true;
@@ -3855,6 +3994,12 @@ _mausProbePunkt = karte;
             else if (a == "--rampen-check") _rampenCheck = true;
             else if (a == "--transport-check") _transportCheck = true;
             else if (a == "--hilfebild-check") _hilfebildCheck = true;
+            // 01.10.2026 (bug-376): eigener MIDI-Abspieler, Pruefstand und Gegenschalter
+            else if (a == "--musik-check") _musikCheck = true;
+            else if (a == "--musik-mci") Audio.MidiMusic.MciWeg = true;
+            else if (a == "--enzyklopaedie-bild-check") _enzBildCheck = true;
+            else if (a == "--enzyklopaedie-ohne-bild") UI.EncyclopediaScreen.OhneBild = true;
+            else if (a == "--enzyklopaedie-bild-komma") UI.EncyclopediaScreen.BildKomma = true;
             else if (a == "--keine-einschlaghoehen") MapEntityLayer.KeineEinschlagHoehen = true;
             else if (a == "--abbruch-check=alt")
             {
@@ -4501,6 +4646,11 @@ _mausProbePunkt = karte;
             else if (a == "--nachladezeit-check") _nachladezeitCheck = true;
             // Die Zeitbasis, siehe Simulation/Zeitbasis.cs.
             else if (a == "--zeitbasis-alt") Simulation.Zeitbasis.AufAltSetzen();
+            else if (a == "--filme-feste-pfade") UI.MoviePlayer.FestePfade = true;
+            else if (a == "--filmsuche-check") _filmsucheCheck = true;
+            else if (a.StartsWith("--filme=")) UI.MoviePlayer.Ordner = a["--filme=".Length..];
+            else if (a.StartsWith("--grundtakt=") && int.TryParse(a["--grundtakt=".Length..], out int gtk))
+                MapEntityLayer.GrundtaktHz = Mathf.Clamp(gtk, 20, 50);   // nur fuer diesen Lauf
             else if (a == "--zeitbasis-check") _zeitbasisCheck = true;
             // Die Farben der Bauliste, siehe Simulation/BaulisteCheck.cs.
             else if (a == "--bauliste-alt") MapEntityLayer.BaulisteAlt = true;
@@ -4816,7 +4966,7 @@ _mausProbePunkt = karte;
     private bool _einschlagCheck;
     private bool _rampenCheck;
     private bool _transportCheck;
-    private bool _hilfebildCheck;
+    private bool _hilfebildCheck, _enzBildCheck, _filmsucheCheck, _musikCheck;
     private float _upTime;
 
     /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from
@@ -5347,6 +5497,7 @@ _mausProbePunkt = karte;
             if (MapEntityLayer.AntiradarProbeAn) GD.Print(_entities.AntiradarProbeZeile());
             if (MapEntityLayer.K21LagerCheckAn) GD.Print(_entities.K21LagerCheckLine());
             if (MapEntityLayer.GleisreparaturCheckAn) GD.Print(_entities.GleisreparaturCheckLine());
+            if (MapEntityLayer.TerrasucheCheckAn) GD.Print(_entities.TerrasucheCheckLine());
             if (_schiffsentwurfCheck) GD.Print(_entities.SchiffsentwurfCheckLine());
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_teilespendeCheck) GD.Print(_entities.TeilespendeCheckLine());
@@ -8940,6 +9091,9 @@ _mausProbePunkt = karte;
                  // Strg: @0x431B93 kehrt zurueck, bevor @0x43201A Strg ansieht.
                  : _entities.ReparaturzeigerHier(mapPos)
                  ? MapEntityLayer.Hint.Reparatur
+                 // ⭐ 01.10.2026, bug-381 — Modus 3: Zeigerart 0x0D (@0x4317C9), Bild 19.
+                 : _entities.PlacementMode == MapEntityLayer.OrderTerraSuche
+                 ? MapEntityLayer.Hint.TerraSuche
                  : Input.IsKeyPressed(Key.Ctrl) && _entities.HasSelection
                  ? MapEntityLayer.Hint.Enemy
                  : _entities.CursorHintAt(mapPos);
@@ -8956,6 +9110,7 @@ _mausProbePunkt = karte;
                 MapEntityLayer.Hint.Entladen => UI.GameCursors.Entladen,
                 // ⭐ 23.09.2026, bug-368 — Zeigerart 22 (@0x431B93), Bild 17.
                 MapEntityLayer.Hint.Reparatur => UI.GameCursors.Reparatur,
+                MapEntityLayer.Hint.TerraSuche => UI.GameCursors.TerraSuche,
                 // ⭐ 12.09.2026 — das EINLADEN traegt kein eigenes Bild: Zeigerart 11
                 // fuehrt ueber die Tafel 0x4A9BEC auf Bild 11, dasselbe wie die
                 // Einfahrt (Art 5). Gelesen in beiden EXE, bug-233.
@@ -8978,6 +9133,7 @@ _mausProbePunkt = karte;
             MapEntityLayer.Hint.Own or MapEntityLayer.Hint.OwnFoot
                 or MapEntityLayer.Hint.Einfahrt or MapEntityLayer.Hint.Entladen
                 or MapEntityLayer.Hint.Einsteigen or MapEntityLayer.Hint.Reparatur
+                or MapEntityLayer.Hint.TerraSuche
                 or MapEntityLayer.Hint.Einnahme or MapEntityLayer.Hint.Neutral
                 => Input.CursorShape.PointingHand,
             _ => Input.CursorShape.Arrow,

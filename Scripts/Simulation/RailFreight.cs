@@ -142,6 +142,13 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Wie oft diese Linie einen Zug abgeschickt hat (Pruefstand).</summary>
         public int Starts;
 
+        /// <summary>⭐ 01.10.2026 (bug-382, E3): Sekunden, seit die Fahrzeit 0 erreicht
+        /// hat — der NACHLAUF der Waggons 1..3. Das Original loescht jeden Waggon
+        /// EINZELN an derselben Stelle (@0x4C6C47 / @0x4C709C), die Nachlaeufer
+        /// 4/7/11 Takte nach Waggon 0. −1 = kein Zug unterwegs und keiner im
+        /// Nachlauf. Nur ohne <c>--zug-einfahrt-alt</c> gelesen.</summary>
+        public float Nachlauf = -1f;
+
         /// <summary>Die Besitzer beider Enden, als die Schalter zuletzt aus
         /// der Matrix gesetzt wurden. -99 = noch nie (Laden der Karte).</summary>
         public int OwnA = -99, OwnB = -99;
@@ -446,6 +453,7 @@ public partial class MapEntityLayer : Node2D
             RailClearWagons(l);
             l.Travel = 0f;
             l.Rollt = false;
+            l.Nachlauf = -1f;                    // bug-382: kein Nachlauf eines zerstoerten Zugs
         }
     }
 
@@ -745,7 +753,17 @@ public partial class MapEntityLayer : Node2D
         // ruckte also einmal je Automatenrunde um fast eine ganze Zelle. Die
         // Summe bleibt dieselbe — es wird nur nicht mehr in Brocken abgezogen.
         foreach (var l in _railLines)
-            if (l.Faze is >= 1 and <= 9 && l.Travel > 0f) l.Travel -= dt;
+        {
+            if (l.Faze is >= 1 and <= 9 && l.Travel > 0f)
+            {
+                l.Travel -= dt;
+                // ⭐ bug-382 (E3): ab hier zaehlt der Nachlauf, mit dem Ueberschuss
+                // dieses Bildes — sonst stuenden die Nachlaeufer bis zur Ankunft im
+                // Automatentakt (bis 0,1 s = 5 Takte) still.
+                if (l.Travel <= 0f) l.Nachlauf = -l.Travel;
+            }
+            else if (l.Nachlauf >= 0f) l.Nachlauf += dt;
+        }
 
         GleisbruchTakt();                 // Waggon auf zerschossenem Gleis? (23.09.2026)
         GleisreparaturCheckTakt(dt);      // --gleisreparatur-check (23.09.2026, bug-368)
@@ -894,6 +912,7 @@ public partial class MapEntityLayer : Node2D
         l.TravelFull = RailTravelSeconds(l);        // aus den Streckencodes, gerechnet
         l.Travel = l.TravelFull;
         l.Rollt = true;
+        l.Nachlauf = -1f;                           // bug-382: neuer Zug, kein Nachlauf
         l.Starts++;
         RailSpawnWagons(l);
     }
@@ -921,7 +940,14 @@ public partial class MapEntityLayer : Node2D
         l.Travel = 0f;
         l.Rollt = false;
         l.Faze = l.Dir == 0 ? 100 - RailDwellTicks : 200 - RailDwellTicks;
-        RailClearWagons(l);
+        // ⭐⭐ 01.10.2026 — bug-382 (E3): NICHT mehr alle Waggons im Ankunftstakt weg.
+        // Entladen hat eben der Spitzenwaggon (@0x4C6C62 `test al,al`: nur Waggon 0);
+        // die Nachlaeufer fahren weiter und verschwinden einzeln an derselben Stelle,
+        // RailPlaceWagons raeumt ab, wenn der letzte durch ist. Gemeldet: »Im Original
+        // fahren die Züge richtig in die Gebäude rein, bei uns verschwinden die
+        // einfach am Gebäude.« Gegenschalter --zug-einfahrt-alt.
+        if (ZugEinfahrtAlt) RailClearWagons(l);
+        else if (l.Nachlauf < 0f) l.Nachlauf = 0f;
     }
 
     // ---- die sichtbaren Waggons --------------------------------------------
@@ -967,11 +993,19 @@ public partial class MapEntityLayer : Node2D
         RailPlaceWagons(l, pd?.Pts ?? route, pd?.Cum, pd?.Lift);
     }
 
-    /// <summary>Am Ziel angekommen: selbst angelegte Waggons verschwinden wieder,
-    /// von der Karte übernommene bleiben stehen, wo sie hielten.</summary>
+    /// <summary>Am Ziel angekommen: selbst angelegte Waggons verschwinden wieder.
+    /// ⭐ 01.10.2026 (V3, bug-377): von der Karte übernommene werden AUSGEBLENDET
+    /// (das Original löscht jeden Satz am Streckenende, @0x4C6C47) und bei der
+    /// nächsten Abfahrt wieder gesetzt. Nur mit <c>--zug-steht-am-bahnsteig</c>
+    /// bleiben sie stehen, wo sie hielten.</summary>
     private void RailClearWagons(RailLine l)
     {
-        if (!l.OwnWagons) return;
+        if (!l.OwnWagons)
+        {
+            if (!ZugStehtAmBahnsteig && _freightWagons.TryGetValue(l.Slot, out var fremd))
+                foreach (var w in fremd) w.Hidden = true;
+            return;
+        }
         if (!_freightWagons.TryGetValue(l.Slot, out var list)) return;
         foreach (var w in list) _wagons.Remove(w);
         _freightWagons.Remove(l.Slot);
@@ -990,6 +1024,10 @@ public partial class MapEntityLayer : Node2D
     {
         if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) return;
         float p = l.TravelFull <= 0f ? 1f : 1f - Mathf.Clamp(l.Travel / l.TravelFull, 0f, 1f);
+        // ⭐ bug-382 (E2/E3, Simulation/ZugEinfahrt.cs): der Fahrweg bis zu den
+        // Routenpunkten 1 / delka−2, und der Fortschritt läuft im Nachlauf über 1 hinaus.
+        ZugWegDaten? weg = ZugEinfahrtAlt ? null : ZugWegOf(l.Slot, route);
+        if (!ZugEinfahrtAlt) p = ZugFortschritt(l);
         int last = route.Count - 1;
         // ⚠ 11.08.2026 — GLEITEND statt springend. Hier stand
         // `Mathf.RoundToInt(p * last)`, und damit sass jeder Waggon immer auf
@@ -1070,8 +1108,25 @@ public partial class MapEntityLayer : Node2D
             // erscheinen die vier bei der Abfahrt nacheinander und
             // verschwinden bei der Ankunft nacheinander, wie im Original.
             int k = Mathf.Clamp(w.Index, 0, RailWagonLagTicks.Length - 1);
-            float pw = p - RailWagonLagTicks[k] * lagCells;
-            w.Hidden = pw < 0f || pw > 1f;
+            float pw = ZugEinfahrtAlt ? p - RailWagonLagTicks[k] * lagCells
+                                      : p - ZugRueckstand(l, k);
+            _zugPw[w] = pw;
+            // ⭐ 01.10.2026 — V3, bug-377: SICHTBAR WIE IM ORIGINAL. Der Einreiher
+            // @0x42E11B/@0x42E14A zeichnet nur bei 1 <= cursor <= delka-2, und
+            // bei cursor == delka loescht der Takt den Satz (@0x4C6C47) — in
+            // den 20 Standrunden gibt es KEINEN Waggon. Bei uns blieben die von
+            // der Karte uebernommenen am Kettenende stehen (»Züge bleiben vor
+            // den Gebäuden stehen«). Jetzt: steht die Linie (!Rollt), ist jeder
+            // Waggon weg, und die Bandenden (pw 0 / 1) zaehlen nicht mehr als
+            // sichtbar. Gegenschalter --zug-steht-am-bahnsteig.
+            // ⭐⭐ 01.10.2026 — bug-382 (E3): JE WAGGON. Sichtbar nur im Fenster
+            // 1 <= cursor <= delka−2 (@0x42E11B/@0x42E14F), das ist bei uns 0 < pw < 1
+            // auf dem verlaengerten Weg; NICHT mehr an `!l.Rollt` — sonst sind mit der
+            // Ankunft alle vier im selben Takt weg, die hinteren 32/56/88 px VOR dem
+            // Gebaeude (Bericht zug-einfahrt-fable.md §5.2). Gegenschalter --zug-einfahrt-alt.
+            w.Hidden = ZugStehtAmBahnsteig ? pw < 0f || pw > 1f
+                     : ZugEinfahrtAlt      ? !l.Rollt || pw <= 0f || pw >= 1f
+                                           : pw <= 0f || pw >= 1f;
 
             // ⚠ Der Fortschritt läuft über die BOGENLÄNGE, nicht über die
             // Gliedzahl — sonst fährt der Zug auf kurzen Gliedern langsam und
@@ -1082,11 +1137,25 @@ public partial class MapEntityLayer : Node2D
             float leadF = cum != null && cum.Length == route.Count
                         ? RailArcToIndex(cum, q * cum[^1])
                         : q * last;
+            // bug-382 (E2): auf dem VERLAENGERTEN Weg setzen; leadF bleibt eine
+            // Stelle der Kette (Gleisbruch, Zaehler und Bild lesen sie so).
+            float wegF = -1f;
+            if (weg != null)
+            {
+                wegF = RailArcToIndex(weg.Cum, q * weg.Cum[^1]);
+                leadF = Mathf.Clamp(wegF - weg.Vorn, 0f, last);
+            }
             w.RawLeadF = leadF;
             // Verkürzt wird immer gegen den ROHWERT, nie gegen das Ergebnis des
             // letzten Takts — sonst zöge sich der Zug über die Fahrt hinweg
             // immer weiter zusammen.
-            if (pass == 1)
+            // ⭐⭐ 01.10.2026 — V6, bug-377, ENTSCHEIDUNG DES SPIELERS »Wie im
+            // Original«: die Kupplung ist AUS. Das Original kennt keine
+            // Abstandsregel (§4.1 des Berichts zuege-demo-fable.md) — jeder
+            // Waggon faehrt mit seinem Rueckstand 0/4/7/11 Takte einzeln, zwei
+            // stehen in 54,76 % der Bilder auf derselben Zelle. RailCouple war
+            // eine bewusste Abweichung und bleibt hinter --zug-gekuppelt.
+            if (pass == 1 && ZugGekuppelt)
                 leadF = RailCouple(route, list, w, pcs, leadF, l.Dir == 0 ? 1 : -1);
             w.LeadF = leadF;
             int lead = Mathf.FloorToInt(leadF);
@@ -1174,6 +1243,21 @@ public partial class MapEntityLayer : Node2D
             // Rechnung benutzt das Original fuer die Schublok (@0x42B542).
             if (pcs != null && step < pcs.Count)
                 w.Piece = dir > 0 ? pcs[step] : (pcs[step] + 4) & 7;
+            // bug-382 (E2): auf dem Verlaengerungsstueck Lage, Hoehe und Bild aus dem
+            // verlaengerten Weg (Bild: das Stueck des Andockschritts aus der Route).
+            if (weg != null && !(pass == 1 && ZugGekuppelt))
+                ZugWegSetzen(w, weg, wegF, last, dir);
+        }
+        // bug-382 (E3): erst wenn der LETZTE Waggon durch ist, wird abgeraeumt.
+        if (!ZugEinfahrtAlt && !l.Rollt && l.Nachlauf >= 0f)
+        {
+            bool alleWeg = true;
+            foreach (var w in list) if (!w.Hidden) { alleWeg = false; break; }
+            if (alleWeg || l.Nachlauf > 3f)
+            {
+                l.Nachlauf = -1f;
+                RailClearWagons(l);
+            }
         }
     }
 
@@ -3705,7 +3789,7 @@ public partial class MapEntityLayer : Node2D
         // MapEntityLayer.RailDrawRowBias und RailCountTilesUnderBuildings.
         sb.Append($" | Anbindung: {RailTilesUnderBuilding} von {RailTilesUnderChecked} " +
                   "LINIENENDEN werden VOR ihrem Endgebaeude gezeichnet, liegen also " +
-                  $"darunter (Verschiebung {(MapEntityLayer.RailProbeBucket0 ? 0 : 2)} " +
+                  $"darunter (Verschiebung {(MapEntityLayer.RailProbeBucket0 || !GleisfachAlt ? 0 : 2)} " +
                   "Zeilen, @0x42DFE9)");
         if (RailTilesUnderBuilding > 0)
             sb.Append($", erstes: {RailUnderWorstWhere}");

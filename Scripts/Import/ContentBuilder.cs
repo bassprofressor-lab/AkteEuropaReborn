@@ -52,6 +52,39 @@ public sealed class ContentBuilder
         _dst = ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\');
     }
 
+    /// <summary>Dasselbe, aber in einen ANDEREN Zielordner als user://data —
+    /// fuer den Pruefstand <c>--import-cd2-check=voll</c>, der einen echten
+    /// Import laufen laesst, ohne die eingelesenen Daten des Spielers
+    /// anzufassen (bug-379). Ein Betriebssystempfad.</summary>
+    public ContentBuilder(Core.ContentSources.Source source, string zielOrdner)
+    {
+        _src = source;
+        _dst = zielOrdner.TrimEnd('/', '\\');
+    }
+
+    /// <summary>Wo der Import steht: Schritt <see cref="Schritt"/> von
+    /// <see cref="Schritte"/>. Gezaehlt wird, was <see cref="Run"/> ohnehin der
+    /// Reihe nach tut — eine Karte ist ein Schritt, jeder Block danach
+    /// (Einheitengrafiken, Oberflaeche, Tabellen, Briefings, Hilfe,
+    /// Enzyklopaedie, Ziele, Ton, Kachelsaetze) einer. Der Fortschrittsbalken
+    /// des Importschirms liest beides im <c>progress</c>-Rueckruf (bug-379).
+    /// ⚠ Die Schritte sind NICHT gleich lang: der Ton (79 MB auspacken) dauert
+    /// so lange wie zehn Karten. Der Balken zeigt die Reihenfolge, nicht die
+    /// Restzeit.</summary>
+    public volatile int Schritt, Schritte;
+
+    /// <summary>Die Kampagnenmissionen, die dieser Lauf gebacken hat — genau
+    /// das, was danach in campaign.json steht.</summary>
+    public SortedSet<int> MissionNumbers
+    {
+        get
+        {
+            var s = new SortedSet<int>();
+            foreach (var m in _missions) s.Add(m.Number);
+            return s;
+        }
+    }
+
     /// <summary>A single folder — the case the folder picker produces.</summary>
     public ContentBuilder(string sourceDir)
         : this(Core.ContentSources.FromFolder(sourceDir)
@@ -124,6 +157,15 @@ public sealed class ContentBuilder
     {
         void Say(string s) { Log.Add(s); progress?.Invoke(s); GD.Print("import: " + s); }
 
+        // die Schrittzahl VOR dem ersten Say, damit der Balken von Anfang an
+        // ein Ende kennt: EXE + jede Karte + jeder .DM + neun Bloecke danach
+        var cwms = Levels("*.CWM");
+        var dms = new List<(string Path, string Name)>();
+        foreach (var (stem, name) in DmStems)
+            if (Find($"LEVELS/{stem}.DM") is { } dp) dms.Add((dp, name));
+        Schritt = 0;
+        Schritte = 1 + cwms.Count + dms.Count + 9;
+
         Say(_src.Describe());
         Directory.CreateDirectory(_dst + "/Maps");
 
@@ -160,18 +202,23 @@ public sealed class ContentBuilder
             }
         }
         catch (Exception e) { Say("GAME.EXE: " + e.Message); }
+        Schritt++;
 
         // ---- the maps -------------------------------------------------------
         // Whatever the source actually carries, not a fixed list: CD 2 brings
         // the campaign levels 16 to 33, which no single installation had.
-        foreach (var (stem, path) in Levels("*.CWM"))
-            BakeOne(path, "map_" + stem, Say);
-        foreach (var (stem, name) in DmStems)
+        foreach (var (stem, path) in cwms)
         {
-            string? p = Find($"LEVELS/{stem}.DM");
-            if (p != null) BakeOne(p, "map_" + name, Say);
+            Schritt++;
+            BakeOne(path, "map_" + stem, Say);
+        }
+        foreach (var (p, name) in dms)
+        {
+            Schritt++;
+            BakeOne(p, "map_" + name, Say);
         }
 
+        Schritt++;
         // ---- the unit sprites ------------------------------------------------
         // ROBO.CWR is in the cabinet on a disc and lies loose in an
         // installation; the palette is the terrain one, as in the game.
@@ -194,6 +241,7 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("ROBO.CWR: " + e.Message); }
 
+        Schritt++;
         // ---- the interface and the effects -----------------------------------
         // FONT.CWD, PANEL.DTA and ANIM.CWA all come out of the same cabinet as
         // ROBO.CWR, and all three are drawn in the terrain palette.
@@ -251,6 +299,7 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Oberflaeche: " + e.Message); }
 
+        Schritt++;
         // ---- the design and catalogue tables ---------------------------------
         try
         {
@@ -261,6 +310,7 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Katalogtabellen: " + e.Message); }
 
+        Schritt++;
         // ---- the mission briefings -------------------------------------------
         // Out of the same cabinet, and the last thing the campaign was missing:
         // until now it opened a mission without a word of what it was about.
@@ -314,6 +364,7 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Briefings: " + e.Message); }
 
+        Schritt++;
         // ---- die Hilfe- und Untermissionstexte ---------------------------------
         // Aus derselben Quelle wie BRIEFG.TXT, und das Stück, das der Kampagne
         // ihren tutorialartigen Anfang gibt: Mission 1 ruft daraus siebzehn
@@ -332,6 +383,7 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Hilfetexte: " + e.Message); }
 
+        Schritt++;
         // ---- die Enzyklopädie des Originals ------------------------------------
         // ⚠ 17.08.2026 — ENCYCLOG.TXT, 106 Seiten, und sie lag die ganze Zeit
         // neben GAME.EXE. Gefunden nur, weil beim Anschliessen der Menuezeile
@@ -352,6 +404,7 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Enzyklopaedie: " + e.Message); }
 
+        Schritt++;
         // ---- die Missionsziele im Klartext -------------------------------------
         // OBJECTG.TXT, aus derselben Quelle wie BRIEFG.TXT und HELPG.TXT — sie
         // liegt im Namensverzeichnis von DATA1.CAB direkt zwischen HELPG.TXT und
@@ -373,6 +426,7 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Missionsziele: " + e.Message); }
 
+        Schritt++;
         // ---- the sound bank ---------------------------------------------------
         // SOUNDS.CWN is 79 MB and lies loose beside the exe, so it is opened as
         // a stream and never goes through Asset(), which reads a whole file into
@@ -413,8 +467,10 @@ public sealed class ContentBuilder
                 try { File.Delete(unpacked); } catch (Exception) { /* leave it */ }
         }
 
+        Schritt++;
         // ---- die Kachelsaetze selbst, fuer den Karteneditor ------------------
         CopyTilesets(Say);
+        Schritt = Schritte;
 
         Say($"fertig: {MapsBaked} Karten, {EntitiesWritten} Spielstaende, " +
             $"{TablesWritten} Tabellen, {SpriteFrames} Einheitenbilder, " +

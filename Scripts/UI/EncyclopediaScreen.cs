@@ -1,6 +1,7 @@
 namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 /// <summary>
@@ -47,8 +48,15 @@ public partial class EncyclopediaScreen : Control
     private sealed class Page
     {
         public string Title = "", Body = "";
+        public int Picture, PictureTxt;
         public readonly List<(int To, string Text)> Links = new();
     }
+
+    /// <summary><c>--enzyklopaedie-ohne-bild</c>: kein Bild, Stand vor bug-374.</summary>
+    public static bool OhneBild;
+    /// <summary><c>--enzyklopaedie-bild-komma</c>: die Komma-Zahl als Bildnummer —
+    /// zeigt den Versatz von bug-121 am Schirm (Nullmodell).</summary>
+    public static bool BildKomma;
 
     private static Dictionary<int, Page>? _pages;
     private static bool _tried;
@@ -60,6 +68,8 @@ public partial class EncyclopediaScreen : Control
     private int _page = FirstPage;
 
     private VBoxContainer? _box;
+    private PanelContainer? _bildRahmen;
+    private TextureRect? _bild;
     private Label? _title;
     private Label? _body;
     private VBoxContainer? _links;
@@ -83,6 +93,13 @@ public partial class EncyclopediaScreen : Control
             pv.VariantType != Variant.Type.Dictionary) return;
 
         var map = new Dictionary<int, Page>();
+        // ⚠ Ein Import von vor dem 01.10.2026 hat kein picture_txt, und sein
+        // picture ist die (falsche) Komma-Zahl. Dann wird die laufende Nummer
+        // hier gezaehlt — in Dateireihenfolge, wie der Exporter es tut.
+        bool neu = false; int lauf = 0;
+        foreach (var kv in pv.AsGodotDictionary<string, Variant>())
+            if (kv.Value.VariantType == Variant.Type.Dictionary
+                && kv.Value.AsGodotDictionary<string, Variant>().ContainsKey("picture_txt")) { neu = true; break; }
         foreach (var kv in pv.AsGodotDictionary<string, Variant>())
         {
             if (!int.TryParse(kv.Key, out int num)) continue;
@@ -93,6 +110,13 @@ public partial class EncyclopediaScreen : Control
                 Title = d.TryGetValue("title", out var t) ? t.AsString() : "",
                 Body = d.TryGetValue("body", out var b) ? b.AsString() : "",
             };
+            int pic = d.TryGetValue("picture", out var pc) ? pc.AsInt32() : -1;
+            if (neu)
+            {
+                p.Picture = pic;
+                p.PictureTxt = d.TryGetValue("picture_txt", out var pt) ? pt.AsInt32() : -1;
+            }
+            else if (pic >= 0) { p.PictureTxt = pic; p.Picture = ++lauf; }
             if (d.TryGetValue("links", out var lv) && lv.VariantType == Variant.Type.Array)
                 foreach (var item in lv.AsGodotArray())
                 {
@@ -104,6 +128,47 @@ public partial class EncyclopediaScreen : Control
             map[num] = p;
         }
         if (map.Count > 0) _pages = map;
+    }
+
+    private static readonly Dictionary<int, Texture2D?> _bildCache = new();
+
+    /// <summary>Bild <c>enc{nr:00}.png</c> (InterfaceExporter.WritePictures aus
+    /// ENCYCLOG.PIC, einsbasiert), oder null.</summary>
+    private static Texture2D? PictureOf(int nr)
+    {
+        if (nr <= 0) return null;
+        if (_bildCache.TryGetValue(nr, out var t)) return t;
+        string path = Core.Content.Path($"UI/pictures/enc{nr:00}.png");
+        Texture2D? tex = null;
+        if (FileAccess.FileExists(path))
+        {
+            var img = Image.LoadFromFile(path);
+            if (img != null) tex = ImageTexture.CreateFromImage(img);
+        }
+        _bildCache[nr] = tex;
+        return tex;
+    }
+
+    /// <summary><c>--enzyklopaedie-bild-check</c> (bug-374): 96 Seiten mit Bild,
+    /// 96 verschiedene Nummern 1…96, jede genau einmal, jede Datei da.</summary>
+    public static string PictureCheck()
+    {
+        Load();
+        if (_pages == null) return "enzyklopaedie-bild-check: keine encyclopedia.json — DURCHGEFALLEN";
+        int mit = 0, dateien = 0, komma = 0;
+        var nrn = new HashSet<int>();
+        foreach (var (_, p) in _pages)
+        {
+            if (p.Picture <= 0) continue;
+            mit++; nrn.Add(p.Picture);
+            if (FileAccess.FileExists(Core.Content.Path($"UI/pictures/enc{p.Picture:00}.png"))) dateien++;
+            if (p.PictureTxt != p.Picture) komma++;
+        }
+        bool lueckenlos = nrn.Count == mit && nrn.Count > 0 && nrn.Min() == 1 && nrn.Max() == mit;
+        bool ok = mit == 96 && lueckenlos && dateien == 96;
+        return $"enzyklopaedie-bild-check: {mit} Seiten mit Bild (erwartet 96), {nrn.Count} verschiedene, "
+             + $"lueckenlos 1..{mit}: {(lueckenlos ? "ja" : "NEIN")}, Dateien {dateien}/{mit}, "
+             + $"Komma-Zahl weicht ab: {komma} (bug-121, erwartet 46) — {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}";
     }
 
     /// <summary>Für den Prüfstand: wie viele Seiten geladen sind.</summary>
@@ -157,6 +222,30 @@ public partial class EncyclopediaScreen : Control
             AddClose();
             return;
         }
+
+        // ⭐ 01.10.2026, bug-374 — DAS BILD DES EINTRAGS. Original (Art 32,
+        // 0x47D6D0): Innenrahmen 80×80 bei (20,20), Bild 60×60 bei (30,30),
+        // der Text beginnt darunter (y = 110). Der Rahmen hier ist ein Panel
+        // mit 10 px Rand — UNSERE Naeherung an PaintInnerFrame 0x47D827.
+        _bildRahmen = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ShrinkBegin };
+        var rs = new StyleBoxFlat
+        {
+            BgColor = new Color(0.07f, 0.07f, 0.06f),
+            BorderColor = new Color(0.45f, 0.43f, 0.36f),
+            ContentMarginLeft = 10, ContentMarginRight = 10,
+            ContentMarginTop = 10, ContentMarginBottom = 10,
+        };
+        rs.SetBorderWidthAll(2);
+        _bildRahmen.AddThemeStyleboxOverride("panel", rs);
+        _bild = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(60, 60),
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            TextureFilter = TextureFilterEnum.Nearest,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        _bildRahmen.AddChild(_bild);
+        _box.AddChild(_bildRahmen);
 
         _title = new Label { HorizontalAlignment = HorizontalAlignment.Center };
         _title.AddThemeFontSizeOverride("font_size", 30);
@@ -218,6 +307,10 @@ public partial class EncyclopediaScreen : Control
         }
         if (remember && number != _page) _history.Add(_page);
         _page = number;
+
+        var tex = OhneBild ? null : PictureOf(BildKomma ? p.PictureTxt : p.Picture);
+        if (_bild != null) _bild.Texture = tex;
+        if (_bildRahmen != null) _bildRahmen.Visible = tex != null;
 
         _title.Text = p.Title.Length > 0 ? p.Title : $"Seite {number}";
         _body.Text = p.Body;

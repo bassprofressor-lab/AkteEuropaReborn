@@ -945,6 +945,26 @@ public sealed class NavGrid
     }
 
     /// <summary>
+    /// ⭐ 01.10.2026, bug-381 — <b>DIE TERRANIUMMARKIERUNG IM BELEGUNGSRASTER.</b>
+    /// <c>add_terra 0x420E20</c> (F <c>0x41FFE0</c>) schreibt für jede der 3x3
+    /// Zellen ein Wort ins imap <c>0xBDEA80</c>: die LINKE Spalte
+    /// <c>0xFFFE</c> (frei), die zwei rechten <c>0xFFFF</c> (harte Sperre).
+    /// Bei uns: <see cref="Ground.Free"/> bzw. <see cref="Ground.Blocked"/> —
+    /// dieselbe Klasse, die der Import den Markierungskacheln einer Karte mit
+    /// sec38 (M17) gibt.
+    ///
+    /// <para>⚠ Das Original schreibt das Wort OHNE Rücksicht auf das, was dort
+    /// stand (auch über rauem Grund oder Wasser) — wir auch.</para></summary>
+    /// <returns>die Klasse, die vorher dort stand.</returns>
+    public Ground TerraMarkeSetzen(int c, int r, bool frei)
+    {
+        if (!InBounds(c, r)) return Ground.Blocked;
+        var alt = (Ground)_ground[Idx(c, r)];
+        _ground[Idx(c, r)] = (byte)(frei ? Ground.Free : Ground.Blocked);
+        return alt;
+    }
+
+    /// <summary>
     /// <b>DIE LANDUNGSBRÜCKE MACHT EINE RAUE ZELLE BEFAHRBAR</b> (12.09.2026,
     /// bug-219) — und nimmt es beim Abriss wieder zurück.
     ///

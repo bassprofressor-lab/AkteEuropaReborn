@@ -803,6 +803,7 @@ public partial class MapEntityLayer
         CommandOp.Unload => ApplyUnload(c),
         CommandOp.Board => ApplyBoard(c),
         CommandOp.RailRepairOrder => ApplyRailRepairOrder(c),
+        CommandOp.TerraSuche => ApplyTerraSuche(c),      // bug-381, Simulation/TerraSuche.cs
 
         // Die fünfzehn Gebäudebefehle — vier Tafeln, eine je Gebäudeart.
         // Siehe CommandOp und ApplyBuildingJob.

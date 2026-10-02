@@ -73,6 +73,17 @@ public static class Settings
     public static bool RightDragPan { get => B("right_drag_pan", true); set => Set("right_drag_pan", value); }
     /// <summary>Keyboard panning speed in map pixels per second at zoom 1.</summary>
     public static int PanSpeed { get => I("pan_speed", 900); set => Set("pan_speed", value); }
+    /// <summary>Ordner mit den Filmen (*.RPL) des Originals, leer = suchen
+    /// (MoviePlayer.Suchorte, bug-375).</summary>
+    public static string MoviesDir { get => S("movies_dir", ""); set => Set("movies_dir", value); }
+    /// <summary>Grundtakt in Originaltakten je Sekunde bei Geschwindigkeit 1, 20…50,
+    /// Vorgabe 50. ⚠ UNSERE ZUTAT — siehe MapEntityLayer.GrundtaktHz.</summary>
+    public static int Grundtakt
+    {
+        get => System.Math.Clamp(I("grundtakt", 50), 20, 50);
+        set { Set("grundtakt", System.Math.Clamp(value, 20, 50));
+              Rendering.MapEntityLayer.GrundtaktHz = System.Math.Clamp(value, 20, 50); }
+    }
 
     /// <summary>
     /// Der farbige BESITZERRING unter jeder Einheit. <b>Standard: aus.</b>
@@ -507,6 +518,7 @@ public static class Settings
         c.Load(SavePath);
         return c;
     }
+    private static string S(string k, string d) => (string)Cfg.GetValue("options", k, d);
 
     private static bool B(string k, bool d) => (bool)Cfg.GetValue("options", k, d);
     private static int I(string k, int d) => (int)Cfg.GetValue("options", k, d);

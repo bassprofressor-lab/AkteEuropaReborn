@@ -1027,6 +1027,13 @@ public partial class MainMenu : Control
                 GetTree().Quit(new Import.ContentBuilder(src).ReexportEntities() ? 0 : 1);
                 return;
             }
+            else if (a == "--import-cd2-check" || a == "--import-cd2-check=voll")
+            {
+                // bug-379: rechnet die CD-2-Erkennung nach; »=voll« laesst den
+                // Weg CD 1 -> Lager -> CD 2 echt laufen, in einen Temp-Ordner
+                GetTree().Quit(Import.ImportCd2Check.Run(a.EndsWith("=voll")));
+                return;
+            }
             else if (a == "--import-cd")
             {
                 var discs = Core.ContentSources.Discs();
@@ -1251,7 +1258,94 @@ public partial class MainMenu : Control
 
         var go = new Button { Text = "Einrichten", CustomMinimumSize = new Vector2(0, 40) };
         box.AddChild(go);
+
+        // ⭐ 01.10.2026 — DER FORTSCHRITTSBALKEN (bug-379), gemeldet von einem
+        // Spieler: »Ein Fortschrittsbalken wäre gut.« Bis heute lief der Import
+        // im Hauptfaden, und das Statusetikett zeigte waehrend der Minuten
+        // GAR NICHTS — Godot zeichnet erst wieder, wenn Run() zurueckkehrt, und
+        // Windows meldet das Fenster als »reagiert nicht«. Jetzt laeuft Run() auf
+        // einem Nebenlaeufer und meldet Schritt x/y (ContentBuilder.Schritt)
+        // ueber CallDeferred zurueck.
+        _impBar = new ProgressBar
+        {
+            CustomMinimumSize = new Vector2(0, 22),
+            ShowPercentage = true,
+            Visible = false,
+        };
+        box.AddChild(_impBar);
+        _impStep = new Label { HorizontalAlignment = HorizontalAlignment.Center, Visible = false };
+        box.AddChild(_impStep);
+        status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         box.AddChild(status);
+        _impStatus = status;
+
+        // ⭐ 01.10.2026 — »BITTE CD 2 EINLEGEN« (bug-379), gemeldet: »Wenn man
+        // von CD 1 installiert, fragt der Installer nie nach CD 2, also fehlen
+        // die Hälfte der Missionen.« Sichtbar erst NACH einem Import, dem
+        // Missionen fehlen — siehe Core.DiscCoverage fuer die Rechnung.
+        _impPrompt = new VBoxContainer { Visible = false };
+        _impPrompt.AddThemeConstantOverride("separation", 8);
+        box.AddChild(_impPrompt);
+        _impPromptText = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Modulate = new Color(1f, 0.85f, 0.45f),
+        };
+        _impPrompt.AddChild(_impPromptText);
+        var promptRow = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        promptRow.AddThemeConstantOverride("separation", 8);
+        _impPrompt.AddChild(promptRow);
+        var weiter = new Button { Text = "Weiter", CustomMinimumSize = new Vector2(140, 36) };
+        var cd2Dir = new Button { Text = "Ordner waehlen …", CustomMinimumSize = new Vector2(0, 36),
+                                  TooltipText = "Fuer eine auf die Platte kopierte CD" };
+        var ohne = new Button { Text = "Ohne CD 2 fortfahren", CustomMinimumSize = new Vector2(0, 36) };
+        promptRow.AddChild(weiter);
+        promptRow.AddChild(cd2Dir);
+        promptRow.AddChild(ohne);
+        _impOhne = ohne;
+        _impLock = new[] { fromCd, go, browse, weiter, cd2Dir, ohne };
+
+        weiter.Pressed += () =>
+        {
+            // erneut nach Laufwerken suchen — und nur nehmen, was etwas von dem
+            // FEHLENDEN traegt: liegt noch CD 1 im Laufwerk, liest »Weiter«
+            // nicht ein zweites Mal alles ein, sondern sagt es
+            var found = Core.DiscCoverage.Useful(Core.ContentSources.Discs(), _impMissing);
+            if (found == null)
+            {
+                _impStatus.Text = "Keine CD mit den fehlenden Missionen gefunden" +
+                    (Core.ContentSources.Discs() != null ? " — im Laufwerk liegt noch dieselbe CD." : ".");
+                return;
+            }
+            StartImport(_impSrc != null ? Core.DiscCoverage.Merge(_impSrc, found) : found);
+        };
+        var dlg2 = new FileDialog
+        {
+            FileMode = FileDialog.FileModeEnum.OpenDir,
+            Access = FileDialog.AccessEnum.Filesystem,
+            Size = new Vector2I(820, 560),
+            Title = "Ordner der fehlenden CD waehlen",
+        };
+        AddChild(dlg2);
+        cd2Dir.Pressed += () => dlg2.PopupCentered();
+        dlg2.DirSelected += d =>
+        {
+            var found = Core.DiscCoverage.Useful(Core.ContentSources.FromFolder(d), _impMissing);
+            if (found == null)
+            {
+                _impStatus.Text = $"In {d} liegt keine der fehlenden Missionen (LEVELS\\NN.CWM).";
+                return;
+            }
+            StartImport(_impSrc != null ? Core.DiscCoverage.Merge(_impSrc, found) : found);
+        };
+        ohne.Pressed += () =>
+        {
+            DropStaging();
+            // das Kampagnenmenue sagt danach selbst, was fehlt (CampaignScreen)
+            if (Core.Content.Ready) GetTree().ChangeSceneToFile(Core.Content.MenuSceneSafe);
+            else _impStatus.Text = "Ohne Karten laesst sich nicht spielen — es wurde keine Mission eingelesen.";
+        };
 
         fromCd.Pressed += () =>
         {
@@ -1291,6 +1385,18 @@ public partial class MainMenu : Control
                                  Core.ContentSources.CabinetIn(dir) ?? "", status, go);
                     break;
                 default:
+                    // ⚠ 01.10.2026 (bug-379): eine auf die Platte KOPIERTE CD
+                    // hat DATA\ und LEVELS\, aber keine GAME.EXE — die steckt im
+                    // Kabinett. Classify verlangte die EXE und wies den Ordner
+                    // ab; der Spieler mit zwei kopierten CDs kam so nie hinein.
+                    if (Core.ContentSources.HasGameData(dir))
+                    {
+                        status.Text = "Spieldaten (DATA, LEVELS) erkannt — wird eingelesen …";
+                        go.Disabled = true;
+                        CallDeferred(nameof(RunImport), new[] { dir },
+                                     Core.ContentSources.CabinetIn(dir) ?? "", status, go);
+                        break;
+                    }
                     status.Text = "Hier ist weder ein Originalspiel noch ein fertiger Datenordner.";
                     break;
             }
@@ -1442,26 +1548,160 @@ public partial class MainMenu : Control
             src.Roots.Add(r);
             src.Exe ??= Core.ContentSources.ExeIn(r);
         }
+        StartImport(src);
+    }
 
+    // ---- bug-379: Fortschritt und CD-Wechsel --------------------------------
+
+    /// <summary>Aus dem Kampagnenmenue: der Einleseschirm, obwohl schon Daten
+    /// da sind. ⚠ Der Weg fuehrt bewusst ueber CD 1 ZUERST: ein Lauf nur ueber
+    /// CD 2 wuerde campaign.json aus den Karten 16–33 allein schreiben und die
+    /// ersten fuenfzehn verlieren (Core.DiscCoverage). Wer CD 1 einliest, wird
+    /// danach von selbst nach CD 2 gefragt.</summary>
+    public void ShowImportForMissing()
+    {
+        var missing = Core.DiscCoverage.MissingImported();
+        StopBackdrop();
+        ShowImportScreen();
+        if (_impStatus != null && missing.Count > 0)
+            _impStatus.Text = Core.DiscCoverage.Explain(missing) + "\n" +
+                "Leg zuerst CD 1 ein und druecke »Von CD installieren« — danach fragt " +
+                "dieser Schirm nach CD 2. Beide CDs in zwei Laufwerken gehen in einem Zug.";
+    }
+
+    private ProgressBar? _impBar;
+    private Label? _impStep, _impStatus, _impPromptText;
+    private VBoxContainer? _impPrompt;
+    private Button? _impOhne;
+    private Button[] _impLock = System.Array.Empty<Button>();
+
+    /// <summary>Die Quelle des letzten Laufs, die Wechseldatentraeger darin
+    /// schon durch ihre Kopie ersetzt — der zweite Lauf haengt die neue CD
+    /// HINTEN an (Core.DiscCoverage.Merge).</summary>
+    private Core.ContentSources.Source? _impSrc;
+    private List<int> _impMissing = new();
+
+    /// <summary>Wo eine CD fuer den Wechsel liegen bleibt — NICHT unter
+    /// user://data, und nach dem Import wieder weg.</summary>
+    private const string StagingRoot = "user://cd_zwischenlager";
+
+    private static void DropStaging()
+    {
+        string dir = ProjectSettings.GlobalizePath(StagingRoot);
+        try { if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true); }
+        catch (System.Exception e) { GD.PrintErr("import: Zwischenlager nicht geloescht: " + e.Message); }
+    }
+
+    /// <summary>
+    /// Den Import auf einem Nebenlaeufer starten. Danach, im Hauptfaden
+    /// (<see cref="ImportDone"/>): fehlen Missionen, wird die Wechsel-CD
+    /// zwischengelagert und nach der anderen gefragt.
+    ///
+    /// <para>⚠ Warum ein Nebenlaeufer erlaubt ist: ContentBuilder fasst nur
+    /// Dateien, Image und GD.Print an, keinen Szenenbaum — dieselbe Art Arbeit,
+    /// die MenuBackdrop schon mit Task.Run erledigt. Der Zielpfad wird im
+    /// Konstruktor HIER, im Hauptfaden, aufgeloest.</para>
+    /// </summary>
+    private void StartImport(Core.ContentSources.Source src)
+    {
+        foreach (var b0 in _impLock) b0.Disabled = true;
+        if (_impPrompt != null) _impPrompt.Visible = false;
+        if (_impBar != null) { _impBar.Visible = true; _impBar.Value = 0; }
+        if (_impStep != null) _impStep.Visible = true;
+        string staging = ProjectSettings.GlobalizePath(StagingRoot);
         var b = new Import.ContentBuilder(src);
-        bool ok = b.Run(line => status.Text = line);
-        var tail = new List<string>
+
+        System.Threading.Tasks.Task.Run(() =>
         {
-            ok ? $"{b.MapsBaked} Karten, {b.EntitiesWritten} Spielstaende und " +
-                 $"{b.TablesWritten} Tabellen erzeugt."
-               : "Es wurde nichts erzeugt.",
-            "Noch nicht dabei: " + string.Join("; ", Import.ContentBuilder.Missing()),
-        };
-        status.Text = string.Join("\n", tail);
-        go.Disabled = false;
-        if (ok && Core.Content.Ready) GetTree().ChangeSceneToFile(Core.Content.MenuSceneSafe);
+            bool ok = false;
+            string? err = null;
+            var missing = new List<int>();
+            Core.ContentSources.Source staged = src;
+            try
+            {
+                ok = b.Run(line =>
+                {
+                    int s = b.Schritt, n = b.Schritte;
+                    Callable.From(() => ImportProgress(s, n, line, false)).CallDeferred();
+                });
+                missing = Core.DiscCoverage.Missing(b.MissionNumbers);
+                // ⚠ VOR der Frage nach der anderen CD, solange diese noch im
+                // Laufwerk liegt: der zweite Lauf braucht ihr Kabinett, ihre
+                // 01.PAL und ihre Karten (Begruendung in Core.DiscCoverage)
+                if (missing.Count > 0 && (ok || src.Complete)
+                    && src.Roots.Exists(Core.DiscCoverage.IsRemovable))
+                    staged = Core.DiscCoverage.Stage(src, staging, (f, d, t) =>
+                    {
+                        int dm = (int)(d >> 20), tm = (int)System.Math.Max(1, t >> 20);
+                        Callable.From(() => ImportProgress(dm, tm,
+                            $"CD wird fuer den Wechsel zwischengelagert: {f}", true)).CallDeferred();
+                    });
+            }
+            catch (System.Exception e) { err = e.Message; }
+            Callable.From(() => ImportDone(b, src, staged, ok, missing, err)).CallDeferred();
+        });
+    }
+
+    private void ImportProgress(int schritt, int schritte, string line, bool kopie)
+    {
+        if (!IsInstanceValid(this) || _impBar == null) return;
+        _impBar.MaxValue = System.Math.Max(1, schritte);
+        _impBar.Value = System.Math.Min(schritt, schritte);
+        if (_impStep != null)
+            _impStep.Text = kopie ? $"Zwischenlager: {schritt} von {schritte} MB"
+                                  : $"Schritt {schritt} von {schritte}";
+        if (_impStatus != null)
+            _impStatus.Text = line.Length > 160 ? line[..157] + " …" : line;
+    }
+
+    private void ImportDone(Import.ContentBuilder b, Core.ContentSources.Source src,
+                            Core.ContentSources.Source staged, bool ok, List<int> missing,
+                            string? err)
+    {
+        if (!IsInstanceValid(this) || _impStatus == null) return;
+        Campaign.CampaignManager.Forget();
+        foreach (var b0 in _impLock) b0.Disabled = false;
+        if (_impBar != null) _impBar.Value = _impBar.MaxValue;
+
+        string summary = ok
+            ? $"{b.MapsBaked} Karten, {b.EntitiesWritten} Spielstaende und " +
+              $"{b.TablesWritten} Tabellen erzeugt — Kampagne: {b.MissionNumbers.Count} von " +
+              $"{Core.DiscCoverage.CampaignCount} Missionen."
+            : "Es wurde nichts erzeugt.";
+        if (err != null) summary += "\nFehler: " + err;
+        _impStatus.Text = summary + "\nNoch nicht dabei: " +
+                          string.Join("; ", Import.ContentBuilder.Missing());
+
+        // alles da (auch: beide CDs in zwei Laufwerken) -> ohne Rueckfrage weiter
+        if (missing.Count == 0 && ok)
+        {
+            DropStaging();
+            _impSrc = null;
+            if (Core.Content.Ready) GetTree().ChangeSceneToFile(Core.Content.MenuSceneSafe);
+            return;
+        }
+        if (missing.Count == 0 || !(ok || src.Complete)) return;   // nichts Sinnvolles zu fragen
+
+        _impSrc = staged;
+        _impMissing = missing;
+        var cds = Core.DiscCoverage.DiscsFor(missing);
+        string which = cds.Count == 1 ? $"CD {cds.Min}" : "die fehlende CD";
+        if (_impPromptText != null)
+            _impPromptText.Text = Core.DiscCoverage.Explain(missing) + "\n" +
+                $"Bitte {which} einlegen und »Weiter« druecken — oder den Ordner einer " +
+                "kopierten CD waehlen.";
+        if (_impOhne != null) _impOhne.Text = $"Ohne {which} fortfahren";
+        if (_impPrompt != null) _impPrompt.Visible = true;
+        GD.Print($"import: {Core.DiscCoverage.Explain(missing)} — frage nach {which}");
     }
 
     private static string Describe(string dir) => Core.ContentImport.Classify(dir) switch
     {
         Core.ContentImport.SourceKind.Derived => "Fertiger Datenordner erkannt.",
         Core.ContentImport.SourceKind.Original => "Originalspiel erkannt (GAME.EXE gefunden).",
-        _ => "Noch nichts Brauchbares gefunden.",
+        _ => Core.ContentSources.HasGameData(dir)
+            ? "Spieldaten erkannt (DATA, LEVELS) — z. B. eine kopierte CD."
+            : "Noch nichts Brauchbares gefunden.",
     };
 
     /// <summary>`--skirmish=map_NET07,3,hard` skips the menu. Handy for testing

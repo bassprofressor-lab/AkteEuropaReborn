@@ -621,6 +621,14 @@ public sealed class MapBaker
     /// </summary>
     public const int BrueckenKachelZahl = 120;
 
+    /// <summary>Die erste der neun Kacheln der TERRANIUMMARKIERUNG — add_terra
+    /// <c>0x420E20</c> setzt <c>10240 + 3·i + j</c> auf <c>(Spalte+j, Zeile+i)</c>
+    /// (bug-381). Auf M17 stehen dieselben neun Codes schon in der Karte.</summary>
+    public const int TerraKachelBasis = 10240;
+
+    /// <summary>3 × 3.</summary>
+    public const int TerraKachelZahl = 9;
+
     public readonly List<(int Code, int X, int Y, int W, int H, int YOff)> BurntAtlas = new();
 
     private byte[]? _burnt;                 // der Streifen, PixelW x _burntH
@@ -872,6 +880,13 @@ public sealed class MapBaker
         // hat das Kartenbild nicht.
         for (int k = 0; k < BrueckenKachelZahl; k++) Streifenplatz(BrueckenKachelBasis - 120 + k);
         for (int k = 0; k < 8; k++) Streifenplatz(k);
+        // ⭐⭐ 01.10.2026 — UND DIE TERRANIUMMARKIERUNG (bug-381). add_terra
+        // 0x420E20 setzt beim Fund eines Terranium-Finders die neun
+        // Objektkacheln 10240 + 3·i + j (0x41D140) — waehrend des Spiels, also
+        // ohne Pixel im gebackenen Bild. Dieselbe Behandlung wie Mole und Steg.
+        // ⚠ Eine Karte aus einem aelteren Import hat sie nicht: dann WIRKT die
+        // Markierung (Bauplatz, Sperren), ist aber unsichtbar.
+        for (int k = 0; k < TerraKachelZahl; k++) Streifenplatz(TerraKachelBasis + k);
 
         // passes A and B — backdrop, then the cell's own detail
         for (int r = 0; r < h; r++)

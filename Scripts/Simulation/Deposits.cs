@@ -4,7 +4,29 @@ namespace AkteEuropaReborn.Rendering;
 
 /// <summary>
 /// WOHER DIE VORKOMMEN KOMMEN — die eine Liste, aus der <c>CellOnDeposit</c>
-/// @0x4205C0 fragt, und ihre ZWEI Quellen.
+/// (C <c>0x421400</c>, F <c>0x4205C0</c>) fragt, und ihre ZWEI Quellen.
+///
+/// <para>⚠⚠ 01.10.2026, bug-381 — <b>BERICHTIGT: ZWEI TAFELN, NICHT EINE.</b>
+/// Seine Meldung: »K23: Terranium Finder kann nichts; Vorkommen sofort baubar
+/// statt erst nach Suche«. Selbst gelesen (C-EXE): <c>add_terra_place
+/// 0x4D0A10</c> schreibt NUR in <b>sec78</b> <c>0xBC6D40</c> (6 Byte, 50 Plätze:
+/// +0 belegt, +1 Spalte, +2 Zeile, +4 Menge) — nie in sec38. sec78 lesen
+/// ausserdem nur der Leerlauf-Automat des Finders (<c>0x4084C0…0x408751</c>),
+/// das Leeren (<c>0x41F088</c>, <c>0x4D0AA0</c>) und Laden/Speichern
+/// (<c>0x41D94F</c>, <c>0x41E9CA</c>) — keine Missionsweiche, kein Fahrplan.
+/// Die Vorkommensfrage des Minenbaus <c>0x421400</c> läuft über <b>sec38</b>
+/// <c>0x6783E8</c> (F <c>0x677448</c>). Also: was das Skript legt, ist ERZ IM
+/// BODEN (<see cref="_erz"/>), und erst ein Terranium-Finder macht daraus einen
+/// Bauplatz (Simulation/TerraSuche.cs). Gezählt über alle 33 Missionen
+/// (berichte/terranium-finder-fable.md §7): Skriptvorkommen gibt es NUR in
+/// M23, 25, 26, 29–33, und dort ist der Finder (Teil 78) ab Fahrplan-Zustand
+/// 23 frei — keine Mission verliert ihren einzigen Bauplatz.
+/// <c>--erz-sofort-baubar</c> = der alte Stand (Skript direkt in sec38).</para>
+///
+/// <para>⚠ Hier stand bis zum 01.10. <c>@0x4205C0</c> allein — das ist die
+/// F-Fassung derselben Routine; in der C-Fassung liegt an 0x4205C0 eine
+/// Nebelroutine, die Vorkommensfrage ist dort <c>0x421400</c> (beide
+/// Anfänge Byte für Byte verglichen: <c>sub esp,0x10 … mov cl,[ebx*2+sec38]</c>).</para>
 ///
 /// <para><b>1. Das Missionsskript</b>, und das ist die gelesene Quelle:
 /// <c>add_terra_place(spalte, zeile, menge)</c> (C: <c>0x4D0A10</c>,
@@ -56,6 +78,32 @@ public partial class MapEntityLayer
     /// Missionsaufbaus legt weitere DAZU.</para></summary>
     private readonly List<(int Col, int Row, int Amount)> _karteTerra = new();
 
+    /// <summary><c>--erz-sofort-baubar</c> — der Stand vor dem 01.10.2026
+    /// (bug-381): die Vorkommen des Missionsskripts (sec78) landen unmittelbar
+    /// in der Bauplatzliste (sec38), als wären sie schon aufgeschlossen.</summary>
+    public static bool ErzSofortBaubar;
+
+    /// <summary>Ein Satz der Tafel <b>sec78</b> »terra_place« <c>0xBC6D40</c>
+    /// (6 Byte): +0 belegt, +1 Spalte, +2 Zeile, +4 Menge. Das ist das Erz IM
+    /// BODEN — unsichtbar und nicht baubar, bis ein Finder es aufschliesst
+    /// (<c>0x408736</c> setzt <c>belegt := 0</c>).</summary>
+    public sealed class ErzSatz
+    {
+        public int Col, Row, Amount;
+        public bool Belegt;
+    }
+
+    /// <summary>sec78 — in TAFELREIHENFOLGE, denn die Suche des Finders nimmt
+    /// den ERSTEN Treffer (<c>0x4084AB</c>), nicht den nächsten.</summary>
+    private readonly List<ErzSatz> _erz = new();
+
+    /// <summary>Wie viele Erzplätze noch im Boden liegen (für Leiste und
+    /// Prüfstand).</summary>
+    public int ErzImBoden
+    {
+        get { int n = 0; foreach (var z in _erz) if (z.Belegt) n++; return n; }
+    }
+
     /// <summary>Das Gitter, aus dem <see cref="_depositList"/> gefüllt wurde —
     /// null, solange nichts nachgezogen wurde.</summary>
     private Simulation.NavGrid? _depositNav;
@@ -70,6 +118,9 @@ public partial class MapEntityLayer
             {
                 _depositNav = _nav;
                 _depositList.Clear();
+                // ⭐ bug-381: mit der Karte wechseln auch Erz und Markierungen.
+                _erz.Clear();
+                TerraKartenwechsel();
                 foreach (var d in _nav.Deposits) _depositList.Add(d);
                 foreach (var d in _karteTerra) _depositList.Add(d);
                 if (_depositList.Count > 0)

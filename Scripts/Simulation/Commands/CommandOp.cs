@@ -342,6 +342,21 @@ public static class CommandOp
     public const short RailRepairOrder = 29;
 
     /// <summary>
+    /// <b>19 = TERRANIUM SUCHEN.</b> P1 = die Einheit, P2/P3 = die geklickte
+    /// Zelle. Absender <c>0x438920</c> (über <c>0x4017E9</c> vom Klickarm
+    /// <c>0x4377D0</c> der Zeigerart 0x0D, Tafel <c>0x437994[13]</c>); er löscht
+    /// danach <c>dword[0x502ACC]</c>. Behandler <c>0x4C3191</c> (F
+    /// <c>0x4C2D06</c>): <c>0x40B070</c> fahre zur Zelle, Klickzelle in den
+    /// Rawmat-Satz der Einheit (<c>0x834C39/3A + 8·byte[+0x40]</c>), und NUR aus
+    /// Zustand 1: Zustand := <c>rand%3 − 0x7B</c> = 0x85…0x87. Siehe
+    /// Simulation/TerraSuche.cs, bug-381.
+    ///
+    /// <para>⚠ Nicht verwechseln: »Terranium suchen« ist ZEILE 0x15 = 21 der
+    /// Befehlsliste, und Kommando 21 ist »Bauplatz setzen (Generatorenbauer)«.
+    /// Zwei Zählungen.</para></summary>
+    public const short TerraSuche = 19;
+
+    /// <summary>
     /// <b>DIE FÜNFZEHN GEBÄUDEBEFEHLE — vier Tafeln, eine je Gebäudeart.</b>
     /// Gelesen am 21.08.2026, und die Zuordnung schliesst von beiden Seiten.
     ///
@@ -505,6 +520,7 @@ public static class CommandOp
         Board => "Einsteigen",
         Unload => "Absetzen",
         RailRepairOrder => "Gleis reparieren",
+        TerraSuche => "Terranium suchen",
         _ when op >= UnitFirst && op <= UnitLast => "Einheitenbefehl (Bereich A, unbenannt)",
         _ when op >= BuildFirst && op <= BuildLast => "Bau/Kauf (Bereich B, unbenannt)",
         _ when op >= SystemFirst && op <= SystemLast => "System (Bereich C, unbenannt)",
