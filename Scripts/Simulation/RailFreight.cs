@@ -651,6 +651,13 @@ public partial class MapEntityLayer : Node2D
     /// Schritte der Linie.</para></summary>
     private float RailTravelSeconds(RailLine l)
     {
+        // ⭐ 02.10.2026 — bug-397 (F7): die Fahrzeit aus dem Fahrmodell je Gleisschritt —
+        // W0 schaltet im Takt 3 auf Routenpunkt 1 (Startzähler 20), rückwärts beginnt er
+        // eine Stelle hinter dem Linienende (cursor = delka, @0x4C678D). Vorwärts damit 1–2
+        // Takte kürzer, rückwärts 3 länger als die Summe unten. Simulation/ZugFahrmodell.cs,
+        // Gegenschalter --zug-fahrmodell-alt.
+        float neu = ZugFahrmodellSekunden(l);
+        if (neu > 0f) return neu;
         if (_linePiece.TryGetValue(l.Slot, out var pcs) && pcs.Count > 1)
         {
             float t = 0f;
@@ -745,6 +752,7 @@ public partial class MapEntityLayer : Node2D
         if (_railLines.Count == 0) return;
         if (_bldBySlot.Count == 0) RebuildRailIndex();
         K21LagerTakt(dt);                 // --k21-lager-check (22.09.2026)
+        ZugFahrzeitTafelTakt();           // --zug-fahrzeit-tafel (02.10.2026, bug-397)
         BahnAnkunftTakt();                // UKOL-0x38-Arm 0x409E4D (22.09.2026)
         // ⚠ 11.08.2026 — die FAHRT laeuft je Bild, der AUTOMAT weiter im Takt.
         //
@@ -1070,6 +1078,15 @@ public partial class MapEntityLayer : Node2D
         // Durchgang 0 setzt alle vier auf ihre getaktete Stelle und damit ihre
         // Pose; Durchgang 1 kuppelt mit den nun feststehenden Posen. Beides ist
         // dieselbe Schleife — die Platzierung darf nicht zweimal dastehen.
+        // ⭐⭐ 02.10.2026 — bug-397 (F7), ENTSCHEIDUNG DES SPIELERS »Ja, wie im Original«:
+        // die Waggons fahren JE ROUTENSCHRITT mit Zähler/Preis wie der Waggontakt 0x4C69C0
+        // (5 Takte gerade, 4 schräg; 8/4/6,4 px je Takt), nicht mehr gleichmäßig über die
+        // Bogenlänge unserer Kette — die ist auf DM_4 bis 30 % kürzer als die Route, und der
+        // Zug kroch dort (Linie 6 senkrecht 2,71 px je Takt, Abstand bis 9,5 px statt 12).
+        // Simulation/ZugFahrmodell.cs; Gegenschalter --zug-fahrmodell-alt (= die Schleife hier).
+        var plan = ZugFahrmodellNeu ? ZugPlanOf(l.Slot) : null;
+        if (plan != null) ZugSchrittSetzen(l, list, plan, route, lift);
+        else
         for (int pass = 0; pass < 2; pass++)
         foreach (var w in list)
         {
@@ -2291,9 +2308,17 @@ public partial class MapEntityLayer : Node2D
         // Zug eine Rampe in derselben Zeit wie ein ebenes Stueck, obwohl sein
         // Weg dort laenger ist — und der Fortschritt haengt seit dem 15.08. an
         // genau dieser Laenge.
+        // ⭐⭐ 02.10.2026 — bug-395 (F0): DER KOMMENTAR DARÜBER WAR FALSCH BEGRÜNDET.
+        // Mit den gehobenen Punkten zählt ein Rampenglied 35 px bergauf (20 Ebene + 15
+        // Anstieg) und 5 px bergab — der Waggon kroch dort auf 57 % und sprang bergab
+        // eine Zelle in einem Takt (DM_4 Linie 5 an (178,131): W0→W1 10,8 px statt 20;
+        // --zug-demo-check kleinster Abstand 2,0 px). Das Original nimmt das Δ aus der
+        // Tafel 0x539400 IN DER EBENE (±40,0)/(0,±20)/(±20,±10) und legt die Rampe als
+        // getrennte ±15-Korrektur in denselben Takt (Tafel 0x4C73C8 @0x4C6AE6…0x4C6B13,
+        // @0x4C6ED9) — die Ebenengeschwindigkeit bleibt gleich. Gegenschalter
+        // --zug-bogen-schirm. Bericht zug-feinlage-fable.md §4.2.
         for (int i = 1; i < pts.Count; i++)
-            cum[i] = cum[i - 1] + RailLifted(pts[i - 1], lift[i - 1])
-                                      .DistanceTo(RailLifted(pts[i], lift[i]));
+            cum[i] = cum[i - 1] + ZugBogenGlied(pts[i - 1], lift[i - 1], pts[i], lift[i]);
         got = new RailPathData { Pts = pts, Lift = lift, Cum = cum };
         _linePath[line] = got;
         return got;

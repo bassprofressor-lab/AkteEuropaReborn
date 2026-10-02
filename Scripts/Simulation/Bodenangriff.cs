@@ -145,7 +145,7 @@ public partial class MapEntityLayer : Node2D
 
         var w = WeaponOf(e.Weapon);
         var mitte = ZellMitte(z.X, z.Y);
-        float dist = Mathf.Max(Mathf.Abs(e.Col - z.X), Mathf.Abs(e.Row - z.Y));
+        float dist = BodenZellAbstand(e, z.X, z.Y);
         e.AimFacing = DirToFacing(mitte - e.Pos);
 
         // ⭐ 15.09.2026 — die Reichweite der EINHEIT (+0x2B), nicht die der Waffentafel:
@@ -348,6 +348,31 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--bodenangriff-tafelreichweite</c> — der Stand bis 15.09.2026: der
     /// Bodenangriff nimmt die Reichweite der Waffentafel statt der Einheit.</summary>
     public static bool BodenangriffTafelreichweite;
+
+    /// <summary>
+    /// ⭐⭐ 02.10.2026 (bug-401) — <b>DER ABSTAND ZUR ANGRIFFSZELLE IST EUKLIDISCH.</b>
+    /// Der Zellprobeschuss 0x4543C0 misst ueber <c>0x453990</c> (Einheit–Zelle):
+    /// <code>
+    ///   0x453A19  imul cx, cx, 0x28     ; Δx · 40
+    ///   0x453A3F  imul dx, dx, 0x28     ; Δy · 40   ⭐ AUCH 40
+    ///   0x453A5C  fsqrt                 ; d = sqrt(dx² + dy²)
+    /// </code>
+    /// und der scharfe Schuss sperrt @<c>0x40BF64…0x40BF8D</c> mit
+    /// <c>+0x2B·40 &lt; d</c> / <c>+0x2A·40 &gt; d</c> — eine KREISSCHEIBE, wie bei
+    /// <see cref="CellDistance"/>. Hier stand <c>max(|Δc|, |Δr|)</c> (Tschebyschew):
+    /// diagonal schoss eine Einheit mit Reichweite 4 auf (4,4) = 5,66 Zellen, das
+    /// Original nicht (226 &gt; 160). Gilt fuer jede Waffe. Feinlage weggelassen wie
+    /// in CellDistance (&lt; ½ Zelle). berichte/moerser-reichweite-fable.md §5 Nr. 9,
+    /// §7 B.2. Gegenschalter <c>--zellabstand-schach</c> (der Stand davor).
+    /// </summary>
+    private static float BodenZellAbstand(Entity e, int zc, int zr)
+        => ZellabstandSchach
+            ? Mathf.Max(Mathf.Abs(e.Col - zc), Mathf.Abs(e.Row - zr))
+            : new Vector2(e.Col - zc, e.Row - zr).Length();
+
+    /// <summary><c>--zellabstand-schach</c> (bug-401) — der Zellangriff misst wieder
+    /// Tschebyschew <c>max(|Δc|, |Δr|)</c> statt euklidisch wie 0x453990.</summary>
+    public static bool ZellabstandSchach;
 
     /// <summary>Wie oft die 60er-Weiche griff, und der letzte Brandwert — fuer den
     /// Pruefstand.</summary>

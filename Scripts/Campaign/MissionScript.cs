@@ -62,6 +62,12 @@ public sealed class MissionScript
         /// Normalfall; nur Mission 28 braucht ihn.</summary>
         public int V = -1;
 
+        /// <summary>⭐ 02.10.2026 (bug-392) — die Aufrufstelle im Original
+        /// (`_at` der Wirkung). Gelesen fuer die Wirkungsprobe von
+        /// <c>--untermission-check</c>: jede show_text-/bus_cmd-528-Stelle der
+        /// EXE muss hier eine Wirkung mit derselben Adresse haben. 0 = keine.</summary>
+        public int At;
+
         /// <summary>`space_in` only: the design numbers to drop, in order. They
         /// index sec47 as <c>typ + 200*player</c> — the same table the design
         /// screen and the factories use, which is why mission 14's single byte
@@ -189,6 +195,18 @@ public sealed class MissionScript
         /// setup starts it at 1. v[101+k] is the k-th objective's state
         /// (1 = open, 10 = done), v[131+k] its text number.</summary>
         public readonly Dictionary<int, int> Init = new();
+
+        /// <summary>
+        /// ⭐ 02.10.2026 (bug-384) — <b>DIE BETRIEBSART sec61 AUS DEM SETUP-BLOCK</b>:
+        /// <c>ai_mode(spieler, wert)</c> @0x4D1050 (Thunk 0x402022), je Mission
+        /// in Blockreihenfolge. Ausgelesen von
+        /// <c>aekernel-tools/mission_betriebsart.py</c>, beide GAME.EXE gleich
+        /// (48 Rufe in 20 Missionen). Davor setzt der gemeinsame Vorspann des
+        /// Missionsaufbaus ALLE ACHT Spieler auf 2 (C @0x48843F, F @0x486B01,
+        /// direkt hinter dem Leeren von sec69) — das ist der Startwert, nicht
+        /// die 0 der Initialisierung @0x41EFF6.
+        /// </summary>
+        public readonly List<(int Spieler, int Wert)> Betriebsart = new();
 
         /// <summary>Die Tore des Blocks, in Adressreihenfolge.</summary>
         public readonly List<Gate> Gates = new();
@@ -1249,6 +1267,44 @@ public sealed class MissionScript
     /// muss, welche Werte NICHT vom Übertrag stammen dürfen.</summary>
     public Dictionary<int, int> InitValues() => new(_script.Init);
 
+    /// <summary>Die Betriebsarten des Setup-Blocks — siehe Script.Betriebsart.
+    /// Gesetzt von MapEntityLayer, sobald die Haken verdrahtet sind.</summary>
+    public IReadOnlyList<(int Spieler, int Wert)> Betriebsarten => _script.Betriebsart;
+
+    /// <summary>⭐ 02.10.2026 — die Gegenschalter der Setzungsregeln in der JSON
+    /// (Feld <c>_schalter</c>). Steht ein Schalter hier, wird seine Regel beim
+    /// Laden ausgelassen. Gefüllt von MapViewer aus der Befehlszeile, VOR dem
+    /// ersten Laden.</summary>
+    public static readonly HashSet<string> SetzungAus = new();
+    /// <summary>Wieviele Setzungsregeln geladen bzw. per Schalter ausgelassen
+    /// wurden — für die Prüfstände.</summary>
+    public static int SetzungenGeladen, SetzungenAusgelassen;
+
+    /// <summary>⭐ 02.10.2026 (bug-388) — die vom Skriptvariablen-Audit
+    /// nachgetragenen Regeln (<c>_von_hand</c>), geladen bzw. per
+    /// <c>--skriptvar-alt</c> ausgelassen. Siehe
+    /// berichte/skriptvariablen-audit-fable.md §5 und
+    /// Simulation/Skriptvariablen.cs.</summary>
+    public static int AuditGeladen, AuditAusgelassen;
+
+    /// <summary>Der Sammelschalter des Audits: alle nachgetragenen Regeln,
+    /// Glieder und Wirkungen fallen weg, die alten (falsch uebersetzten)
+    /// Fassungen kommen zurueck — Stand vor dem 02.10.2026.</summary>
+    public const string SkriptvarAlt = "--skriptvar-alt";
+
+    /// <summary>⭐ 02.10.2026 (bug-388) — derselbe Gegenschalter wie auf
+    /// Regelebene, aber fuer EIN Glied bzw. EINE Wirkung: das Audit ergaenzt
+    /// bestehende Regeln (M22 Endbonus: Geld und Waechter, M9 Endauszahlung,
+    /// M3 Brueckenpreis, M31 v50/v51). <c>_schalter</c> laesst das Element mit
+    /// gesetztem Schalter weg, <c>_nur_mit</c> nimmt es NUR mit gesetztem
+    /// Schalter.</summary>
+    private static bool GliedAus(Godot.Collections.Dictionary<string, Variant> d)
+    {
+        if (d.TryGetValue("_schalter", out var s) && SetzungAus.Contains(s.AsString())) return true;
+        if (d.TryGetValue("_nur_mit", out var n) && !SetzungAus.Contains(n.AsString())) return true;
+        return false;
+    }
+
     /// <summary>Alle Variablen ungleich null — das, was in die nächste Mission
     /// mitgeht. Siehe <see cref="CampaignManager.CarriedVars"/>.</summary>
     public Dictionary<int, int> VarSnapshot()
@@ -1583,11 +1639,57 @@ public sealed class MissionScript
                     s.Minen.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32(), q[3].AsInt32(),
                                  q[4].AsInt32(), q[5].AsString() == "yx"));
                 }
+            // ⭐ 02.10.2026 (bug-384) — die Betriebsart des Setup-Blocks, siehe
+            // Script.Betriebsart.
+            if (body.TryGetValue("betriebsart", out var bav) &&
+                bav.VariantType == Variant.Type.Array)
+                foreach (var e in bav.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Dictionary) continue;
+                    var bd = e.AsGodotDictionary<string, Variant>();
+                    if (!bd.TryGetValue("a", out var bsp) || !bd.TryGetValue("b", out var bwe))
+                        continue;
+                    s.Betriebsart.Add((bsp.AsInt32(), bwe.AsInt32()));
+                }
             if (!body.TryGetValue("rules", out var rv) ||
                 rv.VariantType != Variant.Type.Array) continue;
             foreach (var r in rv.AsGodotArray())
             {
                 var rd = r.AsGodotDictionary<string, Variant>();
+                // ⭐ 02.10.2026 — UNSERE SETZUNGEN IN DER JSON tragen
+                // `_unsere_setzung` (die Begruendung) und `_schalter` (den
+                // Gegenschalter, der das Original wiederherstellt). Ist der
+                // Schalter gesetzt, faellt die Regel beim Laden weg — sie
+                // existiert dann so wenig wie im Original. Erste solche Regel:
+                // M26 add_target(3,1,9,13,0), --m26-tuergriff-aus.
+                // ⭐ 02.10.2026 (bug-388) — Regeln, die das Skriptvariablen-Audit
+                // NACHGETRAGEN hat (`_von_hand`), tragen denselben Schluessel;
+                // dort heisst »ausgelassen« aber »Stand VOR dem Audit«, nicht
+                // »Stand des Originals« — sie SIND das Original.
+                if (rd.TryGetValue("_schalter", out var schv) &&
+                    SetzungAus.Contains(schv.AsString()))
+                {
+                    if (rd.ContainsKey("_von_hand"))
+                    {
+                        AuditAusgelassen++;
+                        continue;
+                    }
+                    SetzungenAusgelassen++;
+                    GD.Print($"Missionsskript M{m}: Setzungsregel ausgelassen " +
+                             $"({schv.AsString()}) — Stand des Originals");
+                    continue;
+                }
+                // ⭐ 02.10.2026 (bug-388) — die Umkehrung: `_nur_mit` laedt eine
+                // Regel NUR, wenn ihr Schalter gesetzt ist. So steht die alte,
+                // vom Leser falsch uebersetzte Fassung (M24 R21/R28, M29 R25:
+                // `unit_field` mit `a: null`) weiter in der Datei und kommt mit
+                // `--skriptvar-alt` zurueck — »alles wie vorher« heisst wirklich
+                // alles.
+                if (rd.TryGetValue("_nur_mit", out var nurv) &&
+                    !SetzungAus.Contains(nurv.AsString()))
+                    continue;
+                if (rd.ContainsKey("_unsere_setzung")) SetzungenGeladen++;
+                if (rd.ContainsKey("_von_hand")) AuditGeladen++;
                 var rule = new Rule();
                 if (rd.TryGetValue("once", out var ov)) rule.Once = ov.AsInt32();
                 if (rd.TryGetValue("_at", out var av)) rule.At = Hex(av.AsString());
@@ -1600,6 +1702,7 @@ public sealed class MissionScript
                     foreach (var c in wv.AsGodotArray())
                     {
                         var cd = c.AsGodotDictionary<string, Variant>();
+                        if (GliedAus(cd)) continue;
                         rule.When.Add(new Cond
                         {
                             Kind = cd.TryGetValue("kind", out var k) ? k.AsString() : "",
@@ -1615,6 +1718,7 @@ public sealed class MissionScript
                     foreach (var c in yv.AsGodotArray())
                     {
                         var cd = c.AsGodotDictionary<string, Variant>();
+                        if (GliedAus(cd)) continue;
                         rule.Any.Add(new Cond
                         {
                             Kind = cd.TryGetValue("kind", out var k) ? k.AsString() : "",
@@ -1635,6 +1739,7 @@ public sealed class MissionScript
                         foreach (var c in g.AsGodotArray())
                         {
                             var cd = c.AsGodotDictionary<string, Variant>();
+                            if (GliedAus(cd)) continue;
                             gruppe.Add(new Cond
                             {
                                 Kind = cd.TryGetValue("kind", out var k) ? k.AsString() : "",
@@ -1650,6 +1755,7 @@ public sealed class MissionScript
                     foreach (var a in tv.AsGodotArray())
                     {
                         var ad = a.AsGodotDictionary<string, Variant>();
+                        if (GliedAus(ad)) continue;
                         var act = new Act
                         {
                             Kind = ad.TryGetValue("kind", out var k) ? k.AsString() : "",
@@ -1660,6 +1766,7 @@ public sealed class MissionScript
                             E = ad.TryGetValue("e", out var e5) ? e5.AsInt32() : 0,
                             F = ad.TryGetValue("f", out var f5) ? f5.AsInt32() : 0,
                             V = ad.TryGetValue("v", out var v5) ? v5.AsInt32() : -1,
+                            At = ad.TryGetValue("_at", out var at5) ? Hex(at5.AsString()) : 0,
                         };
                         if (ad.TryGetValue("typen", out var ty) &&
                             ty.VariantType == Variant.Type.Array)
@@ -1917,6 +2024,7 @@ public sealed class MissionScript
     /// Spiel selbst: die Funktion, die diese Tafel liest, protokolliert sich
     /// als »AI« / »AI end« (@0x4BFB8C, @0x4BFE3A).</summary>
     public Action<int, int>? SetAi;                  // spieler, wert
+    public Action<int, int>? AiMode;                 // spieler, wert — sec61 @0x4D1050
 
     /// <summary>FEUERN AUF EINE ZELLE — <c>0x4D0AD0</c>, 7 Aufrufstellen.
     /// Siehe <c>MissionFireAt</c> für die Beweiskette und für das, was dabei
@@ -2073,6 +2181,13 @@ public sealed class MissionScript
     public Action<int, int>? ChangeOwner;            // einheit, spieler
     public Action<int, int, int>? SetRelation;       // a, b, wert
     public Action<int>? StopTransport;               // einheit
+
+    /// <summary>⭐ 02.10.2026 (bug-388) — steht der Einheitenplatz in der
+    /// Verkaufsliste 0xB4A0D0 (0x4BFFB0)? Fuer <c>in_sale_var</c>.</summary>
+    public Func<int, bool>? InSale;                  // platz -> verkauft, wartet auf Frachter
+    /// <summary>⭐ 02.10.2026 (bug-388) — Flugzeuge mit Typ &gt; b und Besitzer a.
+    /// Fuer <c>set_air_count</c>.</summary>
+    public Func<int, int, int>? AirCount;            // besitzer, typ_min -> Anzahl
 
     /// <summary>Minutes since the mission started — the original's clock
     /// (`game_time()` counts 60·(hour + 24·day) + minute), und eine Spielminute
@@ -2728,6 +2843,30 @@ public sealed class MissionScript
         // 0xFFFE für »frei«. Mission 1 startet daran ihren Zähler für die vier
         // Angreifer vor der Brücke — `imap(39,4) == 0xFFFE`.
         "imap" => ImapAt != null && Cmp(ImapAt(c.A, c.C), c.Op, c.B),
+
+        // ---- 02.10.2026 (bug-388): das Skriptvariablen-Audit -------------
+        // berichte/skriptvariablen-audit-fable.md §5 C3/C8, B.
+
+        // game_time() <op> v[a] + v[b] + c — die ZWEI-VARIABLEN-UHR. M9
+        // @0x49B8D5 (F 0x49B1E9) rechnet sie woertlich so:
+        //     movsx esi, v[4] ; movsx eax, v[6] ; add esi, eax
+        //     call game_time  ; add esi, 0xC   ; cmp esi, eax ; jge raus
+        // Der Leser verwarf das Glied als »Vergleichswert unlesbar cmp
+        // esi,eax«, und mit ihm drei Regeln (Texte 194/195/196, Bonus v5).
+        "time_after2" => c.A >= 0 && c.A < _var.Length && c.B >= 0 && c.B < _var.Length
+                         && Cmp(Minutes, c.Op, _var[c.A] + _var[c.B] + c.C),
+        // Steht die Einheit v[a] in der VERKAUFSLISTE 0xB4A0D0? 0x4BFFB0
+        // (Thunk 0x401334) antwortet 1/0. M24 @0x4A19CD fragt so, bevor es
+        // einen Zivilisten an der Luftstation verkauft und 300 $ zahlt — ohne
+        // diese Frage zahlte die Regel, solange der Frachter unterwegs ist,
+        // bei jedem Durchlauf erneut. ⚠ Kein Haken heisst FALSCH.
+        "in_sale_var" => InSale != null && c.A >= 0 && c.A < _var.Length &&
+                         Cmp(InSale(_var[c.A]) ? 1 : 0, c.Op, c.C),
+        // g_robot_class_count(a, v[b]) <op> c — der SPIELER kommt aus einer
+        // Variablen. M31 @0x4A4AC9: `push v[42]; push 0; call 0x401AFA`
+        // (0x4CF980), v[42] traegt den Besitzer der eroberten Basis.
+        "units_var" => UnitCount != null && c.B >= 0 && c.B < _var.Length &&
+                       Cmp(UnitCount(c.A, _var[c.B]), c.Op, c.C),
         _ => false,
     };
 
@@ -2799,6 +2938,70 @@ public sealed class MissionScript
         {
             case "inc":
                 if (a.A >= 0 && a.A < _var.Length) _var[a.A]++;
+                break;
+            // ---- 02.10.2026 (bug-388): das Skriptvariablen-Audit -----------
+            // `dec word ptr [v]` — M7 @0x49B0DC (v[8]--, ein Wissenschaftler
+            // weniger offen) und @0x49AF2D.
+            case "dec":
+                if (a.A >= 0 && a.A < _var.Length) _var[a.A]--;
+                break;
+            // v[a] := v[a] / 2 — M9 @0x49B91C: `movsx eax,v[5]; cdq; sub eax,edx;
+            // sar eax,1` ist die Teilung ZUR NULL hin, genau C#s `/ 2`. Der
+            // Bonus fuer das schnelle Ende halbiert sich so 2000 -> 1000 -> 500.
+            case "half":
+                if (a.A >= 0 && a.A < _var.Length) _var[a.A] /= 2;
+                break;
+            // geld(b) += v[a] — der Betrag aus einer Variablen. M9 @0x49BB28:
+            // `mov ax, v[5]; push 0; push eax; call 0x401F64` (bus_cmd 528).
+            case "money_var":
+                if (a.A >= 0 && a.A < _var.Length) AddMoney?.Invoke(_var[a.A], a.B);
+                break;
+            // v[a] := AUSGESCHALTET(b) bzw. VERLUSTE(b) — der Stand der Zaehler
+            // 0x87B160/0x87B164 + 40·b, gemerkt fuer einen spaeteren Vergleich
+            // (`var_vs_kills`/`var_vs_losses`). M24 @0x4A14F4/0x4A1501, M30
+            // @0x4A4217 lesen Spieler 0 als feste Adresse.
+            case "set_kills":
+                if (a.A >= 0 && a.A < _var.Length && KillCount != null) _var[a.A] = KillCount(a.B);
+                break;
+            case "set_losses":
+                if (a.A >= 0 && a.A < _var.Length && LossCount != null) _var[a.A] = LossCount(a.B);
+                break;
+            // v[a] := Zahl der Flugzeuge mit Typ > c und Besitzer b — die
+            // Zaehlschleife M9 @0x49B9F8 / M12 @0x49C96B ueber die Flugzeugtafel
+            // 0x6DDF78 (68 B, 200 Plaetze): `cmp byte[+0], 0xC; jbe; cmp
+            // byte[+1], 0; jne; inc v[230]`. Typ 13/14 sind Treibstoff- und
+            // Munitionsheli.
+            case "set_air_count":
+                if (a.A >= 0 && a.A < _var.Length) _var[a.A] = AirCount != null ? AirCount(a.B, a.C) : 0;
+                break;
+            // if (obj_owner(b) == c) v[a] := d — M31 @0x4A4A63..0x4A4AA8:
+            // `push 0; call obj_owner; test al,al; jne; mov v[42], 6` und
+            // dasselbe fuer die Plaetze 14 (4) und 5 (5). Mitten in einer
+            // Regel, darum eine Wirkung und keine eigene Regel.
+            case "set_if_owner":
+                if (a.A >= 0 && a.A < _var.Length && ObjOwner != null && ObjOwner(a.B) == a.C)
+                    _var[a.A] = a.D;
+                break;
+            // change_owner(v[a], b) — M24 @0x4A16A6. ⚠ Das Original gibt den
+            // NEUEN Satzindex zurueck und schreibt ihn nach v[a]; unser
+            // change_owner behaelt den Platz, also bleibt v[a] richtig.
+            case "change_owner_var":
+                if (a.A >= 0 && a.A < _var.Length && _var[a.A] > 0)
+                    ChangeOwner?.Invoke(_var[a.A], a.B);
+                break;
+            // Die Zielschleife M24 @0x4A1524..0x4A158D: fuer jeden Platz
+            // i = 0..99 von Spieler 0, ausser v[V], der noch lebt
+            // (`0x401A96(i, byte[i+0x43])`), add_target(a, b, Teil == c ? d : e,
+            // i, 0) — Teil ist +0x0E, 0x46 = 70 bekommt Vorrang 6, alle anderen 1.
+            case "add_target_units":
+                if (AddTarget == null || UnitAlive == null) break;
+                for (int i = 0; i < 100; i++)
+                {
+                    if (a.V >= 0 && a.V < _var.Length && _var[a.V] == i) continue;
+                    if (!UnitAlive(i)) continue;
+                    int teil = UnitField != null ? UnitField(i, 0x0E) : -1;
+                    AddTarget(a.A, a.B, teil == a.C ? a.D : a.E, i, 0);
+                }
                 break;
             case "set":
                 if (a.A >= 0 && a.A < _var.Length) _var[a.A] = a.B;
@@ -2874,6 +3077,12 @@ public sealed class MissionScript
                 break;
             case "set_ai":
                 SetAi?.Invoke(a.A, a.B);
+                break;
+            // ⭐ 02.10.2026 (bug-384) — ai_mode(spieler, wert) @0x4D1050: die
+            // Betriebsart sec61. Bis heute stand sie nur als »0x4D1050« in
+            // `_tut_ausserdem`, und SetAiBetriebsart hatte keinen Rufer.
+            case "ai_mode":
+                AiMode?.Invoke(a.A, a.B);
                 break;
             case "fire_at":
                 FireAt?.Invoke(a.A, a.B, a.C);
@@ -3421,6 +3630,64 @@ public sealed class MissionScript
     public void SetVarFuerProbe(int n, int wert)
     { if (n >= 0 && n < _var.Length) _var[n] = wert; }
 
+    /// <summary>⭐ 02.10.2026 (bug-392) — fuer die Wirkungsprobe von
+    /// <c>--untermission-check</c>: die Adressen aller GELADENEN Wirkungen
+    /// (`_at`), also nach Abzug dessen, was ein Gegenschalter ausgelassen
+    /// hat.</summary>
+    public HashSet<int> WirkungsStellen()
+    {
+        var h = new HashSet<int>();
+        foreach (var r in _script.Rules)
+            foreach (var a in r.Then)
+                if (a.At > 0) h.Add(a.At);
+        return h;
+    }
+
+    /// <summary>⭐ 02.10.2026 (bug-392) — NUR Pruefstand: die Wirkungen der
+    /// Regel mit der Adresse <paramref name="at"/> einmal ausfuehren, OHNE ihre
+    /// Bedingung — derselbe Weg wie <see cref="ForceMoneyRules"/>, fuer eine
+    /// einzelne Regel. Gibt die Zahl der ausgefuehrten Wirkungen, −1 wenn die
+    /// Regel nicht geladen ist.</summary>
+    public int ErzwingeRegelFuerProbe(int at)
+    {
+        foreach (var r in _script.Rules)
+        {
+            if (r.At != at) continue;
+            foreach (var a in r.Then) Do(a);
+            return r.Then.Count;
+        }
+        return -1;
+    }
+
+    /// <summary>Dasselbe fuer eine BELIEBIGE Mission, ohne <see cref="Current"/>
+    /// anzufassen — fuer die Wirkungsprobe ueber alle 33.</summary>
+    public static HashSet<int> WirkungsStellenVon(int mission)
+    {
+        var h = new HashSet<int>();
+        if (!Load().TryGetValue(mission, out var s)) return h;
+        foreach (var r in s.Rules)
+            foreach (var a in r.Then)
+                if (a.At > 0) h.Add(a.At);
+        return h;
+    }
+
+    /// <summary>Ist eine Regel mit dieser Adresse geladen?</summary>
+    public bool HatRegel(int at)
+    {
+        foreach (var r in _script.Rules) if (r.At == at) return true;
+        return false;
+    }
+
+    /// <summary>Wirkungsarten der Regel mit dieser Adresse — leer, wenn sie
+    /// nicht geladen ist.</summary>
+    public List<string> WirkungenDerRegel(int at)
+    {
+        var l = new List<string>();
+        foreach (var r in _script.Rules)
+            if (r.At == at) foreach (var a in r.Then) l.Add(a.Kind);
+        return l;
+    }
+
     /// <summary>
     /// Eine Skriptvariable aus dem SPIEL setzen — fuer die Stellen ausserhalb
     /// des Missionsblocks, die im Original selbst in <c>v[n]</c> schreiben.
@@ -3607,6 +3874,10 @@ public sealed class MissionScript
         "ticks" => true,
         "text_open" => TextOpen != null,
         "imap" => ImapAt != null,
+        // 02.10.2026 (bug-388), das Skriptvariablen-Audit
+        "time_after2" => true,
+        "in_sale_var" => InSale != null,
+        "units_var" => UnitCount != null,
         _ => false,
     };
 
@@ -3630,6 +3901,7 @@ public sealed class MissionScript
         "order" => OrderUnit != null,
         "move" or "move_var" => MoveUnit != null,
         "set_ai" => SetAi != null,
+        "ai_mode" => AiMode != null,
         "fire_at" => FireAt != null,
         "hit_cell" => HitCell != null,
         "set_unit_field" => SetUnitField != null && UnitField != null,
@@ -3639,6 +3911,15 @@ public sealed class MissionScript
         "change_owner" => ChangeOwner != null,
         "set_relation" => SetRelation != null,
         "stop_transport" => StopTransport != null,
+        // 02.10.2026 (bug-388), das Skriptvariablen-Audit
+        "dec" or "half" => true,
+        "money_var" => AddMoney != null,
+        "set_kills" => KillCount != null,
+        "set_losses" => LossCount != null,
+        "set_air_count" => AirCount != null,
+        "set_if_owner" => ObjOwner != null,
+        "change_owner_var" => ChangeOwner != null,
+        "add_target_units" => AddTarget != null && UnitAlive != null && UnitField != null,
         _ => false,
     };
 

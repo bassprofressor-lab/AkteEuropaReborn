@@ -1,0 +1,2291 @@
+{
+ "_note": "Aufrufstellen von show_text/show_text2 (wert = Textnummer) und bus_cmd 528 (wert = Betrag, null = aus einem Register) je Missionsblock der C:-Fassung (22.01.1998). Erzeugt von aekernel-tools/mission_wirkungsprobe.py am 02.10.2026 (bug-392); gelesen von --untermission-check (Simulation/Skriptvariablen.cs).",
+ "missions": {
+  "1": [
+   {
+    "at": "0x498488",
+    "art": "text",
+    "wert": 1
+   },
+   {
+    "at": "0x4984BC",
+    "art": "text",
+    "wert": 2
+   },
+   {
+    "at": "0x49850B",
+    "art": "text",
+    "wert": 3
+   },
+   {
+    "at": "0x498558",
+    "art": "text",
+    "wert": 4
+   },
+   {
+    "at": "0x4985B5",
+    "art": "text",
+    "wert": 5
+   },
+   {
+    "at": "0x49863F",
+    "art": "text",
+    "wert": 6
+   },
+   {
+    "at": "0x49866E",
+    "art": "text",
+    "wert": 8
+   },
+   {
+    "at": "0x4986B7",
+    "art": "text",
+    "wert": 20
+   },
+   {
+    "at": "0x498706",
+    "art": "text",
+    "wert": 9
+   },
+   {
+    "at": "0x498747",
+    "art": "text",
+    "wert": 10
+   },
+   {
+    "at": "0x49879B",
+    "art": "text",
+    "wert": 11
+   },
+   {
+    "at": "0x4987C4",
+    "art": "text",
+    "wert": 12
+   },
+   {
+    "at": "0x4987FE",
+    "art": "text",
+    "wert": 13
+   },
+   {
+    "at": "0x498833",
+    "art": "text",
+    "wert": 18
+   },
+   {
+    "at": "0x49887D",
+    "art": "text",
+    "wert": 110
+   },
+   {
+    "at": "0x4988B3",
+    "art": "money",
+    "wert": 50
+   },
+   {
+    "at": "0x4988E2",
+    "art": "money",
+    "wert": 50
+   },
+   {
+    "at": "0x498910",
+    "art": "money",
+    "wert": 50
+   },
+   {
+    "at": "0x49895A",
+    "art": "text",
+    "wert": 39
+   },
+   {
+    "at": "0x498993",
+    "art": "text",
+    "wert": 40
+   }
+  ],
+  "2": [
+   {
+    "at": "0x498A51",
+    "art": "text",
+    "wert": 14
+   },
+   {
+    "at": "0x498A89",
+    "art": "text",
+    "wert": 15
+   },
+   {
+    "at": "0x498AB8",
+    "art": "text",
+    "wert": 16
+   },
+   {
+    "at": "0x498AF6",
+    "art": "text",
+    "wert": 17
+   },
+   {
+    "at": "0x498B39",
+    "art": "text",
+    "wert": 21
+   },
+   {
+    "at": "0x498B77",
+    "art": "text",
+    "wert": 22
+   },
+   {
+    "at": "0x498BC8",
+    "art": "text",
+    "wert": 26
+   },
+   {
+    "at": "0x498C05",
+    "art": "text",
+    "wert": 23
+   },
+   {
+    "at": "0x498C61",
+    "art": "text",
+    "wert": 24
+   },
+   {
+    "at": "0x498CB5",
+    "art": "text",
+    "wert": 25
+   },
+   {
+    "at": "0x498CE6",
+    "art": "text",
+    "wert": 7
+   },
+   {
+    "at": "0x498D15",
+    "art": "text",
+    "wert": 8
+   },
+   {
+    "at": "0x498D6B",
+    "art": "text",
+    "wert": 9
+   },
+   {
+    "at": "0x498DA4",
+    "art": "text",
+    "wert": 39
+   },
+   {
+    "at": "0x498DDD",
+    "art": "text",
+    "wert": 40
+   },
+   {
+    "at": "0x498E16",
+    "art": "text",
+    "wert": 41
+   },
+   {
+    "at": "0x498E4F",
+    "art": "text",
+    "wert": 42
+   },
+   {
+    "at": "0x499139",
+    "art": "text",
+    "wert": 120
+   },
+   {
+    "at": "0x49920A",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x499219",
+    "art": "money",
+    "wert": 400
+   },
+   {
+    "at": "0x499399",
+    "art": "text",
+    "wert": 121
+   },
+   {
+    "at": "0x4993A5",
+    "art": "money",
+    "wert": -20
+   }
+  ],
+  "3": [
+   {
+    "at": "0x499470",
+    "art": "text",
+    "wert": 132
+   },
+   {
+    "at": "0x49947F",
+    "art": "money",
+    "wert": 1000
+   },
+   {
+    "at": "0x4994C5",
+    "art": "text",
+    "wert": 20
+   },
+   {
+    "at": "0x499509",
+    "art": "text",
+    "wert": 21
+   },
+   {
+    "at": "0x499540",
+    "art": "text",
+    "wert": 22
+   },
+   {
+    "at": "0x499584",
+    "art": "text",
+    "wert": 26
+   },
+   {
+    "at": "0x4995C1",
+    "art": "text",
+    "wert": 23
+   },
+   {
+    "at": "0x4995FD",
+    "art": "text",
+    "wert": 24
+   },
+   {
+    "at": "0x499651",
+    "art": "text",
+    "wert": 25
+   },
+   {
+    "at": "0x499683",
+    "art": "text",
+    "wert": 39
+   },
+   {
+    "at": "0x4996C7",
+    "art": "text",
+    "wert": 40
+   },
+   {
+    "at": "0x499700",
+    "art": "text",
+    "wert": 41
+   },
+   {
+    "at": "0x499739",
+    "art": "text",
+    "wert": 42
+   },
+   {
+    "at": "0x499A14",
+    "art": "text",
+    "wert": 121
+   },
+   {
+    "at": "0x499A20",
+    "art": "money",
+    "wert": -20
+   },
+   {
+    "at": "0x499A6A",
+    "art": "text",
+    "wert": 121
+   },
+   {
+    "at": "0x499A76",
+    "art": "money",
+    "wert": -20
+   },
+   {
+    "at": "0x499ABC",
+    "art": "text",
+    "wert": 121
+   },
+   {
+    "at": "0x499AC8",
+    "art": "money",
+    "wert": -20
+   },
+   {
+    "at": "0x499B60",
+    "art": "text",
+    "wert": 130
+   },
+   {
+    "at": "0x499BAC",
+    "art": "text",
+    "wert": 29
+   },
+   {
+    "at": "0x499C1F",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x499C3E",
+    "art": "money",
+    "wert": 300
+   }
+  ],
+  "4": [
+   {
+    "at": "0x499CAD",
+    "art": "text",
+    "wert": 29
+   },
+   {
+    "at": "0x499EAC",
+    "art": "text",
+    "wert": 141
+   },
+   {
+    "at": "0x499F67",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x499F7F",
+    "art": "money",
+    "wert": 1600
+   },
+   {
+    "at": "0x49A038",
+    "art": "text",
+    "wert": 140
+   }
+  ],
+  "5": [
+   {
+    "at": "0x49A07F",
+    "art": "text",
+    "wert": 44
+   },
+   {
+    "at": "0x49A0B1",
+    "art": "text",
+    "wert": 32
+   },
+   {
+    "at": "0x49A0E3",
+    "art": "text",
+    "wert": 33
+   },
+   {
+    "at": "0x49A115",
+    "art": "text",
+    "wert": 34
+   },
+   {
+    "at": "0x49A158",
+    "art": "text",
+    "wert": 35
+   },
+   {
+    "at": "0x49A1A1",
+    "art": "text",
+    "wert": 36
+   },
+   {
+    "at": "0x49A1E7",
+    "art": "text",
+    "wert": 37
+   },
+   {
+    "at": "0x49A21E",
+    "art": "text",
+    "wert": 38
+   },
+   {
+    "at": "0x49A250",
+    "art": "text",
+    "wert": 41
+   },
+   {
+    "at": "0x49A289",
+    "art": "text",
+    "wert": 42
+   },
+   {
+    "at": "0x49A2C2",
+    "art": "text",
+    "wert": 79
+   },
+   {
+    "at": "0x49A33D",
+    "art": "text",
+    "wert": 150
+   },
+   {
+    "at": "0x49A454",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49A475",
+    "art": "money",
+    "wert": 180
+   }
+  ],
+  "6": [
+   {
+    "at": "0x49A594",
+    "art": "text",
+    "wert": 41
+   },
+   {
+    "at": "0x49A5CD",
+    "art": "text",
+    "wert": 42
+   },
+   {
+    "at": "0x49A606",
+    "art": "text",
+    "wert": 79
+   },
+   {
+    "at": "0x49A657",
+    "art": "text",
+    "wert": 161
+   },
+   {
+    "at": "0x49A70C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49A71B",
+    "art": "money",
+    "wert": 200
+   },
+   {
+    "at": "0x49A7AF",
+    "art": "text",
+    "wert": 162
+   },
+   {
+    "at": "0x49A844",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49A853",
+    "art": "money",
+    "wert": 650
+   },
+   {
+    "at": "0x49A946",
+    "art": "text",
+    "wert": 160
+   },
+   {
+    "at": "0x49AA41",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49AA59",
+    "art": "money",
+    "wert": 400
+   }
+  ],
+  "7": [
+   {
+    "at": "0x49AB90",
+    "art": "text",
+    "wert": 175
+   },
+   {
+    "at": "0x49ABC4",
+    "art": "text",
+    "wert": 41
+   },
+   {
+    "at": "0x49ABFD",
+    "art": "text",
+    "wert": 42
+   },
+   {
+    "at": "0x49AC36",
+    "art": "text",
+    "wert": 79
+   },
+   {
+    "at": "0x49AD42",
+    "art": "text",
+    "wert": 170
+   },
+   {
+    "at": "0x49ADFE",
+    "art": "text",
+    "wert": 172
+   },
+   {
+    "at": "0x49B06E",
+    "art": "text",
+    "wert": 171
+   },
+   {
+    "at": "0x49B0F2",
+    "art": "money",
+    "wert": 350
+   },
+   {
+    "at": "0x49B125",
+    "art": "text",
+    "wert": 174
+   },
+   {
+    "at": "0x49B1A7",
+    "art": "money",
+    "wert": 400
+   },
+   {
+    "at": "0x49B1E6",
+    "art": "money",
+    "wert": 400
+   },
+   {
+    "at": "0x49B21E",
+    "art": "text",
+    "wert": 173
+   }
+  ],
+  "8": [
+   {
+    "at": "0x49B28D",
+    "art": "text",
+    "wert": 45
+   },
+   {
+    "at": "0x49B2BF",
+    "art": "text",
+    "wert": 41
+   },
+   {
+    "at": "0x49B2F8",
+    "art": "text",
+    "wert": 42
+   },
+   {
+    "at": "0x49B331",
+    "art": "text",
+    "wert": 79
+   },
+   {
+    "at": "0x49B378",
+    "art": "text",
+    "wert": 180
+   },
+   {
+    "at": "0x49B3E4",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49B3F3",
+    "art": "money",
+    "wert": 250
+   },
+   {
+    "at": "0x49B432",
+    "art": "text",
+    "wert": 101
+   }
+  ],
+  "9": [
+   {
+    "at": "0x49B51E",
+    "art": "text",
+    "wert": 190
+   },
+   {
+    "at": "0x49B594",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49B5A3",
+    "art": "money",
+    "wert": 200
+   },
+   {
+    "at": "0x49B5D5",
+    "art": "text",
+    "wert": 191
+   },
+   {
+    "at": "0x49B61F",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x49B65E",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49B66D",
+    "art": "money",
+    "wert": 1300
+   },
+   {
+    "at": "0x49B6B5",
+    "art": "text",
+    "wert": 192
+   },
+   {
+    "at": "0x49B808",
+    "art": "money",
+    "wert": 937
+   },
+   {
+    "at": "0x49B8A6",
+    "art": "text",
+    "wert": 193
+   },
+   {
+    "at": "0x49B909",
+    "art": "text",
+    "wert": 194
+   },
+   {
+    "at": "0x49B96C",
+    "art": "text",
+    "wert": 195
+   },
+   {
+    "at": "0x49B9CF",
+    "art": "text",
+    "wert": 196
+   },
+   {
+    "at": "0x49BB3A",
+    "art": "money",
+    "wert": null
+   }
+  ],
+  "10": [
+   {
+    "at": "0x49BB88",
+    "art": "text",
+    "wert": 80
+   },
+   {
+    "at": "0x49BBD9",
+    "art": "text",
+    "wert": 203
+   },
+   {
+    "at": "0x49BC20",
+    "art": "text",
+    "wert": 200
+   },
+   {
+    "at": "0x49BC6C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49BC7B",
+    "art": "money",
+    "wert": 500
+   },
+   {
+    "at": "0x49BCD2",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49BCE1",
+    "art": "money",
+    "wert": 300
+   },
+   {
+    "at": "0x49BD20",
+    "art": "text",
+    "wert": 101
+   }
+  ],
+  "11": [
+   {
+    "at": "0x49BDBA",
+    "art": "text",
+    "wert": 46
+   },
+   {
+    "at": "0x49BDEC",
+    "art": "text",
+    "wert": 47
+   },
+   {
+    "at": "0x49BE33",
+    "art": "text",
+    "wert": 210
+   },
+   {
+    "at": "0x49BEA1",
+    "art": "money",
+    "wert": null
+   },
+   {
+    "at": "0x49BF02",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49BF18",
+    "art": "money",
+    "wert": 430
+   },
+   {
+    "at": "0x49BFFE",
+    "art": "text",
+    "wert": 211
+   },
+   {
+    "at": "0x49C455",
+    "art": "text",
+    "wert": 213
+   },
+   {
+    "at": "0x49C51F",
+    "art": "text",
+    "wert": 214
+   },
+   {
+    "at": "0x49C643",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49C652",
+    "art": "money",
+    "wert": 800
+   }
+  ],
+  "12": [
+   {
+    "at": "0x49C874",
+    "art": "text",
+    "wert": 220
+   },
+   {
+    "at": "0x49C8EB",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49C8FA",
+    "art": "money",
+    "wert": 400
+   },
+   {
+    "at": "0x49C93D",
+    "art": "text",
+    "wert": 221
+   },
+   {
+    "at": "0x49C9E2",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49C9F1",
+    "art": "money",
+    "wert": 500
+   }
+  ],
+  "13": [
+   {
+    "at": "0x49CA99",
+    "art": "text",
+    "wert": 80
+   },
+   {
+    "at": "0x49CAE2",
+    "art": "text",
+    "wert": 230
+   },
+   {
+    "at": "0x49CB24",
+    "art": "text",
+    "wert": 233
+   },
+   {
+    "at": "0x49CBF9",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49CC08",
+    "art": "money",
+    "wert": 450
+   },
+   {
+    "at": "0x49CC5C",
+    "art": "text",
+    "wert": 231
+   },
+   {
+    "at": "0x49CCA1",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49CCB0",
+    "art": "money",
+    "wert": 500
+   },
+   {
+    "at": "0x49CD1A",
+    "art": "text",
+    "wert": 234
+   },
+   {
+    "at": "0x49CF40",
+    "art": "text",
+    "wert": 236
+   },
+   {
+    "at": "0x49D023",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49D02F",
+    "art": "money",
+    "wert": 0
+   },
+   {
+    "at": "0x49D09B",
+    "art": "text",
+    "wert": 237
+   },
+   {
+    "at": "0x49D11C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49D12B",
+    "art": "money",
+    "wert": 800
+   }
+  ],
+  "14": [
+   {
+    "at": "0x49D2B1",
+    "art": "text",
+    "wert": 240
+   },
+   {
+    "at": "0x49D326",
+    "art": "text",
+    "wert": 241
+   },
+   {
+    "at": "0x49D36F",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x49D3BB",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49D3CA",
+    "art": "money",
+    "wert": 700
+   },
+   {
+    "at": "0x49D452",
+    "art": "text",
+    "wert": 244
+   },
+   {
+    "at": "0x49D4B9",
+    "art": "text",
+    "wert": 242
+   },
+   {
+    "at": "0x49D4FD",
+    "art": "text",
+    "wert": 245
+   },
+   {
+    "at": "0x49D53B",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x49D61D",
+    "art": "text",
+    "wert": 243
+   },
+   {
+    "at": "0x49D69C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49D6BB",
+    "art": "money",
+    "wert": 1000
+   }
+  ],
+  "15": [
+   {
+    "at": "0x49D785",
+    "art": "text",
+    "wert": 254
+   },
+   {
+    "at": "0x49D7E4",
+    "art": "text",
+    "wert": 252
+   },
+   {
+    "at": "0x49D911",
+    "art": "text",
+    "wert": 251
+   },
+   {
+    "at": "0x49D96C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49D97B",
+    "art": "money",
+    "wert": 200
+   },
+   {
+    "at": "0x49D9C2",
+    "art": "text",
+    "wert": 255
+   },
+   {
+    "at": "0x49DA28",
+    "art": "money",
+    "wert": 650
+   }
+  ],
+  "16": [
+   {
+    "at": "0x49DB06",
+    "art": "text",
+    "wert": 261
+   },
+   {
+    "at": "0x49DCBA",
+    "art": "text",
+    "wert": 262
+   },
+   {
+    "at": "0x49DDEC",
+    "art": "text",
+    "wert": 260
+   },
+   {
+    "at": "0x49DE85",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49DE94",
+    "art": "money",
+    "wert": 400
+   },
+   {
+    "at": "0x49DF05",
+    "art": "money",
+    "wert": 100
+   },
+   {
+    "at": "0x49DF95",
+    "art": "text",
+    "wert": 100
+   }
+  ],
+  "17": [
+   {
+    "at": "0x49E08B",
+    "art": "text",
+    "wert": 271
+   },
+   {
+    "at": "0x49E10C",
+    "art": "text",
+    "wert": 270
+   },
+   {
+    "at": "0x49E1A6",
+    "art": "text",
+    "wert": 273
+   },
+   {
+    "at": "0x49E230",
+    "art": "text",
+    "wert": 274
+   },
+   {
+    "at": "0x49E2A5",
+    "art": "text",
+    "wert": 275
+   },
+   {
+    "at": "0x49E3A4",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49E3C2",
+    "art": "money",
+    "wert": 2000
+   },
+   {
+    "at": "0x49E443",
+    "art": "text",
+    "wert": 276
+   },
+   {
+    "at": "0x49E50D",
+    "art": "text",
+    "wert": 277
+   },
+   {
+    "at": "0x49E591",
+    "art": "text",
+    "wert": 278
+   }
+  ],
+  "18": [
+   {
+    "at": "0x49E69D",
+    "art": "text",
+    "wert": 280
+   },
+   {
+    "at": "0x49E70D",
+    "art": "text",
+    "wert": 281
+   },
+   {
+    "at": "0x49E9C0",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49E9CF",
+    "art": "money",
+    "wert": 2000
+   },
+   {
+    "at": "0x49EA7E",
+    "art": "money",
+    "wert": 1000
+   }
+  ],
+  "19": [
+   {
+    "at": "0x49EADC",
+    "art": "text",
+    "wert": 290
+   },
+   {
+    "at": "0x49EB2E",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x49EB75",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49EB84",
+    "art": "money",
+    "wert": 300
+   },
+   {
+    "at": "0x49EBD2",
+    "art": "text",
+    "wert": 291
+   },
+   {
+    "at": "0x49EC10",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49EC1C",
+    "art": "money",
+    "wert": 100
+   },
+   {
+    "at": "0x49EC67",
+    "art": "text",
+    "wert": 292
+   },
+   {
+    "at": "0x49ED0A",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49ED19",
+    "art": "money",
+    "wert": 600
+   },
+   {
+    "at": "0x49EE29",
+    "art": "text",
+    "wert": 293
+   },
+   {
+    "at": "0x49EE98",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49EEA7",
+    "art": "money",
+    "wert": 1000
+   },
+   {
+    "at": "0x49EF2D",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49EF3C",
+    "art": "money",
+    "wert": 1000
+   }
+  ],
+  "20": [
+   {
+    "at": "0x49F000",
+    "art": "text",
+    "wert": 300
+   },
+   {
+    "at": "0x49F0AB",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x49F11E",
+    "art": "text",
+    "wert": 302
+   },
+   {
+    "at": "0x49F1A3",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49F1B2",
+    "art": "money",
+    "wert": 950
+   },
+   {
+    "at": "0x49F1F2",
+    "art": "text",
+    "wert": 303
+   },
+   {
+    "at": "0x49F24B",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49F25A",
+    "art": "money",
+    "wert": 500
+   },
+   {
+    "at": "0x49F2DE",
+    "art": "text",
+    "wert": 305
+   },
+   {
+    "at": "0x49F39B",
+    "art": "text",
+    "wert": 301
+   },
+   {
+    "at": "0x49F3EB",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49F3FA",
+    "art": "money",
+    "wert": 1500
+   },
+   {
+    "at": "0x49F553",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49F562",
+    "art": "money",
+    "wert": 1000
+   }
+  ],
+  "21": [
+   {
+    "at": "0x49F760",
+    "art": "text",
+    "wert": 310
+   },
+   {
+    "at": "0x49F7B2",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x49F7F9",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49F808",
+    "art": "money",
+    "wert": 250
+   },
+   {
+    "at": "0x49F889",
+    "art": "text",
+    "wert": 311
+   },
+   {
+    "at": "0x49F8D7",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49F8E6",
+    "art": "money",
+    "wert": 500
+   },
+   {
+    "at": "0x49F946",
+    "art": "text",
+    "wert": 312
+   },
+   {
+    "at": "0x49F994",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49F9A3",
+    "art": "money",
+    "wert": 700
+   },
+   {
+    "at": "0x49FA03",
+    "art": "text",
+    "wert": 313
+   },
+   {
+    "at": "0x49FA51",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49FA60",
+    "art": "money",
+    "wert": 1000
+   },
+   {
+    "at": "0x49FAC0",
+    "art": "text",
+    "wert": 314
+   },
+   {
+    "at": "0x49FB0E",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49FB1D",
+    "art": "money",
+    "wert": 1450
+   },
+   {
+    "at": "0x49FB7D",
+    "art": "text",
+    "wert": 315
+   },
+   {
+    "at": "0x49FBCB",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49FBDA",
+    "art": "money",
+    "wert": 2000
+   },
+   {
+    "at": "0x49FC9F",
+    "art": "text",
+    "wert": 316
+   },
+   {
+    "at": "0x49FCFE",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x49FD0D",
+    "art": "money",
+    "wert": 3000
+   },
+   {
+    "at": "0x49FDCF",
+    "art": "text",
+    "wert": 317
+   },
+   {
+    "at": "0x49FEC0",
+    "art": "text",
+    "wert": 318
+   },
+   {
+    "at": "0x49FF1A",
+    "art": "text",
+    "wert": 308
+   },
+   {
+    "at": "0x49FF29",
+    "art": "money",
+    "wert": 600
+   },
+   {
+    "at": "0x49FFE9",
+    "art": "text",
+    "wert": 319
+   },
+   {
+    "at": "0x4A0081",
+    "art": "text",
+    "wert": 309
+   },
+   {
+    "at": "0x4A01C5",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A01D4",
+    "art": "money",
+    "wert": 800
+   }
+  ],
+  "22": [
+   {
+    "at": "0x4A03BC",
+    "art": "text",
+    "wert": 320
+   },
+   {
+    "at": "0x4A03FD",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A040C",
+    "art": "money",
+    "wert": 200
+   },
+   {
+    "at": "0x4A044C",
+    "art": "text",
+    "wert": 321
+   },
+   {
+    "at": "0x4A049E",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A04E1",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A04F0",
+    "art": "money",
+    "wert": 1200
+   },
+   {
+    "at": "0x4A0530",
+    "art": "text",
+    "wert": 322
+   },
+   {
+    "at": "0x4A0582",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A05C5",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A05D4",
+    "art": "money",
+    "wert": 2100
+   },
+   {
+    "at": "0x4A0647",
+    "art": "text",
+    "wert": 323
+   },
+   {
+    "at": "0x4A0685",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A0694",
+    "art": "money",
+    "wert": 1000
+   },
+   {
+    "at": "0x4A0708",
+    "art": "text",
+    "wert": 324
+   },
+   {
+    "at": "0x4A0749",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A0758",
+    "art": "money",
+    "wert": 1500
+   },
+   {
+    "at": "0x4A083C",
+    "art": "text",
+    "wert": 326
+   },
+   {
+    "at": "0x4A0893",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A08F7",
+    "art": "text",
+    "wert": 327
+   },
+   {
+    "at": "0x4A094E",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A09B2",
+    "art": "text",
+    "wert": 328
+   },
+   {
+    "at": "0x4A0A09",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A0A7B",
+    "art": "text",
+    "wert": 325
+   },
+   {
+    "at": "0x4A0C3C",
+    "art": "money",
+    "wert": 1200
+   }
+  ],
+  "23": [
+   {
+    "at": "0x4A0D2B",
+    "art": "text",
+    "wert": 330
+   },
+   {
+    "at": "0x4A0D5E",
+    "art": "money",
+    "wert": 230
+   }
+  ],
+  "24": [
+   {
+    "at": "0x4A0E2A",
+    "art": "text",
+    "wert": 340
+   },
+   {
+    "at": "0x4A0E5D",
+    "art": "money",
+    "wert": 150
+   },
+   {
+    "at": "0x4A0EA6",
+    "art": "text",
+    "wert": 342
+   },
+   {
+    "at": "0x4A0F82",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A0F91",
+    "art": "money",
+    "wert": 500
+   },
+   {
+    "at": "0x4A1008",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A1017",
+    "art": "money",
+    "wert": 500
+   },
+   {
+    "at": "0x4A10C7",
+    "art": "text",
+    "wert": 343
+   },
+   {
+    "at": "0x4A11FB",
+    "art": "text",
+    "wert": 347
+   },
+   {
+    "at": "0x4A120A",
+    "art": "money",
+    "wert": 4000
+   },
+   {
+    "at": "0x4A1322",
+    "art": "text",
+    "wert": 344
+   },
+   {
+    "at": "0x4A13E2",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A13F1",
+    "art": "money",
+    "wert": 1500
+   },
+   {
+    "at": "0x4A142E",
+    "art": "text",
+    "wert": 342
+   },
+   {
+    "at": "0x4A14E1",
+    "art": "text",
+    "wert": 345
+   },
+   {
+    "at": "0x4A15D9",
+    "art": "text",
+    "wert": 348
+   },
+   {
+    "at": "0x4A16FF",
+    "art": "text",
+    "wert": 348
+   },
+   {
+    "at": "0x4A1742",
+    "art": "text",
+    "wert": 348
+   },
+   {
+    "at": "0x4A1883",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A1892",
+    "art": "money",
+    "wert": 2500
+   },
+   {
+    "at": "0x4A18EC",
+    "art": "text",
+    "wert": 346
+   },
+   {
+    "at": "0x4A18FB",
+    "art": "money",
+    "wert": 2000
+   },
+   {
+    "at": "0x4A1946",
+    "art": "text",
+    "wert": 341
+   },
+   {
+    "at": "0x4A1A2A",
+    "art": "money",
+    "wert": 300
+   },
+   {
+    "at": "0x4A1A64",
+    "art": "text",
+    "wert": 100
+   }
+  ],
+  "25": [
+   {
+    "at": "0x4A1AF9",
+    "art": "text",
+    "wert": 357
+   },
+   {
+    "at": "0x4A1BAB",
+    "art": "text",
+    "wert": 350
+   },
+   {
+    "at": "0x4A1BE0",
+    "art": "text",
+    "wert": 351
+   },
+   {
+    "at": "0x4A1CAE",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A1CBD",
+    "art": "money",
+    "wert": 4000
+   },
+   {
+    "at": "0x4A1D17",
+    "art": "text",
+    "wert": 352
+   },
+   {
+    "at": "0x4A1D58",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A1D67",
+    "art": "money",
+    "wert": 300
+   },
+   {
+    "at": "0x4A1DD0",
+    "art": "text",
+    "wert": 353
+   },
+   {
+    "at": "0x4A1E20",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A1E2F",
+    "art": "money",
+    "wert": 700
+   },
+   {
+    "at": "0x4A1E8B",
+    "art": "text",
+    "wert": 354
+   },
+   {
+    "at": "0x4A1ED7",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A1EE6",
+    "art": "money",
+    "wert": 1700
+   },
+   {
+    "at": "0x4A1F30",
+    "art": "text",
+    "wert": 355
+   },
+   {
+    "at": "0x4A1F82",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A1FC4",
+    "art": "text",
+    "wert": 356
+   },
+   {
+    "at": "0x4A1FD3",
+    "art": "money",
+    "wert": 2800
+   },
+   {
+    "at": "0x4A2033",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A2074",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A2083",
+    "art": "money",
+    "wert": 6500
+   }
+  ],
+  "26": [
+   {
+    "at": "0x4A218A",
+    "art": "text",
+    "wert": 360
+   },
+   {
+    "at": "0x4A21DC",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A223B",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A224A",
+    "art": "money",
+    "wert": 2800
+   },
+   {
+    "at": "0x4A229A",
+    "art": "text",
+    "wert": 361
+   }
+  ],
+  "27": [
+   {
+    "at": "0x4A2601",
+    "art": "text",
+    "wert": 370
+   },
+   {
+    "at": "0x4A2653",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A26B7",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A26C6",
+    "art": "money",
+    "wert": 1850
+   },
+   {
+    "at": "0x4A272C",
+    "art": "text",
+    "wert": 371
+   },
+   {
+    "at": "0x4A27CA",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A27D9",
+    "art": "money",
+    "wert": 2630
+   },
+   {
+    "at": "0x4A283F",
+    "art": "text",
+    "wert": 372
+   },
+   {
+    "at": "0x4A28CB",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A28DA",
+    "art": "money",
+    "wert": 2500
+   }
+  ],
+  "28": [
+   {
+    "at": "0x4A2BA6",
+    "art": "text",
+    "wert": 380
+   },
+   {
+    "at": "0x4A2D43",
+    "art": "text",
+    "wert": 381
+   },
+   {
+    "at": "0x4A2E01",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A2E10",
+    "art": "money",
+    "wert": 3000
+   },
+   {
+    "at": "0x4A323C",
+    "art": "text",
+    "wert": 382
+   }
+  ],
+  "29": [
+   {
+    "at": "0x4A37E3",
+    "art": "text",
+    "wert": 390
+   },
+   {
+    "at": "0x4A3835",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A387C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A388B",
+    "art": "money",
+    "wert": 450
+   },
+   {
+    "at": "0x4A38EC",
+    "art": "text",
+    "wert": 391
+   },
+   {
+    "at": "0x4A3B1D",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A3B4C",
+    "art": "money",
+    "wert": 8000
+   },
+   {
+    "at": "0x4A3B82",
+    "art": "money",
+    "wert": 4000
+   },
+   {
+    "at": "0x4A3C5C",
+    "art": "text",
+    "wert": 392
+   },
+   {
+    "at": "0x4A3CF9",
+    "art": "text",
+    "wert": 393
+   },
+   {
+    "at": "0x4A3E45",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A3E54",
+    "art": "money",
+    "wert": 5000
+   },
+   {
+    "at": "0x4A3EE3",
+    "art": "text",
+    "wert": 394
+   },
+   {
+    "at": "0x4A3F35",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A3F86",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A3F95",
+    "art": "money",
+    "wert": 2000
+   },
+   {
+    "at": "0x4A40B7",
+    "art": "text",
+    "wert": 395
+   },
+   {
+    "at": "0x4A4109",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A414C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A415B",
+    "art": "money",
+    "wert": 3500
+   }
+  ],
+  "30": [
+   {
+    "at": "0x4A420F",
+    "art": "text",
+    "wert": 400
+   },
+   {
+    "at": "0x4A4296",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A42A5",
+    "art": "money",
+    "wert": 5000
+   },
+   {
+    "at": "0x4A42E5",
+    "art": "text",
+    "wert": 401
+   },
+   {
+    "at": "0x4A4337",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A437A",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4389",
+    "art": "money",
+    "wert": 3000
+   },
+   {
+    "at": "0x4A43FA",
+    "art": "text",
+    "wert": 402
+   },
+   {
+    "at": "0x4A449D",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A44AC",
+    "art": "money",
+    "wert": 4000
+   }
+  ],
+  "31": [
+   {
+    "at": "0x4A4559",
+    "art": "text",
+    "wert": 410
+   },
+   {
+    "at": "0x4A4732",
+    "art": "text",
+    "wert": 411
+   },
+   {
+    "at": "0x4A4792",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A47DB",
+    "art": "text",
+    "wert": 412
+   },
+   {
+    "at": "0x4A4834",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4843",
+    "art": "money",
+    "wert": 500
+   },
+   {
+    "at": "0x4A48F4",
+    "art": "text",
+    "wert": 413
+   },
+   {
+    "at": "0x4A491D",
+    "art": "money",
+    "wert": 250
+   },
+   {
+    "at": "0x4A49AB",
+    "art": "text",
+    "wert": 414
+   },
+   {
+    "at": "0x4A49FD",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A4A4C",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4A5B",
+    "art": "money",
+    "wert": 7000
+   },
+   {
+    "at": "0x4A4B11",
+    "art": "text",
+    "wert": 415
+   },
+   {
+    "at": "0x4A4B63",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A4BAA",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4BB9",
+    "art": "money",
+    "wert": 8000
+   },
+   {
+    "at": "0x4A4C31",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4C83",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4C92",
+    "art": "money",
+    "wert": 3500
+   }
+  ],
+  "32": [
+   {
+    "at": "0x4A4D39",
+    "art": "text",
+    "wert": 420
+   },
+   {
+    "at": "0x4A4D87",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A4DC7",
+    "art": "text",
+    "wert": 421
+   },
+   {
+    "at": "0x4A4E3B",
+    "art": "text",
+    "wert": 424
+   },
+   {
+    "at": "0x4A4E9B",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4EAA",
+    "art": "money",
+    "wert": 4000
+   },
+   {
+    "at": "0x4A4EEB",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A4EFA",
+    "art": "money",
+    "wert": 9000
+   },
+   {
+    "at": "0x4A4F56",
+    "art": "text",
+    "wert": 422
+   },
+   {
+    "at": "0x4A4FA4",
+    "art": "text",
+    "wert": 423
+   },
+   {
+    "at": "0x4A4FF3",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A5002",
+    "art": "money",
+    "wert": 10000
+   },
+   {
+    "at": "0x4A5048",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A5057",
+    "art": "money",
+    "wert": 12000
+   },
+   {
+    "at": "0x4A509D",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A50AC",
+    "art": "money",
+    "wert": 13500
+   }
+  ],
+  "33": [
+   {
+    "at": "0x4A51B4",
+    "art": "text",
+    "wert": 430
+   },
+   {
+    "at": "0x4A523F",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A524E",
+    "art": "money",
+    "wert": 5000
+   },
+   {
+    "at": "0x4A52B3",
+    "art": "text",
+    "wert": 431
+   },
+   {
+    "at": "0x4A531E",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A532D",
+    "art": "money",
+    "wert": 8000
+   },
+   {
+    "at": "0x4A536D",
+    "art": "text",
+    "wert": 432
+   },
+   {
+    "at": "0x4A53BF",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A5410",
+    "art": "text",
+    "wert": 100
+   },
+   {
+    "at": "0x4A541F",
+    "art": "money",
+    "wert": 18000
+   },
+   {
+    "at": "0x4A5461",
+    "art": "text",
+    "wert": 433
+   },
+   {
+    "at": "0x4A54AF",
+    "art": "text",
+    "wert": 101
+   },
+   {
+    "at": "0x4A54FB",
+    "art": "money",
+    "wert": 4000
+   },
+   {
+    "at": "0x4A5541",
+    "art": "money",
+    "wert": 4000
+   },
+   {
+    "at": "0x4A5588",
+    "art": "money",
+    "wert": 4000
+   },
+   {
+    "at": "0x4A55C9",
+    "art": "text",
+    "wert": 100
+   }
+  ]
+ }
+}

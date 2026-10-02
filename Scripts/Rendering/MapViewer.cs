@@ -1304,6 +1304,37 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_kiEinnahmeCheck > 0)
+        {
+            GD.Print(_entities.KiEinnahmeCheck(_kiEinnahmeCheck));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_k24FluchtCheck > 0)
+        {
+            GD.Print(_entities.K24FluchtCheck(_k24FluchtCheck));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_stellungCheck)
+        {
+            if (_shotPath.Length > 0) { _ = StellungBildLauf(); return; }
+            GD.Print(_entities.StellungCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_lebenspruefungCheck > 0)
+        {
+            GD.Print(_entities.LebenspruefungCheck(_lebenspruefungCheck));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_untermissionCheck > 0)
+        {
+            GD.Print(_entities.UntermissionCheck(_untermissionCheck));
+            GetTree().Quit(0);
+            return;
+        }
         if (_vaCheck)
         {
             GD.Print(_entities.VerbuendetenAngriffCheck());
@@ -1509,6 +1540,20 @@ public partial class MapViewer : Node2D
     private bool _vaCheck;
     /// <summary><c>--verbuendeten-ki-check</c> — siehe Simulation/VerbuendetenKi.cs.</summary>
     private bool _vkCheck;
+    /// <summary><c>--ki-einnahme-check[=sekunden]</c> — siehe Simulation/KiEinnahmeCheck.cs
+    /// (02.10.2026, bug-384). 0 = aus.</summary>
+    private int _kiEinnahmeCheck;
+    /// <summary><c>--untermission-check=N</c> — siehe Simulation/Skriptvariablen.cs
+    /// (02.10.2026, bug-392). 0 = aus.</summary>
+    private int _untermissionCheck;
+    /// <summary><c>--lebenspruefung-check[=sekunden]</c> — siehe Simulation/Lebenspruefung.cs
+    /// (02.10.2026, bug-396). 0 = aus.</summary>
+    private int _lebenspruefungCheck;
+    /// <summary><c>--k24-flucht-check[=sekunden]</c> — siehe Simulation/K24FluchtCheck.cs
+    /// (02.10.2026, bug-400). 0 = aus.</summary>
+    private int _k24FluchtCheck;
+    /// <summary><c>--stellung-check</c> — siehe Simulation/Stellungen.cs (02.10.2026, bug-399).</summary>
+    private bool _stellungCheck;
 
     /// <summary><c>--bruecke-treffer-check</c> — siehe MapEntityLayer.BrueckeTrefferCheck.</summary>
     private bool _brueckeTrefferCheck;
@@ -1894,6 +1939,29 @@ public partial class MapViewer : Node2D
     /// den ersten Probe-Werfer, je ein Bild in der flachen Phase (<c>_flach</c>) und
     /// in der aufgerichteten vor dem nächsten Schuss (<c>_hoch</c>). Zum Abziehen wird
     /// der Baum angehalten, damit Zeile und Bild denselben Takt zeigen.</summary>
+    /// <summary><c>--stellung-check --shot=…</c> (02.10.2026, bug-399): Kamera je auf
+    /// eine aufgebaute Abwehrstellung (Blick ≠ 7 und Blick 7), Zoom 4, Baum angehalten,
+    /// ein Bild je Stellung (<c>_blickN_sp_ze</c>). Lauf OHNE --headless, mit
+    /// --kein-nebel, sonst deckt der Nebel die P2-Stellungen zu.</summary>
+    private async System.Threading.Tasks.Task StellungBildLauf()
+    {
+        for (int i = 0; i < 10; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(_entities.StellungCheck());
+        foreach (var (pos, name) in _entities.StellungBildZiele())
+        {
+            MapEntityLayer.GameSpeed = 0;
+            _camera.Position = pos;
+            _camera.Zoom = new Vector2(4, 4);
+            _entities.QueueRedraw();
+            for (int f = 0; f < 6; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string pfad = _shotPath.Replace(".png", $"_{name}.png");
+            GetViewport().GetTexture().GetImage().SavePng(pfad);
+            GD.Print($"stellung-bild: {pfad} — {_entities.StellungBildZeile(pos)}");
+        }
+        MapEntityLayer.GameSpeed = 1;
+        GetTree().Quit(0);
+    }
+
     private async System.Threading.Tasks.Task WerferPoseBildLauf()
     {
         MapEntityLayer.WerferPoseBildLaeuft = true;
@@ -3804,6 +3872,9 @@ _mausProbePunkt = karte;
             else if (a == "--basis-ohne-wahl-alt") MapEntityLayer.BasisOhneWahlAlt = true;
             else if (a == "--basis-verlegung-check") MapEntityLayer.BasisVerlegungCheckAn = true;
             else if (a == "--werferpose-alt") MapEntityLayer.WerferPoseAlt = true;          // bug-378
+            else if (a == "--werferpose-fable") MapEntityLayer.WerferPoseFable = true;      // bug-385
+            else if (a == "--bautor-alt") MapEntityLayer.BautorAlt = true;                  // bug-386
+            else if (a == "--fahrzeuganker-alt") MapEntityLayer.FahrzeugankerAlt = true;    // bug-402
             else if (a == "--werferpose-check") MapEntityLayer.WerferPoseCheckAn = true;
             else if (a == "--gleisreparatur-check") MapEntityLayer.GleisreparaturCheckAn = true;
             else if (a == "--heli-stufe-alt") MapEntityLayer.HeliStufeAlt = true;
@@ -3820,6 +3891,13 @@ _mausProbePunkt = karte;
             // ⭐ 01.10.2026 — bug-382, die Zug-Einfahrt (Simulation/ZugEinfahrt.cs).
             else if (a == "--zug-einfahrt-alt") MapEntityLayer.ZugEinfahrtAlt = true;
             else if (a == "--gleisfach-alt") MapEntityLayer.GleisfachAlt = true;
+            // ⭐ 02.10.2026 — bug-395, die Feinlage des Waggons (berichte/zug-feinlage-fable.md §5).
+            else if (a == "--zug-bogen-schirm") MapEntityLayer.ZugBogenSchirm = true;
+            else if (a == "--zug-feinlage-alt") MapEntityLayer.ZugFeinlageAlt = true;
+            else if (a == "--zug-ohne-sichtprobe") MapEntityLayer.ZugOhneSichtprobe = true;
+            // ⭐ 02.10.2026 — bug-397, F7: das Fahrmodell je Gleisschritt (Simulation/ZugFahrmodell.cs).
+            else if (a == "--zug-fahrmodell-alt") MapEntityLayer.ZugFahrmodellAlt = true;
+            else if (a == "--zug-fahrzeit-tafel") MapEntityLayer.ZugFahrzeitTafelAn = true;
             else if (a == "--zug-einfahrt-check") MapEntityLayer.ZugEinfahrtCheckAn = true;
             else if (a.StartsWith("--zug-einfahrt-check="))
             { MapEntityLayer.ZugEinfahrtCheckAn = true;
@@ -4174,6 +4252,47 @@ _mausProbePunkt = karte;
             else if (a == "--frachter-check") _frachterCheck = true;
             else if (a == "--verbuendeten-angriff-check") _vaCheck = true;
             else if (a == "--verbuendeten-ki-check") _vkCheck = true;
+            // ⭐ 02.10.2026 (bug-384) — Tuergriff, Betriebsart 5, Tuermeidung und
+            // die M26-Setzung; Pruefstand und vier Gegenschalter.
+            // 02.10.: 480 s war zu kurz — P3 faehrt per Streuner nach 334…764 s
+            // (berichte/k26-freie-angreifer-fable.md §3.2, Reihe B 10/10); bug-405 b1.
+            else if (a == "--ki-einnahme-check") _kiEinnahmeCheck = 840;
+            // ⭐ 02.10.2026 (bug-405) — Takt 8 wie im Original, drei Gegenschalter.
+            else if (a == "--ki-sec110-alt") MapEntityLayer.Sec110Alt = true;
+            else if (a == "--ki-gruppengroesse-alt") MapEntityLayer.GruppengroesseAlt = true;
+            else if (a == "--ki-zielgruppe-alt") MapEntityLayer.ZielgruppeAlt = true;
+            else if (a.StartsWith("--ki-einnahme-check=") &&
+                     int.TryParse(a["--ki-einnahme-check=".Length..], out int kes)) _kiEinnahmeCheck = kes;
+            // ⭐ 02.10.2026 (bug-396) — »AI: test of life« 0x4BAB40, Pruefstand und Gegenschalter.
+            else if (a == "--lebenspruefung-check") _lebenspruefungCheck = 5;
+            else if (a.StartsWith("--lebenspruefung-check=") &&
+                     int.TryParse(a["--lebenspruefung-check=".Length..], out int lps)) _lebenspruefungCheck = lps;
+            else if (a == "--lebenspruefung-aus") MapEntityLayer.LebenspruefungAus = true;
+            else if (a == "--ki-tuergriff-aus") MapEntityLayer.TuergriffAus = true;
+            else if (a == "--ki-einnahme-ohne-schutz") MapEntityLayer.KiEinnahmeOhneSchutz = true;
+            else if (a == "--ki-betriebsart5-aus") MapEntityLayer.Betriebsart5Aus = true;
+            else if (a == "--ki-tuermeidung-aus") MapEntityLayer.TuermeidungAus = true;
+            // ⭐ 02.10.2026 — bug-399 (Stellungen), bug-400 (faze/K24-Flucht), bug-401 (Zellangriff).
+            else if (a == "--eingegraben-bild-alt") MapEntityLayer.EingegrabenBildAlt = true;
+            else if (a == "--stellungsturm-alt") MapEntityLayer.StellungsturmAlt = true;
+            else if (a == "--stellung-check") _stellungCheck = true;
+            else if (a == "--ki-faze-alt") MapEntityLayer.KiFazeAlt = true;
+            else if (a == "--k24-flucht-check") _k24FluchtCheck = 10;
+            else if (a.StartsWith("--k24-flucht-check=") &&
+                     int.TryParse(a["--k24-flucht-check=".Length..], out int kfs)) _k24FluchtCheck = kfs;
+            else if (a == "--zellabstand-schach") MapEntityLayer.ZellabstandSchach = true;
+            else if (a == "--m26-tuergriff-aus") Campaign.MissionScript.SetzungAus.Add(a);
+            // ⭐ 02.10.2026 (bug-388..392) — das Skriptvariablen-Audit: Pruefstand,
+            // Sammelschalter und die fuenf Engine-Schreiber einzeln.
+            // Simulation/Skriptvariablen.cs.
+            else if (a.StartsWith("--untermission-check=") &&
+                     int.TryParse(a["--untermission-check=".Length..], out int umc)) _untermissionCheck = umc;
+            else if (a == "--skriptvar-alt") MapEntityLayer.SkriptvarAltSetzen();
+            else if (a == "--v93-aus") MapEntityLayer.V93Aus = true;
+            else if (a == "--v99-aus") MapEntityLayer.V99Aus = true;
+            else if (a == "--v100-aus") MapEntityLayer.V100Aus = true;
+            else if (a == "--v190-aus") MapEntityLayer.V190Aus = true;
+            else if (a == "--verkauf-sofort") MapEntityLayer.VerkaufSofort = true;
             else if (a == "--verbuendete-ohne-ki") MapEntityLayer.VerbuendeteOhneKi = true;
             else if (a == "--kein-angriff-auf-verbuendete") MapEntityLayer.KeinAngriffAufVerbuendete = true;
             else if (a == "--strg-einnahme-alt") MapEntityLayer.StrgEinnahmeAlt = true;
@@ -5996,6 +6115,26 @@ _mausProbePunkt = karte;
                 ClampCamera();
                 GD.Print($"MapViewer: --shot-when=dock ausgeloest — Schiff auf " +
                          $"({at.Value.X},{at.Value.Y})");
+            }
+            // ⭐ 02.10.2026 — bug-395 (F0): ein Waggonpaar auf einer Rampe, dort stauchte
+            // die Bogenlänge in Schirmpixeln (Simulation/ZugEinfahrt.cs ZugAufRampe).
+            else if (_shotWhen == "rampe")
+            {
+                if (!_entities.ZugAufRampe(out var rat, out int rline, out string rwas)) return;
+                _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(rat.X),
+                                                           Mathf.RoundToInt(rat.Y));
+                ClampCamera();
+                GD.Print($"MapViewer: --shot-when=rampe ausgeloest — Linie {rline} bei " +
+                         $"({rat.X:0.00},{rat.Y:0.00}): {rwas}");
+            }
+            // ⭐ 02.10.2026 — bug-397 (F7): ein Zug auf senkrechtem Gleis (Simulation/ZugFahrmodell.cs).
+            else if (_shotWhen == "senkrecht")
+            {
+                if (!_entities.ZugSenkrecht(out var vat, out int vline, out string vwas)) return;
+                _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(vat.X),
+                                                           Mathf.RoundToInt(vat.Y));
+                ClampCamera();
+                GD.Print($"MapViewer: --shot-when=senkrecht ausgeloest — Linie {vline}:{vwas}");
             }
             else if (_shotWhen == "squash")
             {

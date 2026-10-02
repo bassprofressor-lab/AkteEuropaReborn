@@ -28,6 +28,10 @@ public partial class MapEntityLayer
     /// <summary>Wieviele Waggons <see cref="ZugAuslauf"/> am Streckenende gelöscht hat.</summary>
     public int AuslaufGeloescht;
 
+    /// <summary>bug-395 (F4): die Stelle eines auslaufenden Waggons auf dem VERLÄNGERTEN
+    /// Weg (<c>ZugWegOf</c>); <c>w.LeadF</c> bleibt die Kettenstelle.</summary>
+    private readonly Dictionary<Wagon, float> _auslaufWeg = new();
+
     /// <summary>Das Lebensbyte +0x00 eines Waggonsatzes (sec44/121, 24 B). Der Export
     /// trägt es nur im <c>raw</c>-String; ohne ihn gilt der Satz als lebend (−1),
     /// damit eine ältere Exportdatei nicht alle Waggons verliert.</summary>
@@ -95,6 +99,35 @@ public partial class MapEntityLayer
                     if (d < bd) { bd = d; best = k; }
                 }
                 w.LeadF = best;
+            }
+            // ⭐ bug-395 (F4): auf dem VERLÄNGERTEN Weg bis Routenpunkt 1 / delka−2, wie der
+            // Fahrplanwaggon seit bug-382 (E2) — sonst endet der Auslauf in der Mitte der
+            // letzten Gleiszelle, 12–24 px vor dem Originalpunkt, mit dem Stück der
+            // Annäherung statt des Andockschritts (Bericht zug-feinlage-fable.md §4.4).
+            // Gelöscht wird beim Überfahren des Wegendes (@0x4C6C47 cursor+1 == delka,
+            // gezeichnet nur bis delka−2 @0x42E14F). Gegenschalter --zug-einfahrt-alt.
+            var weg = !ZugEinfahrtAlt && pd != null ? ZugWegOf(w.Line, pd.Pts) : null;
+            if (weg != null && weg.Cum.Length == weg.Pts.Count && weg.Cum[^1] > 0f)
+            {
+                var wc = weg.Cum;
+                int wl = wc.Length - 1;
+                if (!_auslaufWeg.TryGetValue(w, out float wf)) wf = w.LeadF + weg.Vorn;
+                int t0 = Mathf.Clamp(Mathf.FloorToInt(wf), 0, wl);
+                int t1 = Mathf.Clamp(t0 + 1, 0, wl);
+                float sw = Mathf.Lerp(wc[t0], wc[t1], wf - t0);
+                sw += w.Dir * dt * TileW / TrainStepSeconds;
+                if (sw >= wc[wl] || sw <= 0f) { _auslaufWeg.Remove(w); Loesche(i); moved = true; continue; }
+                wf = RailArcToIndex(wc, sw);
+                _auslaufWeg[w] = wf;
+                w.LeadF = Mathf.Clamp(wf - weg.Vorn, 0f, last);
+                int st = Mathf.Clamp(Mathf.FloorToInt(w.LeadF), 0, last);
+                w.Step = st;
+                if (_lineCellPiece.TryGetValue(w.Line, out var pcw) && st < pcw.Count)
+                    w.Piece = w.Dir > 0 ? pcw[st] : (pcw[st] + 4) & 7;
+                ZugWegSetzen(w, weg, wf, last, w.Dir);
+                w.Hidden = false;
+                moved = true;
+                continue;
             }
             var cum = pd?.Cum;
             if (cum != null && cum.Length == route.Count && cum[last] > 0f)
@@ -195,10 +228,14 @@ public partial class MapEntityLayer
     {
         _zugfach.Clear();
         WaggonsImFach = 0;
+        ZugImNebelVerborgen = 0;
         int n = 0;
         foreach (var w in _wagons)
         {
             if (w.Hidden) continue;
+            // ⭐ bug-395 (F2): die Sichtprobe des Einreihers @0x42E197, für JEDEN Waggon
+            // (Simulation/ZugEinfahrt.cs ZugImNebel). Gegenschalter --zug-ohne-sichtprobe.
+            if (ZugImNebel(w)) { ZugImNebelVerborgen++; continue; }
             var at = RailLifted(new Vector2(w.Col, w.Row), w.Lift);
             _zugfach.Add((WaggonFach(w), at.Y + n++ * 1e-5f, w));
         }
@@ -226,8 +263,7 @@ public partial class MapEntityLayer
     private int _zdWendenMitte, _zdWendenEnde, _zdWendenBild, _zdLift0, _zdRampenBilder;
     private int _zdStandSichtbar, _zdRoh, _zdGeistSichtbar, _zdKupplung;
     private int _zdHinter, _zdDavor, _zdVerdeckt, _zdEinfahrBilder, _zdImGrundriss;
-    private int _zdNah, _zdPaare;
-    private float _zdMinAbstand = float.MaxValue;
+    private readonly ZugAbstandStat _zdAbstand = new();
     private string _zdDavorWo = "", _zdWendeWo = "", _zdLiftWo = "";
 
     private RailLine? ZdLinie(int slot)
@@ -276,6 +312,11 @@ public partial class MapEntityLayer
             // der die Hoehe schneller steigt als die Zeile faellt.
             var pos = RailLifted(new Vector2(w.Col, w.Row), w.Lift);
             float prog = w.Freight || w.Auslauf ? w.LeadF : w.Step;
+            // ⭐ bug-397 (F7): im Fahrmodell je Schritt fährt der Fahrplanwaggon auf der ROUTE;
+            // seine Kettenstelle ist nur eine Projektion und läuft an Routenstücken ohne
+            // Kette (DM_4 Linie 0, Spitzkehre bei (73,20)) scheinbar zurück. Gemessen wird
+            // dann der Fahrtfortschritt (Takt/Fahrzeit).
+            if (w.Freight && ZugFahrmodellNeu && _zugPw.TryGetValue(w, out float pwF)) prog = pwF;
             int starts = l?.Starts ?? 0;
             if (_zdVorher.TryGetValue(w, out var v))
             {
@@ -302,7 +343,11 @@ public partial class MapEntityLayer
 
             // Höhe: liegt der Waggon auf einem Rampenglied und hat trotzdem Lift 0?
             var pd = RailPathOf(w.Line);
-            if (pd?.Lift != null && pd.Lift.Length > 0)
+            // ⭐ bug-397 (F7): die Fahrplanwaggons tragen die Höhe des ORIGINALS (Bezugszelle
+            // 0x4C76C0 + Rampe 0x4C73C8), nicht mehr den Lift aus dem Gleisbild — die Probe
+            // »Lift 0 auf Rampenglied« gilt dort nicht; der Vergleich steht im
+            // --zug-einfahrt-check (»Hoehe gegen Gleisbild-Lift«).
+            if (pd?.Lift != null && pd.Lift.Length > 0 && !(w.Freight && ZugFahrmodellNeu))
             {
                 float f = w.Freight || w.Auslauf ? w.LeadF : w.Step;
                 float soll = RailLiftAt(pd.Lift, f);
@@ -363,22 +408,10 @@ public partial class MapEntityLayer
         foreach (var k in new List<Wagon>(_zdVorher.Keys))
             if (!gesehen.Contains(k)) _zdVorher.Remove(k);
 
-        // Abstand zweier aufeinanderfolgender Waggons derselben Fahrt (Original: >= 12 px)
-        foreach (var kv in _freightWagons)
-        {
-            var list = kv.Value;
-            for (int i = 1; i < list.Count; i++)
-            {
-                var a = list[i - 1]; var b = list[i];
-                if (a.Hidden || b.Hidden) continue;
-                var pa = RailLifted(new Vector2(a.Col, a.Row), a.Lift);
-                var pb = RailLifted(new Vector2(b.Col, b.Row), b.Lift);
-                float d = pa.DistanceTo(pb);
-                _zdPaare++;
-                if (d < 10f) _zdNah++;
-                if (d < _zdMinAbstand) _zdMinAbstand = d;
-            }
-        }
+        // Abstand zweier aufeinanderfolgender Waggons derselben Fahrt (Original: >= 12 px).
+        // ⭐ bug-395 (F3b): in der EBENE gemessen, mit Ort des kleinsten Paars und dem
+        // Schirmmass zur Auskunft (Simulation/ZugEinfahrt.cs ZugAbstandBild).
+        ZugAbstandBild(_zdAbstand);
     }
 
     private string ZugDemoZeile(bool schluss)
@@ -395,6 +428,9 @@ public partial class MapEntityLayer
         if (ZugGekuppelt) schalter.Add("--zug-gekuppelt");
         if (ZugEinfahrtAlt) schalter.Add("--zug-einfahrt-alt");
         if (GleisfachAlt) schalter.Add("--gleisfach-alt");
+        if (ZugBogenSchirm) schalter.Add("--zug-bogen-schirm");
+        if (ZugFeinlageAlt) schalter.Add("--zug-feinlage-alt");
+        if (ZugOhneSichtprobe) schalter.Add("--zug-ohne-sichtprobe");
         if (schalter.Count > 0) sb.Append($"⚠ NULLMODELL {string.Join(" ", schalter)} | ");
 
         bool v1 = _zdGeistSichtbar == 0;
@@ -406,6 +442,9 @@ public partial class MapEntityLayer
         bool v3 = _zdStandSichtbar == 0 && gleichzeitig == 0;
         bool v4 = fw == _wagons.Count && _zdWendenMitte == 0 && _zdLift0 == 0;
         bool v5 = _zdRoh == 0;
+        // ⚠ bug-395: der Mindestabstand (Original 12 px, W1->W2 senkrecht) ist hier nur
+        // AUSKUNFT — Kriterium ist er im --zug-einfahrt-check (F). Er haengt am Fahrmodell
+        // (F7, nicht gebaut): unser Weg ist kuerzer als die Route bei gleicher Fahrzeit.
         bool v6 = _zdKupplung == 0;
         string Ok(bool b) => b ? "OK" : "ABWEICHUNG";
 
@@ -428,8 +467,7 @@ public partial class MapEntityLayer
                   (_zdLiftWo.Length > 0 ? $" (erstes: {_zdLiftWo})" : "") + $" {Ok(v4)}");
         sb.Append($" | V5 roh gezeichnete Waggonbilder {_zdRoh} {Ok(v5)}");
         sb.Append($" | V6 von der Kupplung verschobene Waggonbilder {_zdKupplung}; Abstand " +
-                  $"aufeinanderfolgender Waggons: {_zdNah} von {_zdPaare} Paaren unter 10 px, kleinster " +
-                  (_zdPaare > 0 ? $"{_zdMinAbstand:0.0} px" : "—") + $" {Ok(v6)}");
+                  $"aufeinanderfolgender Waggons (Soll >= 12 px): {ZugAbstandText(_zdAbstand)} {Ok(v6)}");
         if (schluss)
             sb.Append($"\nzug-demo-check: bug-377 {(v1 && v2 && v3 && v4 && v5 && v6 ? "BESTANDEN" : "DURCHGEFALLEN")}" +
                       $" (V1 {Ok(v1)}, V2 {Ok(v2)}, V3 {Ok(v3)}, V4 {Ok(v4)}, V5 {Ok(v5)}, V6 {Ok(v6)})");

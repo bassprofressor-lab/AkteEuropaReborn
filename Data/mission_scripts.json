@@ -2706,7 +2706,7 @@
     },
     {
      "_at": "0x49C829",
-     "_tut_ausserdem": "0x4D0970 0x4D1050",
+     "_tut_ausserdem": "0x4D0970",
      "any": [
       {
        "a": 12,
@@ -2721,7 +2721,14 @@
       }
      ],
      "once": 0,
-     "then": [],
+     "then": [
+      {
+       "kind": "ai_mode",
+       "a": 4,
+       "b": 3,
+       "_at": "0x49C847"
+      }
+     ],
      "when": []
     },
     {
@@ -2870,6 +2877,20 @@
      ]
     },
     {
+     "_at": "0x49C96B",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Heli-Zaehler (0x49C96B..0x49C9AE): v230 := Flugzeuge mit Typ > 12 und Besitzer 0",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set_air_count",
+       "a": 230,
+       "b": 0,
+       "c": 12
+      }
+     ],
+     "when": []
+    },
+    {
      "_at": "0x49C9C4",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -2980,6 +3001,18 @@
        "op": "=="
       }
      ]
+    }
+   ],
+   "betriebsart": [
+    {
+     "a": 2,
+     "b": 5,
+     "_at": "0x489EE6"
+    },
+    {
+     "a": 1,
+     "b": 2,
+     "_at": "0x489EF1"
     }
    ]
   },
@@ -4719,7 +4752,7 @@
     },
     {
      "_at": "0x49D7CC",
-     "_tut_ausserdem": "show_text add_target add_target add_target add_target add_target add_target 0x4D1050 0x4D1050",
+     "_tut_ausserdem": "show_text add_target add_target add_target add_target add_target add_target",
      "once": 30,
      "then": [
       {
@@ -4787,6 +4820,18 @@
        "d": 12,
        "e": 1,
        "kind": "add_target"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 4,
+       "b": 4,
+       "_at": "0x49D863"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 1,
+       "b": 4,
+       "_at": "0x49D86F"
       }
      ],
      "when": [
@@ -4800,7 +4845,7 @@
     },
     {
      "_at": "0x49D89D",
-     "_tut_ausserdem": "0x4D1050 0x4D1050 sound",
+     "_tut_ausserdem": "sound",
      "any": [
       {
        "a": 12,
@@ -4829,6 +4874,18 @@
        "_at": "0x49D8C5",
        "a": 601,
        "kind": "sound"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 4,
+       "b": 3,
+       "_at": "0x49D8B1"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 1,
+       "b": 3,
+       "_at": "0x49D8BD"
       }
      ],
      "when": [
@@ -5128,6 +5185,23 @@
      1,
      "yx"
     ]
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 3,
+     "_at": "0x48ACAD"
+    },
+    {
+     "a": 4,
+     "b": 4,
+     "_at": "0x48ACB9"
+    },
+    {
+     "a": 2,
+     "b": 1,
+     "_at": "0x48ACCA"
+    }
    ]
   },
   "16": {
@@ -5174,6 +5248,44 @@
        "d": 7,
        "kind": "place_unit",
        "v": 23
+      },
+      {
+       "kind": "move_var",
+       "a": 21,
+       "b": 47,
+       "c": 107,
+       "_at": "0x49DAE8",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "move_var",
+       "a": 22,
+       "b": 47,
+       "c": 107,
+       "_at": "0x49DAE8",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "move_var",
+       "a": 23,
+       "b": 47,
+       "c": 107,
+       "_at": "0x49DAE8",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "text",
+       "a": 261,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "_at": "0x49DB06",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "inc",
+       "a": 102,
+       "_schalter": "--skriptvar-alt"
       }
      ],
      "when": [
@@ -5184,7 +5296,8 @@
        "kind": "imap",
        "op": "<"
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Schleife 0x49DAD5..0x49DAF3 (v21..v23 -> (47,107)), Text 261, v102++"
     },
     {
      "_at": "0x49DB42",
@@ -5658,6 +5771,50 @@
        "c": 65535,
        "kind": "unit_index",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DEF2",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM2 Bezahlung (0x49DEF2..0x49DF0A): feindlicher Wissenschaftler beim Spieler mit UKOL 50 -> remove_unit, +100 $, v29++. v[28] setzt die Regel 0x49DEC4 davor.",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "remove_unit_var",
+       "a": 28,
+       "_at": "0x49DEF9"
+      },
+      {
+       "kind": "money",
+       "a": 100,
+       "b": 0,
+       "_at": "0x49DF05"
+      },
+      {
+       "kind": "inc",
+       "a": 29
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 20,
+       "b": 1,
+       "op": "=="
+      },
+      {
+       "kind": "unit_index",
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "op": "!="
+      },
+      {
+       "kind": "unit_field",
+       "a": 28,
+       "b": 20,
+       "c": 50,
+       "op": "=="
       }
      ]
     },
@@ -6498,6 +6655,23 @@
       }
      ]
     }
+   ],
+   "betriebsart": [
+    {
+     "a": 3,
+     "b": 4,
+     "_at": "0x48B8CE"
+    },
+    {
+     "a": 2,
+     "b": 3,
+     "_at": "0x48B8DA"
+    },
+    {
+     "a": 1,
+     "b": 2,
+     "_at": "0x48B8E5"
+    }
    ]
   },
   "18": {
@@ -6605,7 +6779,7 @@
     },
     {
      "_at": "0x49E6EE",
-     "_tut_ausserdem": "show_text place_unit place_unit place_unit 0x4D1050 add_target add_target add_target",
+     "_tut_ausserdem": "show_text place_unit place_unit place_unit add_target add_target add_target",
      "once": 20,
      "then": [
       {
@@ -6646,6 +6820,12 @@
        "d": 0,
        "kind": "place_unit",
        "v": 23
+      },
+      {
+       "kind": "ai_mode",
+       "a": 3,
+       "b": 5,
+       "_at": "0x49E76B"
       }
      ],
      "when": [
@@ -7083,6 +7263,23 @@
        "op": "=="
       }
      ]
+    }
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 5,
+     "_at": "0x48BC49"
+    },
+    {
+     "a": 2,
+     "b": 5,
+     "_at": "0x48BC55"
+    },
+    {
+     "a": 4,
+     "b": 5,
+     "_at": "0x48BC61"
     }
    ]
   },
@@ -7854,6 +8051,23 @@
       }
      ],
      "_regeln": 3
+    }
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 3,
+     "_at": "0x48C576"
+    },
+    {
+     "a": 2,
+     "b": 3,
+     "_at": "0x48C582"
+    },
+    {
+     "a": 4,
+     "b": 3,
+     "_at": "0x48C58E"
     }
    ]
   },
@@ -10746,7 +10960,7 @@
     },
     {
      "_at": "0x49F484",
-     "_tut_ausserdem": "0x4D1050 add_target add_target add_target add_target",
+     "_tut_ausserdem": "add_target add_target add_target add_target",
      "then": [
       {
        "a": 50,
@@ -10811,6 +11025,12 @@
        "b": 3,
        "c": 2,
        "kind": "set_store"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 6,
+       "b": 5,
+       "_at": "0x49F496"
       }
      ],
      "when": [
@@ -12869,6 +13089,13 @@
      ],
      "_regeln": 2
     }
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 2,
+     "_at": "0x48D551"
+    }
    ]
   },
   "22": {
@@ -13885,6 +14112,18 @@
        "a": 106,
        "b": 10,
        "kind": "set"
+      },
+      {
+       "kind": "money",
+       "a": 5000,
+       "b": 0,
+       "_at": "0x4A0C3C",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "inc",
+       "a": 291,
+       "_schalter": "--skriptvar-alt"
       }
      ],
      "when": [
@@ -13907,7 +14146,8 @@
        "kind": "var",
        "op": "=="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Endbonus 0x4A0BE6..0x4A0C4B: objects(1,1)==0 & v291==0 & v61==1 -> v106:=10, bus_cmd(528,5000) @0x4A0C3C, v291++"
     },
     {
      "_at": "0x4A0C1A",
@@ -13916,16 +14156,44 @@
        "a": 107,
        "b": 10,
        "kind": "set"
+      },
+      {
+       "kind": "money",
+       "a": 2500,
+       "b": 0,
+       "_at": "0x4A0C3C",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "inc",
+       "a": 291,
+       "_schalter": "--skriptvar-alt"
       }
      ],
      "when": [
+      {
+       "kind": "objects",
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "op": "==",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "var",
+       "a": 291,
+       "b": 0,
+       "op": "==",
+       "_schalter": "--skriptvar-alt"
+      },
       {
        "a": 61,
        "b": 2,
        "kind": "var",
        "op": "=="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Endbonus 0x4A0BE6..0x4A0C4B: objects(1,1)==0 & v291==0 & v61==2 -> v107:=10, bus_cmd(528,2500) @0x4A0C3C, v291++"
     },
     {
      "_at": "0x4A0C2C",
@@ -13934,16 +14202,44 @@
        "a": 108,
        "b": 10,
        "kind": "set"
+      },
+      {
+       "kind": "money",
+       "a": 1200,
+       "b": 0,
+       "_at": "0x4A0C3C",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "inc",
+       "a": 291,
+       "_schalter": "--skriptvar-alt"
       }
      ],
      "when": [
+      {
+       "kind": "objects",
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "op": "==",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "var",
+       "a": 291,
+       "b": 0,
+       "op": "==",
+       "_schalter": "--skriptvar-alt"
+      },
       {
        "a": 61,
        "b": 3,
        "kind": "var",
        "op": "=="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Endbonus 0x4A0BE6..0x4A0C4B: objects(1,1)==0 & v291==0 & v61==3 -> v108:=10, bus_cmd(528,1200) @0x4A0C3C, v291++"
     },
     {
      "then": [
@@ -13987,6 +14283,18 @@
        "op": "=="
       }
      ]
+    }
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 3,
+     "_at": "0x48DBC1"
+    },
+    {
+     "a": 4,
+     "b": 5,
+     "_at": "0x48DBCD"
     }
    ]
   },
@@ -14228,6 +14536,18 @@
      173,
      5000
     ]
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 1,
+     "_at": "0x48E60E"
+    },
+    {
+     "a": 4,
+     "b": 5,
+     "_at": "0x48E61A"
+    }
    ]
   },
   "24": {
@@ -14372,7 +14692,7 @@
     },
     {
      "_at": "0x4A0F10",
-     "_tut_ausserdem": "0x4D1050 add_target",
+     "_tut_ausserdem": "add_target",
      "then": [
       {
        "a": 30,
@@ -14386,6 +14706,12 @@
        "d": 14,
        "e": 1,
        "kind": "add_target"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 4,
+       "b": 5,
+       "_at": "0x4A0F22"
       }
      ],
      "when": [
@@ -14801,9 +15127,15 @@
     },
     {
      "_at": "0x4A1383",
-     "_tut_ausserdem": "0x4D1050",
      "once": 281,
-     "then": [],
+     "then": [
+      {
+       "kind": "ai_mode",
+       "a": 4,
+       "b": 2,
+       "_at": "0x4A1395"
+      }
+     ],
      "when": [
       {
        "a": 1,
@@ -14902,6 +15234,80 @@
      ]
     },
     {
+     "_at": "0x4A1482",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM6 Wiffer zur Luftstation, Start (0x4A1482..0x4A158D). ⚠ byte[0x87B1E0] := 1 (Satz Spieler 4 +0x00) ist ungelesen und NICHT eingetragen.",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "inc",
+       "a": 50
+      },
+      {
+       "kind": "inc",
+       "a": 106
+      },
+      {
+       "kind": "text",
+       "a": 345,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "_at": "0x4A14E1"
+      },
+      {
+       "kind": "set_time",
+       "a": 51
+      },
+      {
+       "kind": "set_kills",
+       "a": 55,
+       "b": 0
+      },
+      {
+       "kind": "set_losses",
+       "a": 54,
+       "b": 0
+      },
+      {
+       "kind": "ai_mode",
+       "a": 4,
+       "b": 5,
+       "_at": "0x4A1517"
+      },
+      {
+       "kind": "add_target_units",
+       "a": 4,
+       "b": 2,
+       "c": 70,
+       "d": 6,
+       "e": 1,
+       "v": 52,
+       "_at": "0x4A1579"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 50,
+       "b": 2,
+       "op": "=="
+      },
+      {
+       "kind": "time_after",
+       "a": 51,
+       "b": 1,
+       "op": ">"
+      },
+      {
+       "kind": "unit_is_var",
+       "a": 52,
+       "b": 192,
+       "c": 0,
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A15B6",
      "_tut_ausserdem": "show_text sound",
      "then": [
@@ -14983,6 +15389,65 @@
        "b": 3,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A164B",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Wiffer zurueckerobert (0x4A164B..0x4A16C4): v50:=10, v106:=1, change_owner(v52 -> 4), v51:=Uhr, Klang 601",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set",
+       "a": 50,
+       "b": 10
+      },
+      {
+       "kind": "set",
+       "a": 106,
+       "b": 1
+      },
+      {
+       "kind": "change_owner_var",
+       "a": 52,
+       "b": 4,
+       "_at": "0x4A16A6"
+      },
+      {
+       "kind": "set_time",
+       "a": 51
+      },
+      {
+       "kind": "sound",
+       "a": 601,
+       "_at": "0x4A16BF"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 50,
+       "b": 3,
+       "op": "=="
+      },
+      {
+       "kind": "var",
+       "a": 53,
+       "b": 1,
+       "op": "=="
+      },
+      {
+       "kind": "time_after",
+       "a": 51,
+       "b": 2,
+       "op": ">"
+      },
+      {
+       "kind": "unit_is_var",
+       "a": 52,
+       "b": 192,
+       "c": 0,
+       "op": "!="
       }
      ]
     },
@@ -15133,6 +15598,101 @@
      ]
     },
     {
+     "_at": "0x4A17D3",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Wiffer an der Luftstation (0x4A17D3..0x4A182F): v50==3 & x(v52) in {130,133} & y in {130,127} -> v98:=0, sell_unit(v52), v50++ — ersetzt die Leserfassung 0x4A1810",
+     "_schalter": "--skriptvar-alt",
+     "any_groups": [
+      [
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 0,
+        "c": 130,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 1,
+        "c": 130,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 0,
+        "c": 130,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 1,
+        "c": 127,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 0,
+        "c": 133,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 1,
+        "c": 130,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 0,
+        "c": 133,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 52,
+        "b": 1,
+        "c": 127,
+        "op": "=="
+       }
+      ]
+     ],
+     "then": [
+      {
+       "kind": "set",
+       "a": 98,
+       "b": 0
+      },
+      {
+       "kind": "sell_unit_var",
+       "a": 52,
+       "_at": "0x4A1820"
+      },
+      {
+       "kind": "inc",
+       "a": 50
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 50,
+       "b": 3,
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1810",
      "_tut_ausserdem": "0x4D0EC0",
      "any": [
@@ -15167,7 +15727,9 @@
        "kind": "inc"
       }
      ],
-     "when": []
+     "when": [],
+     "_nur_mit": "--skriptvar-alt",
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — ALTE FASSUNG, nur mit --skriptvar-alt: unit_field mit a: null (fragte v[0] statt v[52]), when leer"
     },
     {
      "_at": "0x4A185C",
@@ -15384,6 +15946,114 @@
      ]
     },
     {
+     "_at": "0x4A19D5",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Zivilisten zur Luftstation (0x4A19CD..0x4A1A2A): nicht schon verkauft (0x4BFFB0) & x(v22) in {130,133} & y in {130,127} -> v21++, sell_unit(v22), +300 $ — ersetzt die Leserfassung 0x4A1A0D",
+     "_schalter": "--skriptvar-alt",
+     "any_groups": [
+      [
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 0,
+        "c": 130,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 1,
+        "c": 130,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 0,
+        "c": 130,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 1,
+        "c": 127,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 0,
+        "c": 133,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 1,
+        "c": 130,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 0,
+        "c": 133,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 22,
+        "b": 1,
+        "c": 127,
+        "op": "=="
+       }
+      ]
+     ],
+     "then": [
+      {
+       "kind": "inc",
+       "a": 21
+      },
+      {
+       "kind": "sell_unit_var",
+       "a": 22,
+       "_at": "0x4A1A1B"
+      },
+      {
+       "kind": "money",
+       "a": 300,
+       "b": 0,
+       "_at": "0x4A1A2A"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 20,
+       "b": 1,
+       "op": "=="
+      },
+      {
+       "kind": "var",
+       "a": 21,
+       "b": 3,
+       "op": "<"
+      },
+      {
+       "kind": "in_sale_var",
+       "a": 22,
+       "c": 0,
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1A0D",
      "_tut_ausserdem": "0x4D0EC0 bus_cmd",
      "any": [
@@ -15419,7 +16089,9 @@
        "kind": "money"
       }
      ],
-     "when": []
+     "when": [],
+     "_nur_mit": "--skriptvar-alt",
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — ALTE FASSUNG, nur mit --skriptvar-alt: unit_field mit a: null (fragte v[0] statt v[22]), when leer, ohne Verkaufslisten-Frage"
     },
     {
      "_at": "0x4A1A46",
@@ -15544,6 +16216,13 @@
       }
      ],
      "_regeln": 2
+    }
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 3,
+     "_at": "0x48EB12"
     }
    ]
   },
@@ -15730,7 +16409,7 @@
     },
     {
      "_at": "0x4A1C04",
-     "_tut_ausserdem": "0x4D1050 sound",
+     "_tut_ausserdem": "sound",
      "then": [
       {
        "a": 10,
@@ -15749,6 +16428,12 @@
        "_at": "0x4A1C27",
        "a": 601,
        "kind": "sound"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 1,
+       "b": 5,
+       "_at": "0x4A1C18"
       }
      ],
      "when": [
@@ -16472,6 +17157,23 @@
      3,
      "xy"
     ]
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 3,
+     "_at": "0x48F7E7"
+    },
+    {
+     "a": 2,
+     "b": 2,
+     "_at": "0x48F7F3"
+    },
+    {
+     "a": 4,
+     "b": 3,
+     "_at": "0x48F7FF"
+    }
    ]
   },
   "26": {
@@ -16839,6 +17541,30 @@
      ]
     },
     {
+     "_unsere_setzung": "02.10.2026 (bug-383/384, berichte/ki-tuergriff-selbstverteidiger-fable.md §9 D): im Original bekommt P3 in M26 KEIN Ziel - der einzige add_target des Blocks (@0x4A2307, Regel 0x4A22BA) ist toter Code (test al,al/jne + cmp al,3/jne auf dasselbe Register) und gilt Spieler 5. Die Siegregel obj_owner(13)==3 ist damit unerfuellbar. Wir geben dem Verbuendeten P3 das Einnahmeziel Myre (Gebaeudeplatz 13, Art 1, Vorrang 9, c = 0 = Tuergriff) gleich beim Missionsstart.",
+     "_schalter": "--m26-tuergriff-aus",
+     "_riegel": "v[290] ist ein freies Wort unter 300 (wird beim Missionswechsel genullt, wandert nicht mit); M26 benutzt 0, 1, 2, 10, 11, 101, 131",
+     "once": 290,
+     "when": [
+      {
+       "a": 290,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "a": 3,
+       "b": 1,
+       "c": 9,
+       "d": 13,
+       "e": 0,
+       "kind": "add_target"
+      }
+     ]
+    },
+    {
      "then": [
       {
        "a": 1,
@@ -16918,6 +17644,23 @@
      ],
      "_regeln": 3
     }
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 3,
+     "_at": "0x48FF9D"
+    },
+    {
+     "a": 3,
+     "b": 2,
+     "_at": "0x48FFA9"
+    },
+    {
+     "a": 5,
+     "b": 5,
+     "_at": "0x48FFB5"
+    }
    ]
   },
   "27": {
@@ -16963,12 +17706,17 @@
     },
     {
      "_at": "0x4A2545",
-     "_tut_ausserdem": "0x4D1050",
      "once": 0,
      "then": [
       {
        "a": 10,
        "kind": "inc"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 1,
+       "b": 3,
+       "_at": "0x4A255E"
       }
      ],
      "when": [
@@ -16982,12 +17730,17 @@
     },
     {
      "_at": "0x4A257E",
-     "_tut_ausserdem": "0x4D1050",
      "once": 1,
      "then": [
       {
        "a": 10,
        "kind": "inc"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 2,
+       "b": 3,
+       "_at": "0x4A2597"
       }
      ],
      "when": [
@@ -17001,12 +17754,17 @@
     },
     {
      "_at": "0x4A25B7",
-     "_tut_ausserdem": "0x4D1050",
      "once": 2,
      "then": [
       {
        "a": 10,
        "kind": "inc"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 4,
+       "b": 3,
+       "_at": "0x4A25D0"
       }
      ],
      "when": [
@@ -17654,7 +18412,7 @@
     },
     {
      "_at": "0x4A2B4C",
-     "_tut_ausserdem": "0x4D0EE0 0x4D1050 add_target 0x4D0860 show_text",
+     "_tut_ausserdem": "0x4D0EE0 add_target 0x4D0860 show_text",
      "then": [
       {
        "a": 20,
@@ -17693,6 +18451,12 @@
       {
        "a": 101,
        "kind": "inc"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 1,
+       "b": 5,
+       "_at": "0x4A2B6A"
       }
      ],
      "when": [
@@ -18772,6 +19536,198 @@
      ]
     },
     {
+     "_at": "0x4A30A8",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Expertenzone, Schleife 0x4A30A3..0x4A3130 entrollt, Durchlauf 0: Einheit 0 (Marke 193) lebt, v[51]==0, 34<x<39, 8<y<15 -> v[51]:=1, remove_unit, v[61]:=Uhr. Ohne sie war die Siegregel (v51/v52==2) unerreichbar.",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set",
+       "a": 51,
+       "b": 1
+      },
+      {
+       "kind": "remove_unit",
+       "a": 0,
+       "_at": "0x4A310F"
+      },
+      {
+       "kind": "set_time",
+       "a": 61
+      }
+     ],
+     "when": [
+      {
+       "kind": "unit_is",
+       "a": 0,
+       "b": 193,
+       "c": 0,
+       "op": "!="
+      },
+      {
+       "kind": "var",
+       "a": 51,
+       "b": 0,
+       "op": "=="
+      },
+      {
+       "kind": "unit_pos",
+       "a": 0,
+       "b": 34,
+       "c": 0,
+       "op": ">"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 0,
+       "b": 8,
+       "c": 1,
+       "op": ">"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 0,
+       "b": 39,
+       "c": 0,
+       "op": "<"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 0,
+       "b": 15,
+       "c": 1,
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A30A9",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Expertenzone, Schleife 0x4A30A3..0x4A3130 entrollt, Durchlauf 1: Einheit 1 (Marke 193) lebt, v[52]==0, 34<x<39, 8<y<15 -> v[52]:=1, remove_unit, v[62]:=Uhr. Ohne sie war die Siegregel (v51/v52==2) unerreichbar.",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set",
+       "a": 52,
+       "b": 1
+      },
+      {
+       "kind": "remove_unit",
+       "a": 1,
+       "_at": "0x4A310F"
+      },
+      {
+       "kind": "set_time",
+       "a": 62
+      }
+     ],
+     "when": [
+      {
+       "kind": "unit_is",
+       "a": 1,
+       "b": 193,
+       "c": 0,
+       "op": "!="
+      },
+      {
+       "kind": "var",
+       "a": 52,
+       "b": 0,
+       "op": "=="
+      },
+      {
+       "kind": "unit_pos",
+       "a": 1,
+       "b": 34,
+       "c": 0,
+       "op": ">"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 1,
+       "b": 8,
+       "c": 1,
+       "op": ">"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 1,
+       "b": 39,
+       "c": 0,
+       "op": "<"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 1,
+       "b": 15,
+       "c": 1,
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A30AA",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Expertenzone, Schleife 0x4A30A3..0x4A3130 entrollt, Durchlauf 2: Einheit 2 (Marke 193) lebt, v[53]==0, 34<x<39, 8<y<15 -> v[53]:=1, remove_unit, v[63]:=Uhr. Ohne sie war die Siegregel (v51/v52==2) unerreichbar.",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set",
+       "a": 53,
+       "b": 1
+      },
+      {
+       "kind": "remove_unit",
+       "a": 2,
+       "_at": "0x4A310F"
+      },
+      {
+       "kind": "set_time",
+       "a": 63
+      }
+     ],
+     "when": [
+      {
+       "kind": "unit_is",
+       "a": 2,
+       "b": 193,
+       "c": 0,
+       "op": "!="
+      },
+      {
+       "kind": "var",
+       "a": 53,
+       "b": 0,
+       "op": "=="
+      },
+      {
+       "kind": "unit_pos",
+       "a": 2,
+       "b": 34,
+       "c": 0,
+       "op": ">"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 2,
+       "b": 8,
+       "c": 1,
+       "op": ">"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 2,
+       "b": 39,
+       "c": 0,
+       "op": "<"
+      },
+      {
+       "kind": "unit_pos",
+       "a": 2,
+       "b": 15,
+       "c": 1,
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x4A3151",
      "_tut_ausserdem": "place_unit",
      "then": [
@@ -19619,6 +20575,33 @@
      ],
      "_regeln": 2
     }
+   ],
+   "betriebsart": [
+    {
+     "a": 5,
+     "b": 3,
+     "_at": "0x490D5C"
+    },
+    {
+     "a": 1,
+     "b": 5,
+     "_at": "0x490D68"
+    },
+    {
+     "a": 2,
+     "b": 2,
+     "_at": "0x490D74"
+    },
+    {
+     "a": 4,
+     "b": 5,
+     "_at": "0x490D80"
+    },
+    {
+     "a": 6,
+     "b": 5,
+     "_at": "0x490D8C"
+    }
    ]
   },
   "29": {
@@ -20164,6 +21147,48 @@
      ]
     },
     {
+     "_at": "0x4A3B25",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM 391 Transporter angekommen (0x4A3B25..0x4A3B54, im Tor v20==14): v102:=10, remove v24, +8000 $",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set",
+       "a": 102,
+       "b": 10
+      },
+      {
+       "kind": "remove_unit_var",
+       "a": 24,
+       "_at": "0x4A3B3D"
+      },
+      {
+       "kind": "money",
+       "a": 8000,
+       "b": 0,
+       "_at": "0x4A3B4C"
+      },
+      {
+       "kind": "sound",
+       "a": 600,
+       "_at": "0x4A3B54"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 20,
+       "b": 14,
+       "op": "=="
+      },
+      {
+       "kind": "var",
+       "a": 102,
+       "b": 2,
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A3B63",
      "_tut_ausserdem": "remove_unit bus_cmd sound",
      "then": [
@@ -20199,6 +21224,47 @@
      ]
     },
     {
+     "_at": "0x4A3B8F",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Transporter zerstoert (0x4A3B8F..0x4A3BC8): v102:=1, v19++, v103:=1, Klang 601",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set",
+       "a": 102,
+       "b": 1
+      },
+      {
+       "kind": "inc",
+       "a": 19
+      },
+      {
+       "kind": "set",
+       "a": 103,
+       "b": 1
+      },
+      {
+       "kind": "sound",
+       "a": 601,
+       "_at": "0x4A3BC8"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 19,
+       "b": 1,
+       "op": "=="
+      },
+      {
+       "kind": "unit_is_var",
+       "a": 24,
+       "b": 57,
+       "c": 0,
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A3BE5",
      "_tut_ausserdem": "game_time",
      "then": [
@@ -20219,6 +21285,71 @@
        "b": 1,
        "kind": "obj_owner",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A3BF0",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM 392 Start (0x4A3BF0..0x4A3C7F). ⚠⚠ IM ORIGINAL TOT: v30 wird nie 1 (reloc_refs 0xBC56CC: nur 0x4A3BCD/0x4A3BF5 lesen, einziger Schreiber 0x4A3C15 in DIESER Regel). Eingetragen, weil es so dasteht; 0x401253(5,5,10,500) davor ist ungelesen und fehlt.",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "inc",
+       "a": 30
+      },
+      {
+       "kind": "set",
+       "a": 19,
+       "b": 1
+      },
+      {
+       "kind": "set",
+       "a": 20,
+       "b": 1
+      },
+      {
+       "kind": "set",
+       "a": 25,
+       "b": 1
+      },
+      {
+       "kind": "inc",
+       "a": 103
+      },
+      {
+       "kind": "text",
+       "a": 392,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "_at": "0x4A3C5C"
+      },
+      {
+       "kind": "place_unit",
+       "a": 57,
+       "b": 0,
+       "c": 2,
+       "d": 3,
+       "v": 24,
+       "_at": "0x4A3C6C"
+      },
+      {
+       "kind": "set_time",
+       "a": 23
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 30,
+       "b": 1,
+       "op": "=="
+      },
+      {
+       "kind": "time_after",
+       "a": 31,
+       "b": 8,
+       "op": ">"
       }
      ]
     },
@@ -20362,6 +21493,101 @@
      ]
     },
     {
+     "_at": "0x4A3D9E",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Barry More am Lufthandelszentrum (0x4A3D9E..0x4A3DF7): v40==3 & x(v42) in {29,32} & y in {152,155} -> v98:=0, v40++, sell_unit(v42) — ersetzt die Leserfassung 0x4A3DDB",
+     "_schalter": "--skriptvar-alt",
+     "any_groups": [
+      [
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 0,
+        "c": 29,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 1,
+        "c": 152,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 0,
+        "c": 29,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 1,
+        "c": 155,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 0,
+        "c": 32,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 1,
+        "c": 152,
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 0,
+        "c": 32,
+        "op": "=="
+       },
+       {
+        "kind": "unit_field",
+        "a": 42,
+        "b": 1,
+        "c": 155,
+        "op": "=="
+       }
+      ]
+     ],
+     "then": [
+      {
+       "kind": "set",
+       "a": 98,
+       "b": 0
+      },
+      {
+       "kind": "inc",
+       "a": 40
+      },
+      {
+       "kind": "sell_unit_var",
+       "a": 42,
+       "_at": "0x4A3DF2"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 40,
+       "b": 3,
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A3DDB",
      "_tut_ausserdem": "0x4D0EC0",
      "any": [
@@ -20396,7 +21622,9 @@
        "kind": "sell_unit_var"
       }
      ],
-     "when": []
+     "when": [],
+     "_nur_mit": "--skriptvar-alt",
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — ALTE FASSUNG, nur mit --skriptvar-alt: unit_field mit a: null (fragte v[0] statt v[42]), when leer"
     },
     {
      "_at": "0x4A3E27",
@@ -20955,6 +22183,23 @@
      ],
      "_regeln": 2
     }
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 2,
+     "_at": "0x491455"
+    },
+    {
+     "a": 2,
+     "b": 3,
+     "_at": "0x491461"
+    },
+    {
+     "a": 5,
+     "b": 4,
+     "_at": "0x49146D"
+    }
    ]
   },
   "3": {
@@ -20991,6 +22236,87 @@
        "b": 19,
        "kind": "var",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49942F",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Dr. Hemmerl, Teil 1: find_unit(0,193). UNSERE SETZUNG: das Original ruft find_unit zweimal und merkt sich nichts; wir legen das Ergebnis in den Merkplatz v[299] (kein Leser in allen 33 Bloecken, v<300 wird je Mission genullt).",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "find_unit",
+       "a": 299,
+       "b": 0,
+       "c": 193
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 101,
+       "b": 10,
+       "op": "=="
+      },
+      {
+       "kind": "unit_index",
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x499470",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Dr. Hemmerl, Teil 2 (0x499425..0x4994A5): UKOL(+0x14)==50 -> Text 132, +1000 $, remove_unit, v[301]:=1 (Kampagnenvariable, liest M25 @0x4A1AE1).",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "text",
+       "a": 132,
+       "b": 1,
+       "c": 450,
+       "d": 350,
+       "_at": "0x499470"
+      },
+      {
+       "kind": "money",
+       "a": 1000,
+       "b": 0,
+       "_at": "0x49947F"
+      },
+      {
+       "kind": "remove_unit_var",
+       "a": 299,
+       "_at": "0x499497"
+      },
+      {
+       "kind": "set",
+       "a": 301,
+       "b": 1
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 101,
+       "b": 10,
+       "op": "=="
+      },
+      {
+       "kind": "unit_index",
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "op": "!="
+      },
+      {
+       "kind": "unit_field",
+       "a": 299,
+       "b": 20,
+       "c": 50,
+       "op": "=="
       }
      ]
     },
@@ -21647,6 +22973,13 @@
        "kind": "text"
       },
       {
+       "kind": "money",
+       "a": -20,
+       "b": 0,
+       "_at": "0x499A20",
+       "_schalter": "--skriptvar-alt"
+      },
+      {
        "a": 40,
        "kind": "inc"
       }
@@ -21658,7 +22991,8 @@
        "kind": "bridge",
        "op": "=="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Brueckenbau kostet 20 $ (bus_cmd 528, -0x14 @0x499A20)"
     },
     {
      "_at": "0x499A5C",
@@ -21672,6 +23006,13 @@
        "c": 330,
        "d": 180,
        "kind": "text"
+      },
+      {
+       "kind": "money",
+       "a": -20,
+       "b": 0,
+       "_at": "0x499A76",
+       "_schalter": "--skriptvar-alt"
       },
       {
        "a": 40,
@@ -21691,7 +23032,8 @@
        "kind": "bridge",
        "op": "=="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Brueckenbau kostet 20 $ (bus_cmd 528, -0x14 @0x499A76)"
     },
     {
      "_at": "0x499AAE",
@@ -21705,6 +23047,13 @@
        "c": 330,
        "d": 180,
        "kind": "text"
+      },
+      {
+       "kind": "money",
+       "a": -20,
+       "b": 0,
+       "_at": "0x499AC8",
+       "_schalter": "--skriptvar-alt"
       },
       {
        "a": 40,
@@ -21724,7 +23073,8 @@
        "kind": "bridge",
        "op": "=="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Brueckenbau kostet 20 $ (bus_cmd 528, -0x14 @0x499AC8)"
     },
     {
      "_at": "0x499AFF",
@@ -21981,6 +23331,51 @@
     "133": 402
    },
    "rules": [
+    {
+     "_at": "0x4A41DC",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM1 20 min ohne Verlust, Start (0x4A41DC..0x4A4227): v11 := Verluste(0), v12 := Uhr",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "inc",
+       "a": 10
+      },
+      {
+       "kind": "inc",
+       "a": 101
+      },
+      {
+       "kind": "text",
+       "a": 400,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "_at": "0x4A420F"
+      },
+      {
+       "kind": "set_losses",
+       "a": 11,
+       "b": 0
+      },
+      {
+       "kind": "set_time",
+       "a": 12
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 10,
+       "b": 0,
+       "op": "=="
+      },
+      {
+       "kind": "time_gt",
+       "a": 5,
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x4A4246",
      "_tut_ausserdem": "sound",
@@ -22434,6 +23829,23 @@
      113,
      5000
     ]
+   ],
+   "betriebsart": [
+    {
+     "a": 1,
+     "b": 3,
+     "_at": "0x491BE9"
+    },
+    {
+     "a": 2,
+     "b": 3,
+     "_at": "0x491BF5"
+    },
+    {
+     "a": 5,
+     "b": 2,
+     "_at": "0x491C01"
+    }
    ]
   },
   "31": {
@@ -22556,7 +23968,7 @@
     },
     {
      "_at": "0x4A464A",
-     "_tut_ausserdem": "0x4D1050 0x4D0F20 add_target add_target add_target add_target add_target",
+     "_tut_ausserdem": "0x4D0F20 add_target add_target add_target add_target add_target",
      "then": [
       {
        "a": 0,
@@ -22597,6 +24009,12 @@
        "d": 33,
        "e": 1,
        "kind": "add_target"
+      },
+      {
+       "kind": "ai_mode",
+       "a": 2,
+       "b": 5,
+       "_at": "0x4A465C"
       }
      ],
      "when": [
@@ -23076,6 +24494,46 @@
        "a": 7000,
        "b": 0,
        "kind": "money"
+      },
+      {
+       "kind": "set_if_owner",
+       "a": 42,
+       "b": 0,
+       "c": 0,
+       "d": 6,
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "set_if_owner",
+       "a": 42,
+       "b": 14,
+       "c": 0,
+       "d": 4,
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "set_if_owner",
+       "a": 42,
+       "b": 5,
+       "c": 0,
+       "d": 5,
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "inc",
+       "a": 50,
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "set_time",
+       "a": 51,
+       "_schalter": "--skriptvar-alt"
+      },
+      {
+       "kind": "sound",
+       "a": 600,
+       "_at": "0x4A4ABA",
+       "_schalter": "--skriptvar-alt"
       }
      ],
      "when": [
@@ -23092,7 +24550,8 @@
        "kind": "objects",
        "op": "=="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Schwanz 0x4A4A63..0x4A4ABA: v42 nach Basisbesitz, v50++, v51:=Uhr, Klang 600"
     },
     {
      "_at": "0x4A4A71",
@@ -23110,7 +24569,9 @@
        "kind": "obj_owner",
        "op": "=="
       }
-     ]
+     ],
+     "_nur_mit": "--skriptvar-alt",
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — ALTE FASSUNG, nur mit --skriptvar-alt: der Schwanz von 0x4A4A2E als eigene Regel, lief jeden Takt"
     },
     {
      "_at": "0x4A4A88",
@@ -23128,7 +24589,9 @@
        "kind": "obj_owner",
        "op": "=="
       }
-     ]
+     ],
+     "_nur_mit": "--skriptvar-alt",
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — ALTE FASSUNG, nur mit --skriptvar-alt: der Schwanz von 0x4A4A2E als eigene Regel, lief jeden Takt"
     },
     {
      "_at": "0x4A4A9F",
@@ -23144,6 +24607,58 @@
        "a": 5,
        "b": 0,
        "kind": "obj_owner",
+       "op": "=="
+      }
+     ],
+     "_nur_mit": "--skriptvar-alt",
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — ALTE FASSUNG, nur mit --skriptvar-alt: der Schwanz von 0x4A4A2E als eigene Regel, lief jeden Takt"
+    },
+    {
+     "_at": "0x4A4AC9",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM5 Start (0x4A4ABF..0x4A4B1E): v50==1 & (Spieler v42 ohne Einheiten | t > v51+20) -> Text 415",
+     "_schalter": "--skriptvar-alt",
+     "any": [
+      {
+       "kind": "units_var",
+       "a": 0,
+       "b": 42,
+       "c": 0,
+       "op": "=="
+      },
+      {
+       "kind": "time_after",
+       "a": 51,
+       "b": 20,
+       "op": ">"
+      }
+     ],
+     "then": [
+      {
+       "kind": "inc",
+       "a": 50
+      },
+      {
+       "kind": "inc",
+       "a": 105
+      },
+      {
+       "kind": "text",
+       "a": 415,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "_at": "0x4A4B11"
+      },
+      {
+       "kind": "set_time",
+       "a": 51
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 50,
+       "b": 1,
        "op": "=="
       }
      ]
@@ -23470,6 +24985,23 @@
       }
      ],
      "_regeln": 4
+    }
+   ],
+   "betriebsart": [
+    {
+     "a": 4,
+     "b": 3,
+     "_at": "0x49232E"
+    },
+    {
+     "a": 6,
+     "b": 3,
+     "_at": "0x49233A"
+    },
+    {
+     "a": 5,
+     "b": 2,
+     "_at": "0x492346"
     }
    ]
   },
@@ -24086,6 +25618,28 @@
      143,
      5000
     ]
+   ],
+   "betriebsart": [
+    {
+     "a": 6,
+     "b": 4,
+     "_at": "0x492AE6"
+    },
+    {
+     "a": 5,
+     "b": 3,
+     "_at": "0x492AF2"
+    },
+    {
+     "a": 4,
+     "b": 1,
+     "_at": "0x492AFD"
+    },
+    {
+     "a": 2,
+     "b": 2,
+     "_at": "0x492B09"
+    }
    ]
   },
   "33": {
@@ -25265,6 +26819,28 @@
      70,
      5000
     ]
+   ],
+   "betriebsart": [
+    {
+     "a": 6,
+     "b": 3,
+     "_at": "0x4932EC"
+    },
+    {
+     "a": 2,
+     "b": 2,
+     "_at": "0x4932F8"
+    },
+    {
+     "a": 4,
+     "b": 1,
+     "_at": "0x493303"
+    },
+    {
+     "a": 1,
+     "b": 4,
+     "_at": "0x49330E"
+    }
    ]
   },
   "4": {
@@ -27371,6 +28947,115 @@
      ]
     },
     {
+     "_at": "0x49AD83",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM1 Wissenschaftler, Start (stille Leserluecke): v6==0 & [ t>v220+1 & v5!=0 | imap(7,107)<1000 | 54<x0<106 & y0>102 ] -> v8:=3, v6/v7/v101++, Text 172, drei Fahrbefehle. ⚠ Die Fahrt ruft 0x4021A8 -> 0x40B070 (Zielzelle, klemmt an den Rand) — als `move` eingetragen.",
+     "_schalter": "--skriptvar-alt",
+     "any_groups": [
+      [
+       {
+        "kind": "time_after",
+        "a": 220,
+        "b": 1,
+        "op": ">"
+       },
+       {
+        "kind": "var",
+        "a": 5,
+        "b": 0,
+        "op": "!="
+       }
+      ],
+      [
+       {
+        "kind": "imap",
+        "a": 7,
+        "b": 1000,
+        "c": 107,
+        "op": "<"
+       }
+      ],
+      [
+       {
+        "kind": "unit_pos",
+        "a": 0,
+        "b": 54,
+        "c": 0,
+        "op": ">"
+       },
+       {
+        "kind": "unit_pos",
+        "a": 0,
+        "b": 102,
+        "c": 1,
+        "op": ">"
+       },
+       {
+        "kind": "unit_pos",
+        "a": 0,
+        "b": 106,
+        "c": 0,
+        "op": "<"
+       }
+      ]
+     ],
+     "then": [
+      {
+       "kind": "set",
+       "a": 8,
+       "b": 3
+      },
+      {
+       "kind": "inc",
+       "a": 6
+      },
+      {
+       "kind": "inc",
+       "a": 7
+      },
+      {
+       "kind": "inc",
+       "a": 101
+      },
+      {
+       "kind": "text",
+       "a": 172,
+       "b": 1,
+       "c": 120,
+       "d": 380,
+       "_at": "0x49ADFE"
+      },
+      {
+       "kind": "move",
+       "a": 7001,
+       "b": 55,
+       "c": 49,
+       "_at": "0x49AE11"
+      },
+      {
+       "kind": "move",
+       "a": 7002,
+       "b": 55,
+       "c": 49,
+       "_at": "0x49AE24"
+      },
+      {
+       "kind": "move",
+       "a": 7003,
+       "b": 55,
+       "c": 49,
+       "_at": "0x49AE37"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 6,
+       "b": 0,
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49AE51",
      "_tut_ausserdem": "0x4D0860",
      "then": [
@@ -27545,6 +29230,102 @@
      ]
     },
     {
+     "_at": "0x49AF23",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Wissenschaftler 7001 entkommt bei (37,23): remove_unit, v8-- (vom Leser gelesen, JSON fehlte, Audit §3.2)",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "remove_unit",
+       "a": 7001,
+       "_at": "0x49AF28"
+      },
+      {
+       "kind": "dec",
+       "a": 8
+      }
+     ],
+     "when": [
+      {
+       "kind": "unit_pos",
+       "a": 7001,
+       "b": 37,
+       "c": 0,
+       "op": "=="
+      },
+      {
+       "kind": "unit_pos",
+       "a": 7001,
+       "b": 23,
+       "c": 1,
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AF49",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Wissenschaftler 7002 entkommt bei (37,23): remove_unit, v8-- (vom Leser gelesen, JSON fehlte, Audit §3.2)",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "remove_unit",
+       "a": 7002,
+       "_at": "0x49AF4E"
+      },
+      {
+       "kind": "dec",
+       "a": 8
+      }
+     ],
+     "when": [
+      {
+       "kind": "unit_pos",
+       "a": 7002,
+       "b": 37,
+       "c": 0,
+       "op": "=="
+      },
+      {
+       "kind": "unit_pos",
+       "a": 7002,
+       "b": 23,
+       "c": 1,
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AF6F",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Wissenschaftler 7003 entkommt bei (37,23): remove_unit, v8-- (vom Leser gelesen, JSON fehlte, Audit §3.2)",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "remove_unit",
+       "a": 7003,
+       "_at": "0x49AF74"
+      },
+      {
+       "kind": "dec",
+       "a": 8
+      }
+     ],
+     "when": [
+      {
+       "kind": "unit_pos",
+       "a": 7003,
+       "b": 37,
+       "c": 0,
+       "op": "=="
+      },
+      {
+       "kind": "unit_pos",
+       "a": 7003,
+       "b": 23,
+       "c": 1,
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49AFD2",
      "_tut_ausserdem": "0x4D0860",
      "then": [
@@ -27645,6 +29426,54 @@
        "c": 65535,
        "kind": "unit_index",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B0CE",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — UM1 Bezahlung (0x49B0CE..0x49B0F7): Wissenschaftler des Spielers mit UKOL 50 -> v9++, v8--, remove_unit, +350 $. v[10] setzt die Regel 0x49B0A0 davor.",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "inc",
+       "a": 9
+      },
+      {
+       "kind": "dec",
+       "a": 8
+      },
+      {
+       "kind": "remove_unit_var",
+       "a": 10,
+       "_at": "0x49B0E3"
+      },
+      {
+       "kind": "money",
+       "a": 350,
+       "b": 0,
+       "_at": "0x49B0F2"
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 8,
+       "b": 0,
+       "op": "!="
+      },
+      {
+       "kind": "unit_index",
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "op": "!="
+      },
+      {
+       "kind": "unit_field",
+       "a": 10,
+       "b": 20,
+       "c": 50,
+       "op": "=="
       }
      ]
     },
@@ -28726,6 +30555,148 @@
      ]
     },
     {
+     "_at": "0x49B8D5",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — schnelles Ende: t > v4+v6+12 -> Text 194, v4:=Uhr, v5 halbiert",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "inc",
+       "a": 3
+      },
+      {
+       "kind": "text",
+       "a": 194,
+       "b": 1,
+       "c": 360,
+       "d": 290,
+       "_at": "0x49B909"
+      },
+      {
+       "kind": "set_time",
+       "a": 4
+      },
+      {
+       "kind": "half",
+       "a": 5
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 3,
+       "b": 2,
+       "op": "=="
+      },
+      {
+       "kind": "time_after2",
+       "a": 4,
+       "b": 6,
+       "c": 12,
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B938",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — schnelles Ende: t > v4+v6+24 -> Text 195, v4:=Uhr, v5 halbiert",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "inc",
+       "a": 3
+      },
+      {
+       "kind": "text",
+       "a": 195,
+       "b": 1,
+       "c": 360,
+       "d": 290,
+       "_at": "0x49B96C"
+      },
+      {
+       "kind": "set_time",
+       "a": 4
+      },
+      {
+       "kind": "half",
+       "a": 5
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 3,
+       "b": 3,
+       "op": "=="
+      },
+      {
+       "kind": "time_after2",
+       "a": 4,
+       "b": 6,
+       "c": 24,
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B99B",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — schnelles Ende: t > v4+v6+30 -> Text 196, v5:=0, v104:=1 (gescheitert)",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "inc",
+       "a": 3
+      },
+      {
+       "kind": "text",
+       "a": 196,
+       "b": 1,
+       "c": 360,
+       "d": 290,
+       "_at": "0x49B9CF"
+      },
+      {
+       "kind": "set",
+       "a": 5,
+       "b": 0
+      },
+      {
+       "kind": "set",
+       "a": 104,
+       "b": 1
+      }
+     ],
+     "when": [
+      {
+       "kind": "var",
+       "a": 3,
+       "b": 4,
+       "op": "=="
+      },
+      {
+       "kind": "time_after2",
+       "a": 4,
+       "b": 6,
+       "c": 30,
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B9F8",
+     "_von_hand": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Heli-Zaehler (0x49B9F8..0x49BA33): v230 := Flugzeuge mit Typ > 12 und Besitzer 0",
+     "_schalter": "--skriptvar-alt",
+     "then": [
+      {
+       "kind": "set_air_count",
+       "a": 230,
+       "b": 0,
+       "c": 12
+      }
+     ],
+     "when": []
+    },
+    {
      "_at": "0x49BA67",
      "then": [
       {
@@ -28813,6 +30784,13 @@
        "a": 104,
        "b": 10,
        "kind": "set"
+      },
+      {
+       "kind": "money_var",
+       "a": 5,
+       "b": 0,
+       "_at": "0x49BB3A",
+       "_schalter": "--skriptvar-alt"
       }
      ],
      "when": [
@@ -28848,7 +30826,8 @@
        "kind": "var",
        "op": "!="
       }
-     ]
+     ],
+     "_ergaenzt": "02.10.2026 bug-388, Skriptvariablen-Audit (berichte/skriptvariablen-audit-fable.md) — Endauszahlung bus_cmd(528, v5) @0x49BB3A"
     },
     {
      "then": [

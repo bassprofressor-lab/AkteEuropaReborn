@@ -444,6 +444,9 @@ public partial class MapEntityLayer
             }
             _market.Remove(o);
             AbladenSchmuck(_entities.Count - 1);
+            // ⭐ 02.10.2026 (bug-389) — inc v99, wenn der Kaeufer der
+            // Sichtspieler ist (@0x4C15A3). Simulation/Skriptvariablen.cs.
+            SkriptvarMarktlieferung(owner);
             geliefert++;
         }
         ShopNote = verschoben == 0
@@ -964,6 +967,9 @@ public partial class MapEntityLayer
         SellNote = $"verkauft fuer ${o.Price} — Kontostand ${Money(owner)}";
 
         RemoveSoldUnit(idx, u);
+        // ⭐⭐ 02.10.2026 (bug-390) — v98 := Besitzer + 1, @0x4C0670 (F 0x4C0130),
+        // im selben Arm wie Geld und Loeschen. Simulation/Skriptvariablen.cs.
+        SkriptvarVerkaufVollzogen(owner);
         UpdatePanel();
         QueueRedraw();
     }

@@ -147,6 +147,10 @@ public partial class MapEntityLayer : Node2D
         /// weist niemanden zu« zu unterscheiden. Siehe AiZustandsmaschine.
         /// </summary>
         public int SmZuweisungen, SmBereit, SmAbkuehlung, SmLeine, SmFertig, SmKeinSektor;
+        /// <summary>⭐ 02.10.2026 (bug-400) — wie viele Satz-Durchläufe das faze-Tor
+        /// @0x4BBDEB übersprungen hat (<c>faze != 0</c>), und die zuletzt gezählte
+        /// Zahl gesperrter Sätze je Durchlauf. Siehe <see cref="MapEntityLayer.KiFazeAlt"/>.</summary>
+        public int SmFazeGesperrt, SmFazeJeDurchlauf;
         public readonly HashSet<string> ClassSeen = new();
 
         /// <summary>Welche INFANTERIE (typ +0x0a == 1) je einen Befehl bekommen
@@ -246,6 +250,8 @@ public partial class MapEntityLayer : Node2D
     public void EnableSkirmishAi(IEnumerable<int> players, AiLevel level = AiLevel.Normal)
     {
         _ai.Clear();
+        // der Lader 0x41E070 macht 0xFF -> 1: jede Mission beginnt ohne Ausgeschiedene
+        LebenspruefungZuruecksetzen();
         foreach (int p in players)
         {
             if (p is < 0 or > 7) continue;
@@ -256,6 +262,23 @@ public partial class MapEntityLayer : Node2D
         _aiOn = _ai.Count > 0;
         GD.Print($"KI aktiv fuer Spieler {string.Join(", ", _ai.Select(a => a.Player))} " +
                  $"({level})");
+    }
+
+    /// <summary>⚠ NUR FUER PRUEFSTAENDE (02.10.2026, --ki-einnahme-check K13):
+    /// einen Spieler nachtraeglich in die KI-Liste nehmen. StartCampaign nimmt nur,
+    /// wer beim Start Einheiten oder Bauten hat; ein Spieler, der erst per
+    /// space_in ankommt (M13 P4), bleibt ohne KI. Nebenbefund, nicht behoben.
+    /// ⚠ 02.10.2026 (bug-396): seit der Lebensprüfung ist M13 P4 ab Takt 50
+    /// AUSGESCHIEDEN; dieser Nachtrag holt ihn trotzdem zurück — eine reine
+    /// Prüfstand-Setzung, das Original kennt den Weg 0xFF → 1 in der Mission nicht.</summary>
+    public bool KiSpielerNachtragenFuerProbe(int p)
+    {
+        if (p is < 0 or > 7 || _ai.Any(x => x.Player == p)) return false;
+        var a = new AiPlayer(p) { Level = AiLevel.Normal, Think = 0.5f + p * 0.13f };
+        AiLoadPlan(a);
+        _ai.Add(a);
+        _aiOn = true;
+        return true;
     }
 
     public bool SkirmishAiActive => _aiOn;
@@ -1130,7 +1153,7 @@ public partial class MapEntityLayer : Node2D
                 : "") +
             $"| Maschine: {a.SmZuweisungen} zugewiesen, {a.SmBereit}x bereit, " +
             $"{a.SmAbkuehlung}x abgekuehlt, {a.SmLeine}x Leine, {a.SmFertig}x fertig, " +
-            $"{a.SmKeinSektor}x kein Sektor " +
+            $"{a.SmKeinSektor}x kein Sektor, {a.SmFazeJeDurchlauf} faze-gesperrt " +
             $"[{string.Join(" ", a.ClassSeen)}]; Infanterie bewegt " +
             $"{a.MovedInf.Count}/{InfantryOf(a.Player)}"));
     }
@@ -1213,6 +1236,12 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 11.09.2026 — der 150er-Zaehler der Teilespende zaehlt in JEDEM
         // ai_tick, vor der Spielerschleife (@0x4BFBA6..0x4BFBBB).
         bool spendeFaellig = TeilespendeZaehlen();
+        // ⭐ 02.10.2026 (bug-396) — TAKT 0, »AI: test of life« 0x4BAB40: wer keine
+        // Basis/Flughafen/Seedock, keine Einheit und kein Flugzeug hat, scheidet
+        // endgueltig aus, seine Gebaeude gehen an 11. Simulation/Lebenspruefung.cs,
+        // Gegenschalter --lebenspruefung-aus. VOR der Spielerschleife, damit ein
+        // Ausgeschiedener in diesem Takt schon nicht mehr zieht.
+        LebenspruefungTakt();
         if (!_aiOn) return;
 
         // ⭐ 12.09.2026 — DIE UHR DER STUFENLEITER (Simulation/KiStufen.cs).
@@ -1374,6 +1403,66 @@ public partial class MapEntityLayer : Node2D
         public int Kind, Priority, Word, Second;
     }
 
+    /// <summary>
+    /// ⭐⭐ 02.10.2026 (bug-384) — <b>DER TÜRGRIFF: Art 1 mit <c>c == 0</c> ist
+    /// ein EINNAHMEZIEL, kein Angriff.</b>
+    ///
+    /// <para>Gelesen in berichte/ki-tuergriff-selbstverteidiger-fable.md §2:
+    /// beide Vollstrecker der Zieltafel verzweigen an <c>c</c>. Mit
+    /// <c>c != 0</c> wird das Gebäude angegriffen (<c>order</c>, Ziel
+    /// 60000+Platz, Gruppenlauf @0x4BD23B / BA5 @0x4BDE98); mit <c>c == 0</c>
+    /// fahren die Einheiten auf die Zelle UNTER Tür 0
+    /// <c>(x+[+0x35], y+[+0x36]+1)</c> — genau die Einnahmezelle @0x43CBEF
+    /// (Gruppenlauf @0x4BD2ED…0x4BD392, <c>fahre</c> @0x4BD380; BA5
+    /// @0x4BDF18…0x4BDFAD). Erledigt ist der Auftrag, sobald das Gebäude dem
+    /// Spieler gehört (@0x4BD095).</para>
+    ///
+    /// <para>Bis heute ignorierte <see cref="ResolveTarget"/> das <c>c</c>, und
+    /// jedes Art-1-Ziel wurde als Angriff gespielt — M13 gibt P4 fünf
+    /// <c>c == 0</c>-Ziele.</para>
+    ///
+    /// <para><c>--ki-tuergriff-aus</c>: der Stand vor dem 02.10.2026 (Angriff,
+    /// keine Bündnisprüfung in der Zielwahl).</para>
+    /// </summary>
+    private static bool IstTuergriff(MissionTarget? t)
+        => !TuergriffAus && t != null && t.Kind == 1 && t.Second == 0;
+
+    /// <summary><c>--ki-tuergriff-aus</c> — siehe <see cref="IstTuergriff"/>.</summary>
+    public static bool TuergriffAus;
+
+    // ⭐ 02.10.2026 — die Zähler der drei Bauten A/B/C, für die Prüfstände
+    // (--ki-einnahme-check). Jede Zahl ist eine Wirkung, nicht ein Versuch.
+    /// <summary>⭐ 02.10.2026 — warum AiMissionAttack ausstieg, je Spieler und
+    /// Grund gezählt (für --ki-einnahme-check). Die letzte Stufe ist
+    /// »losgeschickt«.</summary>
+    private readonly Dictionary<string, int> _amGruende = new();
+    private void AmGrund(int p, string grund)
+    {
+        string k = $"P{p} {grund}";
+        _amGruende[k] = _amGruende.GetValueOrDefault(k) + 1;
+    }
+    public string AmGruendeZeile()
+        => string.Join(", ", _amGruende.OrderBy(x => x.Key).Select(x => $"{x.Key} {x.Value}x"));
+
+    /// <summary>Gebildete Türgriff-Gruppen.</summary>
+    public int TuergriffGruppen { get; private set; }
+    /// <summary>Fahrbefehle auf eine Einnahmezelle (Gruppe + Nachschub).</summary>
+    public int TuergriffFahrten { get; private set; }
+    /// <summary>Türgriff-Gruppen, aufgelöst weil das Gebäude jetzt uns gehört.</summary>
+    public int TuergriffErledigt { get; private set; }
+    /// <summary>Art-1-Ziele, die die Zielwahl als eigen/verbündet übersprang.</summary>
+    public int ZielwahlVerbuendetUebersprungen { get; private set; }
+    /// <summary>KI-Runden im Betriebsart-5-Arm mit gültigem Ziel.</summary>
+    public int Ba5Runden { get; private set; }
+    /// <summary>Einheiten, die der BA5-Arm zuletzt auf Modus 10 setzte.</summary>
+    public int Ba5Modus10 { get; private set; }
+    /// <summary>Fahr-/Angriffsbefehle des BA5-Arms.</summary>
+    public int Ba5Befehle { get; private set; }
+    /// <summary>Einheiten, die die Türmeidung wegschickte (Treffer im Fenster).</summary>
+    public int TuermeidungTreffer { get; private set; }
+    /// <summary>... davon mit gefundenem Weg.</summary>
+    public int TuermeidungFahrten { get; private set; }
+
     private readonly List<MissionTarget>[] _missionTargets =
         { new(), new(), new(), new(), new(), new(), new(), new() };
 
@@ -1497,7 +1586,7 @@ public partial class MapEntityLayer : Node2D
         // Ein doppelt so wichtiges Ziel darf also doppelt so weit weg liegen —
         // und ein weites oder unwichtiges Ziel verlangt mehr Ueberschuss.
         // Die ganze Kette steht in Scripts/Simulation/SkirmishAiSectors.cs.
-        if (AiGesperrt(a.Player)) return;          // sec106: das Skript fuehrt ihn
+        if (AiGesperrt(a.Player)) { AmGrund(a.Player, "gesperrt"); return; }   // sec106: das Skript fuehrt ihn
 
         AiGruppenPflegen(a.Player);
         AiStaerkeraster(a.Player);
@@ -1509,15 +1598,25 @@ public partial class MapEntityLayer : Node2D
         // die alte Bruecke.)
         if (!SektormaschineAlt) AiZustandsmaschine(a);
 
+        // ⭐⭐ 02.10.2026 (bug-384) — DIE WEICHE von `ai_player_step` 0x4BE2E0:
+        // `sec61[p] == 5 -> 0x4BDCC0(p)`, sonst `0x4BECF0(p)`. Betriebsart 5
+        // kennt keine freien Angreifer, keine Wegekarte und keine Gruppe —
+        // siehe AiBetriebsart5.
+        if (_aiSec61[a.Player] == 5 && !Betriebsart5Aus)
+        {
+            AiBetriebsart5(a, list);
+            return;
+        }
+
         int freie = AiFreieAngreifer(a.Player, out int sx, out int sy);
-        if (freie == 0) return;                    // »Not free attacker:«
+        if (freie == 0) { AmGrund(a.Player, "keine freien"); return; }   // »Not free attacker:«
 
         var (platz, po) = AiZielwahl(a.Player, list, sx, sy);
-        if (platz < 0) return;                     // r_best == 0xFF
+        if (platz < 0) { AmGrund(a.Player, "kein Ziel waehlbar"); return; }   // r_best == 0xFF
 
         // Die Freigabe des Originals. `sec61 == 5` haengt sie aus: diese
         // Betriebsart greift auch dann an, wenn zu wenige frei sind.
-        if (!(freie > po || _aiSec61[a.Player] == 5)) return;
+        if (!(freie > po || _aiSec61[a.Player] == 5)) { AmGrund(a.Player, $"freie {freie} <= po {po}"); return; }
 
         var auftrag = list[platz];
         int ziel = ResolveTarget(a.Player, auftrag);
@@ -1529,22 +1628,133 @@ public partial class MapEntityLayer : Node2D
         // passieren — sec69 ist eine feste 100er-Tafel, in der ein erledigter
         // Auftrag AN ORT UND STELLE geleert wird.
         int g = AiGruppeBilden(a.Player, auftrag, po);
-        if (g < 0) return;                         // »Attack group not available«
+        if (g < 0) { AmGrund(a.Player, "keine Gruppe"); return; }   // »Attack group not available«
+        AmGrund(a.Player, "losgeschickt");
 
         // ⚠ UNSER Anteil bleibt das FAHREN. `0x4BCF30` (671 Befehle) und die
         // sec108-Wegpunkte sind noch nicht gelesen; bis dahin schicken wir die
         // Gruppe wie bisher mit `AiSend` los.
+        // ⭐ 02.10.2026 (bug-384) — der Gruppenlauf 0x4BCF30 verzweigt an `c`:
+        // ein Türgriff FAEHRT auf die Einnahmezelle (`fahre` @0x4BD380), alles
+        // andere greift an. AiWalkTo nimmt auch Unbewaffnete, wie das Original.
+        bool tuer = IstTuergriff(auftrag);
+        var front = tuer ? CaptureCells(_entities[ziel]).Front : default;
+        if (tuer) TuergriffGruppen++;
         a.Wave.Clear();
         foreach (int i in _aiGruppen[a.Player][g].Einheiten)
         {
             a.Wave.Add(i);
-            AiSend(i, ziel);
+            if (!tuer) AiSend(i, ziel);
+            else if (AiWalkTo(i, front)) TuergriffFahrten++;
         }
         a.TargetIdx = ziel;
         a.Waves++;
-        GD.Print($"KI P{a.Player}: Gruppe {g} mit {a.Wave.Count} Einheiten auf " +
+        GD.Print($"KI P{a.Player}: Gruppe {g} mit {a.Wave.Count} Einheiten " +
+                 (tuer ? $"zum EINNEHMEN auf Zelle ({front.X},{front.Y}) vor " : "auf ") +
                  $"{_entities[ziel].Name} bei ({_entities[ziel].Col},{_entities[ziel].Row}) " +
                  $"— po={po}, freie={freie}, Start-Sektor ({sx},{sy})");
+    }
+
+    /// <summary>
+    /// ⭐⭐ 02.10.2026 (bug-384) — <b>BETRIEBSART 5, <c>0x4BDCC0</c> / F
+    /// <c>0x4BD780</c></b>, nach berichte/ki-tuergriff-selbstverteidiger-fable.md
+    /// §2.2.
+    ///
+    /// <list type="number">
+    ///   <item><b>Wahl</b> (<c>0x4BDCED…0x4BDDE6</c>): höchster Vorrang, STRIKT
+    ///   (der erste gewinnt), Gültigkeit je Art (Tafel <c>0x4BE184</c>); ein
+    ///   Art-1-Ziel ohne Gebäude wird gelöscht. Kein Besitzer-, kein
+    ///   Bündnistest.</item>
+    ///   <item>Keins → zurück. Sonst <b>alle Plätze des Spielers Modus := 10</b>
+    ///   (<c>0x4BDDF8…0x4BDE24</c>) — sie fallen aus Zustandsmaschine und
+    ///   Gruppenangriff.</item>
+    ///   <item><b>Vollzug</b> (Tafel <c>0x4BE194</c>): Art 1 <c>c == 0</c>
+    ///   @0x4BDF18 — jede Einheit, die nicht schon dorthin fährt,
+    ///   <c>fahre</c> auf die Einnahmezelle, JEDE Runde neu; Art 1 <c>c != 0</c>
+    ///   @0x4BDE98 — <c>order</c> auf das Gebäude für alle, die nicht schon
+    ///   angreifen; Art 2 <c>order</c> auf die Einheit; Art 4 <c>fahre</c> auf
+    ///   die Zelle ±1.</item>
+    /// </list>
+    ///
+    /// <para><b>⚠ UNSERE SETZUNGEN, benannt:</b> »<c>faze == 0</c>« lesen wir
+    /// als lebend, beweglich, KEIN Fußvolk (Zellenmänner stehen nicht im
+    /// Spielerblock) und <c>Ukol == 0</c> (nicht untergestellt/an der Tür —
+    /// sonst führen Depot-Einheiten als Geister los, siehe AiSteht). Die
+    /// Streuung des Angriffs (<c>rand%10−2</c>) übernimmt AiSend nicht — wir
+    /// greifen das Gebäude selbst an. Art 3 (sec17) führen wir nicht.</para>
+    /// </summary>
+    private void AiBetriebsart5(AiPlayer a, List<MissionTarget> list)
+    {
+        int p = a.Player;
+        MissionTarget? best = null;
+        int bestIdx = -1, vorrang = 0;
+        for (int k = 0; k < list.Count; k++)
+        {
+            var t = list[k];
+            if (t.Kind == 0) continue;
+            int idx = ResolveTarget(p, t);
+            if (idx < 0)
+            {
+                // nur Art 1 wird hier geloescht (`typ == 0`), die anderen
+                // gelten nur nicht
+                if (t.Kind == 1) { list.RemoveAt(k); k--; }
+                continue;
+            }
+            if (t.Priority <= vorrang) continue;           // strikt: der erste gewinnt
+            vorrang = t.Priority;
+            best = t;
+            bestIdx = idx;
+        }
+        if (best == null) return;
+
+        Ba5Runden++;
+        int modus10 = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || e.Infantry >= 0) continue;
+            e.AiCpu0 = 10;                                  // @0x4BDDF8
+            modus10++;
+        }
+        Ba5Modus10 = modus10;
+
+        var ziel = _entities[bestIdx];
+        bool tuer = IstTuergriff(best);
+        var front = tuer ? CaptureCells(ziel).Front : default;
+        int befehle = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || e.Infantry >= 0) continue;
+            if (!e.Mobile || e.Ukol != 0) continue;         // faze != 0 -> weiter (Lesart oben)
+            switch (best.Kind)
+            {
+                case 1 when tuer:                           // @0x4BDF18
+                    // »UKOL == 2 && CX == X && CY == Y -> weiter« — faehrt schon hin
+                    if (e.Path != null && e.Goal == front) break;
+                    if ((e.Col, e.Row) == (front.X, front.Y)) break;
+                    if (AiWalkTo(i, front)) { befehle++; TuergriffFahrten++; }
+                    break;
+                case 1:                                     // @0x4BDE98, c != 0
+                case 2:                                     // @0x4BDFB7
+                    if (e.Target == bestIdx) break;         // UKOL 4: greift schon an
+                    AiSend(i, bestIdx);
+                    befehle++;
+                    break;
+                case 4:                                     // @0x4BE0ED
+                {
+                    if (e.Path != null) break;
+                    var zelle = new Vector2I(ziel.Col + a.Roll(3) - 1, ziel.Row + a.Roll(3) - 1);
+                    if (AiWalkTo(i, zelle)) befehle++;
+                    break;
+                }
+            }
+        }
+        Ba5Befehle += befehle;
+        if (befehle > 0)
+            GD.Print($"KI P{p}: Betriebsart 5 — Ziel Art {best.Kind} " +
+                     (tuer ? "(EINNAHME) " : "") +
+                     $"{ziel.Name} ({ziel.Col},{ziel.Row}), {modus10} auf Modus 10, " +
+                     $"{befehle} Befehle");
     }
 
     /// <summary>

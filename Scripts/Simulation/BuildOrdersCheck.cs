@@ -425,6 +425,18 @@ public partial class MapEntityLayer
                               : "(Soll ZU: kein Beleger, harte Sperre)"));
         }
 
+        // ⭐ 02.10.2026, bug-386 — und IM BAU gar kein Torblatt (0x42FCF8).
+        if (neu != null && neu.Doors > 0)
+        {
+            bool imBau = neu.Bauzustand >= BauzustandStart;
+            bool verborgen = TorImBauVerborgen(neu);
+            bool soll = imBau && !BautorAlt;
+            sb.AppendLine($"  {(verborgen == soll ? "ok  " : "⚠ FALSCH")} Torblatt bei Bauzustand {neu.Bauzustand}: " +
+                          $"{(verborgen ? "nicht gezeichnet" : "gezeichnet")} " +
+                          (BautorAlt ? "(Nullmodell --bautor-alt: gezeichnet)"
+                                     : imBau ? "(Soll im Bau: keins, nur Geruest — 0x42FCF8)" : "(Soll fertig: gezeichnet)"));
+        }
+
         sb.AppendLine($"  zugedeckte Zellen: {GebaeudeDeckzellen} " +
                       (VorkommenUnterMineAlt
                           ? "   ⚠ Nullmodell --vorkommen-unter-mine-alt: die Objektebene "

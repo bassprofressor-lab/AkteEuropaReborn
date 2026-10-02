@@ -15,6 +15,14 @@ using Godot;
 ///   E3  je Waggon gelöscht, Nachläufer 4/7/11 Takte später @0x4C6C47 / @0x4C709C   --zug-einfahrt-alt
 ///   E4  Gleis im Fach seiner Zelle (Versatz 0 statt 2)     @0x42DFE9 / @0x4B43F3   --gleisfach-alt
 ///   E5  Prüfstand --zug-einfahrt-check (je Takt sichtbarer Anteil, Rückstand, Endpunkt)
+///
+/// ⭐⭐ 02.10.2026 — bug-395, DIE FEINLAGE (»Gebäude/Züge ist schon gut, aber noch nicht
+/// ganz sauber«), Bauvorlage berichte/zug-feinlage-fable.md §5:
+///   F0  Bogenlänge in der Ebene, Rampe getrennt  0x539400 / 0x4C73C8 @0x4C6ED9   --zug-bogen-schirm
+///   F1  WagonOverRail −18 statt −23 (5 px)       @0x42E214…0x42E24A             --zug-feinlage-alt
+///   F2  Sichtprobe sec50 je Waggon               @0x42E197 (Basis 0x678B55)     --zug-ohne-sichtprobe
+///   F3  Prüfstand E (Deckung je Gebäudeart), F (Waggonabstand ≥ 12 px mit Ort)
+///   F4  ZugAuslauf auf dem verlängerten Weg      @0x42E14F / @0x4C6C47          --zug-einfahrt-alt
 /// </code>
 ///
 /// <para>⚠ Das »Hineinfahren« ist im Original NUR Malerordnung + Kachelform: kein Tor,
@@ -66,6 +74,170 @@ public partial class MapEntityLayer
             : new Vector2(rp.X, rp.Y - 0.5f);
     }
 
+    // ---- bug-395 F0: die Bogenlänge in der Ebene ----------------------------------
+
+    /// <summary>Die Länge eines Wegglieds für den Fortschritt: der Abstand in der
+    /// EBENE <c>(Δcol·40, Δrow·20)</c>, die Höhe (<c>ElevOf·15</c> in RailPoint und der
+    /// Lift aus dem Gleisbild) bleibt allein fürs Zeichnen. Mit
+    /// <c>--zug-bogen-schirm</c> wieder in Schirmpixeln mit Höhe (Stand bis 02.10.2026).
+    /// Original: Δ aus 0x539400 je Stück in der Ebene, Rampe ±15 getrennt (0x4C73C8).</summary>
+    private float ZugBogenGlied(Vector2 a, float liftA, Vector2 b, float liftB)
+        => ZugBogenSchirm
+            ? RailLifted(a, liftA).DistanceTo(RailLifted(b, liftB))
+            : new Vector2((b.X - a.X) * TileW, (b.Y - a.Y) * TileH).Length();
+
+    // ---- bug-395 F2: die Sichtprobe des Einreihers ---------------------------------
+
+    /// <summary>Wieviele Waggonbilder die Sichtprobe zuletzt weggelassen hat (je Bild
+    /// im Zeichner, je Takt im Prüfstand).</summary>
+    public int ZugImNebelVerborgen;
+
+    /// <summary>Die Zelle, die der Einreiher @0x42E197 für einen Waggon prüft:
+    /// <c>byte[0x678B55 + Spalte·256 + Zeile + yoff]</c>. ⚠ Die Basis ist 0x678B55,
+    /// nicht die sec50-Basis 0x678B58 (die das Flugzeug @0x42E373 nimmt) — gelesen
+    /// heißt das sec50[Spalte, Zeile + yoff − 3] (O, @0x42E197 Byte für Byte; im
+    /// Bericht §1.1 als »Zeile + yoff« verkürzt). V: die Zelle, über der das
+    /// Waggonbild liegt (Blitziel 90 px = 4,5 Zeilen über dem Routenpunkt).
+    /// Spalte/Zeile/Stück aus dem nächsten ROUTENPUNKT wie <c>WaggonFach</c>.</summary>
+    private (int Spalte, int Zeile) ZugSichtZelle(Wagon w)
+    {
+        int fach = WaggonFach(w, out int k, out _);         // Zeile + yoff + 2
+        int spalte = Mathf.RoundToInt(w.Col);
+        if (k >= 0 && _lineRoute.TryGetValue(w.Line, out var rt) && k < rt.Count)
+            spalte = Mathf.FloorToInt(rt[k].X + 1e-3f);
+        return (spalte, fach - 2 - 3);
+    }
+
+    /// <summary>F2: liegt der Waggon in einer gerade nicht beobachteten Zelle? Dann
+    /// zeichnet ihn das Original nicht (@0x42E19F <c>je 0x42E2AF</c>) — auch den
+    /// eigenen, es gibt hier keinen Besitzervergleich wie beim Flugzeug @0x42E366.
+    /// sec50 ist die TAKT-Sicht (<c>Watched</c>), nicht das Gedächtnis.
+    /// Gegenschalter <c>--zug-ohne-sichtprobe</c>.</summary>
+    private bool ZugImNebel(Wagon w)
+    {
+        if (ZugOhneSichtprobe || !FogActive) return false;
+        var (s, z) = ZugSichtZelle(w);
+        return !Watched(s, z);
+    }
+
+    // ---- bug-395 F3: der Waggonabstand -----------------------------------------------
+
+    /// <summary>Kleinster Abstand aufeinanderfolgender Waggons, in der EBENE (das Maß,
+    /// das die Tafeln des Originals führen) und auf dem Schirm (mit Höhe, zur
+    /// Auskunft), je Richtung des Gleisstücks unter dem Hintermann.</summary>
+    private sealed class ZugAbstandStat
+    {
+        public int Paare, Nah, Unter12;
+        public float Min = float.MaxValue, MinSchirm = float.MaxValue;
+        /// <summary>⭐ bug-397: Paare auf GERADER Strecke (beide Waggons mit demselben Stück) —
+        /// dort hält das Original die 12 px (W1→W2 senkrecht 3·4). An Ecken liegt die Sehne
+        /// unter dem Weg; das Original selbst geht dort auf 10,4 px (senkrecht↔schräg) und an
+        /// der Spitzkehre der DM_4-Linie 0 auf 5,1 px (Nachrechnung orig_abstand.py, 02.10.).</summary>
+        public int PaareGerade, Unter12Gerade;
+        public float MinGerade = float.MaxValue;
+        public string WoGerade = "";
+        public string Wo = "";
+        /// <summary>0 waagerecht, 1 senkrecht, 2 schräg.</summary>
+        public readonly float[] MinJe = { float.MaxValue, float.MaxValue, float.MaxValue };
+        public readonly int[] PaareJe = new int[3];
+    }
+
+    private readonly ZugAbstandStat _zeAbstand = new();
+
+    /// <summary>Soll aus Bericht zug-feinlage-fable.md §2.4: der kleinste Paarabstand
+    /// des Originals je Richtung ist W1→W2 (3 Takte Rückstand) — waagerecht 3·8 = 24,
+    /// senkrecht 3·4 = 12, schräg 3·6,4 ≈ 19 px. ⚠ Bis bug-395 fuhr unser Modell in allen
+    /// Richtungen gleich schnell (Bogenlänge); seit bug-397 (F7, Simulation/ZugFahrmodell.cs)
+    /// je Schritt wie 0x4C69C0 — die Werte je Richtung bleiben Auskunft (das Stück unter dem
+    /// Hintermann ist nicht immer das des Paars); Kriterium ist der Gesamtmindestabstand ≥ 12 px.</summary>
+    private static readonly float[] ZugAbstandSoll = { 24f, 12f, 19f };
+
+    private void ZugAbstandBild(ZugAbstandStat st)
+    {
+        foreach (var kv in _freightWagons)
+        {
+            var list = kv.Value;
+            for (int i = 1; i < list.Count; i++)
+            {
+                var a = list[i - 1]; var b = list[i];
+                if (a.Hidden || b.Hidden) continue;
+                var eb = new Vector2((a.Col - b.Col) * TileW, (a.Row - b.Row) * TileH);
+                float d = eb.Length();
+                float ds = RailLifted(new Vector2(a.Col, a.Row), a.Lift)
+                           .DistanceTo(RailLifted(new Vector2(b.Col, b.Row), b.Lift));
+                int p = b.Piece & 7;
+                int art = p is 2 or 6 ? 0 : p is 0 or 4 ? 1 : 2;
+                st.Paare++; st.PaareJe[art]++;
+                if (d < 10f) st.Nah++;
+                if (d < 12f - 0.05f) st.Unter12++;
+                if (ds < st.MinSchirm) st.MinSchirm = ds;
+                if ((a.Piece & 7) == p)
+                {
+                    st.PaareGerade++;
+                    if (d < 12f - 0.05f) st.Unter12Gerade++;
+                    if (d < st.MinGerade)
+                    {
+                        st.MinGerade = d;
+                        st.WoGerade = $"Linie {kv.Key} W{a.Index}->W{b.Index} Stueck {p} bei ({a.Col:0.00},{a.Row:0.00}) / ({b.Col:0.00},{b.Row:0.00})";
+                    }
+                }
+                if (d < st.MinJe[art]) st.MinJe[art] = d;
+                if (d < st.Min)
+                {
+                    st.Min = d;
+                    var pd = RailPathOf(kv.Key);
+                    var l = ZdLinie(kv.Key);
+                    string bogen = pd?.Cum != null && pd.Cum.Length > 1
+                        ? $", Bogen {Mathf.Abs(RailIndexToArc(pd.Cum, a.LeadF) - RailIndexToArc(pd.Cum, b.LeadF)):0.0} px" +
+                          (l != null && l.TravelFull > 0f ? $", {pd.Cum[^1] / (l.TravelFull * TickScale):0.00} px je Takt" : "")
+                        : "";
+                    st.Wo = $"Linie {kv.Key} W{a.Index}->W{b.Index} Stueck {p} bei ({a.Col:0.00},{a.Row:0.00}) / " +
+                            $"({b.Col:0.00},{b.Row:0.00}), Lift {a.Lift:0.0}/{b.Lift:0.0}, Schirm {ds:0.0} px{bogen}";
+                }
+            }
+        }
+    }
+
+    private static string ZugAbstandText(ZugAbstandStat st)
+    {
+        if (st.Paare == 0) return "keine Paare";
+        string[] n = { "waagerecht", "senkrecht", "schraeg" };
+        var sb = new System.Text.StringBuilder(
+            $"{st.Paare} Paare, unter 12 px {st.Unter12}, unter 10 px {st.Nah}, kleinster {st.Min:0.0} px in der Ebene " +
+            $"({st.Wo}); auf dem Schirm kleinster {st.MinSchirm:0.0} px; je Richtung (Original-Soll W1->W2):");
+        for (int i = 0; i < 3; i++)
+            sb.Append($" {n[i]} {(st.PaareJe[i] > 0 ? $"{st.MinJe[i]:0.0}" : "—")} (Soll {ZugAbstandSoll[i]:0})");
+        return sb.ToString();
+    }
+
+    // ---- bug-395: der Bildauslöser an der Rampe ---------------------------------------
+
+    /// <summary><c>--shot-when=rampe</c>: ein Spitzen- oder Folgewaggon steht auf einem
+    /// Rampenglied (Lift &gt; 3 px), und sein Hintermann ist sichtbar und weniger als
+    /// zwei Zellen entfernt — dort sah man vor F0 das Stauchen.</summary>
+    public bool ZugAufRampe(out Vector2 at, out int linie, out string was)
+    {
+        at = default; linie = -1; was = "";
+        foreach (var kv in _freightWagons)
+        {
+            var list = kv.Value;
+            for (int i = 1; i < list.Count; i++)
+            {
+                var a = list[i - 1]; var b = list[i];
+                if (a.Hidden || b.Hidden || Mathf.Max(a.Lift, b.Lift) < 3f) continue;
+                var eb = new Vector2((a.Col - b.Col) * TileW, (a.Row - b.Row) * TileH);
+                if (eb.Length() > 2f * TileW) continue;
+                at = new Vector2(a.Col, a.Row); linie = kv.Key;
+                var sb = new System.Text.StringBuilder();
+                foreach (var w in list)
+                    sb.Append($" W{w.Index} " + (w.Hidden ? "—" : $"({w.Col:0.00},{w.Row:0.00}) Lift {w.Lift:0.0}"));
+                was = $"W{a.Index}->W{b.Index} Ebene {eb.Length():0.0} px |{sb}";
+                return true;
+            }
+        }
+        return false;
+    }
+
     private ZugWegDaten? ZugWegOf(int line, List<Vector2> route)
     {
         if (_zugWeg.TryGetValue(line, out var got) && ReferenceEquals(got.Quelle, route)) return got;
@@ -78,7 +250,12 @@ public partial class MapEntityLayer
         if (_lineRoute.TryGetValue(line, out var rt) && rt.Count >= 4)
         {
             int n = rt.Count;
-            Vector2 a = ZugRoutenpunktZelle(rt[1]), b = ZugRoutenpunktZelle(rt[n - 3]);
+            // ⭐ bug-397 (F7): im Fahrmodell je Schritt endet die sichtbare Fahrt in BEIDEN
+            // Richtungen kurz vor Routenpunkt delka−1 bzw. 1 (vorwärts cursor delka−2 mittelt
+            // auf P(delka−1) zu, rückwärts steht cursor c auf P(c+1), 424 Spielstandsätze) —
+            // der Gegenpunkt am Ende ist dann P(delka−1) = rt[n−2], nicht rt[n−3].
+            int hi = ZugFahrmodellNeu ? n - 2 : n - 3;
+            Vector2 a = ZugRoutenpunktZelle(rt[1]), b = ZugRoutenpunktZelle(rt[hi]);
             // Die Kette läuft Bud1 → Bud2 (RailChainFlipped), die Route nicht zwingend.
             bool gedreht = (a - route[0]).LengthSquared() + (b - route[^1]).LengthSquared()
                          > (a - route[^1]).LengthSquared() + (b - route[0]).LengthSquared();
@@ -88,8 +265,8 @@ public partial class MapEntityLayer
             // Stück je Routenschritt: pieces[i] = Schritt i−1 → i (pieces[0] = pieces[1]).
             if (_linePiece.TryGetValue(line, out var rp) && rp.Count == n)
             {
-                weg.StueckVorn = gedreht ? (rp[n - 3] + 4) & 7 : rp[2];
-                weg.StueckHinten = gedreht ? (rp[2] + 4) & 7 : rp[n - 3];
+                weg.StueckVorn = gedreht ? (rp[hi] + 4) & 7 : rp[2];
+                weg.StueckHinten = gedreht ? (rp[2] + 4) & 7 : rp[hi];
             }
             if (Verlaengerbar(vorn, route[0], route[1]))
             {
@@ -111,9 +288,9 @@ public partial class MapEntityLayer
         weg.Pts = pts;
         weg.Lift = lift.ToArray();
         weg.Cum = new float[pts.Count];
+        // bug-395 (F0): Bogen in der EBENE, wie RailPathOf.
         for (int i = 1; i < pts.Count; i++)
-            weg.Cum[i] = weg.Cum[i - 1] + RailLifted(pts[i - 1], weg.Lift[i - 1])
-                                              .DistanceTo(RailLifted(pts[i], weg.Lift[i]));
+            weg.Cum[i] = weg.Cum[i - 1] + ZugBogenGlied(pts[i - 1], weg.Lift[i - 1], pts[i], weg.Lift[i]);
         _zugWeg[line] = weg;
         return weg;
 
@@ -328,9 +505,22 @@ public partial class MapEntityLayer
         }
     }
 
+    private int _zeNebelBilder, _zeWaggonBilder;
+
     private void ZeBild()
     {
         var da = new HashSet<Wagon>();
+        // bug-395 F3: Waggonabstand je Takt; F2: was die Sichtprobe weglässt
+        if (ZugEinfahrtCheckAn && !_zeFertig)
+        {
+            ZugAbstandBild(_zeAbstand);
+            foreach (var w in _wagons)
+            {
+                if (w.Hidden) continue;
+                _zeWaggonBilder++;
+                if (ZugImNebel(w)) _zeNebelBilder++;
+            }
+        }
         foreach (var w in _wagons)
         {
             if (!w.Freight) continue;
@@ -417,6 +607,10 @@ public partial class MapEntityLayer
         return new List<Dictionary<int, ZeEreignis>>(fahrten.Values);
     }
 
+    /// <summary>bug-395 F3a: erlaubte Abweichung der Deckung je Fall, Prozentpunkte
+    /// (Begründung am Aufruf: eine Pixelspalte des Waggonbilds).</summary>
+    private const float ZeFallToleranz = 3f;
+
     private static string ZeTypName(int t) => t switch
     {
         1 => "Basis", 2 or 3 => "Fabrik", 6 => "Bahnstation", 12 => "Feldbahnhof", _ => $"Typ {t}",
@@ -430,6 +624,10 @@ public partial class MapEntityLayer
         if (GleisfachAlt) schalter.Add("--gleisfach-alt");
         if (ZugfachAlt) schalter.Add("--zugfach-alt");
         if (ZugStehtAmBahnsteig) schalter.Add("--zug-steht-am-bahnsteig");
+        if (ZugBogenSchirm) schalter.Add("--zug-bogen-schirm");
+        if (ZugFeinlageAlt) schalter.Add("--zug-feinlage-alt");
+        if (ZugOhneSichtprobe) schalter.Add("--zug-ohne-sichtprobe");
+        if (ZugFahrmodellAlt) schalter.Add("--zug-fahrmodell-alt");
         if (schalter.Count > 0) sb.Append($"⚠ NULLMODELL {string.Join(" ", schalter)} | ");
 
         // (A) kein Waggon verschwindet VOR dem Gebäude (> 1 Zelle vor dem Originalpunkt)
@@ -491,21 +689,55 @@ public partial class MapEntityLayer
             jeTyp[e.Typ] = (t.N + 1, t.Uns + 1f - e.Uns, t.Orig + 1f - e.Orig, t.Ab + e.Abstand);
             if (e.Typ is 6) { nHalle++; halleUns += 1f - e.Uns; halleOrig += 1f - e.Orig; }
         }
-        // Die vier Faelle aus Bericht §4 (DM_4), Spitzenwaggon im letzten Bild, verdeckt:
-        // ⚠ nur zur Auskunft — die senkrechte Lage ist dort V ±15 px.
+        // Die vier Faelle aus Bericht §4 (DM_4), Spitzenwaggon im letzten Bild, verdeckt.
+        // ⭐ bug-395 (F3a): seit der gelesenen Feinlage (F1, −18) ein KRITERIUM gegen die
+        // Rekonstruktion aus der Originallage (aekernel-tools/zug_einfahrt_rekonstruktion.py,
+        // Blitziel @0x42E200/@0x42E214 → Leinwand).
+        // ⚠⚠ DIE BERICHTSZAHLEN 72/100/3/0 WAREN 4 px DANEBEN: die Rekonstruktion legte die
+        // Exportleinwand auf das Blitziel selbst, sie traegt aber xpad 4 (unit_sprites
+        // _facing_img cx = x + 4, CwrFile.FacingImage) — Leinwand = Blitziel − (4, 0), so
+        // steht es im Bericht §1.2 selbst. Mit dem Abzug liefert dieselbe Rekonstruktion
+        // 60 / 99 / 5 / 0 % (02.10.2026 nachgerechnet, Werkzeug berichtigt).
+        // Toleranz ±ZeFallToleranz Prozentpunkte: eine Waggonspalte macht bei 779 deckenden
+        // Pixeln (57/f6, 22 Zeilen) rund 3 %, der letzte Punkt liegt im Mittel 0,2 px neben
+        // dem Routenpunkt (C) — gefordert ist »auf eine Pixelspalte genau«.
         var faelle = new System.Text.StringBuilder();
-        foreach (var (fl, fp, soll, name) in new[] { (3, 28, 72, "Bahnstation links"), (15, 57, 100, "Feldbahnhof-Durchfahrt"),
-                                                     (8, 8, 3, "Fabrik rechts"), (15, 0, 0, "Basis") })
+        int faelleDa = 0, faelleOk = 0;
+        // ⭐⭐ bug-397 (F7, 02.10.2026): im Fahrmodell je Schritt ist das letzte Bild des
+        // Spitzenwaggons das des Originals — Fahrstelle delka−2 (rückwärts P(2), cursor c auf
+        // P(c+1)) plus der letzte Takt des Schritts (f = 0,8 bzw. 24/28). Die Rekonstruktion
+        // (Fall »LETZTES«, aekernel-tools/zug_einfahrt_rekonstruktion.py) liefert dafür
+        // 38 / 77 / 63 / 61 %. Die alten 60 / 99 / 5 / 0 % lagen auf P(1) bzw. P(delka−2) bei
+        // f = 0 (Annahme bug-382) und gelten nur noch mit --zug-fahrmodell-alt.
+        var sollFaelle = ZugFahrmodellNeu
+            ? new[] { (3, 28, 38, "Bahnstation links"), (15, 57, 77, "Feldbahnhof-Durchfahrt"),
+                      (8, 8, 63, "Fabrik rechts"), (15, 0, 61, "Basis") }
+            : new[] { (3, 28, 60, "Bahnstation links"), (15, 57, 99, "Feldbahnhof-Durchfahrt"),
+                      (8, 8, 5, "Fabrik rechts"), (15, 0, 0, "Basis") };
+        foreach (var (fl, fp, soll, name) in sollFaelle)
         {
             var e = _zeEreignisse.Find(x => x.Index == 0 && x.Linie == fl && x.Ende == fp);
             if (e == null) continue;
-            faelle.Append($"{(faelle.Length > 0 ? ", " : "")}{name} L{fl}/P{fp} {100f * (1f - e.Uns):0} % (Soll {soll})");
+            float ist = 100f * (1f - e.Uns);
+            bool fo = Mathf.Abs(ist - soll) <= ZeFallToleranz;
+            faelleDa++; if (fo) faelleOk++;
+            faelle.Append($"{(faelle.Length > 0 ? ", " : "")}{name} L{fl}/P{fp} {ist:0} % (Soll {soll}{(fo ? "" : " ABWEICHUNG")})");
         }
 
         bool a = _zeEreignisse.Count > 0 && vorzeitig == 0;
         bool bOk = fahrtenVoll > 0 && rueckOk == fahrtenVoll;
         bool c = n0 > 0 && abMax <= 10f;
         bool dOk = _zeOrdnungAnders == 0 && nHalle > 0 && halleUns / nHalle >= 0.40f;
+        // bug-395: E Deckung je Gebaeudeart gegen das Soll, F Mindestabstand >= 12 px
+        // bug-397: die vier Fälle stehen nur auf DM_4 — ohne Fall (K21 u.a.) ist E nicht anwendbar
+        // statt durchgefallen (bis dahin »0 von 0 Faellen ABWEICHUNG« auf jeder anderen Karte).
+        bool eOk = faelleOk == faelleDa;
+        // ⭐⭐ bug-397 (02.10.2026): F zählt die GERADE Strecke. Die »nie unter 12 px« vom
+        // 13.08. gelten dort; über Ecken misst die Luftlinie die Sehne, und das gelesene Modell
+        // selbst liefert dort weniger (DM_4: 10,4 px an jeder Ecke senkrecht↔schräg, 5,1 px an
+        // der Spitzkehre von Linie 0; unabhängig nachgerechnet, 297 von 24 690 Paar-Takten
+        // unter 12). Bis bug-395 stand hier der Gesamtmindestabstand.
+        bool fOk = _zeAbstand.PaareGerade > 0 && _zeAbstand.MinGerade >= 12f - 0.05f;
         string Ok(bool x) => x ? "OK" : "ABWEICHUNG";
 
         sb.Append($"{_zeEreignisse.Count} Waggons an Linienenden verschwunden ({_zeUnterwegs} unterwegs, nicht gezaehlt)");
@@ -514,7 +746,7 @@ public partial class MapEntityLayer
         sb.Append($" | B Rueckstand beim Verschwinden (Soll 4/7/11 Takte, ±1): {rueckOk} von {fahrtenVoll} Fahrten" +
                   (fahrtenVoll > 0 ? $", Mittel {rueckSumme[1] / fahrtenVoll:0.0}/{rueckSumme[2] / fahrtenVoll:0.0}/{rueckSumme[3] / fahrtenVoll:0.0}" : "") +
                   (rueckWo.Length > 0 ? $" (erste falsche: {rueckWo})" : "") + $" {Ok(bOk)}");
-        sb.Append($" | C Spitzenwaggon letztes Bild gegen Routenpunkt 1/delka-2: {n0} Ankuenfte, " +
+        sb.Append($" | C Spitzenwaggon letztes Bild gegen Routenpunkt 1/delka-{(ZugFahrmodellNeu ? 1 : 2)}: {n0} Ankuenfte, " +
                   (n0 > 0 ? $"Mittel {abSum / n0:0.0} px, groesster {abMax:0.0} px{(abWo.Length > 0 ? $" ({abWo})" : "")} (Soll <= 10)" +
                   (n0Kette > 0 ? $"; dazu {n0Kette} an NICHT verlaengerten Enden ({kWo}), nicht gewertet" : "") : "—") + $" {Ok(c)}");
         sb.Append($" | D Malerordnung: {_zeOrdnungBilder} Bilder am Linienende, davon {_zeOrdnungVerdeckt} im Original " +
@@ -523,7 +755,20 @@ public partial class MapEntityLayer
                   (nHalle > 0 ? $"{100f * halleUns / nHalle:0} % in {nHalle} Ankuenften (Original-Ordnung {100f * halleOrig / nHalle:0} %, Soll >= 40, Bericht §4/§8: 72)" : "—") +
                   (faelle.Length > 0 ? $"; Faelle §4: {faelle}" : "") +
                   $" {Ok(dOk)}");
+        sb.Append($" | E Deckung je Gebaeudeart gegen die Originallage (±{ZeFallToleranz:0} Punkte): " +
+                  (faelleDa > 0 ? $"{faelleOk} von {faelleDa} Faellen {Ok(eOk)}" : "keine Faelle (nur DM_4) —"));
+        sb.Append($" | F Waggonabstand auf gerader Strecke (Soll >= 12 px, Original W1->W2 senkrecht): " +
+                  $"{_zeAbstand.PaareGerade} Paare, unter 12 px {_zeAbstand.Unter12Gerade}, kleinster " +
+                  $"{(_zeAbstand.PaareGerade > 0 ? $"{_zeAbstand.MinGerade:0.0} px ({_zeAbstand.WoGerade})" : "—")} {Ok(fOk)}" +
+                  $"; alle Paare (Auskunft, Ecken = Sehne; Original DM_4 10,4 / Linie 0 5,1 px): {ZugAbstandText(_zeAbstand)}");
+        sb.Append($" | Sichtprobe @0x42E197: {_zeNebelBilder} von {_zeWaggonBilder} Waggonbildern im Nebel nicht gezeichnet" +
+                  (FogActive ? "" : " (Nebel aus)"));
         sb.Append($" | Weg verlaengert {ZugWegVerlaengert}, nicht {ZugWegNichtVerlaengert}");
+        // bug-397 (F7): welches Fahrmodell, und die Rampenhöhe gegen die Kur C17 als Nullmodell
+        sb.Append(ZugFahrmodellNeu
+            ? $" | Fahrmodell je Gleisschritt (0x4C69C0): Rampenbilder {ZugRampenBilder}, Hoehe gegen Gleisbild-Lift " +
+              $"groesste Abweichung {ZugRampenAbweichungMax:0.0} px{(ZugRampenWo.Length > 0 ? $" ({ZugRampenWo})" : "")}"
+            : " | Fahrmodell Bogenlaenge (Stand bug-395)");
         if (schluss)
         {
             var z = new System.Text.StringBuilder();
@@ -535,6 +780,8 @@ public partial class MapEntityLayer
             sb.Append(ZeProfile());
             sb.Append($"\nzug-einfahrt-check: bug-382 {(a && bOk && c && dOk ? "BESTANDEN" : "DURCHGEFALLEN")}" +
                       $" (A {Ok(a)}, B {Ok(bOk)}, C {Ok(c)}, D {Ok(dOk)})");
+            sb.Append($"\nzug-einfahrt-check: bug-395 {(eOk && fOk ? "BESTANDEN" : "DURCHGEFALLEN")}" +
+                      $" (E {Ok(eOk)}, F {Ok(fOk)})");
         }
         return sb.ToString();
     }

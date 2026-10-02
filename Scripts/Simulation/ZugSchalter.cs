@@ -65,4 +65,36 @@ public partial class MapEntityLayer
 
     /// <summary><c>--zug-einfahrt-check[=N]</c>: der Prüfstand zu bug-382.</summary>
     public static bool ZugEinfahrtCheckAn;
+
+    // ---- bug-395, die Feinlage des Waggons (02.10.2026, berichte/zug-feinlage-fable.md §5) ----
+
+    /// <summary>⭐ F0 <c>--zug-bogen-schirm</c> (bug-395): die Bogenlänge des Waggonwegs
+    /// wieder in SCHIRMPIXELN MIT HÖHE (<c>RailLifted(…).DistanceTo(…)</c>, Stand
+    /// 15.08.–02.10.2026). Dann zählt ein Rampenglied 35 px bergauf bzw. 5 px bergab
+    /// statt 20, der Waggon kriecht dort auf 57 % bzw. springt (Bericht §4.2,
+    /// <c>--zug-demo-check</c> 2,0 px kleinster Abstand). Das Original nimmt Δ aus der
+    /// Tafel 0x539400 in der EBENE und legt die Rampe als getrennte ±15-Korrektur in
+    /// denselben Takt (Tafel 0x4C73C8 @0x4C6AE6…0x4C6B13, @0x4C6ED9).</summary>
+    public static bool ZugBogenSchirm;
+
+    /// <summary>⭐ F1 <c>--zug-feinlage-alt</c> (bug-395): <c>WagonOverRail</c> wieder
+    /// −23 (am 15.08.2026 nach Augenmaß gewählt) statt der gelesenen −18 — der Waggon
+    /// liegt dann 5 px zu hoch (Einreiher @0x42E214…0x42E24A: Blitziel
+    /// <c>y = Zeile·20 − Höhe·15 − 90 + feinY</c>, Bericht §1.4).</summary>
+    public static bool ZugFeinlageAlt;
+
+    /// <summary>⭐ F2 <c>--zug-ohne-sichtprobe</c> (bug-395): Waggons wieder auch in
+    /// gerade nicht beobachteten Zellen zeichnen. Das Original prüft im Einreiher
+    /// @0x42E197 die sec50-Tafel JEDES Waggons, ohne Besitzer-Ausnahme.</summary>
+    public static bool ZugOhneSichtprobe;
+
+    // ---- bug-397, F7: das Fahrmodell je Gleisschritt (02.10.2026, Simulation/ZugFahrmodell.cs) ----
+
+    /// <summary>⭐ <c>--zug-fahrmodell-alt</c> (bug-397): der Stand bug-395 — der Fortschritt
+    /// läuft gleichmäßig über die BOGENLÄNGE der Gleiskette (sec22), die Fahrzeit ist die
+    /// Summe der Schrittpreise 5/4 über alle delka Schritte. Dann fährt der Zug auf
+    /// senkrechtem Gleis langsamer als die Route (DM_4 Linie 6: 2,71 statt 4 px je Takt),
+    /// kleinster Waggonabstand 9,5 px statt 12. Das Original rechnet je Routenschritt mit
+    /// Zähler/Preis (0x4C69C0, Bericht zug-feinlage-fable.md §2).</summary>
+    public static bool ZugFahrmodellAlt;
 }

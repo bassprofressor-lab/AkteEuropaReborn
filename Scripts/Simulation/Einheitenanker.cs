@@ -36,8 +36,18 @@ public partial class MapEntityLayer
         if (EinheitenankerAlt) return a;
         if (e.Infantry >= 0) return new Vector2(19, a.Y);
         if (e.Move == Simulation.NavGrid.MoveClass.Ship) return a;       // (V) nicht nachgemessen
-        return new Vector2(24, a.Y);
+        // ⭐ 02.10.2026, bug-402 — AUCH IN Y WIE DAS ORIGINAL: Blit y = Zeile·20 − Höhe·15 − 35
+        // (C 0x4301D1/0x430212, Ruhelage 20/10 @0x430FE1), zwei Lesungen einig
+        // (berichte/eingegraben-fable.md, berichte/fahrzeuganker-gegenlesung-opus.md):
+        // die Räder stehen auf der Zellunterkante, bei uns saßen sie 10 px höher.
+        // ⚠ NUR die Fahrzeuge — der globale Versuch --anker-neu (27.08.) verschob auch
+        // Züge, Flugzeuge und Spuren und wurde an der Brücke verworfen.
+        // Gegenschalter --fahrzeuganker-alt.
+        return new Vector2(24, FahrzeugankerAlt ? a.Y : 45);
     }
+
+    /// <summary><c>--fahrzeuganker-alt</c>: Fahrzeuge wieder mit y-Anker 55 (Stand vor bug-402).</summary>
+    public static bool FahrzeugankerAlt;
 
     /// <summary>
     /// <c>--einheitenanker-check</c>: für jede stehende Einheit der Karte die sichtbare

@@ -70,6 +70,7 @@ public partial class MapEntityLayer
             w.Num("attack", e.Attack).Num("defence", e.Defence);
             w.Num("infantry", e.Infantry).Num("chassis", e.Chassis).Num("subclass", e.GameUnitType);
             w.Num("pose", e.Pose).Num("condition", e.Condition).Num("state", e.State);
+            w.Num("faze", e.Faze);   // 02.10.2026, bug-400 (+0x09)
             w.Bool("building", e.IsBuilding).Bool("dead", e.Dead).Bool("dug_in", e.DugIn);
             w.Num("dead_time", e.DeadTime);
             w.Num("doors", e.Doors).Num("built", e.Built);
@@ -310,6 +311,7 @@ public partial class MapEntityLayer
                     Attack = GetI(d, "attack"), Defence = GetI(d, "defence"),
                     Infantry = GetI(d, "infantry", -1), Chassis = GetI(d, "chassis", -1),
                     GameUnitType = GetI(d, "subclass", -1), Pose = GetI(d, "pose"),
+                    Faze = GetI(d, "faze"),
                     Condition = GetI(d, "condition", 100), State = GetI(d, "state"),
                     IsBuilding = GetB(d, "building"), Dead = GetB(d, "dead"),
                     DugIn = GetB(d, "dug_in"),

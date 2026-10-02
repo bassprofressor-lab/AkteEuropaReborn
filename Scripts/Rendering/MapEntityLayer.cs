@@ -598,6 +598,25 @@ public partial class MapEntityLayer : Node2D
         public int Pose;
 
         /// <summary>
+        /// ⭐ 02.10.2026 (bug-400, bug-399) — <b>faze</b>, Satzfeld <c>+0x09</c>
+        /// (der Dump-Name des Spiels). <c>0xFF</c> = leerer Platz, <c>0</c> = frei,
+        /// <c>1</c> = die Abwehrstellung ist AUFGEBAUT (der Aufbau 0x409888 schreibt
+        /// <c>faze := 1</c>, OFFENE_FRAGEN.md:12180). Zwei Leser sind gebaut:
+        /// <list type="bullet">
+        ///   <item>die Freiliste der KI-Zustandsmaschine @<c>0x4BBDEB</c>
+        ///   (<c>faze != 0</c> → nächster Satz) — <see cref="KiFazeAlt"/>;</item>
+        ///   <item>der Turmsitz @<c>0x42A02D</c> (<c>faze == 1 &amp;&amp; Chassis == 14</c>
+        ///   → Mount · (ANIM_SPODEK + 10) / 10) — <see cref="StellungsturmAlt"/>.</item>
+        /// </list>
+        /// Gezählt über alle Karten (Rohsätze): auf den Kampagnenkarten tragen NUR
+        /// Abwehrstellungen (Bauteil 171) einen Wert ≠ 0, und zwar 1 (K19…K33, ohne
+        /// K23); auf DM_6/DM_11/DM_12/DM_13 tragen Fussvolksätze 2…72 — ⚠ dort ist
+        /// die Bedeutung ungelesen, das Tor @0x4BBDEB fragt aber nur »≠ 0«.
+        /// Der Lader liest das Byte erst seit dem 02.10.2026; ein Spielstand ohne
+        /// Feld gibt 0 (= der alte Stand).</summary>
+        public int Faze;
+
+        /// <summary>
         /// ⚠ 19.08.2026 — <b>DAS WAR EINE ZWEITE KOPIE DESSELBEN BYTES.</b>
         ///
         /// <para>Hier stand ein eigenes Feld <c>Field28</c>, das der Lader aus
@@ -4065,6 +4084,9 @@ public partial class MapEntityLayer : Node2D
                     // 0xFF is the game's "no group" (@0x429b1b), and the draw
                     // code masks the rest to three bits (@0x429b37).
                     Pose = haveRaw && HexByte(raw, 0x11) != 0xFF ? HexByte(raw, 0x11) & 7 : 0,
+                    // ⭐ 02.10.2026 (bug-400) — faze, +0x09; siehe Entity.Faze.
+                    // Steht schon im exportierten Rohsatz: KEIN Neuimport noetig.
+                    Faze = haveRaw ? HexByte(raw, 0x09) : 0,
                     GameUnitType = haveRaw ? HexByte(raw, 0x0a) : -1,
                     // Field28 ist seit 19.08.2026 nur ein Name fuer Rating28
                     // (dieselbe Zelle, vier Zeilen hoeher gesetzt).
@@ -7585,10 +7607,27 @@ public partial class MapEntityLayer : Node2D
                $"ohne Bildnummer {_doorsNoPic}, ohne Bilddatei {_doorsNoTex}";
     }
 
+    /// <summary><c>--bautor-alt</c>: das Torblatt wird auch im Bau gezeichnet
+    /// (Stand vor bug-386).</summary>
+    public static bool BautorAlt;
+
+    /// <summary>
+    /// ⭐ 02.10.2026, bug-386 — IM BAU GIBT ES KEIN TORBLATT (berichte/mine-tuer-fable.md §1).
+    /// Seine Meldung: »die Tür wird während der Bauphase schon als geschlossen
+    /// angezeigt«. Im Original hat ein Gebäude im Bau gar keinen Eintrag in der
+    /// Zeichenliste — der Einreiher 0x42FCD0 überspringt <c>+0x0A ≥ 100</c>
+    /// (@0x42FCF8, F 0x42EE78), also läuft der Zeichner 0x429900 mit der
+    /// Türschleife im Gerüst nie. Sichtbar ist nur das Gerüst, an der Türzelle
+    /// ein offener dunkler Durchgang (Kacheln 4367/4397/4427 auf 23.CWP). Das
+    /// Torblatt kommt erst mit <c>+0x0A := 1</c> (@0x43CAD2).
+    /// </summary>
+    private bool TorImBauVerborgen(Entity e) => !BautorAlt && e.Bauzustand >= BauzustandStart;
+
     private void DrawBuildingDoors(Entity e, bool count = false)
     {
         if (!count && (!_drawSprites || _nav == null)) return;
         if (e.Dead) return;
+        if (TorImBauVerborgen(e)) return;            // bug-386
         if (e.Doors <= 0) { _doorsNoCount++; return; }
         var cells = BuildingDoors(e.BType);
         if (cells.Count == 0) { _doorsNoCells++; return; }
@@ -11741,6 +11780,17 @@ public partial class MapEntityLayer : Node2D
     /// Umrechner 0x40155F und wird vom GESCHOSSFLUG benutzt, @0x40FF40,
     /// @0x4543D6, @0x4544A2). Er entscheidet nichts ueber Reichweiten.</para>
     ///
+    /// <para>⚠⚠ <b>BERICHTIGT AM 02.10.2026 (bug-401) — AUCH DAS STIMMT NICHT.</b>
+    /// <c>0x453990</c> ist der <b>Abstand Einheit–Zelle des Zellprobeschusses</b>
+    /// (gerufen ueber den Thunk 0x4024DC aus 0x4543C0), und er rechnet <b>beide
+    /// Achsen · 40</b> (<c>imul cx,cx,0x28</c> @0x453A19, <c>imul dx,dx,0x28</c>
+    /// @0x453A3F, <c>fsqrt</c> @0x453A5C) — genau wie 0x40BEA8 und der Abstand
+    /// Einheit–Einheit 0x4536C0 (@0x453893/@0x4538C1). Alle drei Abstandsrechner
+    /// messen eine Kreisscheibe; »Δy · 20« war falsch gelesen
+    /// (berichte/moerser-reichweite-fable.md §2.3). Am Ergebnis hier aendert das
+    /// nichts, nur die Begruendung. Der ZELLANGRIFF misst jetzt ebenso
+    /// (<see cref="BodenZellAbstand"/>).</para>
+    ///
     /// <para><b>Die Schussentscheidung rechnet anders</b>, und sie ist die, um
     /// die es geht (@0x40BEA8…0x40BF77):</para>
     /// <code>
@@ -12356,7 +12406,7 @@ public partial class MapEntityLayer : Node2D
     {
         int aim = TurmRichtung(e);
         return PictureAnchor(e) - EinheitenAnker(e)
-             + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing)
+             + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e)
              + TurmBildMitte(e.Weapon, aim, TurmGruppe(e));   // bug-378, Werferpose.cs
     }
 
@@ -12621,7 +12671,7 @@ public partial class MapEntityLayer : Node2D
         }
 
         // Die Leuchtspur beginnt an der Muendung, nicht am Rumpf.
-        _tracers.Add((shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row, shooter.Facing)
+        _tracers.Add((shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row, shooter.Facing, shooter)
                       + dir * MuzzleReach,
                       victim.Pos - new Vector2(0, 6), 0.10f));
         // ⚠ OFFEN, ausdruecklich: ob das Original bei DIREKTEM Beschuss einen
@@ -13006,6 +13056,10 @@ public partial class MapEntityLayer : Node2D
                    + (grund.Length > 0 ? grund : "UNBENANNT ⚠")
                    + (by is >= 0 and <= 7 ? $", durch Spieler {by}" : ", ohne Schuetzen"));
         NoteKill(victim, by);
+        // ⭐ 02.10.2026 (bug-389) — die zwei Engine-Schreiber der Variablentafel
+        // im Tod: v93 (@0x40B42A, Abwehrstellung) und v100 (@0x4C9AAE,
+        // Gebaeude). Simulation/Skriptvariablen.cs.
+        SkriptvarTod(victim);
         // ⭐ 06.09.2026 — ein GEBAEUDE geht mit Bild. Siehe GebaeudeSprengen.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeSprengen(victim);
         // ⭐ 14.09.2026 — der Gebaeudetod streicht die Routen mit demselben Streicher
@@ -14310,8 +14364,13 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (e.IsBuilding || e.Dead || e.Slot != slot) continue;
+            // ⭐⭐ 02.10.2026 (bug-390) — sell_unit TOETET NICHT, es traegt die
+            // Einheit in die Verkaufsliste ein (0x4D0EC0 -> 0x4BFFF0, Preis 0),
+            // und der Raumfrachter holt sie ab; erst DANN steht v98.
+            // Simulation/Skriptvariablen.cs, Gegenschalter --verkauf-sofort.
+            if (sold && SkriptVerkauf(i, e)) return;
             GD.Print($"Missionsskript: Einheit {slot} " +
-                     (sold ? "verkauft (Erloes ungelesen)" : "verschwindet"));
+                     (sold ? "verkauft (sofort, --verkauf-sofort)" : "verschwindet"));
             Kill(i, e, -1, sold ? "Missionsskript sell_unit" : "Missionsskript remove_unit");
             return;
         }
@@ -14499,6 +14558,10 @@ public partial class MapEntityLayer : Node2D
                                 // Eine Zahl zu erfinden waere schlimmer als die
                                 // Luecke - dann faenden die Regeln das Falsche.
                                 0x14 => e.Ukol,
+                                // ⭐ 02.10.2026 (bug-388) — +0x0E, das BAUTEIL
+                                // (Part). M24 @0x4A1562 vergibt damit den
+                                // Zielvorrang (0x46 = 70 -> 6, sonst 1).
+                                0x0e => e.Part,
                                 _ => -1,
                             };
                     return -1;
@@ -14750,8 +14813,14 @@ public partial class MapEntityLayer : Node2D
                 _mscript.SetAi = (spieler, wert) =>
                     GD.Print($"Missionsskript: KI-Modus Spieler {spieler} = {wert} " +
                              "— die Kampagne hat keine KI, es geschieht nichts");
+                // ⭐ 02.10.2026 (bug-384) — die BETRIEBSART sec61 @0x4D1050, der
+                // erste Rufer von SetAiBetriebsart. Siehe MissionBetriebsart.
+                _mscript.AiMode = MissionBetriebsart;
                 _mscript.RemoveUnit = slot => MissionRemove(slot, false);
                 _mscript.SellUnit = slot => MissionRemove(slot, true);
+                // ⭐ 02.10.2026 (bug-388/390) — Verkaufsliste und Flugzeugzaehler,
+                // Simulation/Skriptvariablen.cs.
+                SkriptvarHakenSetzen();
                 _mscript.ChangeOwner = (slot, spieler) =>
                 {
                     foreach (var e in _entities)
@@ -14819,6 +14888,10 @@ public partial class MapEntityLayer : Node2D
                 // ohne diese Zeile lag in Kampagne 15 keine einzige.
                 // Simulation/MinenRaeumen.cs, Gegenschalter --missionsminen-aus.
                 MissionsMinenLegen(_mscript.Minen);
+                // ⭐ 02.10.2026 (bug-384) — die Betriebsart des Setup-Blocks:
+                // erst der Vorspann (alle acht := 2, @0x48843F), dann die Rufe
+                // der Mission. Simulation/SkirmishAiSectors.cs, --ki-betriebsart5-aus.
+                BetriebsartMissionsstart(_mscript.Betriebsarten);
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
                 {
@@ -21815,6 +21888,9 @@ public partial class MapEntityLayer : Node2D
         e.Depot.RemoveAt(k);
         Refund(e, d);
         RecycledParts++;
+        // ⭐ 02.10.2026 (bug-389) — v190/191/192 := die Erstattung
+        // (@0x4B2A3F/0x4B2A29/0x4B2A45). Simulation/Skriptvariablen.cs.
+        SkriptvarRecycling(d.CostW, d.CostF, d.CostS);
         _order = $"{d.Name} verwertet — zurueck: W{d.CostW} F{d.CostF} S{d.CostS} " +
                  $"(Lager jetzt W{e.StockW} F{e.StockF} S{e.StockS})";
         UpdatePanel();
@@ -22690,15 +22766,20 @@ public partial class MapEntityLayer : Node2D
     /// <para>Gemessen wird jede einzeln, und zu jeder die Gegenprobe — sonst
     /// sagt ein »bestanden« nichts:</para>
     /// <list type="number">
-    /// <item><b>Die Entfernung ist nicht rund.</b> Das Original rechnet x mal
-    /// 40 und y mal 20 Feinschritte; in Zellen heisst das, die Zeilen zählen
-    /// halb. Ein Ziel zwei Zeilen entfernt muss also so weit sein wie eines
-    /// eine Spalte entfernt.</item>
-    /// <item><b>Gattung 4 hat feste 16 Zellen</b>, egal was im Satz steht —
-    /// die Gegenprobe setzt einen abweichenden eigenen Wert und schaut, dass
-    /// er ignoriert wird.</item>
+    /// <item><b>Die Entfernung ist RUND</b> (berichtigt 24.08., Begruendung
+    /// 02.10.2026): alle drei Abstandsrechner 0x40BEA8, 0x4536C0, 0x453990
+    /// rechnen beide Achsen · 40 — eine Zeile ist so weit wie eine Spalte.</item>
+    /// <item><b>Gattung 3 hat feste 16 Zellen</b> (0x454240: 0x280 = 640), egal
+    /// was im Satz steht; Gattung 4 (Schiffe) traegt ihren eigenen Wert
+    /// (0x454230) — berichtigt am 07.09., dieser Pruefstand am 02.10.2026
+    /// nachgezogen (er erwartete bis dahin »Gattung 4 = 16« und fiel durch).</item>
     /// <item><b>Die Mindestreichweite sperrt weiter</b> — sie darf durch den
-    /// Umbau nicht verlorengegangen sein.</item>
+    /// Umbau nicht verlorengegangen sein; und der Mörser (Bauteil 17: 4/0)
+    /// darf auf die Nachbarzelle schiessen.</item>
+    /// <item>⭐ 02.10.2026 (bug-401) — <b>der Zellangriff misst euklidisch</b>
+    /// (0x453990): Reichweite 4 auf Δ(4,4) = 5,66 sperrt, Δ(3,2) = 3,61 und
+    /// Δ(4,0) schiessen. Nullmodell <c>--zellabstand-schach</c>: (4,4) schiesst
+    /// — der Pruefstand faellt dann durch.</item>
     /// </list>
     /// </summary>
     public string ReichweiteCheck()
@@ -22716,6 +22797,9 @@ public partial class MapEntityLayer : Node2D
         // ist der BILDSCHIRMLAGEN-Helfer des Geschossflugs, nicht die
         // Schussentscheidung. Die rechnet @0x40BEAB und @0x40BEE0 BEIDE Achsen
         // mit 40.
+        // ⚠⚠ 02.10.2026 (bug-401) berichtigt: 0x453990 ist der Abstand
+        // Einheit–Zelle des Zellprobeschusses, und auch er rechnet BEIDE Achsen
+        // ·40 (@0x453A19/@0x453A3F). Die »·20« war schon falsch gelesen.
         //
         // ⭐ Ein Pruefstand, der eine falsche Lesung bestaetigt, ist schlimmer
         // als keiner: er haette jeden, der die Metrik berichtigt, mit einem
@@ -22739,26 +22823,56 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  Gegenprobe: zwei Zeilen = {zweiZeilen:0.000} > eine Spalte {eineSpalte:0.000}: " +
                       $"{(gegenOk ? "richtig" : "NICHT WEITER — die Halbierung ist noch da")}");
 
-        // 2. Gattung 4 = feste 16 Zellen, der eigene Wert wird ignoriert
+        // 2. Gattung 3 = feste 16 Zellen (0x454240), der eigene Wert wird ignoriert.
+        // ⚠ 02.10.2026 (bug-401): hier stand »Gattung 4 = 16« — der Stand vor der
+        // Berichtigung vom 07.09. (RangeOf: 3 <-> 4 vertauscht). Der Pruefstand
+        // fiel seitdem durch, ohne dass es jemand sah.
+        var g3probe = new Entity { GameUnitType = 3, Range = 3, Weapon = 0 };
+        bool schiffOk = Mathf.Abs(RangeOf(g3probe) - 16f) < 0.001f;
+        sb.AppendLine($"  Gattung 3 mit eigenem Wert 3: Reichweite {RangeOf(g3probe):0.#} " +
+                      $"(erwartet 16, 0x454240): {(schiffOk ? "fest, richtig" : "FALSCH")}");
         var schiff = new Entity { GameUnitType = 4, Range = 3, Weapon = 0 };
-        bool schiffOk = Mathf.Abs(RangeOf(schiff) - 16f) < 0.001f;
-        sb.AppendLine($"  Gattung 4 mit eigenem Wert 3: Reichweite {RangeOf(schiff):0.#} " +
-                      $"(erwartet 16): {(schiffOk ? "fest, richtig" : "FALSCH")}");
+        bool schiff4Ok = Mathf.Abs(RangeOf(schiff) - 3f) < 0.001f;
+        sb.AppendLine($"  Gattung 4 (Schiff) mit eigenem Wert 3: Reichweite {RangeOf(schiff):0.#} " +
+                      $"(erwartet 3, 0x454230): {(schiff4Ok ? "eigener Wert, richtig" : "FALSCH")}");
 
         var land = new Entity { GameUnitType = 0, Range = 3, Weapon = 0 };
         bool landOk = Mathf.Abs(RangeOf(land) - 3f) < 0.001f;
         sb.AppendLine($"  Gegenprobe Gattung 0 mit Wert 3: Reichweite {RangeOf(land):0.#} " +
                       $"(erwartet 3): {(landOk ? "eigener Wert, richtig" : "FALSCH")}");
 
-        // 3. die Mindestreichweite sperrt weiter
-        var mörser = new Entity { GameUnitType = 0, Range = 12, RangeMin = 5, Weapon = 0 };
-        bool zuNah = !InFiringWindow(mörser, 3f);
-        bool passt = InFiringWindow(mörser, 8f);
-        bool zuWeit = !InFiringWindow(mörser, 20f);
+        // 3. die Mindestreichweite sperrt weiter (Raketenwerfer-Art, 5..12;
+        // hiess bis 02.10. »mörser« — der Mörser hat aber 4/0, siehe unten)
+        var raketen = new Entity { GameUnitType = 0, Range = 12, RangeMin = 5, Weapon = 0 };
+        bool zuNah = !InFiringWindow(raketen, 3f);
+        bool passt = InFiringWindow(raketen, 8f);
+        bool zuWeit = !InFiringWindow(raketen, 20f);
         sb.AppendLine($"  Mindestreichweite 5..12: bei 3 {(zuNah ? "sperrt" : "SCHIESST")}, " +
                       $"bei 8 {(passt ? "schiesst" : "SPERRT")}, " +
                       $"bei 20 {(zuWeit ? "sperrt" : "SCHIESST")}: " +
                       $"{(zuNah && passt && zuWeit ? "richtig" : "FALSCH")}");
+        // der echte Mörser (Bauteil 17, +0x14 = 4, +0x16 = 0): Nachbarzelle erlaubt
+        var mörser = new Entity { GameUnitType = 0, Range = 4, RangeMin = 0, Weapon = 37 };
+        bool mNah = InFiringWindow(mörser, 1f), mWeit = !InFiringWindow(mörser, 5f);
+        sb.AppendLine($"  Mörser 0..4: bei 1 {(mNah ? "schiesst" : "SPERRT")}, bei 5 {(mWeit ? "sperrt" : "SCHIESST")}: " +
+                      $"{(mNah && mWeit ? "richtig" : "FALSCH")}");
+
+        // 3b. ⭐ 02.10.2026 (bug-401) — der Zellangriff (Strg-Klick) misst wie
+        // 0x453990 euklidisch. Dieselbe Entscheidung wie BodenKampf:
+        // BodenZellAbstand <= RangeOf && >= RangeMinOf.
+        var zm = new Entity { GameUnitType = 0, Range = 4, RangeMin = 0, Weapon = 37, Col = 20, Row = 20 };
+        bool Zelle(int dc, int dr)
+        {
+            float d = BodenZellAbstand(zm, zm.Col + dc, zm.Row + dr);
+            return d <= RangeOf(zm) && d >= RangeMinOf(zm);
+        }
+        bool z44 = Zelle(4, 4), z32 = Zelle(3, 2), z40 = Zelle(4, 0), z33 = Zelle(3, 3);
+        bool zellOk = !z44 && z32 && z40 && !z33;
+        sb.AppendLine($"  Zellangriff Reichweite 4 (--zellabstand-schach {ZellabstandSchach}): " +
+                      $"(4,4)={BodenZellAbstand(zm, 24, 24):0.00} {(z44 ? "SCHIESST" : "sperrt")}, " +
+                      $"(3,3)={BodenZellAbstand(zm, 23, 23):0.00} {(z33 ? "SCHIESST" : "sperrt")}, " +
+                      $"(3,2) {(z32 ? "schiesst" : "SPERRT")}, (4,0) {(z40 ? "schiesst" : "SPERRT")}: " +
+                      $"{(zellOk ? "euklidisch wie 0x453990, richtig" : "FALSCH — Tschebyschew (Schachbrett)")}");
 
         // 4. ⚠ Und die Zahl, die uns davon abgehalten hat, Gattung 3 zu sperren.
         int g3 = 0, g3bewaffnet = 0;
@@ -22817,7 +22931,8 @@ public partial class MapEntityLayer : Node2D
                     + $"aber ohne Reichweite ({davonOhneAngriff} davon auch ohne Angriff) "
                     + "— sie schweigen jetzt");
 
-        bool alles = metrikOk && gegenOk && schiffOk && landOk && zuNah && passt && zuWeit
+        bool alles = metrikOk && gegenOk && schiffOk && schiff4Ok && landOk && zuNah && passt && zuWeit
+                  && mNah && mWeit && zellOk
                   && stumm && mitRueckfall > 0f;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
@@ -28152,8 +28267,22 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>⚠ Offen bleibt das x: der Waggonkörper füllt die Spalten 13..35
     /// (Mitte 24), das Gleisbild 10..49 (Mitte 29,5). Der Waggon steht also
-    /// 5,5 px links der Schienenmitte, und die 6 hier hebt das auf.</para></summary>
-    private static readonly Vector2 WagonOverRail = new(6, -23 + RailDeckOffset);
+    /// 5,5 px links der Schienenmitte, und die 6 hier hebt das auf.</para>
+    ///
+    /// <para>⭐⭐ 02.10.2026 — bug-395 (F1), DIE −23 WAR AUGENMASS, GELESEN IST −18.
+    /// Seine Rückmeldung: »Gebäude/Züge ist schon gut, aber noch nicht ganz sauber.«
+    /// Der Einreiher @0x42E214…0x42E24A legt das Blitziel auf
+    /// <c>y = (Zeile − KamZeile)·20 − Höhe·15 − scrolly − 90 + feinY</c> (die −40
+    /// @0x42E22A und −50 @0x42E241 addieren sich, der yoff hebt sich auf), der Blitter
+    /// 0x4AC450 legt Bildzeile r auf <c>y + yoff + r</c> — unsere Exportleinwand hat
+    /// ihren Ursprung also bei Blitziel − (4, 0). Mit RailPoint − ComposedAnchor −23
+    /// −17 lag sie bei <c>Zeile·20 − Höhe·15 − 95 + feinY</c>: 5 px zu hoch, in beiden
+    /// Paritäten, x auf den Pixel gleich (berichte/zug-feinlage-fable.md §1.4). Der
+    /// Kasten 57/f2 steht damit 3 px UNTER der Schienenunterkante auf dem Träger
+    /// (−47…−26 gegen Schiene −33…−29) statt 2 px darüber — und liegt an der
+    /// Bahnstation ganz im Band des Dachstreifens (Soll 72 % verdeckt statt 56 %).
+    /// Gegenschalter <c>--zug-feinlage-alt</c> (= −23).</para></summary>
+    private static Vector2 WagonOverRail => new(6, (ZugFeinlageAlt ? -23 : -18) + RailDeckOffset);
 
     /// <summary>Wo die Schienenoberkante eines Gleisbildes INNERHALB ihrer
     /// Zelle liegt: <c>TileH/2 − ComposedAnchor.y + RailDeckOffset + 29</c>.
@@ -31111,7 +31240,8 @@ public partial class MapEntityLayer : Node2D
     /// den Gebäuden, siehe <see cref="DrawRailAndBuildings"/>.</summary>
     private void DrawTrains()
     {
-        foreach (var w in _wagons) DrawWagon(w);
+        foreach (var w in _wagons)
+            if (!ZugImNebel(w)) DrawWagon(w);       // bug-395 F2, Sichtprobe @0x42E197
     }
 
     /// <summary>Einen Waggon zeichnen. ⭐ 01.10.2026 (V2, bug-377): gerufen aus dem
@@ -35727,7 +35857,11 @@ public partial class MapEntityLayer : Node2D
     /// <see cref="Import.CwrFile.FacingImage"/> setzt das Bild mit
     /// <c>cy = YOffset + y</c> auf die Leinwand. Daraus folgt (24, 45).</para>
     ///
-    /// <para>⚠⚠ <b>UND ES IST TROTZDEM FALSCH — zweimal am Bild geprueft.</b>
+    /// <para>⭐ 02.10.2026: FUER FAHRZEUGE ALLEIN RICHTIG — bug-402 setzt (24,45) nur in
+    /// EinheitenAnker, vom Spieler in K2 an Gelaende, Bruecke und Tor bestaetigt. Was
+    /// am 27.08. scheiterte, war der GLOBALE Anker (Zuege, Flugzeuge, Spuren mit).</para>
+    ///
+    /// <para>⚠⚠ <b>(Stand 27.08.) UND ES IST TROTZDEM FALSCH — zweimal am Bild geprueft.</b>
     /// Am 27.08. zuerst mit dem alten Kachelschneiden (Fahrzeuge versanken
     /// fast ganz), dann noch einmal mit dem berichtigten Schneiden: die
     /// Fahrzeuge sitzen 10 Punkte zu tief und verschwinden hinter den
@@ -35969,9 +36103,23 @@ public partial class MapEntityLayer : Node2D
     /// nicht, wo das Loch sitzt.</summary>
     public static readonly HashSet<(int, int)> HullFacing0Cases = new();
 
+    /// <summary>02.10.2026 (bug-399) — wie oft eine Abwehrstellung (171) in einer
+    /// Gruppe &gt; 0 ihr Blickbild nicht hatte und das richtungslose f7/f3 derselben
+    /// Gruppe bekam (statt Gruppe 0). Siehe <see cref="GetHullTexture"/>.</summary>
+    public static int HullGruppeRichtungslos;
+
+    /// <summary><c>--eingegraben-bild-alt</c> (bug-399) — der Stand davor: fehlt
+    /// der Blick in Gruppe 1…7, faellt der Rumpf auf Gruppe 0 (aufgepackt) zurueck.</summary>
+    public static bool EingegrabenBildAlt;
+
+    /// <summary><c>--stellungsturm-alt</c> (bug-399) — der Stand davor: der Turm der
+    /// aufgebauten Stellung sitzt auf dem ungestreckten Montagepunkt (0,−9).</summary>
+    public static bool StellungsturmAlt;
+
     public string DebugSpriteInfo()
         => $"Hangposen {SlopeDrawn} gezeichnet, {SlopeFallback} mangels Bild flach" +
            $"; Gleisschatten {RailShadowsDrawn}" +
+           (HullGruppeRichtungslos > 0 ? $"; Stellung richtungslos {HullGruppeRichtungslos}x" : "") +
            (HullFacing0Fallback > 0
                 ? $"; ⚠ {HullFacing0Fallback}x Rumpf auf Blick 0 zurueckgefallen "
                   + $"({HullFacing0Cases.Count} Faelle: "
@@ -35990,7 +36138,40 @@ public partial class MapEntityLayer : Node2D
             if (s != null) { SlopeDrawn++; return s; }
             SlopeFallback++;
         }
+        // ⭐⭐ 02.10.2026 (bug-399) — DAS EINGEGRABENE BILD IST RICHTUNGSLOS (siehe
+        // unten). ⚠ Nicht erst bei FEHLENDEM Bild: unter res://Assets/Legacy liegt
+        // ein Export vom 06.08.2026 mit g1…g7/f0,f1,f2,f4,f5,f6 als LEEREN 64×56-
+        // Bildern (94 Byte, kein Bildpunkt), und Content.Path faellt vom
+        // user://-Export (nur f3/f7) dorthin durch. Auf dieser Maschine zeigten die
+        // 40 Stellungen darum KEINEN Rumpf (nur den Turm), auf einer sauberen
+        // Installation die aufgepackte Gruppe 0. ROBO.CWR hat in Gruppe 1…7 nur
+        // Blick 3 und 7 — jeder andere Blick ist hier also immer ein Loch.
+        if (pose > 0 && unitType == 171 && !EingegrabenBildAlt && facing != 3 && facing != 7)
+        {
+            var r = GetHullTexture(unitType, 7, pose, slope) ?? GetHullTexture(unitType, 3, pose, slope);
+            if (r != null) { HullGruppeRichtungslos++; return r; }
+        }
         var t = LoadUnitPart("hull", dir, facing);
+        // ⭐⭐ 02.10.2026 (bug-399) — DAS EINGEGRABENE BILD IST RICHTUNGSLOS.
+        // ROBO.CWR Bauteil 14 (Rumpf der 171 Abwehrstellung): Gruppe 0 hat alle
+        // acht Blicke, die Gruppen 1…7 (Aufbau, 7 = eingegraben) NUR Blick 3 und 7
+        // (Block 0…4), und g7 f3 ≡ f7 (gleicher Bildkopf: rows 33, yoff 25). Der
+        // Aufbau 0x409888 setzt OT_PODV := 7, damit das Bild gefunden wird; in
+        // K24 tragen aber 40 von 83 Kartensätzen Blick 0…6. Im Original zeigt die
+        // Tafel dann auf das Byte VOR dem Blob (Lader 0x42910F..0x42911F addiert
+        // die Basis auch auf 0xFFFFFFFF) — unbestimmt, nicht herstellbar.
+        // ⚠ UNSERE SETZUNG fuer diese 40: f7, dann f3 DERSELBEN Gruppe (erst mit
+        // Hangblock, dann flach) — nicht mehr Gruppe 0 (= das aufgepackte
+        // Fahrzeug mit Raedern, »ragt aus dem Boden«).
+        // berichte/eingegraben-fable.md §2.4/§5 A. Gegenschalter --eingegraben-bild-alt.
+        if (t == null && pose > 0 && unitType == 171 && !EingegrabenBildAlt)
+        {
+            t = (slope > 0
+                    ? LoadUnitPart("hull", $"{dir}/s{slope}", 7) ?? LoadUnitPart("hull", $"{dir}/s{slope}", 3)
+                    : null)
+                ?? LoadUnitPart("hull", dir, 7) ?? LoadUnitPart("hull", dir, 3);
+            if (t != null) { HullGruppeRichtungslos++; return t; }
+        }
         if (t == null && facing != 0)
         {
             // ⚠⚠ 24.08.2026 — DIESER RUECKFALL HAT EINEN FEHLER VIER TAGE LANG
@@ -36542,7 +36723,7 @@ public partial class MapEntityLayer : Node2D
     /// die Entscheidung hängt.</para>
     private static bool HullCarriesItsOwnGun(int unitType) => false;
 
-    private Vector2 TurretOffset(int unitType, int col, int row, int facing = -1)
+    private Vector2 TurretOffset(int unitType, int col, int row, int facing = -1, Entity? e = null)
     {
         LoadMounts();
         // ⭐⭐ 24.08.2026 — UNSERE Montagepunkte je Blickrichtung gehen VOR dem
@@ -36554,6 +36735,20 @@ public partial class MapEntityLayer : Node2D
         if (_mount == null || !_mount.TryGetValue(unitType, out var m)) return Vector2.Zero;
         int k = _flagLookup != null && _flagLookup.TryGetValue((col, row), out int fl) && fl <= 4 ? fl : 0;
         if (k >= m.Length) k = 0;
+        // ⭐⭐ 02.10.2026 (bug-399) — DIE STELLUNG RICHTET SICH AUF, C 0x42A02D..0x42A089:
+        //   0x42A02D  faze (+0x09) == 1 UND Chassis (+0x0B) == 0x0E:
+        //   0x42A041     k = Hangklasse ; m = Mount[Chassis·5 + k] (0x4FA320)
+        //   0x42A053     f = ANIM_SPODEK + 10 ; x += m.x·f/10 ; y += m.y·f/10  (idiv)
+        // Gruppe 7 flach: (0,−9)·17/10 = (0,−15) statt (0,−9) — der Turm steht 6 px
+        // hoeher auf dem ausgefahrenen Sockel. Der Tafelwert geht DIREKT ein, ohne
+        // die Mittelung unten (die gilt nur dem Kippweg, UNIT_SPRITES_RE §4.2).
+        // C# `/` schneidet zur Null wie idiv. berichte/eingegraben-fable.md §2.3/§5 C.
+        // Gegenschalter --stellungsturm-alt.
+        if (!StellungsturmAlt && e != null && e.Faze == 1 && e.Chassis == 14)
+        {
+            int f = e.Pose + 10;          // Pose = ANIM_SPODEK & 7 (Lader), Kartenwert 7
+            return new Vector2(m[k].X * f / 10, m[k].Y * f / 10);
+        }
         return new Vector2(Halve(m[0].X + m[k].X), Halve(m[0].Y + m[k].Y));
     }
 
@@ -36692,7 +36887,7 @@ public partial class MapEntityLayer : Node2D
                        && _flagLookup.TryGetValue((e.Col, e.Row), out int fl) && fl <= 4 ? fl : 0;
             string mnt = _mount != null && _mount.TryGetValue(e.UnitType, out var m)
                          ? $"({m[0].X},{m[0].Y})" : "KEINER";
-            var off = TurretOffset(e.UnitType, e.Col, e.Row, e.Facing);
+            var off = TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e);
             var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
             var turr = GetTurretTexture(e.Weapon, TurmBlick(e, e.Facing),
                                         SlopeClassOf(e.Col, e.Row));
@@ -40191,7 +40386,7 @@ public partial class MapEntityLayer : Node2D
                     var turret = GetTurretTexture(e.Weapon, aim, slope, TurmGruppe(e));
                     if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
                         DrawTexture(Parteifarbe(turret, e.Owner), picC - EinheitenAnker(e)
-                                            + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing));
+                                            + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e));
                     return;
                 }
                 var composed = GetComposedTexture(e.Combo, e.Facing);

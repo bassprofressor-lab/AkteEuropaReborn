@@ -141,6 +141,83 @@ public partial class MapEntityLayer : Node2D
         _aiSec61[player] = Math.Clamp(art, 0, 7);
     }
 
+    /// <summary>Die Betriebsart eines Spielers — für Prüfstände und Zeilen.</summary>
+    public int AiBetriebsart(int player)
+        => player is >= 0 and <= 7 ? _aiSec61[player] : 0;
+
+    /// <summary>
+    /// ⭐⭐ 02.10.2026 (bug-384) — <b>DER SETZER HAT ENDLICH RUFER</b>:
+    /// <c>ai_mode(spieler, wert)</c> @0x4D1050 aus dem Missionsskript
+    /// (<c>MissionScript.AiMode</c>). Bis heute stand der Ruf nur als
+    /// »0x4D1050« in <c>_tut_ausserdem</c>, und jede Kampagnenmission lief mit
+    /// Betriebsart 2 für alle — auch M18/M20/M24/M25/M28/M31, deren Skript
+    /// mitten im Spiel auf 5 umschaltet.
+    ///
+    /// <para>⚠ <b>Argumentfolge:</b> der WERT wird zuerst geschoben
+    /// (<c>push wert / push spieler / call</c>, z. B. M18 @0x49E76B
+    /// <c>push 5 / push 3</c>), also <c>0x4D1050(spieler, wert)</c>.</para>
+    ///
+    /// <para>⚠ Werte 6 und 7 teilen im Original durch Null (pro_style 0, siehe
+    /// <see cref="ProStyleC"/>); das Skript setzt sie nie (gemessen: 63 Rufe,
+    /// Werte 1..5). Die Klemme in <see cref="SetAiBetriebsart"/> bleibt.</para>
+    ///
+    /// <para><c>--ki-betriebsart5-aus</c>: der Stand vor dem 02.10.2026 — der
+    /// Ruf wird nur protokolliert, sec61 bleibt 2.</para>
+    /// </summary>
+    public void MissionBetriebsart(int spieler, int wert)
+    {
+        if (spieler is < 0 or > 7) return;
+        int alt = _aiSec61[spieler];
+        if (!Betriebsart5Aus) SetAiBetriebsart(spieler, wert);
+        BetriebsartRufe++;
+        GD.Print($"Missionsskript: Betriebsart Spieler {spieler} {alt} -> {wert}" +
+                 (Betriebsart5Aus ? "  (--ki-betriebsart5-aus: NICHT gesetzt)" : ""));
+    }
+
+    /// <summary>
+    /// Die Betriebsart beim Missionsstart — der Vorspann des Missionsaufbaus und
+    /// danach der Setup-Block.
+    ///
+    /// <para>⭐ <b>STARTWERT 2, NICHT 0 — begründet:</b> der Bericht
+    /// (berichte/ki-tuergriff-selbstverteidiger-fable.md §2.5) fand
+    /// <c>sec61 := 0</c> in der Initialisierung @0x41EFF6 und liess offen, ob sie
+    /// der Missionsstart ist. Der Missionsaufbau des Kampagnenskripts setzt aber
+    /// danach in seinem GEMEINSAMEN Vorspann, unmittelbar nach dem Leeren der
+    /// Zieltafel sec69 (100 × 6 B × 8, @0x4883D4), in einer Schleife ALLE ACHT
+    /// Spieler auf 2:</para>
+    /// <code>
+    /// C 0x48843D  xor esi,esi / 0x48843F push 2 / push esi / inc esi
+    ///   0x488443  call 0x402022 (ai_mode)  ; cmp esi,8 / jl 0x48843F
+    /// F 0x486B01  dieselbe Folge (6A 02 56 46 E8)
+    /// </code>
+    /// <para>Erst danach springt er in den Setup-Block der Mission. Unser
+    /// <c>{2,…}</c> war also richtig — jetzt mit Beleg. Danach die Setup-Rufe
+    /// (48 in 20 Missionen, beide GAME.EXE gleich, mission_betriebsart.py).</para>
+    /// </summary>
+    public void BetriebsartMissionsstart(IReadOnlyList<(int Spieler, int Wert)> setup)
+    {
+        if (Betriebsart5Aus)
+        {
+            if (setup.Count > 0)
+                GD.Print($"Betriebsart: {setup.Count} Setup-Rufe NICHT gesetzt (--ki-betriebsart5-aus)");
+            return;
+        }
+        for (int p = 0; p < 8; p++) _aiSec61[p] = 2;      // Vorspann @0x48843F
+        foreach (var (sp, w) in setup) SetAiBetriebsart(sp, w);
+        var teile = new List<string>();
+        for (int p = 0; p < 8; p++) if (_aiSec61[p] != 2) teile.Add($"P{p}={_aiSec61[p]}");
+        GD.Print("Betriebsart beim Missionsstart: alle 2" +
+                 (teile.Count > 0 ? ", " + string.Join(" ", teile) : "") +
+                 $"  ({setup.Count} Setup-Rufe)");
+    }
+
+    /// <summary><c>--ki-betriebsart5-aus</c> — der Stand vor dem 02.10.2026:
+    /// <c>ai_mode</c> wird nur protokolliert (sec61 bleibt 2 für alle), und der
+    /// Betriebsart-5-Arm <c>0x4BDCC0</c> ist aus.</summary>
+    public static bool Betriebsart5Aus;
+    /// <summary>Wie oft das Skript <c>ai_mode</c> rief — für die Prüfstände.</summary>
+    public int BetriebsartRufe { get; private set; }
+
     /// <summary>Die Skriptsperre setzen — der Nachbau von <c>0x4D09F0</c>.</summary>
     public void SetAiSkriptsperre(int player, int wert)
     {
@@ -442,6 +519,32 @@ public partial class MapEntityLayer : Node2D
         var r = _aiRaster[p];
         int summe = 0, best = 0;
         sx = sy = 0;
+
+        // ⭐⭐ 02.10.2026 (bug-405, A1) — ZWEIG B, C 0x4BE7BA/0x4BE7C1 `sec110 == 0
+        // -> 0x4BE868` (F 0x4BE27A `cmp ebp(0xB35C20),edx / je 0x4BE324`). Ohne
+        // eigenes Gebaeude mit imp zaehlt das Original nicht den Ueberschuss,
+        // sondern JEDEN Satz des Spielerblocks i = 1000p..1000p+999 mit
+        // `faze (+0x09) == 0` (@0x4BE89B), `UKOL (+0x14) < 0x2D` (@0x4BE8A6) und
+        // `CPU0 (0xB400F0+3i) < 5` (@0x4BE8B1) — `inc dx` @0x4BE8BD. Startsektor
+        // ist (x/24, y/24) der LETZTEN solchen Einheit (@0x4BE8C1…0x4BE8D7, jede
+        // Fundstelle ueberschreibt). Keine Waffen-, keine Gattungspruefung.
+        // Bis heute gab AiFreieAngreifer hier 0 zurueck: ein KI-Spieler ohne
+        // Gebaeude (M13 P4 vor der ersten Einnahme, jeder nach Basisverlust)
+        // griff nie an. Gegenschalter --ki-sec110-alt.
+        if (_aiSec110[p] == 0 && !Sec110Alt)
+        {
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p) continue;
+                if (e.Faze != 0 || e.Ukol >= 0x2D || e.AiCpu0 >= 5) continue;
+                summe++;
+                (sx, sy) = AiSektorVon(e.Col, e.Row);
+            }
+            if (summe > 0) FreieZweigB++;
+            return summe;
+        }
+
         for (int x = 0; x < SektorKante; x++)
             for (int y = 0; y < SektorKante; y++)
             {
@@ -453,6 +556,25 @@ public partial class MapEntityLayer : Node2D
             }
         return summe;
     }
+
+    /// <summary><c>--ki-sec110-alt</c> (bug-405, A1) — der Stand bis zum
+    /// 02.10.2026: ohne eigenes Gebäude mit imp gibt es keine freien Angreifer,
+    /// Zweig B von <c>0x4BE790</c> fehlt.</summary>
+    public static bool Sec110Alt;
+
+    /// <summary><c>--ki-gruppengroesse-alt</c> (bug-405, A2) — die invertierte
+    /// Größenregel bis zum 02.10.2026: 99 bei <c>sec110 != 0 &amp;&amp; sec61 != 5</c>.</summary>
+    public static bool GruppengroesseAlt;
+
+    /// <summary><c>--ki-zielgruppe-alt</c> (bug-405, A3) — der Stand bis zum
+    /// 02.10.2026: ein Auftrag, der schon eine Gruppe hat, wird nochmals gewählt.</summary>
+    public static bool ZielgruppeAlt;
+
+    /// <summary>Zähler für die Prüfstände (bug-405): wie oft Zweig B freie
+    /// Angreifer lieferte, wie oft die Zielwahl einen Auftrag mit Gruppe
+    /// überging, und die Größen der gebildeten Gruppen (Soll / Ist).</summary>
+    public static int FreieZweigB, ZielMitGruppeUebersprungen;
+    public static readonly List<string> GruppenProtokoll = new();
 
     /// <summary>
     /// Die <b>Sektor-Kostenkarte</b> — <c>0x4BEA30</c> / F <c>0x4BE4E0</c>,
@@ -535,6 +657,19 @@ public partial class MapEntityLayer : Node2D
         int best = -1, min = int.MaxValue;
         for (int k = liste.Count - 1; k >= 0; k--)
         {
+            // ⭐ 02.10.2026 (bug-405, A3) — die MARKEN, C 0x4BED60…0x4BEDA5: fuer
+            // g = 0..3 gilt `sec68[202(4p+g)] != 0 (Gruppe belegt) UND sec110[p] != 0
+            // -> Marke[sec68+1 (Auftrag)] := 1`, und 0x4BEDAC uebergeht jeden
+            // markierten Auftrag (VOR der Gueltigkeitspruefung, er wird also auch
+            // nicht geloescht). Ein Ziel bekommt so hoechstens EINE Gruppe; ohne
+            // Gebaeude (sec110 == 0) gilt die Marke nicht. Gegenschalter
+            // --ki-zielgruppe-alt.
+            if (!ZielgruppeAlt && _aiSec110[p] != 0 && AiAuftragHatGruppe(p, liste[k]))
+            {
+                ZielMitGruppeUebersprungen++;
+                continue;
+            }
+
             int idx = ResolveTarget(p, liste[k]);
             if (idx < 0) { liste.RemoveAt(k); continue; }   // erledigt — streichen
 
@@ -545,6 +680,16 @@ public partial class MapEntityLayer : Node2D
             if (imp <= 0) continue;
 
             var e = _entities[idx];
+            // ⭐ 02.10.2026 (bug-384) — @0x4BEDF8/@0x4BEE30: ein Art-1-Ziel, dessen
+            // Besitzer laut Buendnistafel `byte[0x87B155 + 40p + besitzer]` eigen
+            // oder verbuendet ist, wird UEBERSPRUNGEN, nicht geloescht. Ohne das
+            // waehlte die KI ein schon eingenommenes Gebaeude immer wieder.
+            // Gehoert zum Tuergriff, darum derselbe Gegenschalter.
+            if (!TuergriffAus && liste[k].Kind == 1 && Allied(p, e.Owner))
+            {
+                ZielwahlVerbuendetUebersprungen++;
+                continue;
+            }
             var (tx, ty) = AiSektorVon(e.Col, e.Row);
             int pway = AiWegewert(tx, ty);
             if (pway == int.MaxValue) continue;             // unerreichbar
@@ -555,6 +700,20 @@ public partial class MapEntityLayer : Node2D
             best = k;
         }
         return best < 0 ? (-1, 0) : (best, min);
+    }
+
+    /// <summary>Hat einer der vier Gruppenplätze von <paramref name="p"/> diesen
+    /// Auftrag? (<c>sec68 +0 != 0</c> und <c>+1 == Auftrag</c>, 0x4BED78/0x4BED96.)
+    /// Wir vergleichen den Auftrag selbst, nicht den Listenplatz — siehe
+    /// <see cref="AiGruppe.Auftrag"/>.</summary>
+    private bool AiAuftragHatGruppe(int p, MissionTarget t)
+    {
+        for (int g = 0; g < 4; g++)
+        {
+            var gr = _aiGruppen[p][g];
+            if (gr.Einheiten.Count != 0 && ReferenceEquals(gr.Auftrag, t)) return true;
+        }
+        return false;
     }
 
     // ---- Die Angriffsgruppen: sec68, 4 × 100 je Spieler ---------------------
@@ -618,9 +777,9 @@ public partial class MapEntityLayer : Node2D
     /// C <c>0x4BC920</c> / F <c>0x4BC3E0</c>.
     ///
     /// <para>Die Gruppengrösse kommt als <b><c>(3·po) / 2</c></b> herein und
-    /// wird auf <b>3 … 99</b> geklemmt. Ist <c>sec110[p] != 0</c> <b>und</b>
-    /// <c>sec61[p] != 5</c>, wird sie auf <b>99</b> hochgesetzt — »alles, was
-    /// geht«.</para>
+    /// wird auf <b>3 … 99</b> geklemmt. Ist <c>sec110[p] == 0</c> <b>oder</b>
+    /// <c>sec61[p] == 5</c>, wird sie auf <b>99</b> hochgesetzt — »alles, was
+    /// geht«. (⚠ Bis zum 02.10.2026 stand hier die Umkehrung, bug-405.)</para>
     ///
     /// <para>Aufnahmeregel: <c>faze == 0</c>, <c>CPU0</c> ist 1 oder 2, Antrieb
     /// ≠ <c>0xAB</c>, und im Sektor aus <c>CPU1</c> muss
@@ -645,8 +804,24 @@ public partial class MapEntityLayer : Node2D
             return -1;
         }
 
+        // ⭐⭐ 02.10.2026 (bug-405, A2) — DIE GROESSE WAR INVERTIERT. Selbst
+        // nachgelesen, C 0x4BC927…0x4BC97C (F 0x4BC3E7…0x4BC43C, Byte fuer Byte
+        // dieselbe Folge, nur sec110 0xB35C20 / sec61 0x537C10):
+        //     cmp al,0x63 / jbe       ; groesse = min(groesse, 99)
+        //     mov ecx,[eax+0xB36BC0] / test / je 0x4BC96F     ; sec110 == 0 -> 99
+        //     mov al,[ebp+0x538BD8] / cmp al,5 / jne 0x4BC974 ; sec61 == 5  -> 99
+        //     0x4BC96F mov byte [esp+0x40],0x63
+        //     0x4BC974 cmp al,3 / jae / mov 3                  ; groesse = max(groesse, 3)
+        // Also 99 (»Take all«) bei sec110 == 0 ODER sec61 == 5, sonst (3·po)/2.
+        // Bei uns stand `sec110 != 0 && sec61 != 5 -> 99` — genau umgekehrt: im
+        // Normalbetrieb nahm jede Gruppe alles mit belegt > DEF (M26: 13…32 statt 3).
+        // ⚠ Die Groesse ist im Original ein BYTE (`mov al,[esp+0xc]`); (3·po)/2 >= 256
+        // wuerde abgeschnitten. pway <= 20 Sektoren -> po <= 20 -> nie erreicht.
+        // Gegenschalter --ki-gruppengroesse-alt.
         int groesse = Math.Clamp(3 * po / 2, 3, 99);
-        bool alles = _aiSec110[p] != 0 && _aiSec61[p] != 5;
+        bool alles = GruppengroesseAlt
+            ? _aiSec110[p] != 0 && _aiSec61[p] != 5
+            : _aiSec110[p] == 0 || _aiSec61[p] == 5;
         if (alles) groesse = 99;
 
         var gruppe = _aiGruppen[p][frei];
@@ -654,11 +829,16 @@ public partial class MapEntityLayer : Node2D
         gruppe.Einheiten.Clear();
 
         var r = _aiRaster[p];
+        // ⭐ 02.10.2026 (bug-384) — ein Tuergriff nimmt auch Unbewaffnete und
+        // Transporter: 0x4BC920 kennt keine Waffenpruefung, und der Gruppenlauf
+        // FAEHRT nur (@0x4BD380). Fussvolk nicht — die Zellenmaenner stehen nicht
+        // im Spielerblock. Fuer Angriffsgruppen bleibt unser CanFight.
+        bool tuer = IstTuergriff(auftrag);
         for (int i = 0; i < _entities.Count && gruppe.Einheiten.Count < groesse; i++)
         {
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || !e.Mobile) continue;
-            if (!CanFight(e)) continue;
+            if (tuer ? e.Infantry >= 0 : !CanFight(e)) continue;
 
             int s;
             if (_aiSec110[p] == 0)
@@ -682,6 +862,8 @@ public partial class MapEntityLayer : Node2D
             if (s >= 0) r[s].Belegt--;
         }
 
+        if (gruppe.Einheiten.Count > 0)
+            GruppenProtokoll.Add($"P{p} g{frei} po={po} soll={groesse} ist={gruppe.Einheiten.Count}");
         if (gruppe.Einheiten.Count == 0) { AiGruppeAufloesen(p, frei); return -1; }
         return frei;
     }
@@ -710,12 +892,39 @@ public partial class MapEntityLayer : Node2D
             // Schritt 2: ist das Ziel noch da? @0x4BCF30 mit der Tafel
             // 0x4BD7BC. Art 1 loest die Gruppe auch dann auf, wenn das
             // Gebaeude inzwischen UNS gehoert — nicht nur, wenn es weg ist.
-            if (gruppe.Auftrag == null || ResolveTarget(p, gruppe.Auftrag) < 0)
+            int zi = gruppe.Auftrag == null ? -1 : ResolveTarget(p, gruppe.Auftrag);
+            if (zi < 0)
             {
                 AiGruppeAufloesen(p, g);
                 continue;
             }
-            if (gruppe.Einheiten.Count == 0) AiGruppeAufloesen(p, g);
+            if (gruppe.Einheiten.Count == 0) { AiGruppeAufloesen(p, g); continue; }
+
+            // ⭐⭐ 02.10.2026 (bug-384) — DER TUERGRIFF IM GRUPPENLAUF 0x4BCF30.
+            // Gueltigkeit Art 1 `c == 0` @0x4BD095: ERLEDIGT, sobald das Gebaeude
+            // dem Spieler gehoert -> Gruppe aufloesen. Vollzug @0x4BD2ED: wer
+            // steht (`UKOL == 0`, unsere Lesart AiSteht) und nicht auf der
+            // Einnahmezelle ist, bekommt erneut `fahre` dorthin (@0x4BD380).
+            // ⚠ Die zweite Bedingung `+0x04 == 0xFF && +0x16 == 0` ist ungelesen (V).
+            if (IstTuergriff(gruppe.Auftrag))
+            {
+                var b = _entities[zi];
+                if (b.Owner == p)
+                {
+                    TuergriffErledigt++;
+                    GD.Print($"KI P{p}: Gruppe {g} — {b.Name} eingenommen, Gruppe aufgeloest (@0x4BD095)");
+                    AiGruppeAufloesen(p, g);
+                    continue;
+                }
+                var front = CaptureCells(b).Front;
+                foreach (int i in gruppe.Einheiten)
+                {
+                    if (i >= _entities.Count) continue;
+                    var e = _entities[i];
+                    if (!AiSteht(e) || (e.Col, e.Row) == (front.X, front.Y)) continue;
+                    if (AiWalkTo(i, front)) TuergriffFahrten++;
+                }
+            }
         }
     }
 
@@ -817,7 +1026,10 @@ public partial class MapEntityLayer : Node2D
     ///   <item><b><c>UKOL == 0</c></b> heisst bei uns »kein Weg, kein Ziel,
     ///   keine Befehlsliste« — unser <see cref="Entity.Ukol"/> führt nur die
     ///   drei Werte der Einfahrt (0/48/50) und taugt dafür nicht.</item>
-    ///   <item><b>Der 5×5-Griff nach Lage 99 ist NICHT gebaut</b>: die
+    ///   <item>⭐ <b>02.10.2026: GEBAUT, und es ist ein 4×4-Fenster und eine
+    ///   TÜRMEIDUNG</b> (berichte/ki-tuergriff-selbstverteidiger-fable.md §1,
+    ///   <see cref="AiTuerImFenster"/>, <c>--ki-tuermeidung-aus</c>). Der Rest
+    ///   dieses Absatzes ist der Stand davor: <b>Der 5×5-Griff nach Lage 99 ist NICHT gebaut</b>: die
     ///   Lagenkarte (<c>0x542E18</c>, .CWM-Sektion 20) liegt zur Laufzeit gar
     ///   nicht vor. Wir nehmen immer den anderen Ausgang (Modus := 2). Wirkung:
     ///   eine Einheit, die neben einer Lage-99-Zelle steht, fährt nicht noch
@@ -838,11 +1050,23 @@ public partial class MapEntityLayer : Node2D
         int p = a.Player;
         var r = _aiRaster[p];
         _aiKandidaten.Clear();
+        int fazeGesperrt = 0;
+        ZmDurchlaeufe++;
 
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p) continue;
+            // ⭐⭐ 02.10.2026 (bug-400) — DAS FAZE-TOR, C 0x4BBDDF/@0x4BBDEB:
+            // `dl = faze (+0x09) ; != 0 -> 0x4BC0A5 (naechster)` — VOR der
+            // Sprungtafel nach CPU0, also fuer ALLE Modi: ein Satz mit faze != 0
+            // wird weder Kandidat noch als Belegt gezaehlt. In K24 sind das die 83
+            // aufgebauten Abwehrstellungen (faze 1) von P2; ohne das Tor standen
+            // sie in Platzreihenfolge VOR den drei Radardroiden (2083..2085) und
+            // nahmen 17 Durchlaeufe lang die 5er-Quote — die Droiden starben im
+            // Stand (berichte/k24-flucht-fable.md §2.2/§3.2). Gegenschalter
+            // --ki-faze-alt (der Stand vom 01.09.2026: faze wird nicht gefragt).
+            if (!KiFazeAlt && e.Faze != 0) { fazeGesperrt++; continue; }
 
             switch (e.AiCpu0)
             {
@@ -855,7 +1079,21 @@ public partial class MapEntityLayer : Node2D
                 case 1:
                     r[AiSektorAus(e.AiCpu1)].Belegt++;
                     if (!AiSteht(e)) break;
-                    // ⚠ hier faellt der Lage-99-Griff aus, siehe oben.
+                    // ⭐⭐ 02.10.2026 (bug-384) — DIE TUERMEIDUNG, C 0x4BBE79…0x4BBFB5
+                    // (F 0x4BB992). Liegt im 4×4-Fenster [x−2..x+1]×[y−2..y+1]
+                    // (Abbruch `RX+2 > X`, also NICHT 5×5) eine Zelle mit Lage 99
+                    // (sec20, die Tuerzelle), faehrt die Einheit nochmals auf eine
+                    // Zufallszelle IHRES ZUGEWIESENEN Sektors und bleibt Modus 1.
+                    // Der Arm verhindert Einnahmen durch Zufall, er stiftet keine.
+                    if (!TuermeidungAus && AiTuerImFenster(e.Col, e.Row))
+                    {
+                        TuermeidungTreffer++;
+                        int tx = e.AiCpu1 & 0x0F, ty = (e.AiCpu1 >> 4) & 0x0F;
+                        if (AiWalkTo(i, new Vector2I(tx * SektorFeld + a.Roll(14) + 5,
+                                                     ty * SektorFeld + a.Roll(14) + 5)))
+                            TuermeidungFahrten++;
+                        break;                          // Modus bleibt 1
+                    }
                     e.AiCpu0 = 2;
                     a.SmBereit++;
                     break;
@@ -892,6 +1130,9 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
+        a.SmFazeGesperrt += fazeGesperrt;
+        a.SmFazeJeDurchlauf = fazeGesperrt;
+
         // ---- die Zuweisung ------------------------------- 0x4BC0C0..0x4BC208
         int n = Math.Min(_aiKandidaten.Count, 5);
         if (n == 0) return;
@@ -916,6 +1157,8 @@ public partial class MapEntityLayer : Node2D
             e.AiCpu0 = 1;
             e.AiCpu1 = paar;
             a.SmZuweisungen++;
+            if (e.Faze != 0) KiFazeZuweisungen++;           // Soll 0 (bug-400)
+            ZuweisungsHaken?.Invoke(_aiKandidaten[k]);
             AiWalkTo(_aiKandidaten[k],
                      new Vector2I(zx * SektorFeld + a.Roll(14) + 5,
                                   zy * SektorFeld + a.Roll(14) + 5));
@@ -923,6 +1166,66 @@ public partial class MapEntityLayer : Node2D
     }
 
     private readonly List<int> _aiKandidaten = new();
+
+    /// <summary><c>--ki-faze-alt</c> (bug-400) — der Stand vom 01.09.2026: die
+    /// Freiliste fragt <c>faze</c> (+0x09) nicht, aufgebaute Abwehrstellungen
+    /// werden Kandidaten und fahren.</summary>
+    public static bool KiFazeAlt;
+
+    /// <summary>Zuweisungen der Zustandsmaschine an Sätze mit <c>faze != 0</c> —
+    /// das Original kennt keine (0x4BBDEB). Für <c>--k24-flucht-check</c>.</summary>
+    public static int KiFazeZuweisungen;
+
+    /// <summary>Wie oft die Zustandsmaschine gelaufen ist (alle Spieler) — für
+    /// <c>--k24-flucht-check</c>: wer VOR dem ersten Durchlauf fällt, hätte nur
+    /// Takt 7 (Vorschlag B, nicht gebaut) retten können.</summary>
+    public static int ZmDurchlaeufe;
+
+    /// <summary>Wird bei jeder Zuweisung mit dem Satzindex gerufen — nur für
+    /// Prüfstände (<c>--k24-flucht-check</c>), sonst null.</summary>
+    public static System.Action<int>? ZuweisungsHaken;
+
+    /// <summary><c>--ki-tuermeidung-aus</c> — der Stand vor dem 02.10.2026: der
+    /// Modus-1-Arm geht immer auf Modus 2, auch neben einer Tür.</summary>
+    public static bool TuermeidungAus;
+
+    private readonly HashSet<Vector2I> _aiTuerzellen = new();
+    private ulong _aiTuerzellenBild = ulong.MaxValue;
+
+    /// <summary>
+    /// Liegt im 4×4-Fenster <c>[x−2..x+1]×[y−2..y+1]</c> eine Türzelle?
+    /// (C <c>0x4BBE79…0x4BBEF0</c>, Kartengrenze <c>0x41D1D0</c>).
+    ///
+    /// <para>Lage 99 schreibt genau EINE Stelle, <c>0x43CB12</c> in der
+    /// Gebäudeuhr, auf <c>(x + [+0x35], y + [+0x36])</c> — das ist TÜR 0
+    /// (OFFENE_FRAGEN AW.4: 813/813, Nullmodell 0,12 %). Die Lagenkarte selbst
+    /// führen wir nicht; die Menge wird darum aus den lebenden Gebäuden mit Tür
+    /// gebildet, einmal je Bild. ⚠ Der Bericht schlug alle <c>DoorCells</c>
+    /// vor — der Schreiber nennt aber nur Tür 0, und die zweite Tür einer Fabrik
+    /// ist keine Lage-99-Zelle.</para>
+    /// </summary>
+    private bool AiTuerImFenster(int x, int y)
+    {
+        ulong bild = Engine.GetProcessFrames();
+        if (bild != _aiTuerzellenBild)
+        {
+            _aiTuerzellenBild = bild;
+            _aiTuerzellen.Clear();
+            foreach (var b in _entities)
+            {
+                if (!b.IsBuilding || b.IsProp || b.Dead || b.Doors == 0 || b.Built == 0) continue;
+                _aiTuerzellen.Add(CaptureCells(b).Door);
+            }
+        }
+        for (int dx = -2; dx <= 1; dx++)
+            for (int dy = -2; dy <= 1; dy++)
+            {
+                int cx = x + dx, cy = y + dy;
+                if (_nav != null && !_nav.InBounds(cx, cy)) continue;
+                if (_aiTuerzellen.Contains(new Vector2I(cx, cy))) return true;
+            }
+        return false;
+    }
 
     /// <summary><b>UNSERE Lesart von <c>UKOL == 0</c></b> — »die Einheit steht
     /// und hat nichts vor«. Dieselbe Prüfung, die der Sektorangriff seit dem

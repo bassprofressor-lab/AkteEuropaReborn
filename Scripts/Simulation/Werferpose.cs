@@ -44,7 +44,21 @@ public partial class MapEntityLayer
     /// ⚠ Der kleine Abzug fängt den Gleitkommarest von <c>Cooldown -= dt</c>
     /// ab — sonst stünde nach k Takten R−k+1 statt R−k da.</summary>
     private static int Nabyto(Entity e)
-        => e.Cooldown <= 0 ? 0 : Mathf.Max(0, Mathf.CeilToInt(e.Cooldown / ReloadTick - 1e-3f));
+    {
+        // ⭐ 02.10.2026, bug-385 — DIE MUNITIONSSPERRE (Opus-Gegenlesung,
+        // berichte/werferpose-gegenlesung-opus.md, W1): ein Fahrzeug mit Waffe
+        // und Munition +0x39 == 0 bekommt NABYTO jeden Takt fest auf 10
+        // (C 0x4074EC, F 0x407415). Ein leer geschossener Werfer bleibt damit
+        // FLACH und LEER — bei uns lief Cooldown auf 0 und zeigte Raketen.
+        // Gegenschalter --werferpose-fable (Regel der ersten Lesung, ohne Sperre).
+        if (!WerferPoseFable && e.Infantry < 0 && e.Weapon != 0 && e.AmmoMax > 0 && e.Ammo <= 0)
+            return 10;
+        return e.Cooldown <= 0 ? 0 : Mathf.Max(0, Mathf.CeilToInt(e.Cooldown / ReloadTick - 1e-3f));
+    }
+
+    /// <summary><c>--werferpose-fable</c>: Posenregel ohne Munitionssperre, Stand
+    /// bug-378 (01.10.2026).</summary>
+    public static bool WerferPoseFable;
 
     /// <summary>
     /// ⭐⭐ <b>Die Gruppe des Turmbilds wie 0x429D8F/0x429E37</b> — nur aus
@@ -80,6 +94,9 @@ public partial class MapEntityLayer
     }
 
     private List<WerferProbe>? _wpProben;
+    /// <summary>Leerphase (bug-385): Takte seit Munition 0, und die Gruppen darin.</summary>
+    private int _wpLeerTakt = -1;
+    private readonly List<int> _wpLeer = new();
     private int _wpStart = -1;
     private bool _wpFertig;
 
@@ -193,6 +210,19 @@ public partial class MapEntityLayer
         if (genug || _taktNr - _wpStart > 3000) WerferPoseAuswerten();
     }
 
+    /// <summary>bug-385: nach den Folgen 120 Takte mit Munition 0, ohne Nachfuellen.
+    /// Soll durchgehend Gruppe 0 (Sperre 0x4074EC).</summary>
+    private bool WerferLeerTakt()
+    {
+        var p = _wpProben!.FirstOrDefault(q => !_entities[q.Idx].Dead && _entities[q.Idx].AmmoMax > 0);
+        if (p == null) return false;
+        var e = _entities[p.Idx];
+        if (_wpLeerTakt < 0) { _wpLeerTakt = 0; _wpLeer.Clear(); }
+        e.Ammo = 0;
+        _wpLeer.Add(TurmGruppe(e));
+        return ++_wpLeerTakt < 120;
+    }
+
     /// <summary>Der nächste Feind, der schon im Schussfenster liegt (sonst müsste
     /// die Einheit erst hinfahren, und ein weiter Weg misst die Wegfindung statt
     /// der Rampe — beim ersten Lauf in K21 schoss der Turm-27-Werfer so nie).
@@ -214,6 +244,7 @@ public partial class MapEntityLayer
 
     private void WerferPoseAuswerten()
     {
+        if (WerferLeerTakt()) return;                 // bug-385: erst die Leerphase
         _wpFertig = true;
         var sb = new System.Text.StringBuilder("werferpose-check\n");
         bool alle = true;
@@ -276,6 +307,13 @@ public partial class MapEntityLayer
         }
         sb.Append(WerferPoseAlt ? "  [--werferpose-alt: Nullmodell, MUSS durchfallen]\n" : "");
         alle &= gemessen > 0;
+        // bug-385: Leerphase — Munition 0, soll durchgehend flach und leer sein.
+        int leerHoch = _wpLeer.Count(g => g == 1);
+        bool leerOk = _wpLeer.Count > 0 && leerHoch == 0;
+        sb.Append($"  Leerphase (Munition 0, {_wpLeer.Count} Takte): Gruppe 1 in {leerHoch} Takten, "
+                + $"SOLL 0 (Munitionssperre 0x4074EC) -> {(leerOk ? "ok" : "⚠ abweichend")}"
+                + (WerferPoseFable ? "   [--werferpose-fable: Nullmodell, MUSS abweichen]" : "") + "\n");
+        alle &= leerOk;
         sb.Append($"  {gemessen} von {_wpProben!.Count} Werfern gemessen\n");
         sb.Append(alle ? "  BESTANDEN" : "  ⚠ DURCHGEFALLEN");
         GD.Print(sb.ToString());
