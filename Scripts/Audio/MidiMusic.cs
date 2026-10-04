@@ -208,6 +208,10 @@ public static class MidiMusic
 
     private static bool _open;
 
+    /// <summary>Gegenschalter <c>--musikwechsel-alt</c> (bug-413): wie früher vor
+    /// jedem Stück ganz anhalten und das Gerät schließen.</summary>
+    private static bool WechselAltGeschlossen => MidiSequencer.WechselAlt;
+
     /// <summary>Plays track N from the start, looping is not asked for: the
     /// original plays a piece and stops.</summary>
     public static bool Play(int track)
@@ -219,7 +223,9 @@ public static class MidiMusic
         if (!FileAccess.FileExists(res)) { LastError = $"{res} fehlt"; return false; }
         string path = ProjectSettings.GlobalizePath(res);
 
-        Stop();
+        // ⚠ bug-413: auf dem eigenen Weg hält MidiSequencer.Start das laufende
+        // Stück selbst an und lässt das Gerät offen — hier NICHT schließen.
+        if (MciWeg || WechselAltGeschlossen) Stop();
         if (!MciWeg)
         {
             // ⭐ 01.10.2026 (bug-376) — eigener Sequenzer, damit der Regler wirkt.

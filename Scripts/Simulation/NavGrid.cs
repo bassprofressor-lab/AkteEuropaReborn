@@ -1913,8 +1913,16 @@ public sealed class NavGrid
     /// Blockierers noch eine Neuplanung des Wartenden gebaut ist, ist »durch
     /// den Pulk planen« nur eine andere Art steckenzubleiben. Der Schalter
     /// bleibt, damit die naechste Haelfte dagegen gemessen werden kann.</para>
+    ///
+    /// <para>⭐⭐ <b>03.10.2026 — JETZT STANDARD (seine Entscheidung »neue pfadkarte als
+    /// standard«).</b> Neu gemessen, gleicher Aufbau (K4, 96 Einheiten, Ziel (12,40),
+    /// 120 s, Keim 1): alte Karte 2952 gefahrene Zellen, 55 am Ziel, 1 ohne Weg; NEUE
+    /// Karte 3084 Zellen, alle 39 Überlebenden am Ziel, 0 ohne Weg. Das fehlende
+    /// Gegenstück (Ausweichen.cs, 11.09.) ist inzwischen gebaut — das Kriechen vom
+    /// August ist weg. Anlass: bug-409, die M1-Verfolger blieben mit der alten Karte
+    /// in 3 von 5 Keimen stecken. Gegenschalter <c>--pfadkarte-alt</c>.</para>
     /// </summary>
-    public static bool NeuePfadkarte;
+    public static bool NeuePfadkarte = true;
 
     /// <summary><c>--randziel-alt</c> — die Gegenprobe: ein Ziel auf dem
     /// aeussersten Ring wird wieder genommen, wie es ist. ⚠ Dann meldet die

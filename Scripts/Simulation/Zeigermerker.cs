@@ -166,6 +166,10 @@ public partial class MapEntityLayer : Node2D
         // ein Fahrziel EINE Zelle weiter. Der Weg dorthin geht durch dieselbe
         // Wegsuche wie jeder andere Fahrbefehl — ein zweiter, direkter
         // Bewegungspfad waere die schlimmere Abweichung.
+        // ⚠ 03.10.2026 (bug-414): das ist nur noch der Gegenschalter
+        // --handsteuerung-boden-alt; gesteuert wird je Takt in
+        // Simulation/HandsteuerungBoden.cs. Gezählt fürs Nullmodell.
+        HandBodenPostMove++;
         var ziel = new Vector2I(e.Col + dx, e.Row + dy);
         _sel.Clear(); _sel.Add(HandsteuerungIdx);
         return PostMove(CellCenter(ziel.X, ziel.Y)) > 0;

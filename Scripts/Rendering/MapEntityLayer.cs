@@ -265,7 +265,8 @@ public partial class MapEntityLayer : Node2D
         public int Erfahrung;
 
         /// <summary>Der Bremszaehler des Rumpfes beim Drehen — Satz +0x16,
-        /// <c>OTACIM</c>. Nur Schiffe fuehren ihn; siehe die Drehstelle.</summary>
+        /// <c>OTACIM</c>. Seit 03.10.2026 (bug-407) fuehren ihn ALLE Klassen,
+        /// mit <c>--koerperdrehung-alt</c> nur Schiffe; siehe die Drehstelle.</summary>
         public int DrehWarten;
 
         public Rect2 Footprint;
@@ -714,6 +715,16 @@ public partial class MapEntityLayer : Node2D
         /// trug den Fehler mit; jetzt ist <c>Pos</c> eine reine Funktion von
         /// <c>Progress</c> und den zwei Zellmitten.</para></summary>
         public int Progress;
+        /// <summary>bug-410 C: die Zelle, nach der Hangpose und Kippbild gewählt
+        /// werden — ab halbem Schritt die ZIELZELLE (Zellwechsel 0x40799D),
+        /// sonst null = <c>Col/Row</c>.</summary>
+        public Godot.Vector2I? Zeichenzelle;
+        /// <summary>bug-410 E: Schrittanteil 0..1 und Fahrrichtung des laufenden
+        /// Schritts (für das Kippbild an der Zellkante); -1 = steht.</summary>
+        public float SchrittAnteil = -1f;
+        public int SchrittRichtung = -1;
+        /// <summary>bug-410 D: Fahrzittern 0/1 px nach oben (0x429F71), je Takt neu.</summary>
+        public int Zittern;
 
         /// <summary>Was der laufende Schritt kostet: 160000 gerade, 240000
         /// schraeg (NavGrid.StepCostMilli).</summary>
@@ -808,6 +819,17 @@ public partial class MapEntityLayer : Node2D
 
         // ---- combat state (Step B) ----
         public int AimFacing = -1;       // turret facing (-1 = follow the hull)
+
+        /// <summary>⭐ 03.10.2026 (bug-406/407) — der TURMWUNSCH, Satz +0x17
+        /// <c>OTOC_HLAVEN</c>: −1 = keiner (0xFF), sonst 0…7. Gedreht wird eine
+        /// Stufe je zwei Takte (Simulation/TurmDrehung.cs, Rufer 0x409F82).</summary>
+        public int TurmWunsch = -1;
+        /// <summary>Das Merkbit 8 in +0x17 — »diesen Takt aussetzen« (0x409F74).</summary>
+        public bool TurmAussetzen;
+        /// <summary>⚠ UNSERE Setzung (V): das Ziel, das wir beim Verlassen der
+        /// Reichweite schon losgelassen haben, das Original aber bis zum Ende
+        /// des Nachladens hält (Tor 0x40DE8A). Nur für den Turm.</summary>
+        public int TurmHalteZiel = -1;
         public int Target = -1;          // entity index being attacked, -1 = none
 
         /// <summary><b>Das Bodenziel</b> — die Zelle aus dem UTOK_NA-Band
@@ -3765,7 +3787,7 @@ public partial class MapEntityLayer : Node2D
             }
             if (tex == null)
             {
-                tex = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
+                tex = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e));
                 if (tex != null) { what = "Rumpf"; at = picC - EinheitenAnker(e); }
             }
             if (tex == null)
@@ -5131,8 +5153,33 @@ public partial class MapEntityLayer : Node2D
         // auch Bild und Auswahlmarkierung nehmen (bug-084).
         float fuss = FussVersatzFuer(e).Y;
         float arm = e.Infantry >= 0 ? BarYFussvolk : BarYFahrzeug;
-        return ComposedAnchor.Y - fuss - arm;
+        // ⭐ 03.10.2026 (bug-410, berichte/hangfahrt-zeichnen-fable.md §3.3) — der
+        // Balken hängt am SELBEN Blitpunkt wie das Bild (Fahrzeugruf 0x42A720
+        // übergibt [esp+0x1E]/[esp+0x1C] von 0x429C2D/0x429C32). bug-402 hat den
+        // Fahrzeuganker auf 45 gesenkt, der Balken rechnete weiter gegen 55 und
+        // schwebte seitdem 10 px zu hoch. Fußvolk und Schiffe: EinheitenAnker
+        // liefert dort ComposedAnchor.Y, also unverändert.
+        // Gegenschalter --balkenanker-alt.
+        float y = BalkenankerAlt ? ComposedAnchor.Y : EinheitenAnker(e).Y;
+        return y - fuss - arm;
     }
+
+    /// <summary><c>--balkenanker-alt</c>: Lebensbalken wieder gegen
+    /// <c>ComposedAnchor.Y</c> (Stand vor bug-410, 10 px über dem Fahrzeug).</summary>
+    public static bool BalkenankerAlt;
+
+    /// <summary><c>--balkenbild-alt</c>: der alte Balken — schwarzer Kasten α 0,75
+    /// außen, Füllung randlos bw·Anteil × 5 (Stand vor bug-410).</summary>
+    public static bool BalkenbildAlt;
+
+    /// <summary>Rahmenfarbe des Lebensbalkens im Original: Palettenplatz
+    /// <c>(id/1000)·4 + 4</c> = 4 + 4·Spieler (@0x4B6FA4), aus <c>DATA/01.PAL</c>
+    /// nachgeschlagen (Plätze 5/9/13 = Balkenfarben zur Eichung).</summary>
+    private static readonly Color[] BalkenRahmen =
+    {
+        new("1B47B3"), new("2B8F0B"), new("BF0000"), new("DF9F0F"),
+        new("C76700"), new("AFA3A3"), new("6F006F"), new("07AF87"),
+    };
 
     /// <summary>
     /// ⭐⭐ <b>DREI Bänder, nicht zwei — und die Schwellen sind gelesen.</b>
@@ -6075,7 +6122,7 @@ public partial class MapEntityLayer : Node2D
     private Texture2D? AuswahlBild(Entity e)
         => e.Infantry >= 0
             ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
-            : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row))
+            : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e))
               ?? GetComposedTexture(e.Combo, e.Facing);
 
     private static readonly Dictionary<ulong, Vector2> _koerperMitte = new();
@@ -11895,6 +11942,7 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
             if (e.Target >= 0) continue;        // hat eins — der Grund faellt in UpdateCombat
+            if (DrehenCheckAn && i == _drE) continue;   // --drehen-check: die Messeinheit nimmt nichts auf
             // ⭐⭐⭐ 01.09.2026 — EINE FAHRENDE EINHEIT NIMMT SEHR WOHL EIN ZIEL AUF.
             //
             // Hier stand `|| e.Path != null`: wer faehrt, sieht nichts. Gemeldet:
@@ -12112,7 +12160,11 @@ public partial class MapEntityLayer : Node2D
         if (e.Target < 0)
         {
             if (BodenKampf(i, e, dt)) return;
-            e.AimFacing = -1; return;                     // turret returns to the hull
+            // ⭐ 03.10.2026 (bug-406) — ein eigener Turm klappt NICHT auf den
+            // Rumpf zurück: er zielt im Fahren aufs Endziel und bleibt im Stand,
+            // wie er stand (0x409F26…0x409F6A). Simulation/TurmDrehung.cs, --turm-alt.
+            if (!TurmEigen(e)) e.AimFacing = -1;          // turret returns to the hull
+            return;
         }
 
         var t = _entities[e.Target];
@@ -12158,7 +12210,11 @@ public partial class MapEntityLayer : Node2D
         var w = WeaponOf(e.Weapon);
         float dist = CellDistance(e, t);
 
-        e.AimFacing = DirToFacing(t.Pos - e.Pos);   // the turret tracks its target
+        // ⭐ 03.10.2026 (bug-406/407) — ein eigener Turm SPRINGT nicht: die
+        // Schiessuhr setzt nur den Wunsch +0x17 (0x40E7DA–0x40E7F0), gedreht
+        // wird stufig in TurmTakt. Gegenschalter --turm-alt.
+        if (TurmEigen(e)) TurmZielWunsch(e, DirToFacing(t.Pos - e.Pos));
+        else e.AimFacing = DirToFacing(t.Pos - e.Pos);   // the turret tracks its target
 
         if (InFiringWindow(e, dist))
         {
@@ -12255,6 +12311,7 @@ public partial class MapEntityLayer : Node2D
         {
             if (Schussgruende)
                 e.Schussgrund = $"Ziel zu NAH ({dist:0.0} < Mindestreichweite {RangeMinOf(e):0.0})";
+            TurmZielHalten(e);                 // bug-406, wie »zu weit« (0x40E7CB)
             e.Target = -1; MinRangeBlocked++; return;
         }
 
@@ -12266,6 +12323,9 @@ public partial class MapEntityLayer : Node2D
                 e.Schussgrund = $"Ziel Platz {t.Slot} zu WEIT ({dist:0.0} > Reichweite "
                               + $"{RangeOf(e):0.0}) und wird nicht verfolgt "
                               + $"(befohlen {e.Ordered}, beweglich {e.Mobile})";
+            // ⭐ 03.10.2026 (bug-406) — der Turm hält das Ziel bis zum Ende des
+            // Nachladens (Tor 0x40DE8A, NABYTO == 0). Simulation/TurmDrehung.cs.
+            TurmZielHalten(e);
             e.Target = -1; return;
         }
 
@@ -14285,6 +14345,11 @@ public partial class MapEntityLayer : Node2D
     /// mitgegebene Zelle, <c>DALSI_SMER = 0xFF</c>, <c>AKCE = 0</c> und
     /// <c>UTOK_NA</c> = das vierte Argument.</para>
     ///
+    /// <para>⚠⚠ ÜBERHOLT am 03.10.2026 (bug-409): UTOK_NA ist gelesen (0 = Platz 0,
+    /// 60000 = Gebäude 0), der Befehl ist jetzt ein Angriff — siehe die Notiz
+    /// direkt an MissionOrderAt. Der folgende Absatz ist der alte Stand
+    /// (Gegenschalter <c>--skriptangriff-alt</c>).</para>
+    ///
     /// <para>⚠ <b>UNSERE SETZUNG ist die Umsetzung von UKOL 4, nicht die
     /// Zelle.</b> Das Original lässt die Einheit angreifen UND nennt ihr eine
     /// Zielzelle; welches Ziel <c>UTOK_NA = 60000</c> benennt, ist ungelesen
@@ -14328,7 +14393,44 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
-    private void MissionOrderAt(int slot, int cx, int cy, int utokNa)
+    /// <summary>
+    /// ⭐⭐ 03.10.2026, bug-409 — <b>der Skriptbefehl ist ein ANGRIFF, kein
+    /// Fahrbefehl</b> (KayelGee: »Die ersten Gegner auf die man trifft
+    /// rennen/fahren einfach an einem vorbei, anstatt in den Angriff
+    /// überzugehen«; Lesung berichte/m1-gegner-vorbei-fable.md).
+    ///
+    /// <para><b>Original (O):</b> M1 Regel 6 @0x4985C4 ff. ruft
+    /// <c>bus_cmd(11, 1000+i, 4, 39, 0)</c>; der Sender @0x4D0990 legt
+    /// UTOK_NA als WORT ab (@0x4D09A8), der Behandler @0x4C2E0C…0x4C2E2D reicht
+    /// alle Felder an <c>order()</c> @0x410220, und der setzt UKOL := 4
+    /// (@0x4102B0), CX/CY := Zelle und <b>UTOK_NA := 0 ohne Nullprüfung</b>
+    /// (@0x4102D6). »Kein Ziel« wäre 0xFFFF (@0x40B0FA), der Ankunftsnachsatz
+    /// @0x411695 nimmt alles &lt; 8000 als Einheitsziel — <b>0 ist Platz 0, der
+    /// Panzer des Spielers</b>. Der UKOL-4-Arm @0x409060 verfolgt ihn
+    /// (@0x409090 → 0x40FC90: neuer Weg zu seiner aktuellen Zelle). Bei uns
+    /// stand hier ein Fahrbefehl nach (4,39) — auf die Zelle, die der Panzer
+    /// 0,3 s vorher verlassen hatte (Regel 5 zählt v[2] zweimal je Takt bis 29).</para>
+    ///
+    /// <para><b>UTOK_NA entschlüsselt wie ApplyAttack/0x4353F0:</b>
+    /// −1 (aus <c>move</c>, kein UTOK_NA) → Fahrbefehl wie bisher;
+    /// 0…7999 → Einheitenplatz → Listenindex; 60000…60299 → Gebäudeplatz
+    /// (M2 @0x498F73 ff.: 60000 = Gebäude 0, der herrenlose Posten bei
+    /// (12,18)); 30000…30255 → Bodenzelle, Zeile = <c>extra</c> (@0x4102DD);
+    /// 40100…40249 (Brücke/Rampe) ist bei uns nicht gebaut → Fahrbefehl mit
+    /// Protokollzeile.</para>
+    ///
+    /// <para>⚠ UNSERE Setzung (V): die Zelle CX/CY wird beim Einheitsziel
+    /// nicht als erster Wegpunkt gefahren — unser Angriffsbehandler verfolgt
+    /// sofort das Ziel (UpdateCombat), das Original fährt erst CX/CY an und
+    /// befiehlt am Wegende neu (Bauliste B des Berichts, nicht gebaut). Und:
+    /// wo das Original den Befehl stumm annimmt, fragen wir vorher
+    /// CanFight/IstAngriffsziel; fällt das durch, fahren wir die Zelle an und
+    /// sagen warum — eine Einheit soll nie stumm stehen bleiben.</para>
+    ///
+    /// <para>Gegenschalter <c>--skriptangriff-alt</c>: der Fahrbefehl von
+    /// vorher. Prüfstand <c>--m1-angriff-check</c> (Simulation/M1AngriffCheck.cs).</para>
+    /// </summary>
+    private void MissionOrderAt(int slot, int cx, int cy, int utokNa, int extra = 0)
     {
         int idx = -1;
         for (int i = 0; i < _entities.Count; i++)
@@ -14345,13 +14447,84 @@ public partial class MapEntityLayer : Node2D
             GD.Print($"Missionsbefehl (order_at): Platz {slot} kann nicht fahren");
             return;
         }
+        string rueckfall = "";
+        if (utokNa >= 0 && !SkriptangriffAlt)
+        {
+            rueckfall = MissionAngriffAbsetzen(idx, e, slot, cx, cy, utokNa & 0xFFFF, extra);
+            if (rueckfall.Length == 0) return;
+            MissionAngriffRueckfaelle++;
+        }
         bool ok = PostRaw(AkteEuropaReborn.Simulation.Commands.CommandRecord.Make(
             AkteEuropaReborn.Simulation.Commands.CommandOp.Move,
             (byte)Mathf.Clamp(e.Owner, 0, 7),
             (short)idx, (short)cx, (short)cy, (short)0));
         GD.Print($"Missionsbefehl (order_at): Einheit {slot} (Spieler {e.Owner}) " +
                  $"nach ({cx},{cy}){(ok ? "" : " — Ring VOLL, Befehl fiel aus")}" +
-                 $"  [Original: UKOL 4, UTOK_NA {utokNa} ungelesen]");
+                 (utokNa < 0 ? "" : SkriptangriffAlt
+                     ? $"  [--skriptangriff-alt: Original UKOL 4, UTOK_NA {utokNa} verworfen]"
+                     : $"  [Rückfall statt Angriff auf UTOK_NA {utokNa}: {rueckfall}]"));
+    }
+
+    /// <summary><c>--skriptangriff-alt</c> (bug-409): der Skriptbefehl
+    /// <c>order</c>/<c>order_at</c> wird wieder zum Fahrbefehl auf CX/CY,
+    /// UTOK_NA verworfen — der Stand bis zum 03.10.2026.</summary>
+    public static bool SkriptangriffAlt;
+
+    /// <summary>Für <c>--m1-angriff-check</c>: abgesetzte Skriptangriffe und
+    /// Rückfälle auf den Fahrbefehl.</summary>
+    public int MissionAngriffeAbgesetzt, MissionAngriffRueckfaelle;
+
+    /// <summary>bug-409: den Angriffssatz für <see cref="MissionOrderAt"/>
+    /// bauen und absetzen. Rückgabe leer = abgesetzt, sonst der Grund für den
+    /// Rückfall auf den Fahrbefehl.</summary>
+    private string MissionAngriffAbsetzen(int idx, Entity e, int slot, int cx, int cy,
+                                          int utok, int extra)
+    {
+        int ziel = -1;
+        short p5;
+        string zielText;
+        if (utok < 8000)
+        {
+            // Einheitenplatz (1000·Spieler + i) → unser Listenindex
+            for (int k = 0; k < _entities.Count; k++)
+                if (!_entities[k].IsBuilding && !_entities[k].IsProp && !_entities[k].Dead
+                    && _entities[k].Slot == utok) { ziel = k; break; }
+            if (ziel < 0) return $"Platz {utok} ist leer oder tot";
+            p5 = (short)_entities[ziel].Row;
+            zielText = $"Platz {utok} (Sp{_entities[ziel].Owner}, Typ {_entities[ziel].UnitType})";
+        }
+        else if (utok >= 60000 && utok < 60300)
+        {
+            for (int k = 0; k < _entities.Count; k++)
+                if (_entities[k].IsBuilding && _entities[k].Slot == utok - 60000) { ziel = k; break; }
+            if (ziel < 0) return $"Gebäudeplatz {utok - 60000} fehlt";
+            p5 = (short)_entities[ziel].Row;
+            zielText = $"Gebäude {utok - 60000} (Art {_entities[ziel].BType}, Besitzer {_entities[ziel].Owner})";
+        }
+        else if (utok >= UtokBodenzelle && utok < UtokBodenzelle + 256)
+        {
+            if (!CanFight(e)) return "kann nicht kämpfen";
+            p5 = (short)extra;                       // Zeile des Zellziels (@0x4102DD)
+            zielText = $"Bodenzelle ({utok - UtokBodenzelle},{extra})";
+        }
+        else return "Griffraum nicht gebaut (Brücke/Rampe oder unbekannt)";
+
+        if (ziel >= 0)
+        {
+            var v = _entities[ziel];
+            if (ziel == idx) return "Ziel ist die Einheit selbst";
+            if (!CanFight(e)) return "kann nicht kämpfen";
+            if (!IstAngriffsziel(e, v)) return "kein Angriffsziel (IstAngriffsziel)";
+        }
+        bool ok = PostRaw(AkteEuropaReborn.Simulation.Commands.CommandRecord.Make(
+            AkteEuropaReborn.Simulation.Commands.CommandOp.Attack,
+            (byte)Mathf.Clamp(e.Owner, 0, 7),
+            (short)idx, (short)cx, (short)cy, unchecked((short)utok), p5, (short)0));
+        if (!ok) return "Ring VOLL";
+        MissionAngriffeAbgesetzt++;
+        GD.Print($"Missionsbefehl (order): Einheit {slot} (Sp{e.Owner}) greift {zielText} an, " +
+                 $"erster Weg ({cx},{cy}) [UKOL 4, UTOK_NA {utok}; bug-409]");
+        return "";
     }
 
     /// <summary>`remove_unit` @0x4D0B00 und »Robot already sold.« @0x4D0EC0.
@@ -14782,7 +14955,8 @@ public partial class MapEntityLayer : Node2D
                 // `Sicht+1` weit sieht (bei Infanterie VIER Felder, gemessen).
                 // Gemeldet als »dort steht ein Cyborg vor der Bruecke und macht
                 // nix«. Siehe ChaseWatchLine.
-                _mscript.OrderUnit = MissionOrderAt;
+                // bug-409 (03.10.2026): UTOK_NA wird jetzt GELESEN — siehe MissionOrderAt.
+                _mscript.OrderUnit = (s, x, y, u) => MissionOrderAt(s, x, y, u);
                 // BEWEGEN (Befehl 3 des Originals) — dieselbe Bahn wie
                 // `order_at`, das vierte Argument gibt es hier nicht.
                 _mscript.MoveUnit = (slot, x, y) => MissionOrderAt(slot, x, y, -1);
@@ -30790,7 +30964,7 @@ public partial class MapEntityLayer : Node2D
             if (e.IsBuilding || e.IsProp || e.Dead) continue;
             var tex = e.Infantry >= 0
                 ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
-                : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row))
+                : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e))
                   ?? GetComposedTexture(e.Combo, e.Facing);
             if (tex == null) continue;
             var img = tex.GetImage();
@@ -30980,7 +31154,7 @@ public partial class MapEntityLayer : Node2D
             if (e.GameUnitType is not (4 or 5)) continue;      // nur Schiffe
             n++;
             string weg =
-                GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row)) != null ? "Rumpfbank"
+                GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e)) != null ? "Rumpfbank"
                 : GetComposedTexture(e.Combo, e.Facing) != null ? "zusammengesetzt"
                 : GetUnitTexture(e.UnitType, e.Facing) != null ? "nackt"
                 : "KEINS";
@@ -34002,6 +34176,7 @@ public partial class MapEntityLayer : Node2D
         // ANGEFASSTER EINHEIT hochläuft, bekommt kein Taktmuster, sondern eine
         // Reihenfolgeabhängigkeit — siehe die Warnung bei der Schiffsdrehung.
         _taktNr++;
+        if (DrehenCheckAn) DrehenCheckTakt();   // --drehen-check (bug-406..408), Simulation/DrehenCheck.cs
 
         // Was noch abzusetzen ist: EINES je Takt und Traeger. Siehe
         // Entity.UnloadRest — das Original fuehrt denselben Zaehler im Satz.
@@ -34087,6 +34262,11 @@ public partial class MapEntityLayer : Node2D
                                   HandTasteHoch, HandTasteRunter,
                                   HandTasteSteigen, HandTasteSinken,
                                   HandTasteSchuss);
+        // ⭐⭐ 03.10.2026 (bug-414) — und die HANDSTEUERUNG BODEN aus demselben
+        // Sender 0x433460, ebenfalls je Spieltakt. Simulation/HandsteuerungBoden.cs,
+        // Gegenschalter --handsteuerung-boden-alt.
+        else if (HandsteuerungIdx >= 0 && !HandsteuerungBodenAlt)
+            HandsteuerungBodenTakt();
 
         // ⭐⭐ 20.09.2026 — DIE FLUGHAFENWACHE (`guard:`), die Wirkung der
         // Patrouille-Flagge. Sie sitzt im Gebaeudetakt des Originals
@@ -34299,6 +34479,9 @@ public partial class MapEntityLayer : Node2D
             MoleArbeitTick(i, e);
             if (e.Dead) continue;              // der Pionier hat sich verbraucht
 
+            // ⭐ 03.10.2026 (bug-406/407) — der Turm dreht VOR der Schiessuhr,
+            // wie 0x409F82 vor der Weiche 0x409FB8. Simulation/TurmDrehung.cs.
+            TurmTakt(i, e);
             UpdateCombat(i, e, dt);
 
             if (e.Path == null || e.PathIdx >= e.Path.Count) continue;
@@ -34515,8 +34698,22 @@ public partial class MapEntityLayer : Node2D
                 // fuer den Nullvektor liefert.
                 int will = blickD.LengthSquared() < 0.0001f
                     ? e.Facing : DirToFacing(blickD, stufen);
+                // ⭐⭐ 03.10.2026 (bug-407, KayelGee: »das Drehen des Koerpers dauert
+                // im Original laenger«) — die Bremse OTACIM gilt fuer ALLE Klassen,
+                // nicht nur fuer Schiffe: der Bodenzweig 0x404F8B…0x405079 ist
+                // Befehl fuer Befehl derselbe wie der Schiffszweig, nur mit Ring 8
+                // (berichte/turm-koerper-drehen-fable.md §1). Dazu zwei Dinge, die
+                // auch der Schiffszweig bisher nicht hatte:
+                //   0x404FA6  steht der Rumpf schon richtig → +0x16 := 0
+                //   0x405054  die LETZTE Stufe gibt im selben Takt frei (kein Halt)
+                // → 180° = 9 Takte Stand, 90° = 3, 45° = 0 (vorher 4/2/1).
+                // Und 0x404F8B: Fahrwerk-Bauteil (+0x0B) == 9 (Kugelroller) dreht
+                // nie. Gegenschalter --koerperdrehung-alt.
                 if (DrehAlt) e.Facing = will;
-                else if (e.Facing != will)
+                else if (e.Facing == will) { if (!KoerperdrehungAlt) e.DrehWarten = 0; }
+                else if (!KoerperdrehungAlt && stufen <= 8 && e.GameUnitType <= 2 && e.Chassis == 9)
+                { /* 0x404F8B: der Kugelroller dreht nie — Schritt sofort frei */ }
+                else
                 {
                     // kuerzester Weg um den Kreis — jetzt um EINEN Kreis, der
                     // acht oder sechzehn Stufen haben kann
@@ -34536,6 +34733,9 @@ public partial class MapEntityLayer : Node2D
                     // Drehung dauert damit 48 bzw. 96 Takte, knapp eine bzw. zwei
                     // Sekunden. Wir drehten JEDEN Takt: sechzehnmal zu schnell.
                     //
+                    // ⚠⚠ 03.10.2026 ÜBERHOLT: 0x405100 hat keine Bremse, aber ihr
+                    // einziger Rufer 0x409F82 ruft nur JEDEN ZWEITEN Takt (Merkbit 8
+                    // in +0x17) — siehe Simulation/TurmDrehung.cs (bug-407).
                     // ⚠ Der TURM (AimFacing) ist davon nicht betroffen — er
                     // dreht im Original ohne Bremse, eine Stufe je Takt
                     // (0x405100). Diese Stelle bewegt nur den Rumpf.
@@ -34572,12 +34772,24 @@ public partial class MapEntityLayer : Node2D
                         if (e.DrehWarten > 1) { e.DrehWarten--; _drehTicks++; continue; }
                         e.DrehWarten = 3;
                     }
+                    // ⭐ bug-407: dieselbe Bremse fuer Boden und Fussvolk (0x404FC2/0x404FDC).
+                    else if (!KoerperdrehungAlt)
+                    {
+                        if (e.DrehWarten > 1) { e.DrehWarten--; _drehTicks++; continue; }
+                        e.DrehWarten = 3;
+                    }
+                    int rumpfVor = e.Facing;
                     int diff = ((will - e.Facing) % stufen + stufen) % stufen;
-                    e.Facing = (e.Facing + (diff <= stufen / 2 ? 1 : stufen - 1)) % stufen;
-                    // erst drehen, dann fahren — solange die Nase nicht stimmt,
-                    // ruckt nichts vor
+                    e.Facing = KoerperdrehungAlt
+                        ? (e.Facing + (diff <= stufen / 2 ? 1 : stufen - 1)) % stufen
+                        : StufeOriginal(e.Facing, will, stufen);   // 0x404FE3 (bug-407)
                     _drehTicks++;
-                    continue;
+                    if (DrehProtokoll) DrehZeile(e, "Rumpf", rumpfVor, e.Facing);
+                    // erst drehen, dann fahren — solange die Nase nicht stimmt,
+                    // ruckt nichts vor. ⭐ bug-407: stimmt sie NACH dieser Stufe,
+                    // faehrt der Schritt im selben Takt los (0x405054 → return 1).
+                    if (KoerperdrehungAlt || e.Facing != will) continue;
+                    e.DrehWarten = 0;
                 }
             }
 
@@ -34612,6 +34824,18 @@ public partial class MapEntityLayer : Node2D
                 {
                     float tf = e.Progress / (float)full;
                     e.Pos = e.StepFrom.Lerp(dest, tf);
+                    // ⭐ 03.10.2026 (bug-410 C) — das Original wechselt die
+                    // aktuelle Zelle (RX/RY) auf HALBEM Weg (0x40799D), und der
+                    // Zeichner wählt die Hangpose aus ihr (0x429AD5). Gegenschalter
+                    // --hangpose-zellende.
+                    e.Zeichenzelle = !HangposeZellende && tf > 0.5f ? target : null;
+                    e.SchrittAnteil = tf;
+                    e.SchrittRichtung = RichtungVon(target.X - e.Col, target.Y - e.Row);
+                    // ⭐ bug-410 D — 0x429F62..0x429F71: fahrend → bp −= rand()&1.
+                    // ⚠ UNSERE Setzung: je SPIELTAKT gewürfelt (Original je Bild),
+                    // damit es in der Pause steht; eigener Würfel, NICHT der der
+                    // Simulation (reine Darstellung). Gegenschalter --fahrzittern-aus.
+                    e.Zittern = FahrzitternAus || e.Infantry >= 0 ? 0 : _zitterWurf.Next(2);
                     // ⭐⭐ 27.08.2026 — DIE SCHRAEGE UNTERWEGS. Die lineare
                     // Zwischenlage zieht zwischen zwei ZELLMITTEN; das Original
                     // wertet die Schrägenformel laufend auf der eigenen Zelle
@@ -34647,6 +34871,10 @@ public partial class MapEntityLayer : Node2D
                 e.Pos = dest;
                 e.Col = target.X;
                 e.Row = target.Y;
+                e.Zeichenzelle = null;
+                e.SchrittAnteil = -1f;
+                e.SchrittRichtung = -1;
+                e.Zittern = 0;
                 // ⭐ Wer nicht vorgemerkt hat, stempelt JETZT — das ist die
                 // zweite Haelfte von @0x40785B/@0x4079E8: erst das alte
                 // Rechteck raeumen, dann das neue setzen.
@@ -36063,6 +36291,58 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>Auf map_NET02 tragen 4728 von 52 900 Zellen (9 %) eine Klasse
     /// 1..4; der Rest ist eben.</para></summary>
+    /// <summary>Hangklasse für das BILD einer Einheit: ab halbem Schritt die der
+    /// Zielzelle (bug-410 C, <see cref="Entity.Zeichenzelle"/>).</summary>
+    private int SlopeClassOf(Entity e)
+        => e.Zeichenzelle is { } z ? SlopeClassOf(z.X, z.Y) : SlopeClassOf(e.Col, e.Row);
+
+    /// <summary><c>--fahrzittern-aus</c>: kein Fahrzittern (Stand vor bug-410).</summary>
+    public static bool FahrzitternAus;
+    private readonly System.Random _zitterWurf = new();
+
+    /// <summary><c>--kippbild-aus</c>: kein Kippbild an der Hangkante (Stand vor bug-410).</summary>
+    public static bool KippbildAus;
+    public int KippGezeigt, KippFehlt;
+
+    /// <summary>
+    /// ⭐ 03.10.2026 (bug-410 E) — das KIPPBILD, C 0x429BE9..0x429C37: auf einer
+    /// Zelle der Hangklasse 1..4, bei |KOLIK| &gt; 70 und Fahrt QUER zur Kante,
+    /// cl = byte[0x4FA4B0 + 8·Klasse + POHYB] (Werte 40..47 = Block 5 des Rumpfs);
+    /// Läufer (Chassis 0x11) nie. Rückgabe: Bild im Block 5 (0..7) oder -1.
+    /// KOLIK aus unserem Schrittanteil: gerade 159 je Schritt, Wechsel bei der
+    /// Hälfte → |K| &gt; 70 ⇔ 70/159 &lt; t &lt; 89/159. Die Tafel kennt nur gerade
+    /// Richtungen (0/2/4/6), Diagonalen geben 0.
+    /// ⚠ (V) Kippweg-Bildindex nicht ganz gelesen (berichte/hangfahrt-zeichnen-fable.md §7):
+    /// angenommen Basis + cl + Gruppe.
+    /// </summary>
+    private int KippBild(Entity e, int klasse)
+    {
+        if (KippbildAus || klasse < 1 || klasse > 4 || e.Chassis == 0x11 || e.Infantry >= 0) return -1;
+        float t = e.SchrittAnteil;
+        if (t < 0 || t <= 70f / 159f || t >= 89f / 159f) return -1;
+        int cl = (klasse, e.SchrittRichtung) switch
+        {
+            (1, 2) => 44, (1, 6) => 42,
+            (2, 0) => 41, (2, 4) => 47,
+            (3, 2) => 45, (3, 6) => 43,
+            (4, 0) => 40, (4, 4) => 46,
+            _ => 0,
+        };
+        return cl == 0 ? -1 : cl - 40;
+    }
+
+    private Texture2D? GetKippTexture(int unitType, int pose, int bild)
+    {
+        string dir = pose > 0 ? $"{unitType}/g{pose}/k" : $"{unitType}/k";
+        var t = LoadUnitPart("hull", dir, bild);
+        if (t != null) KippGezeigt++; else KippFehlt++;
+        return t;
+    }
+
+    /// <summary><c>--hangpose-zellende</c>: Hangpose wie vor bug-410 erst bei
+    /// Ankunft in der neuen Zelle wechseln.</summary>
+    public static bool HangposeZellende;
+
     private int SlopeClassOf(int col, int row)
         => SlopePoses && _flagLookup != null
            && _flagLookup.TryGetValue((col, row), out int fl) && fl <= 4
@@ -36733,6 +37013,8 @@ public partial class MapEntityLayer : Node2D
         if (facing >= 0 && _mountF.TryGetValue(unitType, out var mf) && mf.Length > 0)
             return mf[((facing % mf.Length) + mf.Length) % mf.Length];
         if (_mount == null || !_mount.TryGetValue(unitType, out var m)) return Vector2.Zero;
+        // bug-410 C: der Turmsitz folgt derselben Zelle wie die Hangpose.
+        if (e?.Zeichenzelle is { } zz) { col = zz.X; row = zz.Y; }
         int k = _flagLookup != null && _flagLookup.TryGetValue((col, row), out int fl) && fl <= 4 ? fl : 0;
         if (k >= m.Length) k = 0;
         // ⭐⭐ 02.10.2026 (bug-399) — DIE STELLUNG RICHTET SICH AUF, C 0x42A02D..0x42A089:
@@ -36888,9 +37170,9 @@ public partial class MapEntityLayer : Node2D
             string mnt = _mount != null && _mount.TryGetValue(e.UnitType, out var m)
                          ? $"({m[0].X},{m[0].Y})" : "KEINER";
             var off = TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e);
-            var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
+            var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e));
             var turr = GetTurretTexture(e.Weapon, TurmBlick(e, e.Facing),
-                                        SlopeClassOf(e.Col, e.Row));
+                                        SlopeClassOf(e));
             var hr = UsedRect(hull);
             var tr = UsedRect(turr);
             sb.Append($"   {e.UnitType}/Bauteil {comp} Var {e.ShipVariant} Waffe {e.Weapon}")
@@ -40368,7 +40650,7 @@ public partial class MapEntityLayer : Node2D
                 // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon
                 // immer danach gerueckt, das Bild aber nicht — der Rumpf blieb
                 // flach auf kippendem Boden.
-                int slope = SlopeClassOf(e.Col, e.Row);
+                int slope = SlopeClassOf(e);
                 // ⭐⭐ 19.08.2026 — DAS GETAUCHTE U-BOOT. Es geht VOR allem
                 // anderen: wer es nicht sehen darf, sieht den Schatten und
                 // sonst nichts.
@@ -40377,15 +40659,23 @@ public partial class MapEntityLayer : Node2D
                     DrawTexture(Parteifarbe(getaucht, e.Owner), picC - EinheitenAnker(e));
                     return;
                 }
-                var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
+                // ⭐ bug-410 E — an der Hangkante quer gefahren: das Kippbild
+                // (Block 5); sonst der flache Weg mit dem Fahrzittern (D).
+                int kipp = KippBild(e, slope);
+                var hull = kipp >= 0 ? GetKippTexture(e.UnitType, PoseOf(e), kipp) : null;
+                bool gekippt = hull != null;
+                hull ??= GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
                 if (hull != null)
                 {
-                    DrawTexture(Parteifarbe(hull, e.Owner), picC - EinheitenAnker(e));
+                    // ⚠ (V) das Zittern rückt hier Rumpf UND Turm; ob der Turm im
+                    // Original mitzittert, ist nicht gelesen.
+                    var zit = gekippt ? Vector2.Zero : new Vector2(0, -e.Zittern);
+                    DrawTexture(Parteifarbe(hull, e.Owner), picC - EinheitenAnker(e) + zit);
                     // ⭐ 01.10.2026 — die Gruppe nach NABYTO/RELOAD wie 0x429D8F/0x429E37
                     // (bug-378, Simulation/Werferpose.cs, --werferpose-alt).
                     var turret = GetTurretTexture(e.Weapon, aim, slope, TurmGruppe(e));
                     if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
-                        DrawTexture(Parteifarbe(turret, e.Owner), picC - EinheitenAnker(e)
+                        DrawTexture(Parteifarbe(turret, e.Owner), picC - EinheitenAnker(e) + zit
                                             + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e));
                     return;
                 }
@@ -40530,6 +40820,17 @@ public partial class MapEntityLayer : Node2D
             // VOR dem Ausstieg fuer unbeschaedigte, nicht angewaehlte Einheiten.
             LadungsbalkenZeichnen(e);
 
+            // ⭐⭐ 03.10.2026 (bug-412) — DIE TAB-BALKEN DES ORIGINALS: die
+            // Stellung byte[0xA31A88] (Tab, 0x412FF5) entscheidet, nicht Auswahl
+            // oder Schaden. 0 = keiner (0x42AAA3), 1 Leben für alle, 2 Sprit /
+            // 3 Munition nur eigene (0x4B71F0). Simulation/Tabbalken.cs.
+            // Gegenschalter --balkenmodus-alt / --tab-alt.
+            if (TabBalkenNeu)
+            {
+                if (TabBalkenFuer(e, Balkenmodus) is { } tb) TabBalkenMalen(e, tb);
+                continue;
+            }
+
             bool sel = _sel.Contains(i);
             if (!sel && e.Hp >= e.HpMax) continue;
             float fr = Mathf.Clamp((float)e.Hp / e.HpMax, 0, 1);
@@ -40537,6 +40838,29 @@ public partial class MapEntityLayer : Node2D
             // und der Balken ist auf x ZENTRIERT (0x4B6F6D: x -= breite/2).
             float bw = BarWidthOf(e.HpMax);
             var hb = e.Pos + new Vector2(-bw / 2f, -BalkenHub(e));
+            if (!BalkenbildAlt)
+            {
+                // ⭐ 03.10.2026 (bug-410) — der Zeichner 0x4B6F60 wörtlich:
+                // Umriss 1 px in Spielerfarbe (Rahmen bw × 5, bw = (HpMax>>2)+2),
+                // innen Füllung ab x+1/y+1, (Hp>>2)−1 Spalten × 3 Zeilen; Farbe
+                // nach 2·f ≥ bw−2 → grün, 4·f < bw−2 → rot, sonst gelb (@0x4B70AE).
+                // Kein schwarzer Kasten — den gibt es im Original nicht.
+                hb = new Vector2(Mathf.Floor(hb.X), Mathf.Floor(hb.Y));
+                var rc = e.Owner >= 0 && e.Owner < BalkenRahmen.Length
+                    ? BalkenRahmen[e.Owner] : PropColor;
+                DrawRect(new Rect2(hb, new Vector2(bw, 1)), rc);
+                DrawRect(new Rect2(hb + new Vector2(0, BarH - 1), new Vector2(bw, 1)), rc);
+                DrawRect(new Rect2(hb + new Vector2(0, 1), new Vector2(1, BarH - 2)), rc);
+                DrawRect(new Rect2(hb + new Vector2(bw - 1, 1), new Vector2(1, BarH - 2)), rc);
+                int innen = (int)bw - 2;
+                int fuell = System.Math.Max(0, e.Hp) >> 2;
+                var fb = 2 * fuell >= innen ? BarGreen
+                       : 4 * fuell < innen ? BarRed
+                       : BarYellow;
+                if (fuell > 1)
+                    DrawRect(new Rect2(hb + Vector2.One, new Vector2(fuell - 1, BarH - 2)), fb);
+                continue;
+            }
             DrawRect(new Rect2(hb - Vector2.One, new Vector2(bw + 2, BarH + 2)),
                      new Color(0, 0, 0, 0.75f));
             // ⭐ Drei Baender mit den gelesenen Schwellen 1/2 und 1/4.

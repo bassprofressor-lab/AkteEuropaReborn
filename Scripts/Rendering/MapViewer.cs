@@ -1276,6 +1276,14 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (MapEntityLayer.HangfahrtCheckAn) { _ = HangfahrtLauf(); return; }
+        if (MapEntityLayer.DrehenCheckAn) { _ = DrehenLauf(); return; }
+        // ⭐ 03.10.2026 — bug-411/412/414, siehe MausTabLauf.cs.
+        if (RollenCheckAn) { _ = RollenLauf(); return; }
+        if (MapEntityLayer.TabbalkenCheckAn) { _ = TabbalkenLauf(); return; }
+        if (MapEntityLayer.HandsteuerungBodenCheckAn) { _ = HandsteuerungBodenLauf(); return; }
+        if (MapEntityLayer.M1AngriffCheckAn) { _ = M1AngriffLauf(); return; }
+        if (MapEntityLayer.M2AngriffCheckAn) { _ = M2AngriffLauf(); return; }
         if (MapEntityLayer.WerferPoseCheckAn && _shotPath.Length > 0) { _ = WerferPoseBildLauf(); return; }
         if (MapEntityLayer.ZugEinfahrtCheckAn && _shotPath.Length > 0) { _ = ZugEinfahrtBildLauf(); return; }
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
@@ -1959,6 +1967,81 @@ public partial class MapViewer : Node2D
             GD.Print($"stellung-bild: {pfad} — {_entities.StellungBildZeile(pos)}");
         }
         MapEntityLayer.GameSpeed = 1;
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--hangfahrt-check</c> (bug-410): siehe HangfahrtCheck.cs. Mit
+    /// <c>--shot=…</c> (ohne --headless) ein Bild beim ersten Kippbild und eins am Ende.</summary>
+    /// <summary><c>--m1-angriff-check</c> (bug-409): siehe Simulation/M1AngriffCheck.cs.</summary>
+    private async System.Threading.Tasks.Task M1AngriffLauf()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print($"m1-angriff-check: {_entities.M1AngriffStart()}");
+        for (int bild = 0; bild < 60 * 600; bild++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (_entities.M1AngriffMessen()) break;
+        }
+        GD.Print(_entities.M1AngriffBericht());
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--m2-angriff-check</c> (bug-409, Gegenprobe C): siehe Simulation/M1AngriffCheck.cs.</summary>
+    private async System.Threading.Tasks.Task M2AngriffLauf()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print($"m2-angriff-check: {_entities.M2AngriffStart()}");
+        for (int bild = 0; bild < 60 * 900; bild++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (_entities.M2AngriffMessen()) break;
+        }
+        GD.Print(_entities.M2AngriffBericht());
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--drehen-check</c> (03.10.2026, bug-406..408): siehe
+    /// Simulation/DrehenCheck.cs. Gemessen wird im Spieltakt; hier wird nur gewartet.</summary>
+    private async System.Threading.Tasks.Task DrehenLauf()
+    {
+        _entities.EnsureMissionScript();
+        for (int bild = 0; bild < 60 * 300 && !_entities.DrehenFertig; bild++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(_entities.DrehenFertig ? _entities.DrehenBerichtText : "drehen-check: ZEIT ABGELAUFEN");
+        GetTree().Quit(0);
+    }
+
+    private async System.Threading.Tasks.Task HangfahrtLauf()
+    {
+        _entities.EnsureMissionScript();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        string? start = _entities.HangfahrtStart();
+        GD.Print($"hangfahrt-check: {start ?? "KEIN eigenes Fahrzeug"}");
+        if (start == null) { GetTree().Quit(0); return; }
+        bool kippBild = false;
+        for (int bild = 0; bild < 60 * 300; bild++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var m = _entities.HangfahrtMessen();
+            if (_shotPath.Length > 0) { _camera.Position = m.pos; _camera.Zoom = new Vector2(4, 4); }
+            if (m.kipp && !kippBild && _shotPath.Length > 0)
+            {
+                kippBild = true;
+                MapEntityLayer.GameSpeed = 0;
+                _entities.QueueRedraw();
+                for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                GetViewport().GetTexture().GetImage().SavePng(_shotPath.Replace(".png", "_kipp.png"));
+                MapEntityLayer.GameSpeed = 1;
+            }
+            if (m.fertig) break;
+        }
+        if (_shotPath.Length > 0)
+        {
+            _entities.QueueRedraw();
+            for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath.Replace(".png", "_stand.png"));
+        }
+        GD.Print(_entities.HangfahrtBericht());
         GetTree().Quit(0);
     }
 
@@ -3899,6 +3982,7 @@ _mausProbePunkt = karte;
             else if (a == "--zug-fahrmodell-alt") MapEntityLayer.ZugFahrmodellAlt = true;
             else if (a == "--zug-fahrzeit-tafel") MapEntityLayer.ZugFahrzeitTafelAn = true;
             else if (a == "--zug-einfahrt-check") MapEntityLayer.ZugEinfahrtCheckAn = true;
+            else if (a == "--hangfahrt-check") MapEntityLayer.HangfahrtCheckAn = true;
             else if (a.StartsWith("--zug-einfahrt-check="))
             { MapEntityLayer.ZugEinfahrtCheckAn = true;
               MapEntityLayer.ZugEinfahrtCheckSekunden = Mathf.Max(1f, a["--zug-einfahrt-check=".Length..].ToFloat()); }
@@ -3967,6 +4051,32 @@ _mausProbePunkt = karte;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
             else if (a == "--balkenhoehe-alt") MapEntityLayer.BalkenhoeheAlt = true;
+            else if (a == "--balkenanker-alt") MapEntityLayer.BalkenankerAlt = true;
+            // ⭐ 03.10.2026 — bug-406..408, Turm und Körper drehen getrennt
+            // (berichte/turm-koerper-drehen-fable.md §6, Simulation/TurmDrehung.cs).
+            else if (a == "--gegenbefehl-alt") MapEntityLayer.GegenbefehlAlt = true;
+            else if (a == "--koerperdrehung-alt") MapEntityLayer.KoerperdrehungAlt = true;
+            else if (a == "--turm-alt") MapEntityLayer.TurmAlt = true;
+            else if (a == "--dreh-protokoll") MapEntityLayer.DrehProtokoll = true;
+            else if (a == "--drehen-check") MapEntityLayer.DrehenCheckAn = true;
+            // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
+            else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
+            else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
+            else if (a == "--m2-angriff-check") MapEntityLayer.M2AngriffCheckAn = true;
+            else if (a == "--balkenbild-alt") MapEntityLayer.BalkenbildAlt = true;
+            // ⭐⭐ 03.10.2026 — Maus, Tab, Handsteuerung Boden (bug-411/412/414,
+            // berichte/maus-tab-handsteuerung-fable.md; MausTabLauf.cs, Simulation/
+            // Tabbalken.cs, Simulation/HandsteuerungBoden.cs).
+            else if (a == "--rollen-alt") RollenAlt = true;
+            else if (a == "--rollen-check") RollenCheckAn = true;
+            else if (a == "--tab-alt") MapEntityLayer.TabAlt = true;
+            else if (a == "--balkenmodus-alt") MapEntityLayer.BalkenmodusAlt = true;
+            else if (a == "--tabbalken-check") MapEntityLayer.TabbalkenCheckAn = true;
+            else if (a == "--handsteuerung-boden-alt") MapEntityLayer.HandsteuerungBodenAlt = true;
+            else if (a == "--handsteuerung-boden-check") MapEntityLayer.HandsteuerungBodenCheckAn = true;
+            else if (a == "--hangpose-zellende") MapEntityLayer.HangposeZellende = true;
+            else if (a == "--fahrzittern-aus") MapEntityLayer.FahrzitternAus = true;
+            else if (a == "--kippbild-aus") MapEntityLayer.KippbildAus = true;
             else if (a == "--gebaeudebrand-aus") MapEntityLayer.GebaeudebrandAus = true;
             else if (a == "--reichweite-alt") MapEntityLayer.ReichweiteAlt = true;
             else if (a == "--ki-freibau") MapEntityLayer.KiFreibau = true;
@@ -4668,6 +4778,7 @@ _mausProbePunkt = karte;
             // ⚠ GEGENPROBEN zu den zwei Haelften vom 23.08.2026 — einzeln,
             // damit sich zeigen laesst, dass erst ihr ZUSAMMENSPIEL traegt.
             else if (a == "--neue-pfadkarte") Simulation.NavGrid.NeuePfadkarte = true;
+            else if (a == "--pfadkarte-alt") Simulation.NavGrid.NeuePfadkarte = false;
             else if (a == "--kein-wegpuffer") Simulation.NavGrid.KeinWegpuffer = true;
             else if (a == "--takt-check") _taktCheck = true;
             else if (a == "--gebaeude-check") _gebaeudeCheck = true;
@@ -8108,6 +8219,9 @@ _mausProbePunkt = karte;
 
     public override void _Process(double delta)
     {
+        // ⭐ 03.10.2026 (bug-411) — ein verlorenes Loslassen darf den Zeiger
+        // nicht gefangen lassen. MausTabLauf.cs.
+        RollenWache();
         // ⚠ Das Erwartungsblatt erst im ERSTEN BILD, nicht beim Aufbau: beim
         // Aufbau ist das Missionsskript noch nicht geladen, und das Blatt
         // meldete »Mission -1, kein Skript«. Ein Blatt, das seine eigene
@@ -8372,14 +8486,28 @@ _mausProbePunkt = karte;
         // Ausschnitt. Siehe Simulation/Zeigermerker.cs.
         if (_entities != null && _entities.HandsteuerungIdx >= 0)
         {
+            // ⭐⭐ 03.10.2026 (bug-414) — wie die Luft: hier nur den
+            // TASTENZUSTAND ablegen (byte[0xA182E8+VK], gesetzt 0x412FD2,
+            // gelöscht 0x413E49) und die Maus fürs Rohr; gewirkt wird je
+            // SPIELTAKT in Simulation/HandsteuerungBoden.cs (0x433460).
+            // Gegenschalter --handsteuerung-boden-alt = die Viertelsekunde unten.
+            if (!MapEntityLayer.HandsteuerungBodenAlt)
+            {
+                _entities.HandTasteLinks  = HandTaste(Key.Left);
+                _entities.HandTasteRechts = HandTaste(Key.Right);
+                _entities.HandTasteHoch   = HandTaste(Key.Up);
+                _entities.HandTasteRunter = HandTaste(Key.Down);
+                _entities.HandMausKarte = KartenMaus();
+                return;
+            }
             _handUhr -= (float)delta;
             if (_handUhr <= 0f)
             {
                 int hx = 0, hy = 0;
-                if (Input.IsKeyPressed(Key.Left)) hx -= 1;
-                if (Input.IsKeyPressed(Key.Right)) hx += 1;
-                if (Input.IsKeyPressed(Key.Up)) hy -= 1;
-                if (Input.IsKeyPressed(Key.Down)) hy += 1;
+                if (HandTaste(Key.Left)) hx -= 1;
+                if (HandTaste(Key.Right)) hx += 1;
+                if (HandTaste(Key.Up)) hy -= 1;
+                if (HandTaste(Key.Down)) hy += 1;
                 if (hx != 0 || hy != 0)
                 {
                     // ⚠ Eine Zelle je Viertelsekunde: schneller waere ein
@@ -8423,6 +8551,17 @@ _mausProbePunkt = karte;
             switch (mb.ButtonIndex)
             {
                 case MouseButton.Left:
+                    // ⭐ 03.10.2026 (bug-411) — WÄHREND DES ROLLENS gibt links
+                    // nichts: LBUTTONUP fragt 0x502AC0 (0x414169), und die
+                    // Zeigerwahl löscht bei gehaltener rechter Taste den
+                    // schwebenden Linksdruck (0x4319C0/C7). --rollen-alt: aus.
+                    if (_rollen)
+                    {
+                        _leftDown = false;
+                        _boxSelect = false;
+                        _entities.SetBand(null);
+                        break;
+                    }
                     if (mb.Pressed)
                     {
                         // ⭐ DER DOPPELKLICK ist der Oeffner des Originals
@@ -8538,9 +8677,35 @@ _mausProbePunkt = karte;
                         _rightDrag = false;
                         _rightStart = mb.Position;
                         _dragLast = mb.Position;
+                        // ⭐⭐ 03.10.2026 (bug-411) — DRUCK 0x414328: nur wenn die
+                        // Einstellung »Scrollen mit RECHTER MAUSTASTE« an ist
+                        // (Einstellung 19 AUS, byte[0x8B7250]==0; bei uns
+                        // Settings.RightDragPan): Rollen an, Kameralage merken,
+                        // Zeiger fest und unsichtbar (SetCursorPos/SetCursor(0)).
+                        if (!RollenAlt && UI.Settings.RightDragPan) RollenBeginnen(mb.Position);
                     }
                     else
                     {
+                        // ⭐⭐ 03.10.2026 (bug-411) — LOSLASSEN 0x414409: »gerollt«
+                        // heisst, die Kameralage hat sich um IRGENDETWAS geändert
+                        // (keine Pixelschwelle). Dann nur Rollen beenden, Zeiger
+                        // zurück; sonst Abbruch/Abwahl wie bisher (bug-369).
+                        if (_rollen) _rightDrag = RollenBeenden();
+                        // ⭐ 03.10.2026 (bug-414) — UKOL 1: Rechtsklick ohne
+                        // Kamerabewegung = Befehl 5 (0x41449E → 0x4C29C3), die
+                        // Steuerung wird abgegeben, KEINE Abwahl. Steht im
+                        // Original nach dem Aufheben der Befehlsart (0x414460),
+                        // darum nach Zeigermerker/Setzmodus unten — hier vorn,
+                        // weil beide unter Handsteuerung nicht schweben.
+                        if (_rightDown && !_rightDrag && _entities.HandsteuerungIdx >= 0
+                            && !MapEntityLayer.HandsteuerungBodenAlt
+                            && _entities.Zeigermerker < 0 && _entities.PlacementMode == 0)
+                        {
+                            _entities.Say(_entities.HandsteuerungBodenAbgeben());
+                            UpdateUnitOrderBar();
+                            _rightDown = false; _rightDrag = false;
+                            break;
+                        }
                         // Ein Rechtsklick bricht den Setzmodus ab — und gibt
                         // KEINEN Fahrbefehl. Das ist unsere Zutat (das Original
                         // hat für den Abbruch keinen gelesenen Weg); ohne sie
@@ -8581,6 +8746,11 @@ _mausProbePunkt = karte;
                     }
                     break;
                 case MouseButton.Middle:
+                    // ⭐ 03.10.2026 (bug-411) — die MITTLERE TASTE hat im Original
+                    // KEINEN Zweig: die Weiche 0x412ED6..0x412F17 kennt nur
+                    // 0x200..0x205, WM_MBUTTONDOWN (0x207) fällt in
+                    // DefWindowProc. Schwenken nur noch mit --rollen-alt.
+                    if (!RollenAlt) { _panDrag = false; break; }
                     _panDrag = mb.Pressed;
                     _dragLast = mb.Position;
                     break;
@@ -8609,8 +8779,18 @@ _mausProbePunkt = karte;
                 (motion.Position - _leftStart).Length() > ClickSlop)
                 _boxSelect = true;
 
+            // ⭐⭐ 03.10.2026 (bug-411) — ROLLEN 0x4B4AD0: Kamera += (Maus − Anker),
+            // 1:1 Bildpunkte, SCHUBrichtung; der Zeiger bleibt fest (Anker).
+            // Siehe MausTabLauf.cs. Die alte 5-px-Schwelle mit Greifrichtung
+            // gilt nur noch unter --rollen-alt.
+            if (_rollen)
+            {
+                RollenBewegen(motion.Relative);
+                return;
+            }
+
             // the right button becomes a pan once it has travelled far enough
-            if (_rightDown && !_rightDrag && UI.Settings.RightDragPan &&
+            if (RollenAlt && _rightDown && !_rightDrag && UI.Settings.RightDragPan &&
                 (motion.Position - _rightStart).Length() > ClickSlop)
                 _rightDrag = true;
 
@@ -8763,7 +8943,16 @@ _mausProbePunkt = karte;
                 case Key.Space: JumpToSelection(); break;
                 // Tab jumps to the last thing that happened to us — a unit
                 // taking fire, a finished build
-                case Key.Tab: JumpToEvent(); break;
+                // ⭐⭐ 03.10.2026 (bug-412) — im ORIGINAL schaltet Tab die Balken
+                // durch: VK_TAB → 0x412FF5, byte[0xA31A88] 0→1→2→3→0 (Aus /
+                // Leben / Sprit / Munition), Simulation/Tabbalken.cs. Der
+                // Ereignissprung war unsere Zutat — nur noch mit --tab-alt.
+                // ⚠ (V) Das Original zählt auch Windows-Autorepeat mit (kein
+                // Bit-30-Test); bei uns filtert die Zeile oben `!key.Echo`.
+                case Key.Tab:
+                    if (MapEntityLayer.TabAlt) JumpToEvent();
+                    else _entities.BalkenmodusWeiter();
+                    break;
                 // ⭐⭐ 20.09.2026 — H IST IM ORIGINAL DIE HANDSTEUERUNG LUFT
                 // (@0x433750, Tastentafel 0xA182E8 + 0x48). Unser
                 // Uebersichtskarten-Schalter ist eine eigene Zutat und tritt

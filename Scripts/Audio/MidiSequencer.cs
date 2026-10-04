@@ -69,6 +69,15 @@ public static class MidiSequencer
     /// MCI-Sequenzer benutzt. Gerät 0 ist der Rückfall.</summary>
     private const uint MidiMapper = 0xFFFFFFFF;
 
+    /// <summary><c>--musikwechsel-alt</c>: beim Stückwechsel das Gerät schließen und
+    /// neu öffnen wie bis zum 02.10.2026 (~230 ms Hänger, bug-413).</summary>
+    public static bool WechselAlt
+    {
+        get => _wechselAlt ??= Array.IndexOf(Core.CommandLine.Args, "--musikwechsel-alt") >= 0;
+        set => _wechselAlt = value;
+    }
+    private static bool? _wechselAlt;
+
     // ---------------------------------------------------------------- Datei
 
     /// <summary>Ein gesendetes Ereignis: Zeitpunkt in Mikrosekunden ab Stückbeginn
@@ -258,17 +267,36 @@ public static class MidiSequencer
     /// <summary>Ein Stück von vorn spielen. Stoppt ein laufendes vorher.</summary>
     public static bool Start(MidiDatei datei, int prozent)
     {
-        Stop();
+        // ⭐ 03.10.2026 (bug-413, KayelGee: »Wenn ein Lied zu Ende ist und das
+        // nächste lädt, dann hängt das Spiel kurz«) — das Gerät bleibt beim
+        // Stückwechsel OFFEN. Gemessen (Microsoft GS Wavetable Synth, Windows 11,
+        // 5 Wiederholungen): midiOutClose ~101 ms + midiOutOpen ~128 ms = ~230 ms
+        // im Hauptfaden je Wechsel; Klänge aus + midiOutReset allein 1–2 ms.
+        // Gegenschalter --musikwechsel-alt: wie bis zum 02.10. schließen und neu öffnen.
+        Stop(schliessen: WechselAlt);
         if (!OperatingSystem.IsWindows()) { LastError = "nur unter Windows"; return false; }
         _prozent = Math.Clamp(prozent, 0, 100);
 
-        int rc = midiOutOpen(out IntPtr h, MidiMapper, IntPtr.Zero, IntPtr.Zero, 0);
-        if (rc != 0) rc = midiOutOpen(out h, 0, IntPtr.Zero, IntPtr.Zero, 0);
-        LastCode = rc;
-        if (rc != 0)
+        IntPtr h = _hmo;
+        if (h == IntPtr.Zero)
         {
-            LastError = $"midiOutOpen {rc} ({midiOutGetNumDevs()} MIDI-Ausgaenge)";
-            return false;
+            int rc = midiOutOpen(out h, MidiMapper, IntPtr.Zero, IntPtr.Zero, 0);
+            if (rc != 0) rc = midiOutOpen(out h, 0, IntPtr.Zero, IntPtr.Zero, 0);
+            LastCode = rc;
+            if (rc != 0)
+            {
+                LastError = $"midiOutOpen {rc} ({midiOutGetNumDevs()} MIDI-Ausgaenge)";
+                return false;
+            }
+        }
+        else
+        {
+            LastCode = 0;
+            // offen geblieben: Regler des Vorgängerstücks (Pitch Bend, Modulation,
+            // Halten …) zurück — CC 121 »Reset All Controllers« je Kanal.
+            lock (_riegel)
+                for (int ch = 0; ch < 16; ch++)
+                    midiOutShortMsg(h, (uint)(0xB0 | ch | (121 << 8)));
         }
         LastError = "";
         lock (_riegel)
@@ -337,7 +365,9 @@ public static class MidiSequencer
 
     /// <summary>Anhalten: Faden beenden, alle Klänge aus (CC 120 »All Sound Off«,
     /// CC 123 »All Notes Off«), <c>midiOutReset</c>, <c>midiOutClose</c>.</summary>
-    public static void Stop()
+    /// <param name="schliessen">false = Klänge aus und <c>midiOutReset</c>, aber das
+    /// Gerät bleibt offen (Stückwechsel, bug-413).</param>
+    public static void Stop(bool schliessen = true)
     {
         _halt = true;
         var f = _faden;
@@ -352,6 +382,7 @@ public static class MidiSequencer
                 midiOutShortMsg(_hmo, (uint)(0xB0 | ch | (123 << 8)));
             }
             midiOutReset(_hmo);
+            if (!schliessen) return;
             midiOutClose(_hmo);
             _hmo = IntPtr.Zero;
         }

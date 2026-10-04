@@ -1757,7 +1757,42 @@ public partial class MapEntityLayer
         e.Orders.Clear();
         if (e.FuelMax > 0 && e.Fuel <= 0) return false;
 
-        var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal, e.Move, i);
+        // ⭐⭐ 03.10.2026 — bug-408, KayelGee: »Bewegungsbefehl in eine Richtung und
+        // danach schnell in die entgegengesetzte → die Einheit wird viel schneller
+        // oder faengt an zu gleiten«. UNSER Fehler: hier wurde `Reserved` genullt,
+        // und der Fahrtakt setzte den Schritt aus der ZWISCHENLAGE mit den Kosten
+        // EINER Zelle neu an (bis 2× Tempo, schraege Bahn).
+        //
+        // Das Original bricht keinen Schritt ab: `fahre` 0x40B070 schreibt weder
+        // POHYB (+0x04) noch KOLIK (+0x06) noch OTACIM (+0x16) — der laufende
+        // Schritt wird zu Ende gefahren, erst dann greift der neue Weg
+        // (berichte/turm-koerper-drehen-fable.md §3). Also: laeuft ein Schritt,
+        // bleiben Reserved/Progress/StepCost stehen, und der Weg wird ab der
+        // VORMERKZELLE gerechnet. Ihr steht sie als path[0] voran, weil die
+        // Ankunft PathIdx weiterzaehlt.
+        // ⚠ UNSERE Setzung (V): das Original sucht ab der Ankerzelle +0x00/+0x01
+        // (= der verlassenen Zelle, Versatz um eine Zelle) — bewusst NICHT
+        // nachgebaut. Gegenschalter --gegenbefehl-alt.
+        bool schrittLaeuft = !GegenbefehlAlt && e.Reserved.HasValue;
+        List<Vector2I>? path = null;
+        if (schrittLaeuft)
+        {
+            var b = e.Reserved!.Value;
+            path = b == goal ? new List<Vector2I>() : _nav.FindPath(b, goal, e.Move, i);
+            if (path != null && (path.Count > 0 || b == goal)) path.Insert(0, b);
+            else
+            {
+                // kein Weg ab der Vormerkzelle: der alte Weg ab der Ankerzelle, und
+                // dann wird der Schritt verworfen — mit geraeumter Vormerkung
+                // (wie ApplyStop), sonst bliebe eine Geisterbelegung stehen.
+                path = null;
+                schrittLaeuft = false;
+            }
+        }
+        path ??= _nav.FindPath(new Vector2I(e.Col, e.Row), goal, e.Move, i);
+        if (!GegenbefehlAlt && !schrittLaeuft && e.Reserved is { } alt && path != null && path.Count > 0)
+            _nav.ClearOccupant(alt.X, alt.Y, i);
+        if (schrittLaeuft) GegenbefehlOhneAbbruch++;
         if (path == null || path.Count == 0)
         {
             // ⚠⚠ 18.08.2026 — HIER STAND NUR `return false`, UND DAS WAR EIN
@@ -1799,7 +1834,7 @@ public partial class MapEntityLayer
         e.PathIdx = 0;
         e.Goal = goal;
         e.RetryIn = 0;
-        e.Reserved = null;
+        if (!schrittLaeuft) e.Reserved = null;   // bug-408: ein laufender Schritt bleibt
         e.WaitTime = 0;
         // ⚠ UND DIE GEDULD. Ohne diese Zeile fängt ein frisch befohlener Wagen
         // mit <c>Block = 0</c> an und gibt beim ERSTEN versperrten Takt auf

@@ -241,6 +241,9 @@ public sealed class UnitsExporter
                                  StackAt(f, blk, g, prop));
                     SlopePoses += CwrFile.Facings * _cwr.PartGroups(prop);
                 }
+            // ⭐ 03.10.2026 (bug-410 E) — das KIPPBILD, Block 5 des Rumpfs
+            // (cl 40..47 aus 0x4FA4B0, Zeichner 0x429C37: Basis + cl + Gruppe).
+            if (newHull && !CwrFile.IsShipPart(prop)) KippbilderSpeichern(ut, prop);
             if (newTurret && weap > 0)
                 for (int k = 1; k < SlopeClasses; k++)
                 {
@@ -320,6 +323,7 @@ public sealed class UnitsExporter
                              StackAt(f, blk, g, prop));
                 SlopePoses += CwrFile.Facings * _cwr.PartGroups(prop);
             }
+            KippbilderSpeichern(ut, prop);
             hulls[ut] = NameOf(ut);
             Hulls++;
         }
@@ -557,6 +561,21 @@ public sealed class UnitsExporter
             for (int x = 0; x < img.GetWidth(); x++)
                 if (img.GetPixel(x, y).A > 0.01f) n++;
         return n;
+    }
+
+    /// <summary>Kippbilder (bug-410 E): Block 5, Bild 0..7, je Gruppe nach
+    /// <c>hull/{ut}[/g{g}]/k/f{n}.png</c>.</summary>
+    public int Kippbilder;
+
+    private void KippbilderSpeichern(int ut, int prop)
+    {
+        for (int g = 0; g < _cwr.PartGroups(prop); g++)
+            for (int f = 0; f < CwrFile.Facings; f++)
+            {
+                Save(g == 0 ? $"hull/{ut}/k/f{f}.png" : $"hull/{ut}/g{g}/k/f{f}.png",
+                     StackAt(f, 5, g, prop));
+                Kippbilder++;
+            }
     }
 
     /// <summary>Wieviele Teile ihre acht Richtungen NICHT im Block 0 haben.

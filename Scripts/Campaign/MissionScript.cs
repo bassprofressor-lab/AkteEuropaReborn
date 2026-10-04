@@ -2121,7 +2121,7 @@ public sealed class MissionScript
     /// trotzdem überschreiben.</para></summary>
     public Func<int, bool>? TextOpen = UI.HelpWindow.IsOpen;
 
-    public Action<int, int, int, int>? OrderUnit;    // einheit, ukol, x, y
+    public Action<int, int, int, int>? OrderUnit;    // einheit, cx, cy, utok_na (bug-409)
 
     /// <summary>
     /// `place_unit(entwurf, spalte, zeile, spieler)` @0x4D0810 — <b>60 Aufrufe
@@ -2174,7 +2174,10 @@ public sealed class MissionScript
     /// Einheit, 10000..13999 Infanteriezelle, ab 50000 Kulissenobjekt. Der Wert
     /// wird mitgeführt und nicht ausgewertet.</para>
     /// </summary>
-    public Action<int, int, int, int>? OrderUnitAt;  // einheit, cx, cy, utok_na
+    /// <remarks>⭐ 03.10.2026, bug-409: UTOK_NA wird jetzt ausgewertet — 60000 ist
+    /// der Gebäudeplatz 0 (Griffraum 60000..60299 wie 0x4353F0 @0x435465), siehe
+    /// MapEntityLayer.MissionOrderAt; das fünfte Argument ist <c>extra</c>.</remarks>
+    public Action<int, int, int, int, int>? OrderUnitAt;  // einheit, cx, cy, utok_na, extra
     public Action<int, int, int, int, int>? AddTarget;  // spieler, art, vorrang, wort, c
     public Action<int>? RemoveUnit;                  // einheit
     public Action<int>? SellUnit;                    // einheit
@@ -3135,12 +3138,13 @@ public sealed class MissionScript
                 if (a.V >= 0 && a.V < _var.Length) _var[a.V] = LastPlaced;
                 break;
             // order(einheit, cx, cy, utok_na, extra) @0x410220 — siehe
-            // OrderUnitAt. e (extra) wird NICHT weitergegeben: das Original
-            // benutzt es nur, wenn utok_na in [30000, 30256) liegt, und
-            // Kampagne 2 gibt dort 60000.
+            // OrderUnitAt. ⭐ 03.10.2026, bug-409: e (extra) wird jetzt
+            // durchgereicht — das Original schreibt es nach +0x38, wenn
+            // utok_na in [30000, 30256) liegt (@0x4102DD, Zeile des
+            // Zellziels). Kampagne 2 gibt dort 60000, nutzt es also nicht.
             case "order_at":
                 OrdersGiven++;
-                OrderUnitAt?.Invoke(a.A, a.B, a.C, a.D);
+                OrderUnitAt?.Invoke(a.A, a.B, a.C, a.D, a.E);
                 break;
             // add_target(spieler, art, vorrang, wort, c) @0x4CF700 — ⚠ das ist
             // KEIN Missionsziel im Panel, sondern die ZIELLISTE DES
