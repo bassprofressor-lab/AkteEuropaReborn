@@ -9882,6 +9882,7 @@ public partial class MapEntityLayer : Node2D
             if (!e.Mobile || e.Dead || e.DugIn) continue;   // dug in = holds position
             e.Target = -1;                      // a move order cancels the attack
             if (!queue) e.Orders.Clear();       // a plain order replaces the queue
+            AuftragLoeschen(e);   // bug-417: ein neuer Auftrag nimmt auch den Zellangriff
 
             // a dry tank goes nowhere — the original stops the unit at zero
             if (e.FuelMax > 0 && e.Fuel <= 0) { dry++; continue; }
@@ -10008,6 +10009,7 @@ public partial class MapEntityLayer : Node2D
             e.Reserved = null;
             e.Target = -1;
             e.Orders.Clear();          // stop means stop, queue and all
+            AuftragLoeschen(e);   // bug-417: ein neuer Auftrag nimmt auch den Zellangriff
         }
         _order = "stop";
         QueueRedraw();
@@ -11907,6 +11909,7 @@ public partial class MapEntityLayer : Node2D
             e.Path = null;
             e.Reserved = null;
             e.Orders.Clear();          // a plain attack replaces the queue
+            AuftragLoeschen(e);   // bug-417: ein neuer Auftrag nimmt auch den Zellangriff
             n++;
         }
         if (n == 0) return false;

@@ -129,6 +129,9 @@ public partial class MapEntityLayer
     /// Gruppenklick auf zehn Einheiten sind also zehn Sätze, jeder mit seiner
     /// eigenen Zielzelle. Genau das steht hier.</para>
     ///
+    /// <para>⭐ <b>04.10.2026, bug-418: JETZT GEBAUT</b> — mit Einstellung 16 und
+    /// Shift (XOR), siehe den Kopf im Rumpf. Der folgende Absatz ist der alte
+    /// Stand.</para>
     /// <para>⚠ <b>GELESEN, ABER NICHT GEBAUT</b> (Regel 12 — der Grund des
     /// Nichteinbaus gehört belegt): das Original berechnet die Zielzelle als
     /// <c>Einheit.x - Mittelwert.x + Klick.x</c> (dieselbe Rechnung für y; der
@@ -150,11 +153,38 @@ public partial class MapEntityLayer
     /// Absender auf beiden Maschinen, wäre es eine Fehlerquelle.</para>
     /// </summary>
     /// <returns>Wie viele Sätze abgesetzt wurden.</returns>
-    public int PostMove(Vector2 mapPos, bool queue = false)
+    public int PostMove(Vector2 mapPos, bool queue = false, bool shift = false)
     {
         if (_nav == null) return 0;
         var cell = CellAt(mapPos);
         if (cell == null) { _order = "outside the map"; return 0; }
+
+        // ⭐⭐ 04.10.2026, bug-418 — DIE FORMATION DES ORIGINALS (Klickverteiler
+        // 0x437060, Arm Zustand 3, selbst nachgelesen):
+        //   0x4378D9  EINE Einheit (<8000)      -> Befehl 3 auf die Klickzelle, Shift ohne Wirkung
+        //   0x437960  GRUPPE: al := [0x8B8068] (Einstellung 16), cl := [0xA182F8] (Shift)
+        //   0x43796C  cmp al,cl / je -> 0x4352E0 (alle auf DIESELBE Zelle)
+        //   0x437971  ungleich       -> 0x435100 FORMATION
+        // 0x435100: Schwerpunkt = Summe der Zellen / Anzahl (idiv, ganzzahlig, ueber
+        // die GANZE Auswahl 0x833098), dann je Einheit Befehl 3 mit
+        //   P2 = Spalte - mx + Klick.x (@0x4351DD/0x4351E0), P3 = Zeile - my + Klick.y.
+        // Shift kehrt also die Einstellung um (XOR); mit der Vorgabe 0 ist
+        // Shift = Formation — genau was KayelGee im Original sieht.
+        // ⚠ UNSERE SETZUNG: die Wunschzelle wird auf die Karte geklemmt.
+        // ⭐ Seit bug-425 (04.10.2026) geht sie ROH in den Satz, und der Fall OHNE
+        // Formation schickt alle auf die Klickzelle wie 0x4352E0; die
+        // PickGoalCell-Ringsuche (bug-418 noch Setzung) gilt nur unter --zielwahl-alt.
+        // Gegenschalter --formation-alt: nie Formation (Stand vor dem 04.10.).
+        int gruppe = 0, sx = 0, sy = 0;
+        foreach (int i in _sel)
+        {
+            var g = _entities[i];
+            if (g.Dead || g.IsBuilding || g.IsProp) continue;
+            gruppe++; sx += g.Col; sy += g.Row;
+        }
+        bool formation = !FormationAlt && gruppe > 1 && FormationGilt(shift);
+        int mx = gruppe > 0 ? sx / gruppe : 0, my = gruppe > 0 ? sy / gruppe : 0;
+        if (formation) FormationsFahrten++; else if (gruppe > 1) GruppenFahrten++;
 
         int n = 0;
         var taken = new HashSet<Vector2I>();
@@ -271,6 +301,56 @@ public partial class MapEntityLayer
     /// <see cref="Owns"/> laufen — das prüft <c>_entities[P1]</c> und würde hier
     /// eine fremde Einheit befragen.</para></summary>
     /// <returns>Wie viele Sätze abgesetzt wurden (0 oder 1).</returns>
+    /// <summary><c>--formation-alt</c> — der Stand vor dem 04.10.2026 (bug-418):
+    /// eine Gruppe faehrt nie in Formation, immer Ringsuche um die Klickzelle.</summary>
+    public static bool FormationAlt;
+
+    /// <summary><c>--warteschlange-shift</c> — der Stand vor dem 04.10.2026
+    /// (bug-418): Shift haengt den Befehl an die Warteschlange (bis
+    /// <see cref="MaxOrders"/>) statt die Formation umzukehren. Spielerentscheidung
+    /// »wie Original, ganz weg«: das Original hat KEINE Warteschlange (13 von 13
+    /// Shift-Lesern erhoben, berichte/maus-befehle-fable.md §4.4).</summary>
+    public static bool WarteschlangeShift;
+
+    /// <summary>Fuer Pruefstaende: Einstellung 16 ohne Plattenzugriff setzen;
+    /// −1 = die gespeicherte Einstellung gilt.</summary>
+    public static int Einstellung16Probe = -1;
+
+    /// <summary>Einstellung 16 (<c>byte[0x8B8068]</c>): 0 = Gruppe Standard,
+    /// 1 = Formation Standard. Siehe <see cref="UI.Settings.GruppeFormation"/>.</summary>
+    public static int Einstellung16 => Einstellung16Probe >= 0 ? Einstellung16Probe
+                                                                : UI.Settings.GruppeFormation;
+
+    /// <summary>Faehrt eine GRUPPE bei diesem Shift-Zustand in Formation?
+    /// <c>Einstellung16 != Shift</c> — @0x43796C und @0x4A9B79, beide Male
+    /// <c>cmp al, dl</c> zweier Bytes.</summary>
+    public static bool FormationGilt(bool shift) => (Einstellung16 != 0) != shift;
+
+    /// <summary>Was Shift beim Kartenbefehl an die Absender weitergibt: nur mit
+    /// <c>--warteschlange-shift</c> die Warteschlange, sonst nie.</summary>
+    public static bool ShiftAlsWarteschlange(bool shift) => WarteschlangeShift && shift;
+
+    /// <summary>Zaehler fuer <c>--formation-check</c>.</summary>
+    public int FormationsFahrten, GruppenFahrten;
+
+    /// <summary><c>--zielwahl-alt</c> (bug-425), siehe
+    /// <see cref="Simulation.NavGrid.ZielwahlAlt"/> — EIN Schalter fuer Absender
+    /// und Wegsuche.</summary>
+    public static bool ZielwahlAlt = true; // bis Paket 3 (bug-425): alte Zielwahl
+
+    /// <summary>Wie oft eine Einheit aus einem Fahrklick KEINEN Satz bekam
+    /// (nur unter <c>--zielwahl-alt</c> moeglich: PickGoalCell ohne Treffer).
+    /// Fuer <c>--anfahren-check</c>.</summary>
+    public int KlickOhneSatz;
+
+    /// <summary><c>--geduld-satzwert</c> (bug-425, MESSSCHALTER, Bericht
+    /// bewegung-anfahren-fable §3 C): der Geduldszaehler beim Fahrbefehl wie im
+    /// Original — <c>fahre</c> 0x40B070 schreibt +0x1C NICHT; der erste Wert ist
+    /// der Kartensatz (<see cref="Entity.SatzGeduld"/>, Byte, 0 = 256 Takte, weil
+    /// <c>dec al</c> @0x408BAB von 0 auf 255 springt). Standard bleibt unsere
+    /// Setzung 15 + Wurf(15) je Befehl.</summary>
+    public static bool GeduldSatzwert;
+
     public int PostAirMove(Vector2 mapPos, bool queue = false)
     {
         if (_nav == null) return 0;
@@ -679,6 +759,7 @@ public partial class MapEntityLayer
         e.Path = null;
         e.Orders.Clear();
         e.Target = -1;
+        AuftragLoeschen(e);            // bug-417: UKOL 0 nimmt auch den Zellangriff
         if (e.Reserved is { } rc) { _nav?.ClearOccupant(rc.X, rc.Y, i); e.Reserved = null; }
 
         _sellOffers.Add(new SellOffer { Unit = i, Price = price, State = 0xFF });
@@ -1755,6 +1836,7 @@ public partial class MapEntityLayer
 
         e.Target = -1;                 // ein Fahrbefehl bricht den Angriff ab
         e.Orders.Clear();
+        AuftragLoeschen(e);            // bug-417: auch den Zellangriff (fahre 0x40B070: UKOL := 2)
         if (e.FuelMax > 0 && e.Fuel <= 0) return false;
 
         // ⭐⭐ 03.10.2026 — bug-408, KayelGee: »Bewegungsbefehl in eine Richtung und
@@ -1962,6 +2044,7 @@ public partial class MapEntityLayer
         e.Path = null;
         e.Reserved = null;
         e.Orders.Clear();
+        AuftragLoeschen(e);            // bug-417: das neue Ziel ersetzt +0x36 ganz
         return true;
     }
 
@@ -1984,6 +2067,7 @@ public partial class MapEntityLayer
         e.Orders.Clear();
         e.Target = -1;
         e.EinsteigTraeger = -1;
+        AuftragLoeschen(e);            // bug-417: Halt heisst auch kein Zellangriff mehr
         return true;
     }
 }

@@ -183,6 +183,7 @@ public partial class MapEntityLayer
         if (path == null || path.Count == 0) return false;
         e.Target = -1;
         e.Orders.Clear();
+        AuftragLoeschen(e);   // bug-417: ein neuer Auftrag nimmt auch den Zellangriff
         e.Path = path; e.PathIdx = 0;
         e.Goal = new Vector2I(col, row);
         e.Reserved = null; e.WaitTime = 0;

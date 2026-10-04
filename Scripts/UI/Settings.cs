@@ -69,6 +69,20 @@ public static class Settings
     public static int FpsLimit { get => I("fps_limit", 0); set => Set("fps_limit", value); }
     /// <summary>Pointer changes shape over friend and foe.</summary>
     public static bool CursorHints { get => B("cursor_hints", true); set => Set("cursor_hints", value); }
+    /// <summary>
+    /// ⭐ 04.10.2026, bug-418 — <b>EINSTELLUNG 16 DES ORIGINALS, »Gruppe Standard« /
+    /// »Formation Standard«</b> (<c>byte[0x8B8068]</c>). 0 = Gruppe Standard (alle auf
+    /// den Klickpunkt), 1 = Formation Standard (Aufstellung bleibt). Shift kehrt sie
+    /// beim Fahrbefehl um (XOR, Klickverteiler @0x437960, Zeiger @0x4A9B6E).
+    /// <para>Belege: Beschriftung @0x47FE58 (<c>test al,al</c> → 0x502348 »Gruppe
+    /// Standard«, sonst 0x50235C »Formation Standard«); Umschalter @0x44C9A4 <c>al :=
+    /// 1 − [0x8B8068]</c>; gespeichert als Byte 16 der <c>options.cfg</c> (Schreiber
+    /// 0x446F00, »wb« 0x4F751C, Reihenfolge 4+4+4+1+1+1+1 Byte davor). ⭐ Die Vorgabe
+    /// ist <b>0</b>: 0x8B8068 liegt im BSS. Gegenprobe: die <c>OPTIONS.CFG</c> der
+    /// F-Installation (24 Byte) traegt an Byte 16 eine 0.</para>
+    /// <para>Bei uns in <c>settings.cfg</c> statt <c>options.cfg</c> (UNSERE Ablage).</para>
+    /// </summary>
+    public static int GruppeFormation { get => I("gruppe_formation", 0); set => Set("gruppe_formation", value); }
     /// <summary>Holding the right button drags the map.</summary>
     public static bool RightDragPan { get => B("right_drag_pan", true); set => Set("right_drag_pan", value); }
     /// <summary>Keyboard panning speed in map pixels per second at zoom 1.</summary>

@@ -41,6 +41,9 @@ namespace AkteEuropaReborn.Rendering;
 /// Strg auf alles andere greift die Zelle an. Die Abweichung sitzt damit genau
 /// dort, wo unsere eigene Erfindung ohnehin schon saß.</para>
 ///
+/// <para>⭐ <b>04.10.2026 (bug-416/417):</b> die Abbruchbedingung ist jetzt
+/// gelesen — es GIBT keine; der Zellangriff endet nur durch einen neuen Auftrag
+/// (<see cref="AuftragLoeschen"/>). Der alte Absatz darunter ist überholt.</para>
 /// <para>⚠ <b>Was NICHT gebaut ist:</b> die Abbruchbedingung des
 /// Bodenangriffs im Original (ungelesen, siehe Bericht) — bei uns hört eine
 /// Einheit auf, wenn auf der Zelle nichts Beschädigbares mehr steht. Und das
@@ -56,6 +59,47 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary><c>--kein-bodenangriff</c> — die Gegenprobe.</summary>
     public static bool BodenangriffAn = true;
+
+    /// <summary><c>--bodenangriff-zielpruefung</c> — der Stand vor dem 04.10.2026
+    /// (bug-416): ein Bodenangriff endet, sobald auf der Zelle nichts
+    /// Beschaedigbares steht, auf leerem Boden also im ersten Takt.</summary>
+    public static bool BodenangriffZielpruefung;
+
+    /// <summary><c>--bodenziel-haftet</c> — der Stand vor dem 04.10.2026
+    /// (bug-417): ein neuer Auftrag loescht die <see cref="Entity.AngriffsZelle"/>
+    /// NICHT, das Bodenziel ueberlebt Fahr- und Haltebefehle.</summary>
+    public static bool BodenzielHaftet;
+
+    /// <summary>
+    /// ⭐⭐ 04.10.2026, bug-417 (KayelGee: »nach Baum angreifen nimmt die Einheit
+    /// keinen Bewegungsbefehl mehr an«) — JEDER NEUE AUFTRAG LOESCHT DAS
+    /// BODENZIEL. Original: <c>fahre</c> <c>0x40B070</c> setzt <c>+0x36 :=
+    /// 0xFFFF</c> und <c>UKOL := 2</c>, verweigert nur faze 1 und UKOL
+    /// 0x16/0x17/1 — UKOL 4 (Zellangriff) steht nicht auf der Liste, also beendet
+    /// ein Fahrbefehl jeden Zellangriff. Der Vorspann <c>0x407383</c> kennt nur
+    /// EIN Ziel <c>+0x36</c>; wer es ueberschreibt, hat das alte weg.
+    /// <para>Bei uns wurde <c>AngriffsZelle</c> von keinem Behandler genullt, und
+    /// <see cref="BodenKampf"/> setzte in Reichweite jeden Takt <c>Path =
+    /// null</c> — der frische Fahrweg starb im naechsten Takt. Am leeren Boden
+    /// fiel das nicht auf (der Auftrag endete dort ohnehin sofort), am Baum
+    /// schon.</para>
+    /// <para>Gerufen von allen Behandlern, die einen neuen Auftrag geben:
+    /// Fahrt, Halt, Angriff auf ein Ziel, Verkauf, Einfahrt, Bau, Terranium
+    /// suchen, Handsteuerung. ⚠ UNSERE Liste — welche Behandler des Originals
+    /// <c>+0x36</c> ueberschreiben, ist nur fuer <c>fahre</c> gelesen; dass die
+    /// anderen es auch tun, folgt aus »nur EIN Zielfeld« (V).</para>
+    /// </summary>
+    public void AuftragLoeschen(Entity e)
+    {
+        if (BodenzielHaftet || e.AngriffsZelle == null) return;
+        e.AngriffsZelle = null;
+        e.AimFacing = -1;
+        BodenzielGeloescht++;
+    }
+
+    /// <summary>Wie oft <see cref="AuftragLoeschen"/> ein Bodenziel wirklich
+    /// genommen hat — fuer <c>--bodenangriff-abbruch-probe</c>.</summary>
+    public int BodenzielGeloescht;
 
     /// <summary><c>--bruecke-nicht-angreifbar</c> — der Stand vor dem 13.09.2026
     /// abends: Strg auf eine Brückenzelle bricht sofort ab.</summary>
@@ -133,9 +177,21 @@ public partial class MapEntityLayer : Node2D
         if (e.AngriffsZelle is not { } z) return false;
         if (!BodenangriffAn || _nav == null) { e.AngriffsZelle = null; return false; }
 
-        // Steht dort nichts Beschädigbares mehr, ist der Auftrag zu Ende.
-        // ⚠ UNSERE SETZUNG — die Abbruchbedingung des Originals ist ungelesen.
-        if (!ZelleHatZiel(z.X, z.Y))
+        // ⭐⭐ 04.10.2026, bug-416 (KayelGee: »im Original kann man mit Strg den
+        // Boden angreifen, in Reborn geht das nicht«) — DAS ORIGINAL KENNT HIER
+        // KEIN ENDE. Gelesen (berichte/maus-befehle-fable.md §2.2/§2.3): der
+        // Vorspann des Auftragsbands @0x407383 prueft das Ziel nur fuer eine
+        // Einheit (<8000), ein Gebaeude (60000..60300) und Bruecke/Rampe
+        // (40000..40255); die BODENZELLE (30000 + Spalte) laeuft nur durch die
+        // Protokollzeile »move HOLA« @0x4074AB. Der UKOL-4-Arm @0x409060 ruft
+        // 0x40FC90, und der rechnet Spalte = (UTOK-48)&0xFF @0x40FF2C, Zeile
+        // +0x38 @0x40FF2F, Abstand gegen Reichweite: anfahren oder schiessen —
+        // ohne ein einziges `UKOL := 0`. Die Einheit beschiesst die Zelle, bis
+        // ein neuer Befehl kommt (bug-417, AuftragLoeschen).
+        // Hier stand bis heute UNSERE SETZUNG »nichts Beschaedigbares mehr ->
+        // fertig«, und auf leerem Boden endete der Auftrag damit im ersten Takt,
+        // ohne einen Schuss. Gegenschalter --bodenangriff-zielpruefung.
+        if (BodenangriffZielpruefung && !ZelleHatZiel(z.X, z.Y))
         {
             e.AngriffsZelle = null;
             e.AimFacing = -1;

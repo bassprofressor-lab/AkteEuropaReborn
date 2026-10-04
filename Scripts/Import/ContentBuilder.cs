@@ -242,62 +242,7 @@ public sealed class ContentBuilder
         catch (Exception e) { Say("ROBO.CWR: " + e.Message); }
 
         Schritt++;
-        // ---- the interface and the effects -----------------------------------
-        // FONT.CWD, PANEL.DTA and ANIM.CWA all come out of the same cabinet as
-        // ROBO.CWR, and all three are drawn in the terrain palette.
-        try
-        {
-            string? palPath = Find("DATA/01.PAL");
-            if (palPath == null) { Say("01.PAL fehlt — keine Oberflaeche"); }
-            else
-            {
-                var pal = PalFile.Load(palPath);
-                var ui = new InterfaceExporter(pal, _dst + "/UI", _dst + "/Effects");
-                var font = Asset("FONT.CWD");
-                var font2 = Asset("FONT2.CWD");
-                var panel = Asset("PANEL.DTA");
-                var anim = Asset("ANIM.CWA");
-                if (font != null) ui.WriteFont(font);
-                // the briefing screen's own typeface — same layout, thinner
-                // letters; the loader @0x45bddc reads it right before BRIEFG.DAT
-                if (font2 != null)
-                    ui.WriteFont(font2, InterfaceExporter.Font2Name, "FONT2.CWD");
-                if (panel != null) ui.WritePanel(panel);
-                // Die WINDFAHNE unten in der Mitte des Bedienfelds — acht
-                // Stellungen aus WINDOWS.CWW, siehe WriteWindVane.
-                var cww = Asset("WINDOWS.CWW");
-                if (cww != null) ui.WriteWindVane(cww);
-                // ⭐ 25.08.2026 — DIE FENSTERMOEBEL. Dieselbe Datei traegt die
-                // 314 Kacheln zu 20x20, aus denen das Original JEDES seiner 48
-                // Fenster zusammensetzt: Raender, Titelleiste, Innenflaeche,
-                // Schliesskreuz und die Knopfgesichter. Siehe
-                // InterfaceExporter.WriteWindowChrome — bis heute haben wir aus
-                // WINDOWS.CWW nur die acht Bilder der Windfahne genommen und
-                // die Fenster selbst aus Godot-Bausteinen gebaut.
-                if (cww != null) ui.WriteWindowChrome(cww);
-                if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
-                // Die SACHBILDER zu Hilfe und Enzyklopaedie. Die Texte hatten
-                // wir laengst, die Bilder lagen ungenutzt. Sie liegen NICHT
-                // unter DATA/, sondern neben der GAME.EXE im Spielordner —
-                // deshalb Asset() ohne Unterordner.
-                var helpPic = Asset("HELPG.PIC");
-                var encPic = Asset("ENCYCLOG.PIC");
-                if (helpPic != null || encPic != null) ui.WritePictures(helpPic, encPic);
-                Say($"Sachbilder: {ui.HelpPics} Hilfe + {ui.EncycPics} Enzyklopaedie" +
-                    (ui.PicsBlank > 0 ? $", {ui.PicsBlank} davon einfarbig" : "") +
-                    (helpPic == null && encPic == null
-                         ? "  ⚠ KEINE — HELPG.PIC/ENCYCLOG.PIC liegen neben der GAME.EXE, "
-                           + "nicht auf den CDs"
-                         : ""));
-                Say($"Oberflaeche: {ui.Fonts} Schriften mit {ui.Glyphs} Glyphen, " +
-                    $"Panel {(panel != null ? "ja" : "nein")}, " +
-                    $"Windfahne {ui.VaneFrames} Bilder, " +
-                    $"Fenstermoebel {ui.ChromeTiles} Kacheln " +
-                    $"({ui.ChromePixels} belegte Punkte), " +
-                    $"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern");
-            }
-        }
-        catch (Exception e) { Say("Oberflaeche: " + e.Message); }
+        OberflaecheSchreiben(Say);
 
         Schritt++;
         // ---- the design and catalogue tables ---------------------------------
@@ -1228,6 +1173,183 @@ public sealed class ContentBuilder
         say($"Geruestkacheln {GeruestKachelVon}..{GeruestKachelBis}: {mit.Count} von {gesamt} " +
             $"Kachelsaetzen tragen welche [{string.Join(", ", mit)}], {ohne} keine. " +
             "⚠ KEIN Sollwert — 19 Saetze tragen von Haus aus keine");
+    }
+
+    /// <summary>Der Oberflaechenteil von <see cref="Run"/> — Schriften, Bedienfeld,
+    /// Windfahne, Fenstermoebel, Effekte, Sachbilder und (seit bug-415) die
+    /// Mauszeiger. ⭐ 04.10.2026 aus <c>Run</c> herausgezogen, damit
+    /// <c>--zeigerbank-check</c> GENAU diesen Weg in einen leeren Ordner gehen kann,
+    /// ohne Karten und Ton.</summary>
+    private void OberflaecheSchreiben(Action<string> Say)
+    {
+            // ---- the interface and the effects -----------------------------------
+            // FONT.CWD, PANEL.DTA and ANIM.CWA all come out of the same cabinet as
+            // ROBO.CWR, and all three are drawn in the terrain palette.
+            try
+            {
+                string? palPath = Find("DATA/01.PAL");
+                if (palPath == null) { Say("01.PAL fehlt — keine Oberflaeche"); }
+                else
+                {
+                    var pal = PalFile.Load(palPath);
+                    var ui = new InterfaceExporter(pal, _dst + "/UI", _dst + "/Effects");
+                    var font = Asset("FONT.CWD");
+                    var font2 = Asset("FONT2.CWD");
+                    var panel = Asset("PANEL.DTA");
+                    var anim = Asset("ANIM.CWA");
+                    if (font != null) ui.WriteFont(font);
+                    // the briefing screen's own typeface — same layout, thinner
+                    // letters; the loader @0x45bddc reads it right before BRIEFG.DAT
+                    if (font2 != null)
+                        ui.WriteFont(font2, InterfaceExporter.Font2Name, "FONT2.CWD");
+                    if (panel != null) ui.WritePanel(panel);
+                    // Die WINDFAHNE unten in der Mitte des Bedienfelds — acht
+                    // Stellungen aus WINDOWS.CWW, siehe WriteWindVane.
+                    var cww = Asset("WINDOWS.CWW");
+                    if (cww != null) ui.WriteWindVane(cww);
+                    // ⭐ 25.08.2026 — DIE FENSTERMOEBEL. Dieselbe Datei traegt die
+                    // 314 Kacheln zu 20x20, aus denen das Original JEDES seiner 48
+                    // Fenster zusammensetzt: Raender, Titelleiste, Innenflaeche,
+                    // Schliesskreuz und die Knopfgesichter. Siehe
+                    // InterfaceExporter.WriteWindowChrome — bis heute haben wir aus
+                    // WINDOWS.CWW nur die acht Bilder der Windfahne genommen und
+                    // die Fenster selbst aus Godot-Bausteinen gebaut.
+                    if (cww != null) ui.WriteWindowChrome(cww);
+                    if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
+                    // Die SACHBILDER zu Hilfe und Enzyklopaedie. Die Texte hatten
+                    // wir laengst, die Bilder lagen ungenutzt. Sie liegen NICHT
+                    // unter DATA/, sondern neben der GAME.EXE im Spielordner —
+                    // deshalb Asset() ohne Unterordner.
+                    var helpPic = Asset("HELPG.PIC");
+                    var encPic = Asset("ENCYCLOG.PIC");
+                    if (helpPic != null || encPic != null) ui.WritePictures(helpPic, encPic);
+                    // ⭐⭐ 04.10.2026, bug-415 (KayelGee: »die Mauszeiger aus dem Original
+                    // fehlen alle«) — DIE MAUSZEIGER GEHOEREN IN DEN SPIELERIMPORT. Bis
+                    // heute schrieb sie NUR ReexportEffects, und das laeuft nur ueber den
+                    // Entwicklerschalter --reexport-effects=. Jeder Spieler, der nur
+                    // importiert hat, sah den Systempfeil (»Mauszeiger: keine Bilder
+                    // gefunden - Systemzeiger bleiben«). Gegenschalter --zeiger-ohne-nachzug
+                    // (der alte Import ohne Zeiger, und kein Nachziehen beim Start).
+                    if (!UI.GameCursors.OhneNachzug && Asset("ROBO.CWR") is { } roboZeiger)
+                    {
+                        ui.WriteCursors(CwrFile.FromBytes(roboZeiger));
+                        Say($"Mauszeiger: {ui.Cursors} Arten");
+                    }
+                    Say($"Sachbilder: {ui.HelpPics} Hilfe + {ui.EncycPics} Enzyklopaedie" +
+                        (ui.PicsBlank > 0 ? $", {ui.PicsBlank} davon einfarbig" : "") +
+                        (helpPic == null && encPic == null
+                             ? "  ⚠ KEINE — HELPG.PIC/ENCYCLOG.PIC liegen neben der GAME.EXE, "
+                               + "nicht auf den CDs"
+                             : ""));
+                    Say($"Oberflaeche: {ui.Fonts} Schriften mit {ui.Glyphs} Glyphen, " +
+                        $"Panel {(panel != null ? "ja" : "nein")}, " +
+                        $"Windfahne {ui.VaneFrames} Bilder, " +
+                        $"Fenstermoebel {ui.ChromeTiles} Kacheln " +
+                        $"({ui.ChromePixels} belegte Punkte), " +
+                        $"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern");
+                }
+            }
+            catch (Exception e) { Say("Oberflaeche: " + e.Message); }
+    }
+
+    /// <summary><c>--zeigerbank-check</c>: nur der Oberflaechenteil des Imports, in
+    /// den Zielordner dieses Bauers (Konstruktor mit <c>zielOrdner</c>).</summary>
+    public void OberflaecheFuerProbe(Action<string>? say = null)
+        => OberflaecheSchreiben(t => { Log.Add(t); say?.Invoke(t); GD.Print("zeigerbank-probe import: " + t); });
+
+    /// <summary>Nur die Mauszeiger schreiben: ROBO.CWR aus der Quelle, die Palette
+    /// aus der Quelle oder aus dem schon eingelesenen <c>DATA/01.PAL</c> des
+    /// Zielordners. ⭐ bug-415.</summary>
+    public bool ZeigerbankSchreiben(Action<string>? say = null)
+    {
+        byte[]? robo = Asset("ROBO.CWR");
+        if (robo == null) return false;
+        byte[]? pal = Asset("01.PAL");
+        foreach (string p in new[] { _dst + "/DATA/01.PAL",
+                                     ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\') + "/DATA/01.PAL" })
+            if (pal == null && File.Exists(p)) pal = File.ReadAllBytes(p);
+        if (pal == null) { say?.Invoke("ROBO.CWR gefunden, aber keine Palette 01.PAL"); return false; }
+        var ui = new InterfaceExporter(PalFile.FromBytes(pal), _dst + "/UI", _dst + "/Effects");
+        ui.WriteCursors(CwrFile.FromBytes(robo));
+        say?.Invoke($"Mauszeiger: {ui.Cursors} Arten aus {_src.Label}");
+        return ui.Cursors > 0;
+    }
+
+    /// <summary>Wo das Original fuer das Nachziehen der Zeigerbank gesucht wird —
+    /// in dieser Reihenfolge: beide Program-Files-Ordner, dann JEDES bereite
+    /// Laufwerk (Wurzel und <c>Akte Europa</c>), zuletzt die eingelegten CDs
+    /// (Kabinett). ⚠ UNSERE Liste, nach dem Muster von MoviePlayer.Suchorte
+    /// (bug-375); das Original braucht keine, es liest ROBO.CWR beim Start.</summary>
+    public static System.Collections.Generic.IEnumerable<Core.ContentSources.Source> ZeigerQuellen()
+    {
+        var ordner = new List<string>();
+        foreach (var env in new[] { "ProgramFiles(x86)", "ProgramFiles" })
+        {
+            string? pf = System.Environment.GetEnvironmentVariable(env);
+            if (!string.IsNullOrEmpty(pf)) ordner.Add(Path.Combine(pf, "Akte Europa"));
+        }
+        DriveInfo[] drives;
+        try { drives = DriveInfo.GetDrives(); } catch (Exception) { drives = Array.Empty<DriveInfo>(); }
+        foreach (var d in drives)
+        {
+            bool ready;
+            try { ready = d.IsReady; } catch (Exception) { continue; }
+            if (!ready) continue;
+            string r = d.RootDirectory.FullName.TrimEnd('/', '\\');
+            ordner.Add(r + "/Akte Europa");
+            ordner.Add(r);
+        }
+        foreach (string o in ordner)
+        {
+            if (!Directory.Exists(o)) continue;
+            if (!File.Exists(o + "/ROBO.CWR") && !File.Exists(o + "/DATA/ROBO.CWR")
+                && Core.ContentSources.CabinetIn(o) == null) continue;
+            var src = Core.ContentSources.FromFolder(o) ?? new Core.ContentSources.Source
+            {
+                Kind = Core.ContentSources.Kind.Installation, Label = o, Roots = { o },
+                Exe = Core.ContentSources.ExeIn(o), Cabinet = Core.ContentSources.CabinetIn(o),
+            };
+            yield return src;
+        }
+    }
+
+    /// <summary><c>--zeigerbank-check</c>: EINE Quelle aus allen gefundenen
+    /// Original-Ordnern (Program Files traegt die Palette unter Data/, eine
+    /// kopierte CD-Installation ROBO.CWR) — wie ein Spieler mit zwei Ordnern
+    /// (<see cref="Core.ContentSources.FromFolders"/>).</summary>
+    public static Core.ContentSources.Source? ProbeQuelle()
+    {
+        var ordner = new List<string>();
+        foreach (var s in ZeigerQuellen()) ordner.AddRange(s.Roots);
+        foreach (var env in new[] { "ProgramFiles(x86)", "ProgramFiles" })
+        {
+            string? pf = System.Environment.GetEnvironmentVariable(env);
+            if (string.IsNullOrEmpty(pf)) continue;
+            string o = Path.Combine(pf, "Akte Europa");
+            if (Directory.Exists(o) && !ordner.Contains(o)) ordner.Add(o);
+        }
+        return Core.ContentSources.FromFolders(ordner);
+    }
+
+    /// <summary>
+    /// ⭐⭐ 04.10.2026, bug-415 — <b>DIE ZEIGERBANK NACHZIEHEN</b>, einmal beim Start,
+    /// wenn <c>UI/cursors/cursors_index.json</c> fehlt (alle, die vor 0.7 importiert
+    /// haben). Sucht das Original ueber <see cref="ZeigerQuellen"/> und schreibt nur
+    /// die Zeiger nach <paramref name="zielRoot"/>. Gibt die Quelle zurueck oder
+    /// null. Gegenschalter <c>--zeiger-ohne-nachzug</c> (im Rufer).
+    /// </summary>
+    public static string? ZeigerbankNachziehen(string zielRoot, Action<string>? say = null)
+    {
+        foreach (var src in ZeigerQuellen())
+        {
+            try
+            {
+                var b = new ContentBuilder(src, zielRoot);
+                if (b.ZeigerbankSchreiben(say)) return src.Label;
+            }
+            catch (Exception e) { say?.Invoke($"Zeigerbank aus {src.Label}: {e.Message}"); }
+        }
+        return null;
     }
 
     /// <summary>Nur die Effektbilder aus ANIM.CWA neu schreiben. Nötig, sobald

@@ -172,6 +172,23 @@ public partial class SettingsScreen : Control
             Settings.RightDragPan, v => Settings.RightDragPan = v));
         box.AddChild(Check("Zeiger zeigt an, was ein Klick tut",
             Settings.CursorHints, v => Settings.CursorHints = v));
+        // ⭐ 04.10.2026, bug-418 — EINSTELLUNG 16 des Originals: ein Knopf, der
+        // zwischen »Gruppe Standard« und »Formation Standard« umschaltet, genau
+        // so beschriftet wie im Einstellungsfenster des Originals (0x47FE58,
+        // Umschalter 0x44C9A4). Hilfetext woertlich aus der EXE (Datei 0xF0BEE).
+        // Shift kehrt die Einstellung beim Fahrbefehl einer Gruppe um.
+        var formation = new Button
+        {
+            Text = Settings.GruppeFormation == 0 ? "Gruppe Standard" : "Formation Standard",
+            TooltipText = "Art der Formation bei Gruppenbewegungen einstellen\n"
+                        + "(Shift beim Fahrbefehl kehrt sie um)",
+        };
+        formation.Pressed += () =>
+        {
+            Settings.GruppeFormation = 1 - Settings.GruppeFormation;
+            formation.Text = Settings.GruppeFormation == 0 ? "Gruppe Standard" : "Formation Standard";
+        };
+        box.AddChild(Row("Gruppenbewegung", formation));
         // ⚠ Hier stand ein Schalter »Farbiger Ring unter jeder Einheit«.
         // Entfernt am 21.08.2026 — siehe MapEntityLayer.DrawUnitBody.
 

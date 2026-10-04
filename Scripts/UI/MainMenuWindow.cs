@@ -128,7 +128,9 @@ public sealed partial class MainMenuWindow : Control
         "",
         // ⚠ Seit dem 09.09.2026 gibt es auch die Forschungsergebnisse.
         "",
-        "Untermissionen gibt es bei uns nicht.", "", "", "", "", "",
+        // ⭐ Seit dem 04.10.2026 (bug-419) gibt es auch die Untermissionen —
+        // 0x44B9B9 -> 0x451530, siehe MapViewer.UntermissionenZeigen.
+        "", "", "", "", "", "",
         // ⚠ Seit dem 09.09.2026 gibt es auch den CD-Spieler — bei uns spielt
         // er die MIDI-Musik statt der CD, siehe CdPlayerView.
         "", "",
@@ -148,6 +150,9 @@ public sealed partial class MainMenuWindow : Control
     public Action? OnLoad;
     public Action? OnQuit;
     public Action? OnSettings;
+    /// <summary>Knopf 5 »Untermissionen« (bug-419): Klickarm <c>0x44B9B9</c> →
+    /// <c>0x451530</c>, danach das Menue zu (<c>0x4471A0</c>).</summary>
+    public Action? OnSubMissions;
 
     private int _held = -1;
     private bool _zieht;
@@ -185,6 +190,7 @@ public sealed partial class MainMenuWindow : Control
         1 => OnUnitList != null,
         2 => OnBuildingList != null,
         3 => OnResearchList != null,
+        4 => OnSubMissions != null,
         11 => OnCdPlayer != null,
         5 => OnRestart != null,
         6 => OnEncyclopedia != null,
@@ -264,6 +270,7 @@ public sealed partial class MainMenuWindow : Control
             case 1: OnUnitList?.Invoke(); break;
             case 2: OnBuildingList?.Invoke(); break;
             case 3: OnResearchList?.Invoke(); break;
+            case 4: OnSubMissions?.Invoke(); break;
             case 11: OnCdPlayer?.Invoke(); break;
             case 5: OnRestart?.Invoke(); break;
             case 6: OnEncyclopedia?.Invoke(); break;

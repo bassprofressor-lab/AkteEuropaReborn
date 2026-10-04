@@ -443,6 +443,7 @@ public partial class MapEntityLayer : Node2D
         u.Reserved = null;
         u.Path = null;
         u.Orders.Clear();
+        AuftragLoeschen(u);   // bug-417: ein neuer Auftrag nimmt auch den Zellangriff
         u.Target = -1;
 
         u.Ukol = UkolUntergestellt;      // @0x43D657

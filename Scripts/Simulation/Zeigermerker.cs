@@ -151,6 +151,7 @@ public partial class MapEntityLayer : Node2D
         }
         if (!_entities[idx].Mobile) return "diese Einheit faehrt nicht";
         HandsteuerungIdx = idx;
+        AuftragLoeschen(_entities[idx]);   // bug-417: Handsteuerung (UKOL 1) ersetzt den Zellangriff
         return "Handsteuerung: mit den Pfeiltasten fahren, nochmal druecken beendet sie";
     }
 

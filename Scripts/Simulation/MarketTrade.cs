@@ -251,6 +251,7 @@ public partial class MapEntityLayer
             // ist der Auftrag kein Byte, sondern Weg und Reihe.
             u.Path = null;
             u.Orders.Clear();
+            AuftragLoeschen(u);   // bug-417: ein neuer Auftrag nimmt auch den Zellangriff
             u.Target = -1;
             // »Steht sie?« — im Original <c>byte[ent+0x04] == 0xFF</c>, das Feld
             // für die FAHRTRICHTUNG, das beim Anhalten auf 0xFF gesetzt wird

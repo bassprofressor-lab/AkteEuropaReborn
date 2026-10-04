@@ -108,9 +108,54 @@ public static class GameCursors
     /// <b>Bild 19</b>. Selbst gelesen am 01.10.2026, bug-381.</summary>
     public const int TerraSuche = 19;
 
-    /// <summary>⚠ UNSERE ZAHL: wie lange ein Bild der Folge steht. Das Original
-    /// zählt die Phase, nennt aber keinen Takt.</summary>
-    public const float FrameSeconds = 0.10f;
+    /// <summary><b>Handsteuerung Boden</b> — Zustand 1000 fuehrt @0x4A9AF3 auf
+    /// @0x4A9BC9 <c>mov dl,3</c>: Bild 3 (ein Bild, kleines Kreuz). bug-415.</summary>
+    public const int Handsteuerung = 3;
+
+    /// <summary><b>FAHRT</b> — Zustand 3 (Fahrbefehl ueber freiem Boden, einem
+    /// Verbuendeten, einem tuerlosen fremden Gebaeude): @0x4A9B81 <c>mov dl,4</c>,
+    /// Bild 4 (fuenf Bilder, vier Pfeile nach innen). bug-415.</summary>
+    public const int Fahrt = 4;
+
+    /// <summary><b>FORMATIONSFAHRT</b> — Zustand 3 bei einer GRUPPE
+    /// (<c>word[0x4FA0C8] == 10000</c> @0x4A9B63) und Einstellung 16 ≠ Shift
+    /// (@0x4A9B6E…0x4A9B79): @0x4A9B7D <c>mov dl,0x1B</c>, Bild 27 (vier Bilder).
+    /// bug-418.</summary>
+    public const int Formation = 27;
+
+    /// <summary>
+    /// ⭐ 04.10.2026, bug-415 — <b>DER BILDTAKT DES ORIGINALS</b>: der Zeichner
+    /// <c>0x4A9F90</c> zaehlt die Phase <c>byte[0x502AA0]</c> bei JEDEM Aufruf um
+    /// eins weiter (@0x4A9FE8…0x4A9FF9, Ruecksprung auf 0 bei der Bildzahl aus
+    /// 0xA31AA0 @0x4AA014/1C), und gerufen wird er aus der Hauptschleife 0x415CF0
+    /// @0x416CE1 AUSSERHALB des Taktblocks — also einmal je BILD. Der Bildzaehler
+    /// laeuft mit 50/s (O(B), meldungsfenster-fable: word 0x4FA248) ⇒ 0,02 s je
+    /// Bild, eine Fuenferfolge dreht in 0,1 s.
+    /// <para>⚠ (V): die 50 Bilder/s sind dort gelesen, nicht hier gemessen; das
+    /// Original haengt an seiner tatsaechlichen Bildrate, wir an der Uhr.</para>
+    /// <para>⭐ 04.10.2026 — <b>VORGABE IST 0,10 s je Bild</b>, die Entscheidung des
+    /// Spielers nach Augenmass im Vergleich (»das alte tempo war besser, mach das als
+    /// standard«): die 50 Bilder/s sind ungemessen, das Original lief auf der Hardware
+    /// von 1998 vermutlich deutlich langsamer. UNSERE Setzung, nicht gelesen.</para>
+    /// <para>Schalter <c>--zeigertakt-schnell</c>: 0,02 s je Bild (50 Bilder/s wie
+    /// oben gelesen). <c>--zeigertakt-alt</c> bleibt als gleichbedeutender Name der
+    /// Vorgabe angenommen.</para></summary>
+    public static float FrameSeconds => ZeigertaktSchnell ? 0.02f : 0.10f;
+
+    /// <summary><c>--zeigertakt-alt</c> (seit 04.10.2026 die Vorgabe, wirkungslos).</summary>
+    public static bool ZeigertaktAlt = System.Array.IndexOf(Core.CommandLine.Args, "--zeigertakt-alt") >= 0;
+
+    /// <summary><c>--zeigertakt-schnell</c> — 0,02 s je Bild (50 Bilder/s).</summary>
+    public static bool ZeigertaktSchnell = System.Array.IndexOf(Core.CommandLine.Args, "--zeigertakt-schnell") >= 0;
+
+    /// <summary><c>--zeiger-ohne-nachzug</c> — der Stand vor dem 04.10.2026
+    /// (bug-415): der Spielerimport schreibt keine Zeiger, und beim Start wird
+    /// nichts nachgezogen.</summary>
+    public static bool OhneNachzug = System.Array.IndexOf(Core.CommandLine.Args, "--zeiger-ohne-nachzug") >= 0;
+
+    /// <summary>Was beim Start nachgezogen wurde (leer = nichts) — fuer das
+    /// Protokoll und den Pruefstand.</summary>
+    public static string Nachgezogen = "";
 
     private static readonly Dictionary<int, Texture2D[]> Bank = new();
     private static Vector2I _hot = new(32, 32);
@@ -123,11 +168,40 @@ public static class GameCursors
         get { Load(); return Bank.Count > 0; }
     }
 
+    /// <summary>Die Entscheidung des Nachzugs (bug-415), fuer <see cref="Load"/> und
+    /// <c>--zeigerbank-check</c> dieselbe: steht unter <paramref name="datenRoot"/>
+    /// (Betriebssystempfad des Datenordners) schon <c>UI/cursors/cursors_index.json</c>,
+    /// geschieht nichts (Rueckgabe ""); mit <c>--zeiger-ohne-nachzug</c> auch nicht
+    /// (null); sonst wird aus dem Original nachgezogen (Quelle oder null).</summary>
+    public static string? NachzugWennNoetig(string datenRoot)
+    {
+        string root = datenRoot.TrimEnd('/', '\\');
+        if (System.IO.File.Exists(root + "/UI/cursors/cursors_index.json")) return "";
+        if (OhneNachzug) { GD.Print("Mauszeiger: Zeigerbank fehlt - kein Nachzug (--zeiger-ohne-nachzug)"); return null; }
+        string? quelle = Import.ContentBuilder.ZeigerbankNachziehen(root, t => GD.Print("Mauszeiger-Nachzug: " + t));
+        GD.Print(quelle != null
+            ? $"Mauszeiger: Zeigerbank fehlte - aus {quelle} nachgezogen"
+            : "Mauszeiger: Zeigerbank fehlt, ROBO.CWR nicht gefunden - kein Nachzug");
+        return quelle;
+    }
+
     private static void Load()
     {
         if (_tried) return;
         _tried = true;
         string idx = Core.Content.Path("UI/cursors/cursors_index.json");
+        // ⭐⭐ 04.10.2026, bug-415 — FEHLT DIE BANK, WIRD SIE EINMAL NACHGEZOGEN.
+        // Bis heute schrieb sie nur der Entwicklerweg --reexport-effects; wer
+        // »nur« importiert hatte (KayelGee, jeder Spieler), sah ueberall den
+        // Systempfeil. Jetzt schreibt sie der Import selbst (ContentBuilder.
+        // OberflaecheSchreiben), und wer vorher importiert hat, bekommt sie hier
+        // aus dem Original nach, sofern ROBO.CWR auffindbar ist.
+        if (!FileAccess.FileExists(idx))
+        {
+            string? quelle = NachzugWennNoetig(ProjectSettings.GlobalizePath(Core.Content.UserRoot));
+            Nachgezogen = quelle ?? "";
+            idx = Core.Content.Path("UI/cursors/cursors_index.json");
+        }
         if (!FileAccess.FileExists(idx)) return;
         using var f = FileAccess.Open(idx, FileAccess.ModeFlags.Read);
         if (f == null) return;
@@ -163,6 +237,35 @@ public static class GameCursors
         GD.Print(Bank.Count > 0
             ? $"Mauszeiger: {Bank.Count} Arten geladen (Angriff={(Bank.ContainsKey(Attack) ? Bank[Attack].Length + " Bilder" : "FEHLT")})"
             : "Mauszeiger: keine Bilder gefunden - Systemzeiger bleiben");
+    }
+
+    /// <summary><c>--zeigerbank-check</c>: liest eine Zeigerbank aus einem
+    /// BELIEBIGEN Ordner (Betriebssystempfad), ohne die Bank des Spiels anzufassen.
+    /// Gibt je Art die Zahl der wirklich ladbaren Bilder.</summary>
+    public static Dictionary<int, int> ProbeLesen(string ordner)
+    {
+        var raus = new Dictionary<int, int>();
+        string idx = ordner.TrimEnd('/', '\\') + "/cursors_index.json";
+        if (!System.IO.File.Exists(idx)) return raus;
+        var json = Json.ParseString(System.IO.File.ReadAllText(idx));
+        if (json.VariantType != Variant.Type.Dictionary) return raus;
+        var root = json.AsGodotDictionary();
+        if (!root.TryGetValue("cursors", out var cv)) return raus;
+        var list = cv.AsGodotDictionary();
+        foreach (var key in list.Keys)
+        {
+            if (!int.TryParse(key.AsString(), out int typ)) continue;
+            var rec = list[key].AsGodotDictionary();
+            int n = rec.TryGetValue("frames", out var nv) ? (int)nv : 0;
+            int gut = 0;
+            for (int i = 0; i < n; i++)
+            {
+                var img = Image.LoadFromFile($"{ordner}/t{typ:00}_f{i}.png");
+                if (img != null && img.GetWidth() > 0) gut++;
+            }
+            raus[typ] = gut;
+        }
+        return raus;
     }
 
     /// <summary>Hat die Bank ueberhaupt ein Bild fuer diese Art? ⚠ Fuer

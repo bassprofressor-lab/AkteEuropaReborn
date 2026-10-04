@@ -398,6 +398,10 @@ public partial class MapViewer : Node2D
             w.OnResearchList = OeffneForschungsliste;
         if (UI.CdPlayerView.Usable && !UI.CdPlayerView.Alt)
             w.OnCdPlayer = OeffneCdSpieler;
+        // ⭐ 04.10.2026, bug-419 — »Untermissionen« (0x44B9B9 -> 0x451530, dann
+        // 0x4471A0 Menue zu). Gegenschalter --untermissionen-knopf-aus.
+        if (!UntermissionenKnopfAus)
+            w.OnSubMissions = () => { ClosePause(); UntermissionenZeigen(); };
 
         // Die Missionsinformation gibt es nur, wo es eine Mission gibt — im
         // Gefecht ist der Knopf darum gedimmt, und das ist keine Lücke.
@@ -9199,6 +9203,12 @@ _mausProbePunkt = karte;
     /// Beleg: berichte/gleisreparatur-klick-fable.md.</summary>
     private void KartenBefehl(bool shift, bool ctrl)
     {
+        // ⭐⭐ 04.10.2026, bug-418 — SHIFT IST KEINE WARTESCHLANGE MEHR. Das Original
+        // hat keine (13 von 13 Shift-Lesern erhoben, berichte/maus-befehle-fable.md
+        // §4.4); Shift kehrt bei einer Gruppenfahrt die Einstellung 16 um
+        // (Formation, @0x437960). Spielerentscheidung »wie Original, ganz weg«.
+        // Die Absender bekommen `queue` — nur mit --warteschlange-shift ist das Shift.
+        bool queue = MapEntityLayer.ShiftAlsWarteschlange(shift);
         // ⚠ EINGABEN WERDEN DATEN. Der Klick setzt einen
         // Befehl ab; gewirkt wird am nächsten Taktanfang
         // (MapEntityLayer.SimTick → CommandTick). Vorher
@@ -9238,7 +9248,7 @@ _mausProbePunkt = karte;
         // Eine Sperre in der Eingabe wäre auf der zweiten
         // Maschine nicht vorhanden.
         if (_entities.PostAirMove(KartenMaus(),
-                                  shift) > 0)
+                                  queue) > 0)
         {
             return;
         }
@@ -9281,7 +9291,7 @@ _mausProbePunkt = karte;
             // MapEntityLayer.StrgRechtsklick, damit der
             // Pruefstand denselben Weg geht. Gegenschalter
             // --strg-einnahme-alt, --kein-angriff-auf-verbuendete.
-            _entities.StrgRechtsklick(KartenMaus(), shift);
+            _entities.StrgRechtsklick(KartenMaus(), queue);
         }
         // ⭐⭐⭐ 08.09.2026 — WO DER EINNAHMEZEIGER STEHT,
         // NIMMT DER KLICK EIN. Seine Meldung: »das einnahme
@@ -9323,9 +9333,9 @@ _mausProbePunkt = karte;
         // Strg greift weiter alles an.
         else if (!(_entities.EinnahmezeigerHier(KartenMaus())
                    && _entities.PostCapture(KartenMaus(),
-                                            shift))
-              && !_entities.PostUnloadKlick(KartenMaus(), shift)
-              && !_entities.PostBoardKlick(KartenMaus(), shift)
+                                            queue))
+              && !_entities.PostUnloadKlick(KartenMaus(), queue)
+              && !_entities.PostBoardKlick(KartenMaus(), queue)
               // ⭐ 15.09.2026 — ueber einem Verbuendeten ist der
               // gewoehnliche Klick die Fahrt (Zeigerart 3, C 0x4378CB);
               // angegriffen wird er nur mit Strg.
@@ -9335,8 +9345,8 @@ _mausProbePunkt = karte;
               // Damit faellt auch das tuerlose fremde Gebaeude darunter.
               && !(_entities.FadenkreuzHier(KartenMaus())
                    && _entities.PostAttack(KartenMaus(),
-                                           shift)))
-            _entities.PostMove(KartenMaus(), shift);
+                                           queue)))
+            _entities.PostMove(KartenMaus(), queue, shift);
     }
 
     /// <summary>Gibt der Linksklick hier einen Befehl statt einer Anwahl? Das
@@ -9427,6 +9437,10 @@ _mausProbePunkt = karte;
                  : _entities.CursorHintAt(mapPos);
         if (UI.GameCursors.Available)
         {
+            // ⭐ 04.10.2026, bug-415/418 — Fahrt (4), Formationsfahrt (27) und
+            // Handsteuerung Boden (3). Siehe FahrtZeigerArt.
+            int fahrt = FahrtZeigerArt(hint, Input.IsKeyPressed(Key.Shift));
+            if (fahrt >= 0) { UI.GameCursors.Use(fahrt, _cursorTime); return; }
             UI.GameCursors.Use(hint switch
             {
                 MapEntityLayer.Hint.Enemy => UI.GameCursors.Attack,

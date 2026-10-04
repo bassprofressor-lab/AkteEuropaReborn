@@ -552,6 +552,34 @@ public sealed partial class HelpWindow : PanelContainer
         return w;
     }
 
+    /// <summary>
+    /// ⭐ 04.10.2026, bug-419 — <b>show_text <c>0x443490</c></b>, der Weg des
+    /// Menuepunkts »Untermissionen« (<c>0x451530</c> → <c>0x401A69</c>). Anders als
+    /// show_text2 (<see cref="Show"/>, Riegel <c>byte[0x87AE00+id]</c>) prueft er
+    /// NUR, ob ein Fenster mit demselben Text schon offen ist (@0x4434E7, dann
+    /// raus), und setzt keinen Riegel — der Spieler kann eine Untermission also
+    /// beliebig oft nachlesen. ⚠ (V): ob show_text die Stimme spielt, ist
+    /// ungelesen; wir spielen sie nicht. Das Anhalten bei offenem Hilfefenster
+    /// gilt wie bei <see cref="Show"/> (unsere Einstellung PauseOnHelp).
+    /// </summary>
+    public static HelpWindow? ShowOhneRiegel(Node host, int id, int ox, int oy)
+    {
+        if (Suppressed) { SuppressedCount++; return null; }
+        foreach (var open in Open)
+            if (open.Id == id) { open._pendingClose = false; return open; }
+        var paras = TextOf(id);
+        if (paras == null || paras.Count == 0)
+        {
+            GD.PrintErr($"Hilfetext {id} gibt es nicht — Fenster faellt aus");
+            return null;
+        }
+        var w = new HelpWindow(id, paras, ox, oy);
+        Layer(host).AddChild(w);
+        Open.Add(w);
+        Anhalten(host);
+        return w;
+    }
+
     /// <summary>Ein Fenster mit FREIEM Text, ohne Hilfetextnummer.
     ///
     /// <para>Gebraucht fuer »Einkommen: N« — das Original baut diesen Text im
