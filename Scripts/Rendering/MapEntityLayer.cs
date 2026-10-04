@@ -763,6 +763,12 @@ public partial class MapEntityLayer : Node2D
         /// </summary>
         public int Block;
 
+        /// <summary>bug-425: der Geduldszaehler <c>+0x1C</c> aus dem KARTENSATZ
+        /// (−1 = kein Rohsatz). Nur <c>--geduld-satzwert</c> liest ihn.</summary>
+        public int SatzGeduld = -1;
+        /// <summary>bug-425: der Kartenwert wurde schon einmal uebernommen.</summary>
+        public bool SatzGeduldVerbraucht;
+
         /// <summary>What this unit still has to do after the current order.
         /// OURS — the original takes one order at a time; see
         /// <see cref="MaxOrders"/>.</summary>
@@ -4035,6 +4041,10 @@ public partial class MapEntityLayer : Node2D
                     // durch fuenfzehn Missionen. Liegt hinter dem Fenster, das
                     // `haveRaw` prueft, darum die eigene Laengenpruefung.
                     Mark = raw.Length >= 0x44 * 2 ? HexByte(raw, 0x43) : -1,
+                    // bug-425: der Geduldszaehler +0x1C (Byte) fuer --geduld-satzwert.
+                    SatzGeduld = haveRaw ? HexByte(raw, 0x1C) : -1,
+                    // bug-421: das Wort +0x3E, die Entwurfsnummer fuer den Namen im Block.
+                    Entwurf3E = raw.Length >= 0x40 * 2 ? HexByte(raw, 0x3E) | (HexByte(raw, 0x3F) << 8) : -1,
                     UnitType = GetI(e, "unit_type", -1),
                     // ⚠ 16.08.2026 — hier stand ausserdem `Category = GetI(e,
                     // "category", -1)`, und das Feld war TOT: zwei Zeilen

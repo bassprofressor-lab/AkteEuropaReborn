@@ -1289,7 +1289,33 @@ public sealed class NavGrid
     {
         UrBesucht = 0; UrWellen = 0; UrRingVoll = false;
         if (!InBounds(start.X, start.Y) || !InBounds(goal.X, goal.Y)) return null;
-        if (!IsFree(goal.X, goal.Y, mc, mover))
+        // ⭐⭐ 04.10.2026, bug-425 — DIE ZIELWAHL VON `Search:` (0x4D3A48..0x4D3B83,
+        // Art 0/1, selbst nachgelesen). Ein Ziel ist ZULAESSIG bei imap == 0xFFFE,
+        // bei einem FAHRZEUG darauf (< 8000 und Unterklasse +0x0A == 0, @0x4D3A53)
+        // oder bei einer leeren Infanteriezelle (@0x4D3A7A). Nur sonst sucht das
+        // Original ein Ersatzziel — ueber die euklidische Ringtafel 0x79A008 bis
+        // word[0x834AE4] (= T[50]), Kandidat nach DENSELBEN drei Regeln (@0x4D3B05).
+        // Bis heute stand hier `!IsFree(goal)` -> NearestFree (Chebyshev, Radius 12,
+        // jede Einheit belegt): ein Ziel, auf dem ein Fahrzeug steht, wurde vorab
+        // verlegt. Jetzt plant die Einheit AUF das Fahrzeug zu; das Ende loesen
+        // Ausweichbitte, 1/60-Neuplanung und das »nah genug« (Aufgeben.cs).
+        // Nur die SUCHE bekommt das Ersatzziel, Entity.Goal bleibt (CX/CY bleiben
+        // im Original, @0x4D39BE/CE nur gelesen).
+        // ⚠ Nur mit der durchlaessigen Karte (NeuePfadkarte): mit --pfadkarte-alt
+        // waere eine Fahrzeugzelle karte == 2 und die Suche scheiterte am Ziel.
+        // ⚠ Schiffe behalten den alten Weg (Arme 2..13 ab 0x4D3B88 nicht Zeile fuer
+        // Zeile gelesen — UNSERE Setzung). Gegenschalter --zielwahl-alt.
+        if (ZielwahlWieSearch(mc))
+        {
+            if (!ZielZulaessig(goal.X, goal.Y, mc, mover))
+            {
+                var ersatz = ErsatzZiel(goal, mc, mover);
+                if (ersatz == null) { ErsatzzielOhneTreffer++; return null; }
+                goal = ersatz.Value;
+                ErsatzzielGenommen++;
+            }
+        }
+        else if (!IsFree(goal.X, goal.Y, mc, mover))
         {
             var ausweich = NearestFree(goal, mc, mover);
             if (ausweich == null) return null;
@@ -1409,7 +1435,10 @@ public sealed class NavGrid
         if (!RandzielAlt && (goal.X == 0 || goal.Y == 0 || goal.X == w - 1 || goal.Y == h - 1))
         {
             var innen = new Vector2I(Math.Clamp(goal.X, 1, w - 2), Math.Clamp(goal.Y, 1, h - 2));
-            var ersatz = IsFree(innen.X, innen.Y, mc, mover)
+            // bug-425: mit der Zielwahl von Search: gelten auch hier ihre Regeln.
+            var ersatz = ZielwahlWieSearch(mc)
+                       ? (ZielZulaessig(innen.X, innen.Y, mc, mover) ? innen : ErsatzZiel(innen, mc, mover))
+                       : IsFree(innen.X, innen.Y, mc, mover)
                        ? innen : NearestFree(innen, mc, mover);
             if (ersatz == null) return null;
             goal = ersatz.Value;
@@ -2043,6 +2072,127 @@ public sealed class NavGrid
         path.RemoveAt(path.Count - 1);   // drop the start cell
         path.Reverse();
         return path;
+    }
+
+    // ======================= bug-425: DIE ZIELWAHL VON `Search:` ==================
+
+    /// <summary><c>--zielwahl-alt</c> — der Stand vor dem 04.10.2026 (HEAD
+    /// <c>feec479</c>): Ziel nur, wenn <see cref="IsFree"/>; sonst
+    /// <see cref="NearestFree"/> (Chebyshev, Radius 12, jede Einheit belegt), und
+    /// <c>PostMove</c> sucht wieder je Einheit eine freie Zelle im Umkreis 8 und
+    /// setzt ohne Treffer KEINEN Satz ab.</summary>
+    public static bool ZielwahlAlt;
+
+    /// <summary>Wie oft <c>FindPathUr</c> ein Ersatzziel aus der Ringtafel nahm,
+    /// und wie oft die Ringtafel nichts fand (dann scheitert die Suche wie im
+    /// Original an <c>karte[ziel] == 2</c>).</summary>
+    public static int ErsatzzielGenommen, ErsatzzielOhneTreffer;
+
+    /// <summary>Gilt die Zielwahl von <c>Search:</c> fuer diese Bewegungsart?
+    /// Nicht unter <c>--zielwahl-alt</c>, nicht mit der alten Pfadkarte, nicht
+    /// fuer Schiffe (Setzung, siehe FindPathUr).</summary>
+    public static bool ZielwahlWieSearch(MoveClass mc)
+        => !ZielwahlAlt && NeuePfadkarte && mc != MoveClass.Ship;
+
+    /// <summary>
+    /// <b>Ist diese Zelle ein zulaessiges Suchziel?</b> — die drei Bedingungen von
+    /// <c>Search:</c> @0x4D3A48 (und dieselben fuer den Kandidaten @0x4D3B05):
+    /// <code>
+    ///   imap == 0xFFFE                                 frei
+    ///   imap &lt; 8000 und byte[+0x0A] == 0              ein FAHRZEUG steht darauf
+    ///   10000 &lt;= imap &lt; 14000 und byte[0x74EC89+22·imap] == 0   leere Infanteriezelle
+    /// </code>
+    /// <para>⚠ UNSERE Abbildung: das Gelaende fragt <see cref="CanEnter"/> (0xFFFE
+    /// heisst im Original zugleich »befahrbar und leer«; 0xFFFD rau ist fuer Art 0
+    /// kein Ziel, das tut CanEnter fuer Vehicle ebenso). Ein Fahrzeug ist bei uns
+    /// ein Beleger, der weder fest (<c>_immobile</c>) noch Fussvolk
+    /// (<c>_crushable</c>) noch ein Schiffsrumpf ist. Eine Zelle mit Fussvolk ist
+    /// bei uns nie »leer« — das Byte <c>+1</c> der Infanteriezelle ist nicht
+    /// gelesen (V: die Mannzahl), wir nehmen besetzt = nicht zulaessig.</para>
+    /// </summary>
+    public bool ZielZulaessig(int c, int r, MoveClass mc, int mover)
+    {
+        int side = HullOf(mover);
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                int cc = c + dx, rr = r + dy;
+                if (!CanEnter(cc, rr, mc)) return false;
+                int i = Idx(cc, rr);
+                int wer = _occupant[i];
+                if (wer < 0 || wer == mover) continue;
+                if (_immobile[i] || _crushable[i]) return false;
+                if (HullOf(wer) >= 2) return false;
+            }
+        return true;
+    }
+
+    /// <summary>Die Ringtafel <c>0x79A008</c>, gebaut wie <c>@0x438790</c>:
+    /// Radius 0..126, je Radius Zeile dy = −r..r aussen, Spalte dx = −r..r innen
+    /// (das innere Byte <c>bl</c> landet bei <c>+0</c> und wird zur SPALTE
+    /// addiert, @0x4D3AB8), aufgenommen wenn <c>(int)(sqrt(dx²+dy²) + 0.5) == r</c>
+    /// (<c>fadd qword[0x4F0268]</c> = 0,5, <c>_ftol</c> @0x4D6C1C schneidet ab),
+    /// hoechstens 20000 Eintraege. Ganzzahlig gerechnet: r ist die groesste Zahl
+    /// mit <c>(2r−1)² ≤ 4·d²</c> — die Grenzen sind ungerade, 4·d² gerade, also
+    /// nie gleich, und das Ergebnis ist dasselbe wie mit dem Gleitkomma.</summary>
+    private static (sbyte Dx, sbyte Dy)[]? _ringTafel;
+    private static int[]? _ringAb;
+
+    /// <summary>T[50] des Originals: <c>word[0x834AE4]</c> = <c>0x834A80 + 2·50</c>
+    /// — die Ersatzsuche laeuft ueber alle Eintraege mit Radius &lt; 50.</summary>
+    public const int ErsatzRadius = 50;
+
+    private static void RingTafelBauen()
+    {
+        if (_ringTafel != null) return;
+        var l = new List<(sbyte, sbyte)>();
+        var ab = new int[128];
+        for (int r = 0; r < 127; r++)
+        {
+            ab[r] = l.Count;
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    long q = 4L * (dx * dx + dy * dy);
+                    int rr = (int)Math.Floor(Math.Sqrt(dx * dx + dy * dy) + 0.5);
+                    // ganzzahlig nachziehen (Gleitkomma nur als Startwert)
+                    while (rr > 0 && (2L * rr - 1) * (2L * rr - 1) > q) rr--;
+                    while ((2L * rr + 1) * (2L * rr + 1) <= q) rr++;
+                    if (rr != r) continue;
+                    if (l.Count >= 20000) goto voll;
+                    l.Add(((sbyte)dx, (sbyte)dy));
+                }
+        }
+        voll:
+        ab[127] = l.Count;
+        _ringTafel = l.ToArray();
+        _ringAb = ab;
+    }
+
+    /// <summary>Anzahl der Eintraege mit Radius &lt; r (T[r]) — fuer Pruefstaende.</summary>
+    public static int RingTafelBis(int r) { RingTafelBauen(); return _ringAb![Math.Clamp(r, 0, 127)]; }
+
+    /// <summary>
+    /// <b>Das Ersatzziel von <c>Search:</c></b> (@0x4D3AA5..0x4D3B83): die
+    /// Ringtafel ab Eintrag 0 bis T[50] durchlaufen, Kartengrenze pruefen
+    /// (<c>0x41D1D0</c>), erster Kandidat nach <see cref="ZielZulaessig"/>.
+    /// ⚠ Zusaetzlich (UNSERE Setzung vom 08.09., <c>--randziel-alt</c>): keine Zelle
+    /// auf dem versiegelten Kartenrand — sonst scheiterte die Suche dort still.
+    /// Liefert null, wenn nichts zulaessig ist.
+    /// </summary>
+    public Vector2I? ErsatzZiel(Vector2I um, MoveClass mc, int mover)
+    {
+        RingTafelBauen();
+        int bis = _ringAb![ErsatzRadius];
+        for (int k = 0; k < bis; k++)
+        {
+            var (dx, dy) = _ringTafel![k];
+            int c = um.X + dx, r = um.Y + dy;
+            if (!InBounds(c, r)) continue;
+            if (!RandzielAlt && (c <= 0 || r <= 0 || c >= Width - 1 || r >= Height - 1)) continue;
+            if (ZielZulaessig(c, r, mc, mover)) return new Vector2I(c, r);
+        }
+        return null;
     }
 
     /// <summary>Closest free cell to <paramref name="around"/> (spiral search).</summary>

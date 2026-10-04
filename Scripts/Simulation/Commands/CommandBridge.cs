@@ -194,7 +194,23 @@ public partial class MapEntityLayer
             if (!e.Mobile || e.Dead || e.DugIn) continue;
             if (e.FuelMax > 0 && e.Fuel <= 0) continue;   // ein trockener Panzer fährt nicht
 
-            Vector2I goal = PickGoalCell(i, e, cell.Value, taken);
+            var wunsch = formation
+                ? new Vector2I(Mathf.Clamp(e.Col - mx + cell.Value.X, 0, _nav.Width - 1),
+                               Mathf.Clamp(e.Row - my + cell.Value.Y, 0, _nav.Height - 1))
+                : cell.Value;
+            // ⭐⭐ 04.10.2026, bug-425 — DER KLICK WIRD GESENDET, wie er ist.
+            // Das Original schickt Befehl 3 mit der Klickzelle (Einzeleinheit
+            // @0x4378D9, Gruppe ohne Formation 0x4352E0: ALLE auf dieselbe Zelle,
+            // P2/P3 = di/bp aus den Argumenten @0x435316/0x43531D, selbst
+            // nachgelesen) bzw. mit der Formationszelle (0x435100). `fahre`
+            // 0x40B070 prueft das Ziel nicht; ein unzulaessiges Ziel ersetzt erst
+            // `Search:` (NavGrid.FindPathUr, Ringtafel bis Radius 50). Die
+            // Verteilung einer Gruppe entsteht unterwegs — Ausweichbitte, 1/60,
+            // »nah genug« —, nicht im Absender.
+            // Bis heute ging jede Wunschzelle durch PickGoalCell (Spirale Radius 8,
+            // `taken`), und ohne Treffer gab es KEINEN Satz (`continue` unten) —
+            // stumm, nur im klick-log sichtbar. Gegenschalter --zielwahl-alt.
+            Vector2I goal = ZielwahlAlt ? PickGoalCell(i, e, wunsch, taken) : wunsch;
             // --klick-log: WAS WIRD AUS DEM KLICK? Zwischen der Zelle unter dem
             // Zeiger und dem Fahrbefehl sitzt PickGoalCell. Solange nicht im
             // Protokoll steht, welche Zelle wirklich zum Ziel wird, laesst sich
@@ -208,10 +224,12 @@ public partial class MapEntityLayer
                           : $"({goal.X},{goal.Y})"
                             + (goal.X == cell.Value.X && goal.Y == cell.Value.Y
                                ? "  = die geklickte Zelle"
-                               : "  ⚠ AUSGEWICHEN, die geklickte Zelle war nicht frei"))
+                               : !ZielwahlAlt ? "  = Formationszelle"
+                               : "  ⚠ AUSGEWICHEN, die geklickte Zelle war nicht frei")
+                            + (!ZielwahlAlt ? " (ein Ersatz waehlt erst die Wegsuche, Ringtafel r<50)" : ""))
                        + $" | geklickte Zelle frei: {_nav.IsFree(cell.Value.X, cell.Value.Y, e.Move, i)}"
                        + $", Bewegungsart {e.Move}");
-            if (goal.X < 0) continue;
+            if (goal.X < 0) { KlickOhneSatz++; continue; }
             taken.Add(goal);
 
             var c = CommandRecord.Make(CommandOp.Move, (byte)ViewPlayer,
@@ -336,7 +354,11 @@ public partial class MapEntityLayer
     /// <summary><c>--zielwahl-alt</c> (bug-425), siehe
     /// <see cref="Simulation.NavGrid.ZielwahlAlt"/> — EIN Schalter fuer Absender
     /// und Wegsuche.</summary>
-    public static bool ZielwahlAlt = true; // bis Paket 3 (bug-425): alte Zielwahl
+    public static bool ZielwahlAlt
+    {
+        get => AkteEuropaReborn.Simulation.NavGrid.ZielwahlAlt;
+        set => AkteEuropaReborn.Simulation.NavGrid.ZielwahlAlt = value;
+    }
 
     /// <summary>Wie oft eine Einheit aus einem Fahrklick KEINEN Satz bekam
     /// (nur unter <c>--zielwahl-alt</c> moeglich: PickGoalCell ohne Treffer).
@@ -1926,7 +1948,14 @@ public partial class MapEntityLayer
         // meldete: <c>Determinism.Roll</c> zieht eine Zahl aus dem Strom. Ein
         // Weg, der sie zieht, und einer, der es nicht tut, laufen danach
         // auseinander — nicht wegen des Befehls, sondern wegen des Stroms.
-        e.Block = BlockEnter + Determinism.Roll(BlockEnterSpread);
+        if (!GeduldSatzwert) e.Block = BlockEnter + Determinism.Roll(BlockEnterSpread);
+        else if (!e.SatzGeduldVerbraucht)
+        {
+            // --geduld-satzwert (bug-425, Messschalter): der Kartensatz +0x1C als
+            // Byte; danach schreibt kein Fahrbefehl mehr (fahre 0x40B070).
+            e.SatzGeduldVerbraucht = true;
+            e.Block = e.SatzGeduld is > 0 and < 256 ? e.SatzGeduld : 256;
+        }
         return true;
     }
 
