@@ -1169,8 +1169,26 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"   noch anklickbar             : {stillPicked} von {victims.Count}");
         sb.AppendLine($"   Leiche schnappt den Klick   : {takenByDead} von {tested}");
         sb.AppendLine($"   (Lebender davor, normal)    : {takenByOther} von {tested}");
+        // ⭐ 04.10.2026 (bug-430) — DIE ERWARTUNG WAR VERALTET, NICHT DAS WRACK.
+        // Hier stand »erwartet = alle Nicht-Fusssoldaten«. Seit c1a2fd9 (19.08.)
+        // hinterlaesst ein SCHIFF kein Wrack (likvid typ @0x406F1B -> Tafel
+        // 0x40A048: nur Gattung 0 legt @0x406F3D das Wrack 0x4A97C0 an;
+        // Gattung 1/2 @0x40716B keines, 3 @0x407026, 4/5 @0x407094/@0x4070FF
+        // Wasser). K1 toetet 5 Nicht-Fusssoldaten, davon 3 Frachter -> 2 Wracks
+        // sind RICHTIG. Die Erwartung zaehlt jetzt nur Gattung 0 (so gelesen).
+        // ⚠ Unser Kill legt fuer Gattung 2/3 noch ein Wrack an (Abweichung, hier
+        // sichtbar, wenn ein Opfer dieser Gattung dabei ist).
+        int wrackSoll = 0, schiffe = 0;
+        foreach (int i in victims)
+        {
+            var v = _entities[i];
+            if (v.Infantry >= 0) continue;
+            if (v.GameUnitType == 0) wrackSoll++;
+            else if (v.GameUnitType is 4 or 5) schiffe++;
+        }
         sb.AppendLine($"   Wrackreste auf dem Boden    : {wreckFx} " +
-                      $"(erwartet {victims.Count - foot}, Infanterie hinterlaesst keine)");
+                      $"(erwartet {wrackSoll}: nur Gattung 0 @0x406F3D; {schiffe} Schiffe und " +
+                      $"{foot} Fusssoldaten hinterlassen keines)  {(wreckFx == wrackSoll ? "BESTANDEN" : "DURCHGEFALLEN")}");
         sb.Append(stillPicked == 0 && takenByDead == 0
                   ? "   BEIDES BEHOBEN" : "   NOCH FEHLERHAFT");
         return sb.ToString();

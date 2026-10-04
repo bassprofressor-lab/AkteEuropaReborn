@@ -4051,6 +4051,7 @@ _mausProbePunkt = karte;
             else if (a == "--infanterie-einheitenarm") MapEntityLayer.InfanterieArmAlt = true;
             else if (a == "--skripttreffer-halbe-huelle") MapEntityLayer.SkripttrefferHalbeHuelle = true;
             else if (a == "--ueberfahren-alle") MapEntityLayer.UeberfahrenAlle = true;
+            else if (a == "--ueberfahren-check-streng") MapEntityLayer.UeberfahrenCheckStreng = true;   // bug-429
             else if (a == "--ueberfahren-loeschen") MapEntityLayer.UeberfahrenLoeschen = true;
             else if (a == "--sprengung-ohne-nachbarn") MapEntityLayer.SprengungOhneNachbarn = true;
             else if (a == "--werteliste-nur-roh") UI.UnitStatBook.NurRoheWerteliste = true;
@@ -9473,6 +9474,10 @@ _mausProbePunkt = karte;
         // unter dem Zeiger«.
         if (!ZeigerUeberallAlt && GetViewport().GuiGetHoveredControl() != null)
         {
+            // ⭐ 04.10.2026, bug-431 — ueber dem Koerper des Kartenschirms Bild 26
+            // (Zustand 100, @0x43163B). Siehe KartenschirmZeiger.
+            int ks = KartenschirmZeiger(GetViewport().GuiGetHoveredControl());
+            if (ks >= 0 && UI.GameCursors.Available) { UI.GameCursors.Use(ks, _cursorTime); return; }
             UI.GameCursors.Reset();
             if (_cursor != Input.CursorShape.Arrow)
             {
@@ -9504,6 +9509,10 @@ _mausProbePunkt = karte;
                  : _entities.CursorHintAt(mapPos);
         if (UI.GameCursors.Available)
         {
+            // ⭐ 04.10.2026, bug-431 — im Setzmodus der Zeiger der BEFEHLSART
+            // (gueltig/ungueltig), vor Strg/Reparatur wie @0x4316F5. Befehlszeiger.cs.
+            int befehl = _entities.ZielwahlSchwebt ? -1 : BefehlsZeigerArt(mapPos);
+            if (befehl >= 0) { UI.GameCursors.Use(befehl, _cursorTime); return; }
             // ⭐ 04.10.2026, bug-415/418 — Fahrt (4), Formationsfahrt (27) und
             // Handsteuerung Boden (3). Siehe FahrtZeigerArt.
             int fahrt = FahrtZeigerArt(hint, Input.IsKeyPressed(Key.Shift));

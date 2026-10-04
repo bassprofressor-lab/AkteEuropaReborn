@@ -51,12 +51,45 @@ public partial class MapEntityLayer : Node2D
     private readonly Dictionary<int, int[]> _uZaehler = new();   // [GiveWay, Blocked, Free]
     private readonly HashSet<int> _uZeilen = new();
 
+    // ⭐ 04.10.2026 (bug-429) — WER HAT DEN PROBANDEN UMGEBRACHT?
+    //
+    // Gemeldet: K3 faellt in B und E. Bisektion im Worktree: K3 faellt GLEICH
+    // an HEAD, feec479, 08f3e0e, 5fac5da und am Geburtscommit 271b62b
+    // (11.09.) — der Pruefstand ist auf K3 NIE bestanden; gebaut und geprueft
+    // wurde er auf K4/K6/K7. Ursache ist kein Rueckschritt, sondern
+    // FREMDEINWIRKUNG: der Streifen liegt in Schussweite bewaffneter Einheiten,
+    // die die (entwaffneten) Probanden erschiessen — K3 B: der Forscher fiel
+    // »Beschuss von 2x Maschinengewehr (Spieler 2, 3 Zellen weit)«, K3 E: das
+    // Opfer lief weg und fiel unter einer Bordkanone; K7 E: der Fahrer
+    // (Cpt.Cossarro) wurde am Ziel von einem fremden Transporter ueberfahren.
+    // Gemessen wird hier aber nur die Regel des EIGENEN Fahrers. Darum:
+    // »ueberfahren« zaehlt nur, wenn es DER Fahrer des Falls war, und ein Tod
+    // aus anderer Hand wird genannt, aber nicht als Regelbruch gewertet — die
+    // Zaehler (gebeten/blockiert/frei > 0) belegen weiter, dass die Begegnung
+    // stattfand. Gegenschalter --ueberfahren-check-streng (alte Wertung).
+    public static bool UeberfahrenCheckStreng;
+    private readonly Dictionary<int, int> _uUeberfahrer = new();          // Opfer -> Fahrer
+    private readonly Dictionary<Entity, string> _uTodGrund = new();
+
+    /// <summary>Aus RunOverFoot: wer wen ueberfahren hat (nur im Pruefstand).</summary>
+    private void UeberfahrenCheckNotiere(int fahrer, int opfer)
+    {
+        if (_uCheckAn) _uUeberfahrer[opfer] = fahrer;
+    }
+
+    /// <summary>Aus Kill: der Todesgrund jedes Probanden (nur im Pruefstand).</summary>
+    private void UeberfahrenCheckTod(Entity e, string grund)
+    {
+        if (_uCheckAn && !e.Dead && !_uTodGrund.ContainsKey(e))
+            _uTodGrund[e] = grund.Length > 0 ? grund : "UNBENANNT";
+    }
+
     public void UeberfahrenCheckStart()
     {
         if (_nav == null) return;
         _uCheckAn = true;
         Fahrgruende = true;                  // damit die Zeile sagt, WARUM ein Fahrer steht
-        _uFaelle.Clear(); _uZaehler.Clear(); _uZeilen.Clear(); _haltGemessen.Clear();
+        _uFaelle.Clear(); _uZaehler.Clear(); _uZeilen.Clear(); _haltGemessen.Clear(); _uUeberfahrer.Clear(); _uTodGrund.Clear();
         var benutzt = new HashSet<int>();
 
         // ⚠ Nur, wer frei auf der Karte steht: nichts aus einem Transporter
@@ -199,7 +232,14 @@ public partial class MapEntityLayer : Node2D
             var fu = _entities[f.Fuss];
             var z = _uZaehler.TryGetValue(f.Fahrer, out var zz) ? zz : new int[3];
             bool durch = fa.Col >= f.Col + 4;
-            bool ueberfahren = _ueberfahrenOpfer.Contains(f.Fuss);
+            bool ueberfahrenIrgendwer = _ueberfahrenOpfer.Contains(f.Fuss);
+            // bug-429: nur der EIGENE Fahrer zaehlt (streng: jeder)
+            bool ueberfahren = UeberfahrenCheckStreng
+                ? ueberfahrenIrgendwer
+                : _uUeberfahrer.TryGetValue(f.Fuss, out var uv) && uv == f.Fahrer;
+            // ein Tod, der NICHT das eigene Ueberfahren ist, ist Fremdeinwirkung
+            bool fussFremd = !UeberfahrenCheckStreng && fu.Dead && !ueberfahren;
+            bool fahrerFremd = !UeberfahrenCheckStreng && fa.Dead;
             int halt = _haltGemessen.TryGetValue(fu, out var h) ? h : -1;
             bool treffer = false;
             foreach (var t in _trefferLog)
@@ -208,9 +248,9 @@ public partial class MapEntityLayer : Node2D
             bool soll = f.Name[0] switch
             {
                 'A' => fu.Dead && ueberfahren && treffer && halt is >= 8 and <= 11 && durch,
-                'B' => !fu.Dead && !ueberfahren && z[0] > 0,
-                'C' or 'D' => !fu.Dead && !ueberfahren && z[1] > 0,
-                _ => !fu.Dead && !fa.Dead && !ueberfahren && z[2] > 0 && durch,
+                'B' => (!fu.Dead || fussFremd) && !ueberfahren && z[0] > 0,
+                'C' or 'D' => (!fu.Dead || fussFremd) && !ueberfahren && z[1] > 0,
+                _ => (!fu.Dead || fussFremd) && (!fa.Dead || fahrerFremd) && !ueberfahren && z[2] > 0 && durch,
             };
             ok &= soll;
             sb.Append($"  {f.Name}: Fuss {(fu.Dead ? "TOT" : "lebt")} (TP {fu.Hp}/{fu.HpMax}"
@@ -219,6 +259,11 @@ public partial class MapEntityLayer : Node2D
                     + $"Fahrer auf ({fa.Col},{fa.Row}){(durch ? " durch" : " davor")}, "
                     + $"gebeten {z[0]} / blockiert {z[1]} / frei {z[2]}  {(soll ? "ja" : "NEIN")}"
                     + $"{(f.Eingriff.Length > 0 ? "  " + f.Eingriff : "")}\n");
+            // bug-429: Fremdeinwirkung nennen — sie zaehlt nicht gegen die Regel
+            if (fussFremd)
+                sb.Append($"      ⚠ FREMDTOD Fuss: {(_uTodGrund.TryGetValue(fu, out var gf) ? gf : "?")}\n");
+            if (fahrerFremd && fa.Dead)
+                sb.Append($"      ⚠ FREMDTOD Fahrer: {(_uTodGrund.TryGetValue(fa, out var gfa) ? gfa : "?")}\n");
             // ⚠ Ohne den Zustand des Fahrers ist »kam nie an« nicht von »durfte
             // nicht fahren« zu unterscheiden (Fall E am 11.09.: alle Zaehler 0).
             if (!soll)
@@ -229,7 +274,8 @@ public partial class MapEntityLayer : Node2D
                         + $"letzter Fahrgrund: {(string.IsNullOrEmpty(fa.Fahrgrund) ? "-" : fa.Fahrgrund)}\n");
         }
         sb.Append($"  Gegenschalter --ueberfahren-alle: {UeberfahrenAlle}, "
-                + $"--ueberfahren-loeschen: {UeberfahrenLoeschen}\n");
+                + $"--ueberfahren-loeschen: {UeberfahrenLoeschen}, "
+                + $"--ueberfahren-check-streng: {UeberfahrenCheckStreng}\n");
         sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }

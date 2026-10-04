@@ -60,6 +60,32 @@ public partial class MapViewer
             ? UI.GameCursors.Formation : UI.GameCursors.Fahrt;
     }
 
+    /// <summary>⭐ 04.10.2026, bug-431 — das Zeigerbild der laufenden BEFEHLSART an der
+    /// Mauszelle (14/15, 17/18, 19), −1 = keine. Siehe Simulation/Befehlszeiger.cs.
+    /// ⚠ Im Original kommt die Befehlsart NACH der Handsteuerung (@0x4316DF vor
+    /// @0x4316F5) und VOR Strg und Reparaturzeiger (beide erst ab @0x431B19).</summary>
+    public int BefehlsZeigerArt(Vector2 mapPos)
+    {
+        if (_entities.PlacementMode == 0 || _entities.HandsteuerungIdx >= 0) return -1;
+        if (_entities.CellAt(mapPos) is not { } c) return -1;
+        return _entities.BefehlsartZeigerbild(c.X, c.Y);
+    }
+
+    /// <summary>⭐ 04.10.2026, bug-431 — <b>Zustand 100, Bild 26</b>: die Maus steht
+    /// ueber einem Fenster der Art 3 (Kartenschirm, <c>byte[0x8B9038]</c> == 3) auf
+    /// Element 1 (<c>word[0x4FD654]</c> == 1, der Koerper — der Klickarm @0x448F78
+    /// nimmt 2/3 als Zoom, alles andere als Kartenklick) @0x431626…0x43163B.
+    /// −1 = nicht ueber dem Koerper (oder <c>--befehlszeiger-aus</c>).</summary>
+    public static int KartenschirmZeiger(Control? unterMaus)
+    {
+        if (MapEntityLayer.BefehlszeigerAus) return -1;
+        for (var n = unterMaus; n != null; n = n.GetParent() as Control)
+            if (n is UI.KartenschirmView ks)
+                return ks.ZelleUnter(ks.GetLocalMousePosition()) != null
+                    ? MapEntityLayer.ZeigerKartenschirm : -1;
+        return -1;
+    }
+
     /// <summary>
     /// ⭐⭐ 04.10.2026, bug-419 — <b>DER MENÜPUNKT »UNTERMISSIONEN«</b>,
     /// <c>0x451530</c> (selbst zerlegt):
@@ -289,6 +315,55 @@ public partial class MapViewer
         }
         else sb.AppendLine("  (keine eigene fahrende Einheit — Zeigerart nicht geprueft)");
 
+        // 5. ⭐ bug-431 — die BEFEHLSARTEN: je angeschlossene Befehlsart eine gueltige
+        // und eine ungueltige Zelle -> das gelesene Bild (Tafel 0x432A10 / 0x4A9BEC).
+        // Nullmodell --befehlszeiger-aus: alles −1, faellt durch.
+        if (MapEntityLayer.BefehlszeigerAus) sb.AppendLine("  ⚠ NULLMODELL --befehlszeiger-aus: die Befehlsarten MUESSEN durchfallen");
+        foreach (int bild in new[] { 14, 15, 17, 18, 19, 26 })
+            Soll(UI.GameCursors.HatBild(bild), $"Bild {bild} in der Bank des Spiels");
+        var befehle = new (int Modus, string Name, int Orig, int Gut, int Schlecht)[]
+        {
+            (MapEntityLayer.OrderBruecke,    "Bruecke bauen",     1, 14, 15),
+            (MapEntityLayer.OrderMole,       "Mole bauen",        2, 14, 15),
+            (MapEntityLayer.OrderTerraSuche, "Terranium suchen",  3, 19, 19),
+            (MapEntityLayer.OrderAusbessern, "Bruecke/Mole rep.", 4, 17, 18),
+            (MapEntityLayer.OrderDepot,      "Depot bauen",       5, 14, 15),
+            (MapEntityLayer.OrderFieldMine,  "Mine bauen",        6, 14, 15),
+            (MapEntityLayer.OrderGenerator,  "Generator bauen",   7, 14, 15),
+        };
+        var (bw, bh) = _entities.KartenMassFuerProbe();
+        foreach (var bf in befehle)
+        {
+            int gc = -1, gr = -1, sc = -1, sr = -1;
+            for (int r = 1; r < bh - 1 && (gc < 0 || sc < 0); r++)
+                for (int c = 1; c < bw - 1 && (gc < 0 || sc < 0); c++)
+                {
+                    bool? g = _entities.BefehlsartGueltig(bf.Modus, c, r);
+                    if (g != false && gc < 0) { gc = c; gr = r; }
+                    if (g != true && sc < 0) { sc = c; sr = r; }
+                }
+            _entities.BefehlsartFuerProbe(bf.Modus, e);
+            int zg = gc >= 0 ? BefehlsZeigerArt(_entities.ZellMitteFuerProbe(gc, gr)) : -2;
+            int zs = sc >= 0 ? BefehlsZeigerArt(_entities.ZellMitteFuerProbe(sc, sr)) : -2;
+            _entities.BefehlsartFuerProbe(0, -1);
+            // eine Zelle, die es auf dieser Karte nicht gibt, sagt nichts (-2) — kein Fehler
+            bool ok = (zg == -2 || zg == bf.Gut) && (zs == -2 || zs == bf.Schlecht) && (zg != -2 || zs != -2);
+            Soll(ok, $"Befehlsart {bf.Orig} »{bf.Name}« (bei uns {bf.Modus}): gueltig {(zg == -2 ? "keine Zelle" : $"({gc},{gr}) Bild {zg}")} (soll {bf.Gut}), "
+                   + $"ungueltig {(zs == -2 ? "keine Zelle" : $"({sc},{sr}) Bild {zs}")} (soll {bf.Schlecht})");
+        }
+        // ohne Befehlsart kein Befehlszeiger
+        int zohne = BefehlsZeigerArt(_entities.ZellMitteFuerProbe(bw / 2, bh / 2));
+        Soll(zohne == -1, $"ohne Befehlsart: {zohne} (soll −1, Zeiger nach dem Ziel)");
+        // Bild 26 ueber dem Koerper des Kartenschirms
+        var ksv = new UI.KartenschirmView();
+        AddChild(ksv);
+        ksv.Zeige(new Vector2I(bw, bh), 0, -1);
+        bool imKoerper = ksv.ZelleUnter(ksv.Bildversatz + new Vector2(2, 2)) != null;
+        bool imTitel = ksv.ZelleUnter(new Vector2(2, 2)) != null;
+        int z26 = MapEntityLayer.BefehlszeigerAus ? -1 : (imKoerper ? MapEntityLayer.ZeigerKartenschirm : -1);
+        ksv.QueueFree();
+        Soll(z26 == 26 && !imTitel, $"Kartenschirm: Koerper -> Bild {z26} (soll 26), Titelzeile kein Koerper ({(!imTitel ? "ja" : "NEIN")})");
+
         foreach (string d in new[] { p1, p2 })
             try { System.IO.Directory.Delete(d, true); } catch (System.Exception) { }
         return sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN").ToString();
@@ -301,6 +376,7 @@ public partial class MapViewer
         switch (a)
         {
             case "--fahrtzeiger-aus": FahrtzeigerAus = true; return true;
+            case "--befehlszeiger-aus": MapEntityLayer.BefehlszeigerAus = true; return true;   // bug-431
             case "--untermissionen-knopf-aus": UntermissionenKnopfAus = true; return true;
             case "--formation-check": _formationCheck = true; return true;
             case "--zeigerbank-check": _zeigerbankCheck = true; return true;

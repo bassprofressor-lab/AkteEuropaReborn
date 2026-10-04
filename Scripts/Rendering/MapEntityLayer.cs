@@ -7642,12 +7642,13 @@ public partial class MapEntityLayer : Node2D
         // Spieler sieht das aus wie »einfach umgefallen«.
         string grund = $"UEBERFAHREN ({wo}) von {LabelOf(driver)} (Spieler {driver.Owner}, "
                      + $"auf ({driver.Col},{driver.Row}))";
-        if (UeberfahrenLoeschen) { Kill(footIdx, foot, driver.Owner, grund); return; }
+        if (UeberfahrenLoeschen) { UeberfahrenCheckNotiere(driverIdx, footIdx); Kill(footIdx, foot, driver.Owner, grund); return; }
         // ⭐⭐ 11.09.2026 — K3: EIN TREFFER, KEIN LOESCHEN. »drive over«
         // 0x412A50 setzt die Flagge 0x4F6308, ruft die Schadensroutine mit
         // Angreifer 40200 (@0x412ABF/@0x412AC4) und leert danach die Zelle. Kein
         // Schuetze wird gutgeschrieben (Angreifer >= 8000, Spielerbyte 0xFF).
         _ueberfahrenOpfer.Add(footIdx);
+        UeberfahrenCheckNotiere(driverIdx, footIdx);   // bug-429: wer war es
         InfanterieZellenTreffer(footIdx, foot, 0, 200, grund, ueberfahren: true);
         // ⭐ 13.09.2026 — der Infanteriezellen-Arm laeuft immer in den Zellzweig:
         // ueberfahren AUF einer Bruecke kostet sie 200 (Bauwerkstreffer.cs).
@@ -13171,6 +13172,7 @@ public partial class MapEntityLayer : Node2D
                    + $"auf ({victim.Col},{victim.Row}), TP {victim.Hp}/{victim.HpMax}, Grund: "
                    + (grund.Length > 0 ? grund : "UNBENANNT ⚠")
                    + (by is >= 0 and <= 7 ? $", durch Spieler {by}" : ", ohne Schuetzen"));
+        UeberfahrenCheckTod(victim, grund);   // bug-429: Todesgrund der Probanden
         NoteKill(victim, by);
         // ⭐ 02.10.2026 (bug-389) — die zwei Engine-Schreiber der Variablentafel
         // im Tod: v93 (@0x40B42A, Abwehrstellung) und v100 (@0x4C9AAE,
