@@ -1628,6 +1628,11 @@ public sealed class ContentBuilder
     /// </summary>
     public static int ExportBuildingPatterns(CwpFile cwp, PalFile pal, int tileset, string dstRoot)
     {
+        // ⭐ 04.10.2026 (bug-427) — die 285 NEBELMASKEN des Kachelsatzes
+        // (Aux-Block 0x0c, Familie 7) gehen auf DIESEM Weg mit, damit jeder
+        // Spieler sie mit dem normalen Import bekommt und nicht nur ueber einen
+        // Entwicklerschalter (genau das war bug-415). Siehe Import/NebelMasken.cs.
+        NebelMasken.Export(cwp, pal, tileset, $"{dstRoot.TrimEnd('/', '\\')}/Buildings");
         if (!cwp.HasBuildings) return 0;
         string dir = $"{dstRoot.TrimEnd('/', '\\')}/Buildings";
         Directory.CreateDirectory(dir);

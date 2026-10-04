@@ -1161,7 +1161,8 @@ public partial class MapEntityLayer : Node2D
         }
 
         int wreckFx = 0;
-        foreach (var fx in _effects) if (fx.Kind == "wreck") wreckFx++;
+        foreach (var fx in _effects) if (fx.Kind == "wreck" || fx.Kind.StartsWith("wrack")) wreckFx++;
+        wreckFx += _sterbend.Count;   // bug-426: das Wrack kommt 6 Takte nach dem Tod
 
         sb.AppendLine($"corpse-check: {victims.Count} Einheiten gefallen " +
                       $"({foot} zu Fuss, {victims.Count - foot} Fahrzeuge)");

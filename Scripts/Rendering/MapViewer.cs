@@ -1341,6 +1341,14 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
+        if (BedienungPruefstaende()) return;
+        // ⭐ 04.10.2026 — Paket 2 Infofenster (bug-420..424), Rendering/InfofensterLauf.cs.
+        if (InfofensterPruefstand()) return;
+        // ⭐ 04.10.2026 — Paket 3 Bewegung (bug-425), Rendering/AnfahrenLauf.cs.
+        if (AnfahrenPruefstand()) return;
+        // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
+        if (GrafikPruefstand()) return;
         if (_untermissionCheck > 0)
         {
             GD.Print(_entities.UntermissionCheck(_untermissionCheck));
@@ -3718,6 +3726,14 @@ _mausProbePunkt = karte;
         // und dann greift hier keine einzige Prueffahne. Siehe Core/CommandLine.cs.
         foreach (string a in Core.CommandLine.Args)
         {
+            // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
+            if (BedienungSchalter(a)) continue;
+            // ⭐ 04.10.2026 — Paket 2 Infofenster (bug-420..424), Rendering/InfofensterLauf.cs.
+            if (InfofensterSchalter(a)) continue;
+            // ⭐ 04.10.2026 — Paket 3 Bewegung (bug-425), Rendering/AnfahrenLauf.cs.
+            if (AnfahrenSchalter(a)) continue;
+            // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
+            if (GrafikSchalter(a)) continue;
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
             else if (a.StartsWith("--shot-delay=")) _shotDelay = a[13..].ToInt();
             else if (a.StartsWith("--rail-tour="))

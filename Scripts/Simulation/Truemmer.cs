@@ -63,20 +63,35 @@ using Godot;
 /// Gattung (+0x0A); nur Zweig 0 laeuft durch die Schleifen, die Faelle bei
 /// 0x40B6A9/0x40B6B1/0x40B6B9 springen daran vorbei.</para>
 ///
-/// <para>⚠⚠ <b>WAS UNSER BLEIBT — genau zwei Zahlen, und beide sind
-/// Umrechnungen, keine Mechanik:</b></para>
-/// <list type="number">
-/// <item><b>Takt → Sekunde.</b> Das Tempo steht in Bildpunkten je TAKT; wie
-/// lang ein Takt ist, steht nirgends. Wir nehmen
-/// <see cref="PxPerProjectileSpeed"/> — dieselbe Zahl, mit der schon die
-/// Geschosse rechnen. EIN Unbekanntes, EINE Konstante, statt zwei.</item>
-/// <item><b>Die Bogenhoehe.</b> Das Original rechnet Schwerkraft und
-/// Anfangssteigen aus <c>(Tempo &gt;&gt; 3) + 2</c> und zwei Gleitkommazahlen
-/// (@0x4ADA6C..0x4ADAAC); die Kette habe ich NICHT zu Ende gelesen.
-/// <see cref="BogenFaktor"/> setzt darum den Scheitel auf ein Vielfaches
-/// dieser gelesenen Zahl. Die FORM (Wurfparabel, Landung genau im Ziel) ist
-/// gelesen, nur ihre Hoehe ist geeicht.</item>
-/// </list>
+/// <para>⭐⭐ <b>04.10.2026 (bug-426) — DER BOGEN IST JETZT GANZ GELESEN</b>,
+/// und er war 3- bis 8-mal zu flach. KayelGee: »Trümmer fliegen im Original in
+/// einer Parabel aus der Explosion heraus.« Lesung
+/// <c>berichte/nebel-explosionen-fable.md</c> §2.4/§2.5 (Konstanten
+/// <c>0x4F2E74 = 2,0</c>, <c>0x4F2E78 = 1,0</c>, <c>0x4F2E7C = 0,5</c>):</para>
+/// <code>
+///   0x4ADA0D  d  = √(dx² + dy²)   dx = 40·Δsp + Δfein, dy = 40·Δze + Δfein
+///             m  = d / (2·T)  ;  h0 = (T &gt;&gt; 3) + 2
+///             g  = 2d / (h0·m·(m+1))  -> +0x28 ; vz0 = g·m -> +0x24
+///   0x4ADCE9  Bogen += vz ; vz −= g          ; je TAKT
+///   ⇒ Scheitel = g·m(m+1)/2 = d / h0  — ein Halbes bis ein Viertel der Strecke
+///   0x4AE04A  Z = Grund + Bogen &gt; Bodenhoehe am Punkt (0x4B5CE0) ∧ nicht da
+///             -> weiter, sonst LANDUNG; Brocken: Aufschlagbild 230 + rand&amp;3
+/// </code>
+/// <para>Und die Uhr: der Teilchentakt <c>0x4ADB80</c> laeuft im Taktblock
+/// (@0x4165F1), wie das Explosionsbild (@0x4164A7) und das Wrackalter
+/// (@0x4164FF) — <b>eine Uhr fuer Wolke, Teile, Schweif und Wrack</b>
+/// (<see cref="EffektTakteJeSekunde"/>).</para>
+///
+/// <para>⚠⚠ <b>WAS UNSER BLEIBT:</b> nur noch <b>wie lang ein Takt ist</b>
+/// (<see cref="EffektTakteJeSekunde"/> = 25, die Bildrate, mit der die Wolke
+/// seit dem 24.08. laeuft) und die Lage des Aufschlagbilds (siehe
+/// <see cref="Aufschlag"/>). Gegenschalter je Teil:
+/// <c>--truemmer-bogen-alt</c> (Scheitel 3,5·h0 wie bisher, samt der alten
+/// Endpunkte mit der DOPPELT abgezogenen Hoehe, s. <see cref="EinTeil"/>),
+/// <c>--truemmer-uhr-alt</c> (85 Takte/s fuer den Flug, Schweif je 0,06 s),
+/// <c>--truemmer-aufschlag-aus</c> (feste Dauer, keine Bodenlandung, kein
+/// Aufschlagbild). Pruefstand <c>--truemmer-check</c>
+/// (Simulation/TruemmerCheck.cs).</para>
 ///
 /// <para>⚠ Nebenbefund derselben Lesung: der Schweif ist NICHT der Qualm
 /// beschaedigter Fahrzeuge, den er getrennt gemeldet hat. Der haengt woanders
@@ -93,6 +108,15 @@ public partial class MapEntityLayer
         public string Folge;
         public bool Schweif;        // Bildfolge >= 25 -> Rauch
         public float SchweifAb;     // naechster Rauchtakt
+        // ⭐ 04.10.2026 (bug-426) — der gelesene Takt
+        public Vector2 FlachVon, FlachNach;   // Bodenpunkt OHNE Hoehe (Zeile·20 + Fein)
+        public float GrundVon, GrundNach;     // Gelaende·15 je Ende (@0x4AD6BB)
+        public float N;                       // Takte bis zur Ankunft (@0x4ADBB6)
+        public float G, M;                    // Schwerkraft, m (@0x4ADA0D..0x4ADAB2)
+        public int Takt;                      // abgelaufene Takte
+        public bool Brocken;                  // Stil 1 (Folge 25..38): Aufschlagbild
+        public float Strecke, MaxBogen;       // fuer den Pruefstand
+        public int Wurf;                      // welche Sprengung (Pruefstand)
     }
 
     private readonly List<Truemmer> _truemmer = new();
@@ -130,8 +154,45 @@ public partial class MapEntityLayer
 
     /// <summary>Wie oft der Takt einen Rauchball setzt: <b>jeder dritte</b>
     /// (@0x4ADD60, <c>rand()%3 == 0</c>). In Sekunden ueber denselben
-    /// Taktbegriff wie das Tempo.</summary>
+    /// Taktbegriff wie das Tempo. ⚠ Nur noch fuer <c>--truemmer-uhr-alt</c>:
+    /// seit dem 04.10.2026 wird je Effekttakt gewuerfelt, wie im Original.</summary>
     private const float SchweifAbstand = 0.06f;
+
+    /// <summary>
+    /// ⭐ 04.10.2026 (bug-426) — <b>EINE UHR</b> fuer Explosionsbild, Truemmer,
+    /// Schweif und Wrack. Im Original laufen alle vier im Taktblock der
+    /// Hauptschleife (<c>0x416077..0x4168B4</c>: Anims @0x4164A7, Wrackalter
+    /// @0x4164FF, Teilchen @0x4165F1) — ein Bild, ein Teilchenschritt, ein
+    /// Alterstakt je Spieltakt. Bei uns lief die Wolke mit 25 Bildern/s, die
+    /// Teile mit 85 Takten/s: ein 3-Zellen-Wurf (24 Takte) war nach 0,28 s
+    /// weg, die 22-Bild-Wolke stand 0,88 s.
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG ist die Zahl 25</b> — die Bildrate, mit der die
+    /// Wolke seit dem 24.08.2026 laeuft (<c>FrameTime 0,04</c>). Gelesen ist nur,
+    /// dass es EINE Uhr ist. Gegenschalter <c>--truemmer-uhr-alt</c>.</para>
+    /// </summary>
+    public const float EffektTakteJeSekunde = 25f;
+
+    /// <summary><c>--truemmer-bogen-alt</c> — Scheitel 3,5·h0 und die alten
+    /// Endpunkte (Stand feec479).</summary>
+    public static bool TruemmerBogenAlt;
+    /// <summary><c>--truemmer-uhr-alt</c> — Flug mit 85 Takten/s, Schweif je
+    /// 0,06 s (Stand feec479).</summary>
+    public static bool TruemmerUhrAlt;
+    /// <summary><c>--truemmer-aufschlag-aus</c> — feste Flugdauer, keine
+    /// Landung auf Bodenhoehe, kein Aufschlagbild (Stand feec479).</summary>
+    public static bool TruemmerAufschlagAus;
+
+    /// <summary>Wie viele Aufschlagbilder (Folge 230..233) die Brocken gesetzt
+    /// haben — und wie viele Brocken geworfen wurden. Soll gleich.</summary>
+    public int TruemmerAufschlaege, TruemmerBrockenGeworfen;
+
+    /// <summary>Die laufende Nummer der Sprengung, fuer den Pruefstand.</summary>
+    private int _truemmerWurf;
+
+    /// <summary>Gelandete Teile (fuer den Pruefstand): Wurf, Brocken?,
+    /// Flugdauer in Sekunden, Strecke d, gemessener Scheitel.</summary>
+    internal readonly List<(int Wurf, bool Brocken, float Sekunden, float Strecke, float Scheitel)> TruemmerGelandet = new();
 
     /// <summary>Wie viele Teile seit dem Start geworfen wurden. ⚠ Ohne die Zahl
     /// sieht »ich sehe keine Truemmer« genauso aus wie »es wurden keine
@@ -143,6 +204,7 @@ public partial class MapEntityLayer
     {
         // Gattung 0 = Fahrzeug. Alles andere springt an den Schleifen vorbei.
         if (opfer.GameUnitType != 0 || opfer.Infantry >= 0 || opfer.IsBuilding) return;
+        _truemmerWurf++;
 
         int n = Simulation.Determinism.Roll(10) + 10;
         for (int k = 0; k < n; k++) EinTeil(opfer, sorte: 0, streuung: 3);
@@ -311,35 +373,104 @@ public partial class MapEntityLayer
             zr = Mathf.Clamp(zr, 0, _nav.Height - 1);
         }
 
-        var von = Ende(opfer.Col, opfer.Row);
-        var nach = Ende(zc, zr);
+        // Start- UND Zielfeinlage gewuerfelt (@0x4AD6C0..0x4AD710), je Ende
+        // rand%40 / rand%20 ab der linken oberen Zellecke.
+        int fx0 = Simulation.Determinism.Roll(40), fy0 = Simulation.Determinism.Roll(20);
+        int fx1 = Simulation.Determinism.Roll(40), fy1 = Simulation.Determinism.Roll(20);
+        var flachVon = new Vector2(_ox + opfer.Col * TileW + fx0, _oy + opfer.Row * TileH + fy0);
+        var flachNach = new Vector2(_ox + zc * TileW + fx1, _oy + zr * TileH + fy1);
+        float grundVon = ElevOf(opfer.Col, opfer.Row) * TruemmerHoehe;    // @0x4AD6BB
+        float grundNach = ElevOf(zc, zr) * TruemmerHoehe;
+
+        // ⚠⚠ 04.10.2026 — DIE ALTEN ENDPUNKTE ZOGEN DIE HOEHE DOPPELT AB:
+        // `CellCenter` enthaelt seit dem Hangbau schon `HubOf` (Hoehe·15 plus
+        // Hang), und hier wurde noch einmal `ElevOf·15` abgezogen. Auf K1
+        // (Hoehe 3) starteten die Teile 45 px ueber dem Boden. Nur noch mit
+        // --truemmer-bogen-alt.
+        Vector2 von, nach;
+        if (TruemmerBogenAlt)
+        {
+            von = CellCenter(opfer.Col, opfer.Row) + new Vector2(fx0 - 20, fy0 - 10) - new Vector2(0, grundVon);
+            nach = CellCenter(zc, zr) + new Vector2(fx1 - 20, fy1 - 10) - new Vector2(0, grundNach);
+        }
+        else
+        {
+            von = flachVon - new Vector2(0, grundVon);
+            nach = flachNach - new Vector2(0, grundNach);
+        }
 
         // n = Strecke / Tempo, und die SENKRECHTE Strecke zaehlt doppelt —
         // @0x4ADC0A `lea edi,[eax*2]`, die isometrische Entzerrung.
-        float dx = nach.X - von.X, dy = (nach.Y - von.Y) * 2f;
+        float dx = flachNach.X - flachVon.X, dy = (flachNach.Y - flachVon.Y) * 2f;
+        if (TruemmerBogenAlt) { dx = nach.X - von.X; dy = (nach.Y - von.Y) * 2f; }
         float takte = Mathf.Sqrt(dx * dx + dy * dy) / tempo;
         if (takte < 1f) takte = 1f;
 
+        // ⭐ Der Bogen des Erzeugers (@0x4ADA0D..0x4ADAB2): beide Achsen ×40 je
+        // Zelle, die Feinlage einfach — d = √(dx² + dy²).
+        float gx = 40f * (zc - opfer.Col) + (fx1 - fx0);
+        float gy = 40f * (zr - opfer.Row) + (fy1 - fy0);
+        float d = Mathf.Sqrt(gx * gx + gy * gy);
+        int h0 = (tempo >> 3) + 2;
+        float m = d / (2f * tempo);
+        float g = m > 0f ? 2f * d / (h0 * m * (m + 1f)) : 0f;
+
+        bool brocken = seq >= 25 && seq < 39;            // Stil 1 (@0x4AD9AC)
+        if (brocken) TruemmerBrockenGeworfen++;
+        float rate = TruemmerUhrAlt ? TruemmerTakteJeSekunde : EffektTakteJeSekunde;
         _truemmer.Add(new Truemmer
         {
             Von = von,
             Nach = nach,
             Zeit = 0f,
-            Dauer = takte / TruemmerTakteJeSekunde,
-            Scheitel = BogenFaktor * ((tempo >> 3) + 2),
+            Dauer = takte / rate,
+            Scheitel = TruemmerBogenAlt ? BogenFaktor * h0 : (h0 > 0 ? d / h0 : 0f),
             Folge = folge,
             Schweif = schweif,
             SchweifAb = 0f,
+            FlachVon = flachVon, FlachNach = flachNach,
+            GrundVon = grundVon, GrundNach = grundNach,
+            N = takte, G = g, M = m,
+            Brocken = brocken,
+            Strecke = d,
+            Wurf = _truemmerWurf,
         });
         TruemmerGeworfen++;
+    }
 
-        // Feinlage im Feld (die Kachel ist 40x20 — genau die beiden Modulo des
-        // Originals) und die Hoehe des Gelaendes darueber.
-        Vector2 Ende(int c, int r)
-            => CellCenter(c, r)
-             + new Vector2(Simulation.Determinism.Roll(40) - 20,
-                           Simulation.Determinism.Roll(20) - 10)
-             - new Vector2(0, ElevOf(c, r) * TruemmerHoehe);
+    /// <summary>Der Bogen nach k Takten: <c>Σ (vz0 − (j−1)·g)</c> fuer
+    /// j = 1..k = <c>g·(k·m − k(k−1)/2)</c> (@0x4ADCE9..0x4ADD45). Bei
+    /// <c>--truemmer-bogen-alt</c> die alte Parabel <c>4·S·f(1−f)</c>.</summary>
+    private static float TruemmerBogen(in Truemmer t, float k)
+    {
+        if (TruemmerBogenAlt)
+        {
+            float f = t.N <= 0f ? 1f : Mathf.Clamp(k / t.N, 0f, 1f);
+            return 4f * t.Scheitel * f * (1f - f);
+        }
+        return t.G * (k * t.M - k * (k - 1f) / 2f);
+    }
+
+    /// <summary>
+    /// ⭐ Das AUFSCHLAGBILD eines Brockens: <c>sec42 (230 + rand&amp;3)</c> bei
+    /// der Landung (@0x4AE0DE). Bei uns die Folgen <c>glut0..3</c> (230..233,
+    /// schon fuer den Gebaeudebrand ausgegeben).
+    /// <para>⚠ UNSERE SETZUNG: die Lage. Das Original legt es bei
+    /// <c>(feinX + 24, Hoehe·15 − feinY − 58)</c> an, die Wolke bei
+    /// <c>fein − 50</c>; wie diese sec42-Koordinaten auf unseren Effektanker
+    /// abbilden, ist nicht gelesen. Wir setzen es wie Explosion und Brand:
+    /// Bodenpunkt − (0, 6).</para></summary>
+    private void Aufschlag(Vector2 bodenPunkt)
+    {
+        string k = "glut" + Simulation.Determinism.Roll(4);
+        if (EffectFrames(k).Count == 0) return;
+        _effects.Add(new Effect
+        {
+            Pos = bodenPunkt - new Vector2(0, 6),
+            Kind = k,
+            FrameTime = 1f / EffektTakteJeSekunde,
+        });
+        TruemmerAufschlaege++;
     }
 
     /// <summary>Ein Geschwindigkeitsanteil: gleichverteilt in [−s, s), und was
@@ -352,26 +483,66 @@ public partial class MapEntityLayer
         return v;
     }
 
-    /// <summary>Wo ein Teil gerade ist: gerade Verbindung plus Wurfparabel.</summary>
-    private static Vector2 TruemmerOrt(in Truemmer t)
+    /// <summary>Wo ein Teil gerade ist: gerade Verbindung (Grund linear,
+    /// @0x4ADCC6) plus Bogen. Zwischen zwei Takten wird gleitend gezeichnet.</summary>
+    private Vector2 TruemmerOrt(in Truemmer t)
     {
-        float f = t.Dauer <= 0f ? 1f : Mathf.Clamp(t.Zeit / t.Dauer, 0f, 1f);
-        // vz −= g je Takt, Hoehe += vz, Landung genau im Ziel: das ist die
-        // Parabel 4·h·f·(1−f). Die FORM ist gelesen, die Hoehe geeicht.
-        return t.Von.Lerp(t.Nach, f) - new Vector2(0, 4f * t.Scheitel * f * (1f - f));
+        float rate = TruemmerUhrAlt ? TruemmerTakteJeSekunde : EffektTakteJeSekunde;
+        float k = t.Zeit * rate;
+        float f = t.N <= 0f ? 1f : Mathf.Clamp(k / t.N, 0f, 1f);
+        return t.Von.Lerp(t.Nach, f) - new Vector2(0, Mathf.Max(0f, TruemmerBogen(t, k)));
     }
 
     private void TruemmerTakt(float dt)
     {
+        float rate = TruemmerUhrAlt ? TruemmerTakteJeSekunde : EffektTakteJeSekunde;
         for (int i = _truemmer.Count - 1; i >= 0; i--)
         {
             var t = _truemmer[i];
             t.Zeit += dt;
-            if (t.Zeit >= t.Dauer) { _truemmer.RemoveAt(i); continue; }
+            bool gelandet = false;
+            Vector2 boden = t.Nach;
+            if (TruemmerAufschlagAus)
+            {
+                // Stand feec479: feste Dauer, kein Bodentest
+                gelandet = t.Zeit >= t.Dauer;
+                if (!gelandet) t.MaxBogen = Mathf.Max(t.MaxBogen, TruemmerBogen(t, t.Zeit * rate));
+            }
+            else
+            {
+                // ⭐ je ganzem Takt die Pruefung des Originals (@0x4AE04A):
+                // weiter, solange Z ueber dem Boden am Punkt und nicht angekommen.
+                while (!gelandet && t.Takt + 1 <= t.Zeit * rate)
+                {
+                    t.Takt++;
+                    float f = t.N <= 0f ? 1f : Mathf.Min(1f, t.Takt / t.N);
+                    var p = t.FlachVon.Lerp(t.FlachNach, f);
+                    float grund = Mathf.Lerp(t.GrundVon, t.GrundNach, f);
+                    float bogen = TruemmerBogen(t, t.Takt);
+                    t.MaxBogen = Mathf.Max(t.MaxBogen, bogen);
+                    int c = Mathf.FloorToInt((p.X - _ox) / TileW), r = Mathf.FloorToInt((p.Y - _oy) / TileH);
+                    int fx = Mathf.PosMod(Mathf.FloorToInt(p.X - _ox), TileW);
+                    int fy = Mathf.PosMod(Mathf.FloorToInt(p.Y - _oy), TileH);
+                    float bodenHoehe = HubOf(c, r, fx, fy);              // 0x4B5CE0
+                    bool angekommen = t.Takt >= t.N;
+                    if (grund + (int)bogen > bodenHoehe && !angekommen) continue;
+                    gelandet = true;
+                    boden = p - new Vector2(0, bodenHoehe);
+                    if (TruemmerBogenAlt && angekommen) boden = t.Nach;
+                }
+            }
+            if (gelandet)
+            {
+                if (TruemmerMitschreiben)
+                    TruemmerGelandet.Add((t.Wurf, t.Brocken, t.Zeit, t.Strecke, t.MaxBogen));
+                if (t.Brocken && !TruemmerAufschlagAus) Aufschlag(boden);   // @0x4AE0DE
+                _truemmer.RemoveAt(i);
+                continue;
+            }
 
             // Der Schweif: jeder dritte Takt ein Rauchball, aber nur bei den
             // Brocken (@0x4AD9AC/@0x4ADD60).
-            if (t.Schweif)
+            if (t.Schweif && TruemmerUhrAlt)
             {
                 t.SchweifAb -= dt;
                 if (t.SchweifAb <= 0f)
@@ -385,15 +556,35 @@ public partial class MapEntityLayer
                         });
                 }
             }
+            else if (t.Schweif)
+            {
+                // ⭐ 04.10.2026: je EFFEKTTAKT gewuerfelt, `rand()%3 == 0`
+                // (@0x4ADD60), und die Wolke laeuft auf derselben Uhr.
+                while (t.SchweifAb + 1f <= t.Zeit * rate)
+                {
+                    t.SchweifAb += 1f;
+                    if (Simulation.Determinism.Roll(3) != 0) continue;
+                    string r = "rauch" + Simulation.Determinism.Roll(3);
+                    if (EffectFrames(r).Count > 0)
+                        _effects.Add(new Effect
+                        {
+                            Pos = TruemmerOrt(t), Kind = r, FrameTime = 1f / EffektTakteJeSekunde,
+                        });
+                }
+            }
             _truemmer[i] = t;
         }
+        SterbendTakt(dt);
     }
+
+    /// <summary>Nur im Pruefstand: gelandete Teile mitschreiben.</summary>
+    internal bool TruemmerMitschreiben;
 
     private void TruemmerZeichnen()
     {
         // Das Bild laeuft mit der Uhr, nicht mit dem Alter des Teils
         // (@0x4ADCF5: `(Uhr + Platz) % Bildzahl`).
-        int uhr = Mathf.FloorToInt(_clock * 20f);
+        int uhr = Mathf.FloorToInt(_clock * (TruemmerUhrAlt ? 20f : EffektTakteJeSekunde));
         for (int i = 0; i < _truemmer.Count; i++)
         {
             var t = _truemmer[i];

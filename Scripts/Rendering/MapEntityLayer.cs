@@ -1009,6 +1009,11 @@ public partial class MapEntityLayer : Node2D
         public bool Dead;
         public float DeadTime;           // seconds since destruction (wreck anim)
 
+        /// <summary>⭐ 04.10.2026 (bug-426) — der Rumpf eines gesprengten
+        /// Fahrzeugs steht noch unter der Wolke (UKOL 100, AKCE 0..5 @0x406EE6).
+        /// Nur BILD: <see cref="Dead"/> ist schon gesetzt. Simulation/Truemmer.cs.</summary>
+        public bool Sterbend;
+
         /// <summary>Wie viele Takte ein UEBERFAHRENER Soldat noch in Block 12
         /// stehen bleibt, bevor er faellt — <c>+0x1C</c> des Originals
         /// (@0x40B73A: <c>8 + rand&amp;3</c>, nur mit der Flagge 0x4F6308).
@@ -2670,10 +2675,17 @@ public partial class MapEntityLayer : Node2D
                     for (int sx = 0; sx < n; sx++)
                     {
                         int p = (ty * tw + (c * n + sx)) * 4;
+                        // ⚠ 04.10.2026 (bug-427): diese Rampe zeichnet nur noch
+                        // --nebel-rampe-alt (und die Uebersicht). Ihre Schuerze
+                        // macht die Rechteckstufen aus seinem Bild; eine kleine
+                        // Abhilfe daran (Verlauf statt Wiederholung, Minimum bei
+                        // Ueberdeckung) war gebaut und gemessen — 18 Bloecke vorher
+                        // wie nachher — und ist wieder heraus. Rendering/NebelKante.cs.
+                        byte a = (byte)(Deckung(zustand, maske, sx, sy) * 255f);
                         _fogPixels[p] = FogR;
                         _fogPixels[p + 1] = FogG;
                         _fogPixels[p + 2] = FogB;
-                        _fogPixels[p + 3] = (byte)(Deckung(zustand, maske, sx, sy) * 255f);
+                        _fogPixels[p + 3] = a;
                     }
                 }
             }
@@ -3318,6 +3330,7 @@ public partial class MapEntityLayer : Node2D
         _originY = GetI(meta, "origin_y");
         if (!meta.ContainsKey("tileset")) return;
         int ts = GetI(meta, "tileset");
+        NebelmaskenLaden(ts);          // ⭐ 04.10.2026 (bug-427), Rendering/NebelKante.cs
         string path = Core.Content.Path($"Buildings/tileset_{ts:00}.json");
         if (!FileAccess.FileExists(path)) return;
         using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
@@ -13168,6 +13181,9 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 14.09.2026 — der Gebaeudetod streicht die Routen mit demselben Streicher
         // wie die Einnahme (0x440190 @C 0x4C9A6C / F 0x4C961C). Simulation/EinnahmeAbschluss.cs.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) RouteGebaeudeStreichen(victim.Slot);
+        // ⭐ 04.10.2026 (bug-426) — Veteranenstimme 143 und Todesklang 400+rand&3
+        // (@0x40B3E3, @0x40B519). Simulation/Truemmer.cs, TodesKlang.
+        if (!victim.IsBuilding && !victim.IsProp && !victim.Dead) TodesKlang(victim);
         victim.Hp = 0;
         victim.Dead = true;
         // ⭐⭐ 09.09.2026 — EIN ZERSTOERTES GEBAEUDE VERLIERT SEINE ART.
@@ -13252,8 +13268,11 @@ public partial class MapEntityLayer : Node2D
             Kind = victim.GameUnitType == 0
                  ? "sprengung" + Simulation.Determinism.Roll(9)
                  : "explosion",
-            FrameTime = 0.04f,
+            // ⭐ 04.10.2026 (bug-426): EIN Bild je Effekttakt — dieselbe Uhr wie
+            // Truemmer, Schweif und Wrack (Simulation/Truemmer.cs, EffektTakte).
+            FrameTime = 1f / EffektTakteJeSekunde,
         });
+        TodSprengbilder++;
 
         // ⭐ 24.08.2026 — und gleich dahinter die TRUEMMER, genau in dieser
         // Reihenfolge: das Original wirft sie unmittelbar nach dem
@@ -13289,11 +13308,12 @@ public partial class MapEntityLayer : Node2D
         // byte[0x9C6FBF + 10*i], solange != 0 — @0x4A9860. Das haben wir noch
         // nicht, steht in OFFENE_FRAGEN.md.)
         if (victim.GameUnitType is not (4 or 5))
-            // the rubble variant is picked from where it fell, so two wrecks side
-            // by side do not look stamped from the same mould — see DrawWreck
-            _effects.Add(new Effect { Pos = victim.Pos, Kind = "wreck",
-                                      FrameTime = 0.25f, Hold = true,
-                                      Variant = victim.Col * 3 + victim.Row });
+        {
+            // ⭐ 04.10.2026 (bug-426) — der Rumpf steht erst 6 Takte unter der
+            // Wolke, DANN liegt das Wrack (@0x406EE6..0x406F63). Truemmer.cs.
+            if (!SterbendAlt && victim.Infantry < 0) SterbendBeginnen(victim);
+            else WrackAnlegen(victim);
+        }
     }
 
     // ---- ANIM.CWA effect sprites ----
@@ -13907,6 +13927,8 @@ public partial class MapEntityLayer : Node2D
             if (fx.Drift != Vector2.Zero) fx.Pos += fx.Drift * dt;
             var frames = EffectFrames(fx.Kind);
             if (frames.Count == 0) { _effects.RemoveAt(i); continue; }
+            // ⭐ 04.10.2026 (bug-426): ein Wrack lebt 2550 Takte (Truemmer.cs)
+            if (fx.Hold && WrackAbgelaufen(fx)) { _effects.RemoveAt(i); continue; }
             if (fx.Time >= frames.Count * fx.FrameTime && !fx.Hold) _effects.RemoveAt(i);
             else _effects[i] = fx;
         }
@@ -13978,6 +14000,7 @@ public partial class MapEntityLayer : Node2D
             var frames = EffectFrames(fx.Kind);
             if (frames.Count == 0) continue;
             if (fx.Kind == "wreck") { DrawWreck(fx, frames); continue; }
+            if (fx.Kind.StartsWith("wrack")) { DrawWrack(fx, frames); continue; }   // bug-426
             int f = Mathf.Min((int)(fx.Time / fx.FrameTime), frames.Count - 1);
             DrawTexture(frames[f], fx.Pos - _fxAnchor[fx.Kind]);
         }
@@ -30720,6 +30743,9 @@ public partial class MapEntityLayer : Node2D
             if (e.Dead)
             {
                 if (e.Infantry >= 0) _leichenDraw.Add(i);   // Wracks macht DrawEffects
+                // ⭐ 04.10.2026 (bug-426): der sterbende Rumpf bleibt im
+                // Zeilendurchgang, bis das Wrack kommt (Simulation/Truemmer.cs).
+                else if (e.Sterbend && !NoUnitOcclusion) _unitDraw.Add(i);
                 continue;
             }
             if (NoUnitOcclusion) continue;
@@ -40615,7 +40641,9 @@ public partial class MapEntityLayer : Node2D
         var oc = OwnerColor(e.Owner);
 
         // Ein gefallener Fusssoldat bleibt liegen, wo er fiel.
-        if (e.Dead)
+        // (Ein sterbendes Fahrzeug faellt durch und wird als Rumpf gezeichnet,
+        // bug-426.)
+        if (e.Dead && !(e.Sterbend && e.Infantry < 0))
         {
             if (e.Infantry >= 0 && _drawSprites)
             {
@@ -41269,8 +41297,14 @@ public partial class MapEntityLayer : Node2D
         // is not watched is dimmed, what was never seen is black
         if (FogActive && _fog != null)
         {
-            if (_fogTex == null || _fogDrawn != _fog.Version) BuildFogTexture();
-            if (_fogTex != null) DrawTextureRect(_fogTex, _fogRect, false);
+            // ⭐ 04.10.2026 (bug-427): die 285 Originalmasken wie 0x4B47A8,
+            // Rendering/NebelKante.cs; --nebel-rampe-alt = die Rampe.
+            if (NebelmaskenAktiv) NebelmaskenZeichnen();
+            else
+            {
+                if (_fogTex == null || _fogDrawn != _fog.Version) BuildFogTexture();
+                if (_fogTex != null) DrawTextureRect(_fogTex, _fogRect, false);
+            }
         }
 
         // rubber-band selection rectangle

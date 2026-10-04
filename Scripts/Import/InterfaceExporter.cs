@@ -670,6 +670,16 @@ public sealed class InterfaceExporter
         // Folge 910, ein Bild (Rahmen 1512). Abladen 0x4C158D: 0x435950(…, 0x60) —
         // Folge 96, sieben Bilder. geschaeftszentrum-lieferung-fable.md §6.
         ("frachter", 910), ("lichtblitz", 96),
+        // ⭐ 04.10.2026 (bug-426) — DIE 16 WRACKSORTEN. Der Wrackzeichner
+        // @0x42D0AD nimmt die Variante rand&15 (@0x406F47) als ANIM-FOLGE
+        // (word[0x7A404A + 4·folge] @0x42D0E2); in ANIM.CWA haben die Folgen
+        // 0..15 je vier Bilder: drei Verfallsstufen (Alter/90 @0x42D0DA) und
+        // die Bodenmarke (Bild +3 @0x42D0F0). Bisher ging nur Folge 0 als
+        // "wreck" hinaus. berichte/nebel-explosionen-fable.md §2.6.
+        ("wrack0", 0), ("wrack1", 1), ("wrack2", 2), ("wrack3", 3),
+        ("wrack4", 4), ("wrack5", 5), ("wrack6", 6), ("wrack7", 7),
+        ("wrack8", 8), ("wrack9", 9), ("wrack10", 10), ("wrack11", 11),
+        ("wrack12", 12), ("wrack13", 13), ("wrack14", 14), ("wrack15", 15),
     };
 
     /// <summary>
