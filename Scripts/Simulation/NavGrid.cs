@@ -1020,6 +1020,42 @@ public sealed class NavGrid
         if (InBounds(c, r)) _ground[Idx(c, r)] = (byte)alt;
     }
 
+    /// <summary>
+    /// ⭐ 04.10.2026 (bug-433) — <b>DIE ZELLEN NACH DEM UNTERGANG.</b>
+    /// <c>likvid typ</c> (@0x406F1B, Tafel <c>0x40A048</c>) schreibt fuer die
+    /// Gattungen 3/4/5 einen festen imap-Wert ueber ein Quadrat ab dem Anker,
+    /// ohne nachzusehen, was vorher dort stand:
+    /// <code>
+    ///   3  @0x407026  0x406C20(x, y, 0xFFFE)   2x2  frei
+    ///   4  @0x407094  0x406C20(x, y, 0xFFFC)   2x2  Wasser
+    ///   5  @0x4070FF  0x406C70(x, y, 0xFFFC)   4x4  Wasser
+    /// </code>
+    /// (0x406C20 schreibt <c>[x·256+y]</c>, <c>+0x100</c>, <c>+1</c>, <c>+0x101</c>;
+    /// 0x406C70 zwei Schleifen 0..3.) Bei uns sind Boden und Belegung getrennt:
+    /// hier nur der BODEN, die Belegung loescht <see cref="ClearOccupant"/>.
+    /// Wie <see cref="BrueckeSetzen"/> ein direkter Schreiber ohne Zwischenspeicher.
+    /// <returns>Wie viele Zellen dabei ihren Boden gewechselt haben.</returns></summary>
+    public int UntergangsBoden(int c, int r, int seite, Ground g)
+    {
+        int n = 0;
+        for (int dx = 0; dx < seite; dx++)
+            for (int dy = 0; dy < seite; dy++)
+            {
+                if (!InBounds(c + dx, r + dy)) continue;
+                int i = Idx(c + dx, r + dy);
+                if (_ground[i] != (byte)g) n++;
+                _ground[i] = (byte)g;
+            }
+        return n;
+    }
+
+    /// <summary>Nur fuer den Pruefstand <c>--schiffstod-check</c>: den Boden
+    /// einer Zelle setzen (und zuruecksetzen).</summary>
+    internal void BodenFuerPruefstand(int c, int r, Ground g)
+    {
+        if (InBounds(c, r)) _ground[Idx(c, r)] = (byte)g;
+    }
+
     /// <summary><c>--wald-bleibt-sperre</c> — die Gegenprobe: ein abgebrannter
     /// Baum sperrt weiter, wie bis zum 01.09.2026.</summary>
     public static bool WaldBleibtSperre;

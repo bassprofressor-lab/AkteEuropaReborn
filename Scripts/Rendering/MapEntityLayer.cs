@@ -13200,6 +13200,10 @@ public partial class MapEntityLayer : Node2D
         // statt zur Ruine zu werden. Siehe Entity.BildArt.
         if (victim.IsBuilding && !victim.IsProp && !BauwerkNur1Bis16) victim.BType = 0;
         victim.DeadTime = 0;
+        // ⭐ 04.10.2026 (bug-433) — die Anker merken, BEVOR das Gitter sie
+        // vergisst: likvid typ schreibt nach 6 Takten an Satz- und Zielzelle
+        // (@0x407026/@0x407094/@0x4070FF). Simulation/Schiffstod.cs.
+        if (SchiffstodNeu(victim)) UntergangMerken(vi, victim);
         victim.Path = null;
         victim.Target = -1;
         if (vi >= 0)
@@ -13264,17 +13268,24 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Nur der Fahrzeugzweig bekommt sie: Fusssoldaten sind oben schon
         // heraus, und fuer Schiffe/Flugzeuge verzweigt das Original woanders
         // hin (Sprungtafel 0x40B858).
-        _effects.Add(new Effect
+        // ⭐⭐ 04.10.2026 (bug-433) — Gattung 3/4/5 bekommt ihr eigenes grosses
+        // Todesbild: 0x4AEBA0 (3/4) bzw. 0x4AED80 (5), Tafel 0x40B858.
+        // Simulation/Schiffstod.cs; Gegenschalter --schiffstod-alt.
+        if (SchiffstodNeu(victim)) SchiffsTodesbild(victim);
+        else
         {
-            Pos = victim.Pos - new Vector2(0, 6),
-            Kind = victim.GameUnitType == 0
-                 ? "sprengung" + Simulation.Determinism.Roll(9)
-                 : "explosion",
-            // ⭐ 04.10.2026 (bug-426): EIN Bild je Effekttakt — dieselbe Uhr wie
-            // Truemmer, Schweif und Wrack (Simulation/Truemmer.cs, EffektTakte).
-            FrameTime = 1f / EffektTakteJeSekunde,
-        });
-        TodSprengbilder++;
+            _effects.Add(new Effect
+            {
+                Pos = victim.Pos - new Vector2(0, 6),
+                Kind = victim.GameUnitType == 0
+                     ? "sprengung" + Simulation.Determinism.Roll(9)
+                     : "explosion",
+                // ⭐ 04.10.2026 (bug-426): EIN Bild je Effekttakt — dieselbe Uhr wie
+                // Truemmer, Schweif und Wrack (Simulation/Truemmer.cs, EffektTakte).
+                FrameTime = 1f / EffektTakteJeSekunde,
+            });
+            TodSprengbilder++;
+        }
 
         // ⭐ 24.08.2026 — und gleich dahinter die TRUEMMER, genau in dieser
         // Reihenfolge: das Original wirft sie unmittelbar nach dem
@@ -13309,13 +13320,25 @@ public partial class MapEntityLayer : Node2D
         //   Gattung 5 Schiff 4x4 @0x4070FF  -> alle vier Zellen := 0xFFFC
         //
         // Ein versenktes Schiff laesst also nichts zurueck — kein Wrack, kein
-        // Oelfleck, keine Truemmer; nur die Einschlagsanimation des Geschosses
-        // und den Klang. Was bleibt, ist Wasser.
+        // Oelfleck. Was bleibt, ist Wasser.
+        // ⚠ 04.10.2026 (bug-433): hier stand auch »keine Truemmer; nur die
+        // Einschlagsanimation und den Klang«. Falsch — die Todesroutine wirft
+        // fuer 3/4 ueber 0x4AEBA0, fuer 5 ueber 0x4AED80 Wolken, Flammen, Glut
+        // und bis zu 129 Teile. Simulation/Schiffstod.cs.
         //
         // (Die Wracks der Fahrzeuge altern uebrigens: alle 10 Takte +1 auf
         // byte[0x9C6FBF + 10*i], solange != 0 — @0x4A9860. Das haben wir noch
         // nicht, steht in OFFENE_FRAGEN.md.)
-        if (victim.GameUnitType is not (4 or 5))
+        // ⭐ 04.10.2026 (bug-433) — auch ein SCHIFF steht 6 Takte (+0x15 zaehlt
+        // fuer jede Gattung ausser 1, @0x406ECA..0x406EF0), dann schreibt likvid
+        // typ seine Zellen: 3 frei 2x2, 4 Wasser 2x2, 5 Wasser 4x4. Ein Wrack
+        // legt keine dieser Gattungen (LegtWrack). Simulation/Schiffstod.cs.
+        if (SchiffstodNeu(victim))
+        {
+            if (!SterbendAlt) SterbendBeginnen(victim);
+            else UntergangAbschliessen(victim);
+        }
+        else if (victim.GameUnitType is not (4 or 5))
         {
             // ⭐ 04.10.2026 (bug-426) — der Rumpf steht erst 6 Takte unter der
             // Wolke, DANN liegt das Wrack (@0x406EE6..0x406F63). Truemmer.cs.

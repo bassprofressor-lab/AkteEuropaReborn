@@ -12,6 +12,10 @@ namespace AkteEuropaReborn.Rendering;
 /// <c>--truemmer-aufschlag-aus</c>, <c>--todesklang-alt</c>,
 /// <c>--sterbend-alt</c>, <c>--wrack-alt</c>, <c>--wrack-gattung-alt</c>
 /// (bug-432: auch Gattung 2/3 legt ein Wrack).</item>
+/// <item>⭐ bug-433: <c>--schiffstod-check</c> (Simulation/Schiffstod.cs), mit
+/// <c>--shot=…png</c> ein Bildlauf eines Untergangs (<c>…_vorher.png</c>,
+/// <c>…_t00.png</c> … <c>…_t60.png</c>, <c>…_nachher.png</c>); waehlbar
+/// <c>--schiffstod-gattung=3|4|5</c>. Gegenschalter <c>--schiffstod-alt</c>.</item>
 /// <item><c>--nebelkante-check[=c,r]</c> (Rendering/NebelKante.cs); mit
 /// <c>--shot=…png</c> das Bild an seiner Stelle (K1: 11,47, Zoom 1,6).</item>
 /// <item>Gegenschalter <c>--nebel-rampe-alt</c>;
@@ -21,7 +25,8 @@ namespace AkteEuropaReborn.Rendering;
 /// </summary>
 public partial class MapViewer
 {
-    private bool _truemmerCheck, _nebelkanteCheck;
+    private bool _truemmerCheck, _nebelkanteCheck, _schiffstodCheck;
+    private int _schiffstodGattung;
     private Vector2I? _nebelkanteOrt;
 
     /// <summary>true = Schalter erkannt.</summary>
@@ -39,7 +44,11 @@ public partial class MapViewer
             case "--wrack-gattung-alt": MapEntityLayer.WrackGattungAlt = true; return true;   // bug-432
             case "--nebel-rampe-alt": MapEntityLayer.NebelRampeAlt = true; return true;
             case "--nebelkante-check": _nebelkanteCheck = true; return true;
+            case "--schiffstod-check": _schiffstodCheck = true; return true;              // bug-433
+            case "--schiffstod-alt": MapEntityLayer.SchiffstodAlt = true; return true;   // bug-433
         }
+        if (a.StartsWith("--schiffstod-gattung=") && int.TryParse(a["--schiffstod-gattung=".Length..], out int sg))
+        { _schiffstodGattung = sg; return true; }
         if (a.StartsWith("--nebelkante-check="))
         {
             var q = a["--nebelkante-check=".Length..].Split(',');
@@ -58,6 +67,13 @@ public partial class MapViewer
         {
             if (_shotPath.Length > 0) { _ = TruemmerBildLauf(); return true; }
             GD.Print(_entities.TruemmerCheck());
+            GetTree().Quit(0);
+            return true;
+        }
+        if (_schiffstodCheck)
+        {
+            if (_shotPath.Length > 0) { _ = SchiffstodBildLauf(); return true; }
+            GD.Print(_entities.SchiffstodCheck());
             GetTree().Quit(0);
             return true;
         }
@@ -90,6 +106,32 @@ public partial class MapViewer
             string pfad = _shotPath.Replace(".png", $"_t{t:00}.png");
             GetViewport().GetTexture().GetImage().SavePng(pfad);
             GD.Print($"truemmer-bild: {pfad}");
+        }
+        GetTree().Quit(0);
+    }
+
+    /// <summary>bug-433: ein Untergang zu mehreren Zeitpunkten, Baum angehalten.
+    /// »vorher« vor dem Tod, »t06« = Rumpf eben weg, »nachher« nach 150 Takten.</summary>
+    private async System.Threading.Tasks.Task SchiffstodBildLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetTree().Paused = true;
+        var p = _entities.SchiffstodBildVorbereiten(_schiffstodGattung, out int vi);
+        if (p == null) { GD.Print("schiffstod-bild: keine Einheit der Gattung 3/4/5"); GetTree().Quit(0); return; }
+        _camera.Position = p.Value; _camera.Zoom = new Vector2(2f, 2f);
+        GD.Print($"schiffstod-bild: {_entities.SchiffstodBildName(vi)}");
+        for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetViewport().GetTexture().GetImage().SavePng(_shotPath.Replace(".png", "_vorher.png"));
+        _entities.TruemmerBildSprengen(vi);
+        int stand = 0;
+        foreach (int t in new[] { 0, 2, 4, 6, 10, 16, 24, 40, 60, 150 })
+        {
+            _entities.TruemmerBildTakte(t - stand);
+            stand = t;
+            for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string pfad = _shotPath.Replace(".png", t == 150 ? "_nachher.png" : $"_t{t:00}.png");
+            GetViewport().GetTexture().GetImage().SavePng(pfad);
+            GD.Print($"schiffstod-bild: {pfad}");
         }
         GetTree().Quit(0);
     }

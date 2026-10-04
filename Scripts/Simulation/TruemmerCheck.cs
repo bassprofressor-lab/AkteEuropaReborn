@@ -94,6 +94,7 @@ public partial class MapEntityLayer
                 e.Sterbend = false;
                 _sterbend.RemoveAt(i);
                 if (LegtWrack(e)) WrackAnlegen(e);
+                UntergangAbschliessen(e);   // bug-433: Gattung 3/4/5, Simulation/Schiffstod.cs
                 continue;
             }
             _sterbend[i] = (e, z);
