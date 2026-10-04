@@ -741,9 +741,16 @@ public static class PortraitBank
     /// über <c>component_stats +0x0D</c> braucht nur, wer von einem BAUTEIL
     /// kommt (die zwei Fenster).</para>
     /// </summary>
-    public static int DrawPictures(CanvasItem ci, Rect2 box, int chassisPic, int turretPic)
+    /// <param name="mulde">⭐ 04.10.2026, bug-420: der BEDIENBLOCK hat keine Mulde. Sein
+    /// Zeichner ruft den Bildzeichner <c>0x4508A0</c> @<c>0x4701A9</c> ohne <c>fill_rect</c>
+    /// darunter, der Blit <c>0x4AC1B0</c> übergeht 0xFF (@<c>0x4AC283</c>) — durch die
+    /// durchsichtigen Punkte scheint PANEL.DTA, dort einfarbig (55,47,47) = 0x2C (3600 von
+    /// 3600 Punkten). Die 0x2F-Mulde gehört den Kästen in Erstellung/Basis
+    /// (<c>0x456A50(x,y,3,3)</c>) und bleibt dort. Siehe berichte/infofenster-fable.md §1.</param>
+    public static int DrawPictures(CanvasItem ci, Rect2 box, int chassisPic, int turretPic,
+                                   bool mulde = true)
     {
-        ci.DrawRect(box, Fill);
+        if (mulde) ci.DrawRect(box, Fill);
         int n = 0;
         if (Blit(ci, box, Picture(chassisPic <= 0 ? -1 : chassisPic))) n++;
         if (Blit(ci, box, Picture(turretPic <= 0 ? -1 : turretPic))) n++;

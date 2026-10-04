@@ -37,6 +37,13 @@ public partial class MapEntityLayer : Node2D
         public int Slot, Col, Row, Owner, Team, UnitType, Hp, HpMax, Elev;
         public int Mark = -1;      // record +0x43 — the campaign's handle on one unit
 
+        /// <summary>⭐ 04.10.2026, bug-421 — Satzwort <b>+0x3E</b>, die ENTWURFSNUMMER, nach der
+        /// der Bedienblock die Einheit benennt (<c>0x4701CF</c>, berichte/infofenster-fable.md §2).
+        /// Auf den gelieferten Karten gleich <see cref="Mark"/> (+0x43) — 1969 von 1969 Land-,
+        /// Fuss- und Schiffseinheiten, nachgezaehlt am 04.10. —, aber ein Missionsskript
+        /// schreibt nur die Marke um, darum ein eigenes Feld. −1 = unbekannt.</summary>
+        public int Entwurf3E = -1;
+
         /// <summary>
         /// <b>CPU0 und CPU1 — der KI-Zustand, den das Original IM
         /// EINHEITENSATZ führt.</b>
@@ -2897,6 +2904,7 @@ public partial class MapEntityLayer : Node2D
         _panel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
         _panel.AddThemeConstantOverride("outline_size", 6);
         layer.AddChild(_panel);
+        BlockZeilenAnlegen(layer);          // bug-421/422, Rendering/Infofenster.cs
         BuildPanelBars(layer);
     }
 
@@ -3399,6 +3407,17 @@ public partial class MapEntityLayer : Node2D
         }
         _ox = ox; _oy = oy;
         _mission = GetS(meta, "mission", name).ToUpper();
+        // bug-422: der Block schreibt den Kartenkopf so, wie er dasteht (0x77CAD0).
+        _missionRoh = GetS(meta, "mission", name);
+        // bug-428: der Puffer 0x77CAD0 bleibt NICHT der Kartenkopf — der Lader
+        // liest ihn zwar (fread 21 Byte @0x41E254), ueberschreibt ihn aber gleich
+        // danach mit dem Eintrag word[0x539934] (Kampagnenzaehler) der festen
+        // Tafel 0x4F81C0 (21 Byte je Eintrag: »Test Name«, »Mission 1 «…»Mission 33«,
+        // dann Gefechtskarten) @0x41E25E…0x41E295. Im Let's Play steht darum
+        // »Mission 1« im Block, nicht »Airborne Ambush«. Im Gefecht bleibt der
+        // Kartenkopf (UNSERE Setzung, die Gefechtsnummern sind nicht zugeordnet).
+        if (UI.SkirmishSetup.CampaignMission > 0 && !MissionsnameAlt)
+            _missionRoh = $"Mission {UI.SkirmishSetup.CampaignMission}";
 
         // The music. It was exported and playable all along, but nothing ever
         // started it outside the sound probe — which is why the game was
@@ -10094,8 +10113,17 @@ public partial class MapEntityLayer : Node2D
         _uiFontSize = size;
         _panel.AddThemeFontOverride("font", font);
         _panel.AddThemeFontSizeOverride("font_size", size);
-        _panel.AddThemeConstantOverride("line_spacing", 0);
+        // ⭐ 04.10.2026, bug-423: mit der richtig grossen Schrift ist eine Zeile
+        // lineHeight 15·2 = 30 Punkte hoch; der Block des Originals setzt seine
+        // Zeilen aber im 13er-Schritt (Gruppe 45/58/71/84/97) = 26 Schirmpunkte.
+        // Darum −4. Unter --schrift-unskaliert der alte Wert 0.
+        _panel.AddThemeConstantOverride("line_spacing",
+            UI.WindowChrome.SchriftUnskaliert ? 0 : -(15 - LegacyGlyph) * size / LegacyGlyph);
+        BlockZeilenLage();
     }
+
+    /// <summary>Die Glyphhöhe von FONT.CWD (13), zu <c>lineHeight 15</c> der .fnt.</summary>
+    private const int LegacyGlyph = 13;
 
     /// <summary>
     /// Place the info text inside the recessed display box of the original
@@ -10107,6 +10135,7 @@ public partial class MapEntityLayer : Node2D
     {
         _panelTextOn = on;
         _panel.Visible = on;
+        if (_blockZeilen != null) _blockZeilen.Visible = on;
     }
 
     private bool _panelTextOn = true;
@@ -10155,6 +10184,7 @@ public partial class MapEntityLayer : Node2D
         _panel.ClipText = true;
         _panel.AddThemeConstantOverride("outline_size", 0);
         PlacePanelBars(box);
+        BlockZeilenLage();
     }
 
     /// <summary>
@@ -19560,9 +19590,12 @@ public partial class MapEntityLayer : Node2D
             aus.Add(new UI.UnitListView.Zeile
             {
                 Rang = e.Rating28,
-                Name = LabelOf(e),
+                // bug-421: auch die Liste nennt den ENTWURF (0x51CE22, Kopf von
+                // UnitListView) — sonst hiesse dieselbe Einheit im Block »Panzer« und hier
+                // »Schwere Bordkanone«. --panelname-alt: der alte Name.
+                Name = PanelnameAlt ? LabelOf(e) : EntwurfsName(e),
                 Hp = e.Hp, HpMax = e.HpMax,
-                Aufbauteil = MountName(e),
+                Aufbauteil = AufbauteilName(e),   // bug-423: kurzer EXE-Name, --aufbauteil-alt
                 Fahrwerk = fahrwerk.StartsWith('?') ? "" : fahrwerk,
                 Verbesserung = verbess.StartsWith('?') ? "" : verbess,
                 Ammo = e.AmmoMax > 0 ? e.Ammo : -1,
@@ -32175,6 +32208,7 @@ public partial class MapEntityLayer : Node2D
             // ihr im Menue »Angreifen« und in der Mitnahmeliste der Platz.
             // Gegenschalter --marke-alt.
             Mark = MarkeAlt ? -1 : d.Slot >= 0 ? d.Slot % 200 : -1,
+            Entwurf3E = d.Slot >= 0 ? d.Slot % 200 : -1,   // bug-421: 0x4B1AA3 schreibt +0x3E
             Comp0D = MarkeAlt ? 0 : d.Weapon is > 0 and < 50 ? d.Weapon : 0,
             Comp0F = MarkeAlt ? 0 : d.Propulsion,
             // ⭐ 30.08.2026 — sie VERLÄSST GERADE das Gebäude, UKOL 51. Das
@@ -32377,6 +32411,7 @@ public partial class MapEntityLayer : Node2D
             Part = PartRowOf(d.Weapon),
             Chassis = d.Derived.ChassisComponent, GameUnitType = TypeOfChassis(d.Propulsion),
             Mark = typ,                       // record +0x43, written by create_unit
+            Entwurf3E = typ,                  // bug-421: V — create_unit schreibt +0x3E wie +0x43 (nicht gelesen)
             // ⭐ 13.09.2026 — +0x0D/+0x0F wie beim Fabrik-Aufsteller (0x4B1840);
             // ⚠ fuer create_unit 0x4B34E0 ANGENOMMEN, nicht gelesen. --marke-alt.
             Comp0D = MarkeAlt ? 0 : d.Weapon is > 0 and < 50 ? d.Weapon : 0,
@@ -40052,6 +40087,9 @@ public partial class MapEntityLayer : Node2D
 
     private void UpdatePanel()
     {
+        // bug-421/422: die Zeilen an festen Blockpunkten gehoeren dem Leerzweig und
+        // Zeile 2 einer Einheit; jeder andere Zweig zeigt sie nicht.
+        _blockZeilen?.Setze(null);
         // Ein angewaehltes FLUGZEUG: Name, Art, Huelle, Munition und Sprit —
         // dieselben Groessen, die der Block auch fuer eine Einheit zeigt. Ohne
         // diesen Zweig stuende neben dem Bild "KEINE AUSWAHL".
@@ -40071,10 +40109,9 @@ public partial class MapEntityLayer : Node2D
         }
         if (_selected < 0)
         {
-            _panel.Visible = _panelTextOn;
-            PanelHoehe(false);
-            _panel.Text = MissionSummaryText();
-            ShowPanelBars(null);
+            // ⭐ 04.10.2026, bug-422 — sechs Zeilen an festen Punkten statt eines
+            // Fliesstexts im 34-Punkte-Streifen. Siehe Rendering/Infofenster.cs.
+            ZeigeLeerzweig();
             return;
         }
         // Mehr als eine Einheit gewaehlt: das Original zeigt dann NICHT die
@@ -40129,6 +40166,17 @@ public partial class MapEntityLayer : Node2D
         if (e.IsProp)
         {
             _panel.Text = $"PROP {e.UnitType}\nZELLE {e.Col},{e.Row}\nHOEHE {e.Elev}";
+        }
+        else if (e.IsBuilding && !GebaeudetextImBlock)
+        {
+            // ⭐⭐ 04.10.2026, bug-422 — EIN GEWAEHLTES GEBAEUDE ZEIGT IM BLOCK DIE
+            // MISSIONSZEILEN. Die Weiche des Zeichners (0x470107/0x4705F4/0x470C10)
+            // kennt nur Einheit (< 8000), Gruppe (10000) und Flugzeugplatz
+            // (20000..20299); 8000..9999 faellt mit 0xFFFF nach 0x470E76. Der Block
+            // liest die Gebaeudetafel nicht (0 Treffer in 5048 Byte). Der Text
+            // darunter ist UNSERER und kommt mit --gebaeudetext-im-block zurueck.
+            ZeigeLeerzweig();
+            return;
         }
         else if (e.IsBuilding)
         {
@@ -40215,9 +40263,19 @@ public partial class MapEntityLayer : Node2D
             // und »keine Munition« sind der einzige Fall, in dem ein leerer
             // Balken allein zu wenig ist — das Spiel haelt die Einheit dann an
             // (@0x407ab8), und das gehoert gesagt.
-            _panel.Text =
-                $"{LabelOf(e).ToUpper()}\n" +
-                (warn == st ? "" : warn);
+            // ⭐ 04.10.2026, bug-421 — Rangzeichen + ENTWURFSname, so geschrieben
+            // wie in sec47 (0x4701CF..0x4702A8); die Warnung (unsere) und die
+            // Ausruestung (0x4702C9) stehen als Zeile 2 an (11,122). Siehe
+            // Rendering/Infofenster.cs. --panelname-alt: der alte Text.
+            if (PanelnameAlt || !BlockZeilenMoeglich)
+                _panel.Text =
+                    $"{BlockName(e)}\n" +
+                    (warn == st ? "" : warn);
+            else
+            {
+                _panel.Text = BlockName(e);
+                BlockZeile2Setzen(BlockZeile2(e, warn == st ? "" : warn));
+            }
             ShowPanelBars(e);
         }
         else

@@ -518,12 +518,53 @@ public static class WindowChrome
                 var bmp = new FontFile();
                 if (bmp.LoadBitmapFont(path) == Error.Ok) _font = bmp;
             }
+            if (_font != null) SchriftEinrichten(_font);
             return _font;
         }
     }
 
     private static Font? _font;
     private static bool _fontTried;
+
+    /// <summary>
+    /// ⭐⭐ 04.10.2026, bug-423 (KayelGee: »die Schriftgrößen füllen ihre Boxen
+    /// nicht gut aus«, <c>berichte/infofenster-fable.md</c> §4) — <b>die
+    /// Bitmapschrift darf wachsen.</b>
+    ///
+    /// <para>FONT.CWD hat 13-Punkt-Glyphen, Vorschub = Glyphbreite
+    /// (<c>0x4BA1C0</c>, <c>return x + w</c>); das Original zeichnet Block und
+    /// Fenster 1:1 — <b>Schrift : Kachel = 13 : 20</b> in jeder Auflösung. Wir
+    /// zeichnen Block und Fenster mit <c>Scale = 2</c> und fragen die Schrift mit
+    /// <c>font_size 26</c> an. ⚠ Eine Bitmapschrift hat aber genau EINE Größe, und
+    /// Godot zeichnet sie in dieser Größe, egal was <c>font_size</c> sagt — bis
+    /// <c>FixedSizeScaleMode</c> das Vergrößern erlaubt (so schon
+    /// <c>BriefingScreen.cs</c> seit dem 18.08.). Ohne diese Zeile stand überall
+    /// <b>13 : 40</b> — halb so groß wie im Original.</para>
+    ///
+    /// <para><c>IntegerOnly</c>: nur ganze Vielfache, die Glyphen bleiben
+    /// scharf. Gesetzt hier (Kachelfenster) und in
+    /// <c>MapViewer.ApplyLegacyFont</c> (Bedienblock, HUD, Leisten) — die zwei
+    /// Stellen laden die Datei je selbst (<c>LoadBitmapFont</c> gibt jedes Mal
+    /// ein eigenes Objekt).</para>
+    ///
+    /// <para>Gegenschalter <c>--schrift-unskaliert</c>: die Vorgabe
+    /// <c>Disable</c>, also der Stand bis zum 04.10.2026. Er wird hier selbst aus
+    /// der Befehlszeile gelesen, weil die Schrift VOR dem Schalterleser des
+    /// Kartenschirms geladen wird (<c>ApplyLegacyFont</c> läuft in <c>_Ready</c>
+    /// vor <c>ParseCmdline</c>).</para>
+    /// </summary>
+    public static void SchriftEinrichten(Font f)
+    {
+        if (f is FontFile ff)
+            ff.FixedSizeScaleMode = SchriftUnskaliert
+                ? TextServer.FixedSizeScaleMode.Disable
+                : TextServer.FixedSizeScaleMode.IntegerOnly;
+    }
+
+    /// <summary><c>--schrift-unskaliert</c> — siehe <see cref="SchriftEinrichten"/>.</summary>
+    public static bool SchriftUnskaliert
+        => _schriftUnskaliert ??= System.Array.IndexOf(Core.CommandLine.Args, "--schrift-unskaliert") >= 0;
+    private static bool? _schriftUnskaliert;
 
     /// <summary>Die Zellhöhe der Originalschrift (FONT.CWD, 13 Punkte).</summary>
     public const int FontCell = 13;

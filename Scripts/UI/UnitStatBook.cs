@@ -171,6 +171,17 @@ public static class UnitStatBook
         return Import.Cp437.GetString(r, 0x02, 11);
     }
 
+    /// <summary>⭐ 04.10.2026, bug-421 — das Byte <b>+0x01</b> einer Bauteilzeile, die Zahl
+    /// in der Klammer der zweiten Blockzeile (<c>0x4702C9</c>). ⚠ Das Original liest die
+    /// Forschungskopie JE SPIELER; wir haben hier die Tafel der EXE, in der +0x01 überall
+    /// 0 ist (V: die Stufe). −1, wenn es die Zeile nicht gibt.</summary>
+    public static int ComponentStufe(int row)
+    {
+        Load();
+        if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r)) return -1;
+        return r[0x01];
+    }
+
     public static string ComponentLongLabel(int row)
     {
         Load();

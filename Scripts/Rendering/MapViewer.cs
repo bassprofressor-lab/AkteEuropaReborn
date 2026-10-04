@@ -6588,8 +6588,10 @@ _mausProbePunkt = karte;
 
         public override void _Draw()
         {
+            // ⭐ 04.10.2026, bug-420 — OHNE Mulde: PANEL.DTA scheint durch, wie im
+            // Original. --bildmulde-alt: die 0x2F-Mulde wie bis heute.
             Drawn = UI.PortraitBank.DrawPictures(this, new Rect2(Vector2.Zero, Size),
-                                                 _chassisPic, _turretPic);
+                                                 _chassisPic, _turretPic, mulde: BildmuldeAlt);
         }
 
         public string WatchLine()
@@ -7710,8 +7712,23 @@ _mausProbePunkt = karte;
             GD.Print("MapViewer: legacy font not imported yet — using the default");
             return;
         }
+        // ⭐ 04.10.2026, bug-423 — die 13-Punkt-Bitmapschrift darf auf 26 wachsen;
+        // ohne das zeichnete Godot sie in 13 Punkten in den 2x-Block. Siehe
+        // UI.WindowChrome.SchriftEinrichten, Gegenschalter --schrift-unskaliert.
+        UI.WindowChrome.SchriftEinrichten(font);
         int size = LegacyFontCell * LegacyFontScale;
-        _hud.AddThemeFontOverride("font", font);
+        // ⚠ UNSERE Setzung (04.10.2026, bug-423): die AUFTRAGSPLATTE oben links behaelt die
+        // bisherige, unvergroesserte Schrift. Sie ist keine Box des Originals (Spielerwunsch
+        // 14.08.), und in voller Groesse deckte sie auf K21 sechs Zeilen hoch die halbe
+        // Karte zu (Bild 04.10.). Eine eigene Kopie, damit Block und Leisten wachsen.
+        Font hudFont = font;
+        if (!UI.WindowChrome.SchriftUnskaliert && font is FontFile hudFf
+            && hudFf.Duplicate() is FontFile hudKopie)
+        {
+            hudKopie.FixedSizeScaleMode = TextServer.FixedSizeScaleMode.Disable;
+            hudFont = hudKopie;
+        }
+        _hud.AddThemeFontOverride("font", hudFont);
         _hud.AddThemeFontSizeOverride("font_size", size);
         _hud.AddThemeConstantOverride("outline_size", 0);
         _hud.AddThemeConstantOverride("line_spacing", 2 * LegacyFontScale);
@@ -8198,7 +8215,38 @@ _mausProbePunkt = karte;
             return;
         }
         _hud.Text = obj.Length > 0 ? _hudBase + "\n" + obj : _hudBase;
-        _hudBg.Size = _hud.GetMinimumSize() + new Vector2(16, 10);
+        HudUmbruch();
+    }
+
+    /// <summary>
+    /// ⭐ 04.10.2026, bug-423 (Maße nachgezogen) — <b>die Auftragsplatte bricht um, statt aus
+    /// dem Schirm zu laufen.</b> Mit der richtig großen Schrift ist die Zeile
+    /// »AUFTRAG … ZIELE … OFFEN: …« doppelt so breit und lief auf K1 rechts über den Rand
+    /// (Bild 04.10.). Die Platte ist UNSERE (Spielerwunsch 14.08.); das Original hat sie
+    /// nicht. Bricht nur um, wenn die Zeile nicht passt — unter <c>--schrift-unskaliert</c>
+    /// passt sie wie bisher.
+    /// </summary>
+    private void HudUmbruch()
+    {
+        float max = GetViewportRect().Size.X - 2 * _hud.Position.X;
+        _hud.AutowrapMode = TextServer.AutowrapMode.Off;
+        _hud.CustomMinimumSize = Vector2.Zero;
+        var frei = _hud.GetMinimumSize();
+        if (max > 0 && frei.X > max)
+        {
+            _hud.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            _hud.CustomMinimumSize = new Vector2(max, 0);
+            _hud.Size = new Vector2(max, 0);
+            _hud.ResetSize();
+            float h = _hud.GetLineCount() * _hud.GetLineHeight()
+                      + Mathf.Max(0, _hud.GetLineCount() - 1)
+                        * _hud.GetThemeConstant("line_spacing");
+            _hud.Size = new Vector2(max, h);
+            _hudBg.Size = new Vector2(max, h) + new Vector2(16, 10);
+            return;
+        }
+        _hud.ResetSize();
+        _hudBg.Size = frei + new Vector2(16, 10);
     }
 
     private string _hudBase = "";
@@ -9019,6 +9067,9 @@ _mausProbePunkt = karte;
     /// das ist er.</summary>
     private void ZeigeLokator(int zeile)
     {
+        // ⭐ 04.10.2026, bug-424 — mit den Kacheln des Originals (UI/LokatorChrome.cs);
+        // der alte Aufbau unten mit --lokatorfenster-alt oder ohne Kachelbogen.
+        if (!UI.LokatorChrome.Alt && UI.LokatorChrome.Usable) { LokatorChromeZeigen(zeile); return; }
         if (_locator == null)
         {
             _locatorLayer = new CanvasLayer { Layer = 94 };
