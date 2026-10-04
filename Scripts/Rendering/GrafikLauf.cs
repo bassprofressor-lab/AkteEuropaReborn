@@ -10,7 +10,8 @@ namespace AkteEuropaReborn.Rendering;
 /// (<c>…_t00.png</c> … <c>…_t60.png</c>, Effekttakte).</item>
 /// <item>Gegenschalter <c>--truemmer-bogen-alt</c>, <c>--truemmer-uhr-alt</c>,
 /// <c>--truemmer-aufschlag-aus</c>, <c>--todesklang-alt</c>,
-/// <c>--sterbend-alt</c>, <c>--wrack-alt</c>.</item>
+/// <c>--sterbend-alt</c>, <c>--wrack-alt</c>, <c>--wrack-gattung-alt</c>
+/// (bug-432: auch Gattung 2/3 legt ein Wrack).</item>
 /// <item><c>--nebelkante-check[=c,r]</c> (Rendering/NebelKante.cs); mit
 /// <c>--shot=…png</c> das Bild an seiner Stelle (K1: 11,47, Zoom 1,6).</item>
 /// <item>Gegenschalter <c>--nebel-rampe-alt</c>;
@@ -35,6 +36,7 @@ public partial class MapViewer
             case "--todesklang-alt": MapEntityLayer.TodesklangAlt = true; return true;
             case "--sterbend-alt": MapEntityLayer.SterbendAlt = true; return true;
             case "--wrack-alt": MapEntityLayer.WrackAlt = true; return true;
+            case "--wrack-gattung-alt": MapEntityLayer.WrackGattungAlt = true; return true;   // bug-432
             case "--nebel-rampe-alt": MapEntityLayer.NebelRampeAlt = true; return true;
             case "--nebelkante-check": _nebelkanteCheck = true; return true;
         }

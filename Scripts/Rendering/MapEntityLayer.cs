@@ -13297,8 +13297,14 @@ public partial class MapEntityLayer : Node2D
         // ueber 0x40A048 nach der Gattung, und nur EIN Zweig legt ein Wrack an:
         //
         //   Gattung 0 Fahrzeug   @0x406F3D  -> Wrack (0x4A97C0, Tafel 0x9C6FB8)
-        //   Gattung 1/2 Inf/Flug @0x40716B  -> keines
-        //   Gattung 3            @0x407026  -> Zelle := 0xFFFE (leer)
+        //   Gattung 1 Fussvolk   @0x40716B  -> keines (Leiche ueber 0x40B270)
+        //   Gattung 2 (unbelegt) @0x40716B  -> keines, nicht einmal die Zelle
+        //   Gattung 3 Rumpf 138  @0x407026  -> 2x2 Zellen := 0xFFFE (0x406C20)
+        //   ⭐ 04.10.2026 (bug-432): die Zeile »Gattung 1/2 Inf/Flug« war halb
+        //   falsch — Gattung 2 ist KEIN Flugzeug (die haben eigene 68-Byte-Saetze,
+        //   AIR_RE.md) und kommt auf keiner der 36 Karten vor; Gattung 3 traegt
+        //   nur Rumpf 138 (5x, Spieler 2 auf 3/5/6/7/10.DM). Beide legten bei uns
+        //   trotzdem ein Wrack an. Simulation/TruemmerCheck.cs, LegtWrack.
         //   Gattung 4 Schiff 2x2 @0x407094  -> Zelle := 0xFFFC (WASSER)
         //   Gattung 5 Schiff 4x4 @0x4070FF  -> alle vier Zellen := 0xFFFC
         //
@@ -13313,8 +13319,11 @@ public partial class MapEntityLayer : Node2D
         {
             // ⭐ 04.10.2026 (bug-426) — der Rumpf steht erst 6 Takte unter der
             // Wolke, DANN liegt das Wrack (@0x406EE6..0x406F63). Truemmer.cs.
+            // Der Zaehler +0x15 (@0x406EE6) laeuft fuer JEDE Gattung, erst danach
+            // verzweigt likvid typ — also steht auch ein Rumpf der Gattung 2/3
+            // seine 6 Takte, und SterbendTakt fragt dann LegtWrack (bug-432).
             if (!SterbendAlt && victim.Infantry < 0) SterbendBeginnen(victim);
-            else WrackAnlegen(victim);
+            else if (LegtWrack(victim)) WrackAnlegen(victim);
         }
     }
 

@@ -1124,6 +1124,18 @@ public partial class MapEntityLayer : Node2D
             if (e.IsBuilding || e.IsProp || e.Dead || e.HpMax <= 0) continue;
             victims.Add(i);
         }
+        // ⭐ 04.10.2026 (bug-432) — dazu JEDE Einheit der Gattung 2/3, die es auf
+        // der Karte gibt (Rumpf 138 auf 3/5/6/7/10.DM), sonst kaeme sie unter den
+        // ersten zwoelf nie vor und die Wrackzeile saehe die Abweichung nicht.
+        int g23 = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.HpMax <= 0 || e.Infantry >= 0) continue;
+            if (e.GameUnitType is not (2 or 3)) continue;
+            g23++;
+            if (!victims.Contains(i)) victims.Add(i);
+        }
         if (victims.Count == 0) return "corpse-check: keine Einheiten auf dieser Karte";
 
         int foot = 0;
@@ -1162,7 +1174,9 @@ public partial class MapEntityLayer : Node2D
 
         int wreckFx = 0;
         foreach (var fx in _effects) if (fx.Kind == "wreck" || fx.Kind.StartsWith("wrack")) wreckFx++;
-        wreckFx += _sterbend.Count;   // bug-426: das Wrack kommt 6 Takte nach dem Tod
+        // bug-426: das Wrack kommt 6 Takte nach dem Tod — aber nur, wo eines kommt
+        // (bug-432: LegtWrack, sonst zaehlte ein sterbender Rumpf 138 als Wrack)
+        foreach (var st in _sterbend) if (LegtWrack(st.E)) wreckFx++;
 
         sb.AppendLine($"corpse-check: {victims.Count} Einheiten gefallen " +
                       $"({foot} zu Fuss, {victims.Count - foot} Fahrzeuge)");
@@ -1176,18 +1190,21 @@ public partial class MapEntityLayer : Node2D
         // Gattung 1/2 @0x40716B keines, 3 @0x407026, 4/5 @0x407094/@0x4070FF
         // Wasser). K1 toetet 5 Nicht-Fusssoldaten, davon 3 Frachter -> 2 Wracks
         // sind RICHTIG. Die Erwartung zaehlt jetzt nur Gattung 0 (so gelesen).
-        // ⚠ Unser Kill legt fuer Gattung 2/3 noch ein Wrack an (Abweichung, hier
-        // sichtbar, wenn ein Opfer dieser Gattung dabei ist).
-        int wrackSoll = 0, schiffe = 0;
+        // ⭐ 04.10.2026 (bug-432): Kill legt fuer Gattung 2/3 kein Wrack mehr an
+        // (Gegenschalter --wrack-gattung-alt). Gattung -1 (kein Satzbyte) zaehlt
+        // wie in LegtWrack als Fahrzeug (UNSERE SETZUNG).
+        int wrackSoll = 0, schiffe = 0, gattung23 = 0;
         foreach (int i in victims)
         {
             var v = _entities[i];
             if (v.Infantry >= 0) continue;
-            if (v.GameUnitType == 0) wrackSoll++;
+            if (v.GameUnitType <= 0) wrackSoll++;
             else if (v.GameUnitType is 4 or 5) schiffe++;
+            else if (v.GameUnitType is 2 or 3) gattung23++;
         }
         sb.AppendLine($"   Wrackreste auf dem Boden    : {wreckFx} " +
-                      $"(erwartet {wrackSoll}: nur Gattung 0 @0x406F3D; {schiffe} Schiffe und " +
+                      $"(erwartet {wrackSoll}: nur Gattung 0 @0x406F3D; {schiffe} Schiffe, " +
+                      $"{gattung23} der Gattung 2/3 (@0x40716B/@0x407026, auf der Karte {g23}) und " +
                       $"{foot} Fusssoldaten hinterlassen keines)  {(wreckFx == wrackSoll ? "BESTANDEN" : "DURCHGEFALLEN")}");
         sb.Append(stillPicked == 0 && takenByDead == 0
                   ? "   BEIDES BEHOBEN" : "   NOCH FEHLERHAFT");

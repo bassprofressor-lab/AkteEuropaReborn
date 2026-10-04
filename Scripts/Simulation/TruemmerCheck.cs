@@ -93,12 +93,47 @@ public partial class MapEntityLayer
             {
                 e.Sterbend = false;
                 _sterbend.RemoveAt(i);
-                WrackAnlegen(e);
+                if (LegtWrack(e)) WrackAnlegen(e);
                 continue;
             }
             _sterbend[i] = (e, z);
         }
     }
+
+    // ---- wer ueberhaupt ein Wrack hinterlaesst (bug-432) -----------------------
+
+    /// <summary><c>--wrack-gattung-alt</c> — Stand c2cf10d: jede Gattung ausser
+    /// den Schiffen (4/5) legt ein Wrack, also auch Gattung 2 und 3.</summary>
+    public static bool WrackGattungAlt;
+
+    /// <summary>
+    /// ⭐ 04.10.2026 (bug-432) — <b>nur Gattung 0 hinterlaesst ein Wrack.</b>
+    /// <c>move units</c> laesst den Rumpf 6 Takte stehen (Zaehler +0x15,
+    /// @0x406EE6..0x406EF0, fuer JEDE Gattung), dann »likvid typ:« (@0x406F1B)
+    /// und die Sprungtafel <c>0x40A048</c> nach Gattung (+0x0A):
+    /// <code>
+    ///   0  @0x406F3D  0x4A97C0(…, rand&amp;15) = WRACK; Zelle := 0xFFFE-(+0x13&amp;3)
+    ///   1  @0x40716B  nichts (Fussvolk: Leiche ueber 0x40B270 in der Todesroutine)
+    ///   2  @0x40716B  nichts — nicht einmal die imap-Zelle wird frei
+    ///   3  @0x407026  0x406C20(x, y, 0xFFFE): VIER Zellen (x..x+1, y..y+1) frei,
+    ///                 bei laufendem Schritt auch die Zielzelle; KEIN Wrack
+    ///   4  @0x407094  0x406C20(x, y, 0xFFFC): 2x2 Wasser
+    ///   5  @0x4070FF  0x406C70(x, y, 0xFFFC): 4x4 Wasser
+    /// </code>
+    /// Danach fuer alle 0x410E60 (Satz austragen), fuer alle ausser 1 noch
+    /// 0x404AC0. Ein Schreiber, der +0x0A auf 2 oder 3 setzt, ist nicht
+    /// gefunden (Relokationstafel auf 0x6E26D2: 6 Schreibstellen, nur 0/1/4/5;
+    /// Bytesuche <c>mov byte [r32+0x0A], 2|3</c> ohne SIB: 0 Treffer; ⚠ Kopien
+    /// ganzer Saetze und SIB-Formen nicht abgedeckt) — nach allem Gelesenen
+    /// kommen beide Gattungen nur aus der Kartendatei. Gezaehlt ueber alle 36 Karten: Gattung 2 <b>nirgends</b>,
+    /// Gattung 3 genau fuenfmal, immer Rumpf 138 auf Platz 2001 (Spieler 2) von
+    /// 3/5/6/7/10.DM.
+    /// <para>⚠ UNSERE SETZUNG: eine Einheit ohne Satzbyte (Gattung −1) gilt
+    /// weiter als Fahrzeug und legt ein Wrack.</para>
+    /// </summary>
+    private static bool LegtWrack(Entity v)
+        => WrackGattungAlt ? v.GameUnitType is not (4 or 5)
+                           : v.GameUnitType <= 0;
 
     // ---- das Wrack sec41 (@0x4A97C0, @0x4A9860, Zeichner @0x42D0AD) --------
 
@@ -181,7 +216,8 @@ public partial class MapEntityLayer
     {
         var sb = new System.Text.StringBuilder("truemmer-check (bug-426)\n");
         sb.Append($"  Schalter: bogen-alt {TruemmerBogenAlt}, uhr-alt {TruemmerUhrAlt}, aufschlag-aus {TruemmerAufschlagAus}, "
-                + $"todesklang-alt {TodesklangAlt}, sterbend-alt {SterbendAlt}, wrack-alt {WrackAlt}\n");
+                + $"todesklang-alt {TodesklangAlt}, sterbend-alt {SterbendAlt}, wrack-alt {WrackAlt}, "
+                + $"wrack-gattung-alt {WrackGattungAlt}\n");
         // drei Fahrzeuge, die man SIEHT, zuerst (sonst kann Zeile 5 nichts sagen)
         var opfer = new List<int>();
         BuildUnitDrawOrder();
@@ -295,10 +331,67 @@ public partial class MapEntityLayer
         else stufen = "kein neues Wrack (wrack0..15) — altert nicht";
         ok &= z6;
         sb.Append($"  6 Wrack: {stufen}  {(z6 ? "ja" : "NEIN")}\n");
+        // 7. ⭐ bug-432: Gattung 2/3 hinterlaesst KEIN Wrack (0x40A048 -> @0x40716B
+        // bzw. @0x407026). Echte Einheiten der Karte zuerst (Rumpf 138 auf
+        // 3/5/6/7/10.DM); fehlen sie, bekommen zwei Fahrzeuge der Karte die Gattung
+        // 2 bzw. 3 als STELLVERTRETER (Pruefstand-Eingriff, nur fuer diesen Lauf).
+        bool z7 = G23OhneWrack(sb, opfer, dt);
+        ok &= z7;
         int fehlend = Enumerable.Range(0, 16).Count(k => EffectFrames("wrack" + k).Count < 4);
         if (fehlend > 0) sb.Append($"  ⚠ {fehlend} von 16 Wrackfolgen fehlen — --reexport-effects=<Quelle> schreibt sie\n");
         sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
+    }
+
+    /// <summary>Zeile 7 des <c>--truemmer-check</c> (bug-432): Gattung 2 und 3
+    /// sterben, der Rumpf steht seine 6 Takte, danach darf KEIN Wrack liegen.
+    /// Nullmodell <c>--wrack-gattung-alt</c> muss hier durchfallen.</summary>
+    private bool G23OhneWrack(System.Text.StringBuilder sb, List<int> schonTot, float dt)
+    {
+        var faelle = new List<(int Vi, int Gattung, bool Echt)>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.Dead || e.IsProp || e.IsBuilding || e.Infantry >= 0) continue;
+            if (e.GameUnitType is 2 or 3) faelle.Add((i, e.GameUnitType, true));
+        }
+        if (faelle.Count == 0)
+        {
+            int g = 2;
+            for (int i = 0; i < _entities.Count && g <= 3; i++)
+            {
+                var e = _entities[i];
+                if (e.Dead || e.IsProp || e.IsBuilding || e.Infantry >= 0 || e.GameUnitType != 0) continue;
+                if (schonTot.Contains(i)) continue;
+                e.GameUnitType = g;                    // Pruefstand-Eingriff
+                faelle.Add((i, g, false));
+                g++;
+            }
+        }
+        if (faelle.Count == 0)
+        {
+            sb.Append("  7 Gattung 2/3 ohne Wrack: keine Einheit und kein Stellvertreter — sagt NICHTS  NEIN\n");
+            return false;
+        }
+        int mitWrack = 0;
+        var teile = new List<string>();
+        foreach (var (vi, g, echt) in faelle)
+        {
+            var v = _entities[vi];
+            int w0 = _effects.Count(x => x.Kind.StartsWith("wrack") || x.Kind == "wreck");
+            Kill(vi, v, -1, "truemmer-check Gattung " + g);
+            for (int t = 0; t < 4 * SterbendTakte && (t < SterbendTakte + 1 || _sterbend.Count > 0); t++)
+                UpdateEffects(dt);
+            int w1 = _effects.Count(x => x.Kind.StartsWith("wrack") || x.Kind == "wreck");
+            bool wrack = w1 > w0;
+            if (wrack) mitWrack++;
+            teile.Add($"Gattung {g} {(echt ? "echt" : "Stellvertreter")} Rumpf {v.UnitType} Platz {v.Slot} "
+                    + $"({v.Col},{v.Row}): {(wrack ? "WRACK" : "kein Wrack")}");
+        }
+        bool z7 = mitWrack == 0;
+        sb.Append($"  7 Gattung 2/3 ohne Wrack (0x40A048 -> @0x40716B/@0x407026): {faelle.Count - mitWrack}/{faelle.Count} "
+                + $"[{string.Join("; ", teile)}]{(WrackGattungAlt ? " (--wrack-gattung-alt)" : "")}  {(z7 ? "ja" : "NEIN")}\n");
+        return z7;
     }
 
     // ---- Bildlauf (Fenster) ----------------------------------------------------
