@@ -18315,7 +18315,73 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private static bool IsUnitPlant(Entity e) => e.IsBuilding && e.BType == 1;
 
-    private const float BuildSeconds = 6f;
+    /// <summary>
+    /// ⭐ 06.10.2026, bug-462 (KayelGee R4, Meldung 23): »Produzieren von Einheiten
+    /// hat im Original keine Bauzeit und sendet Einheiten sofort aus dem Depot,
+    /// sobald diese bereit sind«. 0x4B1840 (Befehl 503) hat kein Zeitfeld und
+    /// keinen Zaehler; am Ende andocken 0x43BFC0 und ausgesandt 0x410420 (UKOL
+    /// 0x33). Die 6 s waren unsere Zutat. Seine Entscheidung: ueberall weg, auch
+    /// im Gefecht. Die KI-Wege (SkirmishAi, Transportroute) setzen weiter
+    /// BuildTime — er laeuft jetzt im naechsten Takt ab. --bauzeit-alt.
+    /// </summary>
+    private static float BuildSeconds => BauzeitAlt ? 6f : 0.001f;
+
+    /// <summary><c>--bauzeit-alt</c> — Stand bis 0.6.6: 6 s Bauzeit,
+    /// Warteschlange, die fertige Einheit wartet als Entwurfsnummer im Depot auf
+    /// den Knopf »Aussenden«. Nullmodell zu bug-462.</summary>
+    public static bool BauzeitAlt;
+
+    public int NeubauInListeGelegt;
+
+    /// <summary>
+    /// bug-462: der Neubau als ECHTER Satz in der Liste des Gebaeudes, gleich
+    /// ausgesandt (UKOL 51, unsichtbar, nicht im Gitter) — DepotAuslass laesst ihn
+    /// an der freien Tuer heraus (Tuer UND Zelle darunter, bug-456). Dieselben
+    /// Felder wie SendOutOfDepot.
+    /// </summary>
+    private Entity? NeubauInListe(Entity e, int designIdx)
+    {
+        if (_nav == null || _designs == null) return null;
+        var d = EntwurfFuer(e.Owner, _designs[designIdx % _designs.Count]);
+        int tx = e.Col + e.DoorCol, ty = e.Row + e.DoorRow;
+        int hp = d.Hp > 0 ? d.Hp : HpOfType(d.Propulsion);
+        int ammo = d.Ammo > 0
+            ? d.Ammo
+            : _ammoCap.TryGetValue(TurretOf(d.Weapon), out var cap) ? cap : 0;
+        var u = new Entity
+        {
+            Slot = NaechsterFreierPlatz(e.Owner),
+            Col = tx, Row = ty,
+            Owner = e.Owner, Team = e.Team, UnitType = d.Propulsion,
+            Hp = hp, HpMax = hp, Elev = ElevOf(tx, ty),
+            Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
+            Part = PartRowOf(d.Weapon),
+            Chassis = d.Derived.ChassisComponent, GameUnitType = TypeOfChassis(d.Propulsion),
+            Attack = d.Attack, Defence = d.Defence,
+            Fuel = d.Fuel, FuelMax = d.Fuel,
+            AmmoMax = ammo, Ammo = ammo,
+            Range = d.Range, Sight = d.Sight, Reload = d.Reload, Speed = d.Speed,
+            Facing = DefaultFacing, Mobile = true,
+            RadarCharges = RadarvorratAlt ? -1 : d.Weapon == RadarKitWeapon ? RadarKitCharges : 0,
+            Mark = MarkeAlt ? -1 : d.Slot >= 0 ? d.Slot % 200 : -1,
+            Entwurf3E = d.Slot >= 0 ? d.Slot % 200 : -1,
+            Comp0D = MarkeAlt ? 0 : d.Weapon is > 0 and < 50 ? d.Weapon : 0,
+            Comp0F = MarkeAlt ? 0 : d.Propulsion,
+            Ukol = UkolVerlaesst,
+            InGebaeude = e,
+            Move = BewegungsklasseFuer(d.Propulsion, d.Derived.ChassisComponent),
+            Footprint = CellRect(_ox, _oy, tx, ty, ElevOf(tx, ty)),
+        };
+        InfanterieAnlegen(u, d.Weapon);
+        u.Pos = BodyCenterAt(u, u.Col, u.Row);
+        _entities.Add(u);
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
+        e.Garage.Add(u);
+        NeubauInListeGelegt++;
+        ProduktionsmerkerSetzen(e.Owner, d.Propulsion);
+        NoteEvent(e, $"{d.Name} gebaut und ausgesandt");
+        return u;
+    }
 
     /// <summary>Wie viele Bestellungen hinter der laufenden warten dürfen.
     ///
@@ -22735,8 +22801,10 @@ public partial class MapEntityLayer : Node2D
             _sel.Clear(); _sel.Add(idx); _selected = idx;
             int before = b.BuildQueue.Count;
             bool running = b.BuildTime > 0f;
+            int gelegtVor = NeubauInListeGelegt;     // bug-462: ohne Bauzeit sofort ein Satz
             BuildPanelPick(pick);
-            if (b.BuildQueue.Count > before || (!running && b.BuildTime > 0f)) _queueOrdered++;
+            if (b.BuildQueue.Count > before || (!running && b.BuildTime > 0f)
+                || NeubauInListeGelegt > gelegtVor) _queueOrdered++;
         }
     }
 
@@ -25391,6 +25459,21 @@ public partial class MapEntityLayer : Node2D
             // Die Kur ist die SCHLANGE (Entscheidung des Spielers, siehe
             // Entity.BuildQueue): der laufende Bau bleibt stehen, die Bestellung
             // wird bezahlt und hinten angehaengt.
+            // bug-462: ohne Bauzeit — erst der Platz (0x44A6D3 »Es gibt keinen Platz
+            // mehr im Depot.«, VOR dem Bezahlen), dann sofort ein Satz in der Liste.
+            if (!BauzeitAlt)
+            {
+                if (GarageBelegt(e) >= DepotSlots)
+                {
+                    MeldungBasis(DepotFullWord);
+                    _order = DepotFullWord;
+                    continue;
+                }
+                PayFor(e, chosen);
+                if (NeubauInListe(e, pick) != null) n++;
+                continue;
+            }
+
             if (e.BuildTime > 0f && !NoBuildQueue)
             {
                 if (e.BuildQueue.Count >= BuildQueueMax)
@@ -32321,6 +32404,17 @@ public partial class MapEntityLayer : Node2D
             return;
         }
         var fertig = _designs[e.BuildIndex % _designs.Count];
+        if (!BauzeitAlt && e.DoorCells.Count > 0)
+        {
+            // bug-462: auch der KI-Weg legt einen echten Satz in die Liste
+            // und sendet ihn aus — keine Entwurfsnummer, die auf den Knopf wartet.
+            NeubauInListe(e, e.BuildIndex);
+            _order = $"{fertig.Name} gebaut — wird ausgesandt";
+            NextFromQueue(e, fertig.Name);
+            UpdatePanel();
+            QueueRedraw();
+            return;
+        }
         e.Depot.Add(e.BuildIndex);
         // ⭐⭐ 12.09.2026 — DER PRODUKTIONSMERKER (bug-243). Die Basisproduktion
         // 0x4B1840 schreibt `byte[0xA9A208 + Spieler]`, und das Missionsskript

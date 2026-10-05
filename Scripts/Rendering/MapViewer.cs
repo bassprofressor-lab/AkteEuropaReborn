@@ -1713,7 +1713,7 @@ public partial class MapViewer : Node2D
     /// <summary><c>--fensterwerte-check</c> — Simulation/FensterwerteCheck.cs (bug-441..443).</summary>
     private bool _fensterwerteCheck;
     /// <summary><c>--depotauslass-check</c> — Simulation/DepotauslassCheck.cs (bug-456/457).</summary>
-    private bool _depotauslassCheck, _vorplatzCheck, _recycleGarageCheck, _depotreiterCheck;
+    private bool _depotauslassCheck, _vorplatzCheck, _recycleGarageCheck, _depotreiterCheck, _produktionCheck;
 
     /// <summary><c>--fussklangsatz-check</c> — siehe Simulation/FussklangsatzCheck.cs.</summary>
     private bool _fussklangsatzCheck;
@@ -4093,6 +4093,7 @@ _mausProbePunkt = karte;
             else if (a == "--fensterwerte-check") _fensterwerteCheck = true;
             else if (a == "--depotauslass-check") _depotauslassCheck = true;
             else if (a == "--vorplatz-check") _vorplatzCheck = true;
+            else if (a == "--produktion-check") _produktionCheck = true;
             else if (a == "--depotreiter-check") _depotreiterCheck = true;
             else if (a == "--recycle-garage-check") _recycleGarageCheck = true;
             else if (a == "--tuerauslass-check") _tuerauslassCheck = true;
@@ -4128,6 +4129,7 @@ _mausProbePunkt = karte;
             else if (a == "--recycle-garage-alt") MapEntityLayer.RecycleGarageAlt = true;
             else if (a == "--entwurf-alle-teile") MapEntityLayer.EntwurfAlleTeile = true;
             else if (a == "--depotreiter-einzelwahl") UI.BaseWindow.DepotreiterEinzelwahl = true;
+            else if (a == "--bauzeit-alt") MapEntityLayer.BauzeitAlt = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
@@ -8451,6 +8453,13 @@ _mausProbePunkt = karte;
             GD.Print(sbd.Append($": {drin} eingefahren, Zeilen 0 und 2 angeklickt, markiert {markiert}, Recycle verwertet {verwertet} (Soll 2)"
                    + (UI.BaseWindow.DepotreiterEinzelwahl ? " (Nullmodell --depotreiter-einzelwahl)" : "")
                    + (okd ? " — BESTANDEN" : " — DURCHGEFALLEN")).ToString());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_produktionCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.ProduktionCheckLine());
             GetTree().Quit(0);
             return;
         }
