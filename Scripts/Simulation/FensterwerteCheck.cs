@@ -56,6 +56,21 @@ public partial class MapEntityLayer
             sb.Append($"  Basistitel Platz {e.Slot} (Karte »{e.Name}«): {titel}, Soll {soll}{(g ? "" : "   ⚠")}\n");
             break;
         }
+        // bug-460 (Meldung 19): was das Erstellen-Fenster in der Kampagne anbietet —
+        // nur Bauteile, die ForschungBesitzt bejaht (Fahrplan des Missionsskripts).
+        LoadDesignParts();
+        ErfundeneWaffenNachtragen();
+        string Ids(System.Collections.Generic.List<DesignScreen.Part> l)
+            => string.Join(",", l.ConvertAll(p => p.Id.ToString()));
+        int fremd = 0;
+        if (UI.SkirmishSetup.CampaignMission > 0)
+            foreach (var l in new[] { Designer.Propulsions, Designer.Weapons, Designer.Equipment })
+                foreach (var p in l) if (!ForschungBesitzt(ViewPlayer, p.Id)) fremd++;
+        bool eOk = fremd == 0;
+        ok &= eOk;
+        sb.Append($"  Erstellen-Fenster (Mission {UI.SkirmishSetup.CampaignMission}): Fahrwerke [{Ids(Designer.Propulsions)}], "
+                + $"Waffen [{Ids(Designer.Weapons)}], Ausruestung [{Ids(Designer.Equipment)}], nicht besessen {fremd}"
+                + (EntwurfAlleTeile ? " (Nullmodell --entwurf-alle-teile)" : "") + (eOk ? "\n" : "   ⚠\n"));
         sb.Append(ok ? "fensterwerte-check: BESTANDEN" : "fensterwerte-check: DURCHGEFALLEN");
         return sb.ToString();
     }

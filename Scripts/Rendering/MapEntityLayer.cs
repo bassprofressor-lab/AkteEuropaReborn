@@ -7751,6 +7751,14 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private bool TorImBauVerborgen(Entity e) => !BautorAlt && e.Bauzustand >= BauzustandStart;
 
+    /// <summary><c>--torphase-alt</c> — Stand bis 0.6.6: das Torbild gleitet nach
+    /// der Belegung der Torzelle bis Bild 3 und oeffnet nie ganz. Nullmodell zu
+    /// bug-455.</summary>
+    public static bool TorphaseAlt;
+
+    /// <summary>Tore, die im letzten Durchgang offen (ohne Blatt) waren.</summary>
+    private int _doorsOffen;
+
     private void DrawBuildingDoors(Entity e, bool count = false)
     {
         if (!count && (!_drawSprites || _nav == null)) return;
@@ -7769,11 +7777,30 @@ public partial class MapEntityLayer : Node2D
 
             // the game's own rule: something in the cell opens the door
             int key = e.Slot * 4 + k;
-            float want = _nav != null && _nav.OccupantAt(c, r) >= 0
-                       ? Import.BuildingPatterns.DoorPhases - 1 : 0;
-            float have = _doorPhase.TryGetValue(key, out float p) ? p : 0f;
-            have = Mathf.MoveToward(have, want, DoorOpenSpeed * (float)GetProcessDeltaTime());
-            _doorPhase[key] = have;
+            float have;
+            // ⭐ 06.10.2026, bug-455 (KayelGee R4, Meldung 38): »die Tuer des
+            // Depots oeffnet sich nicht vollstaendig«. Der Zeichner Art 10
+            // (0x42B25C..0x42B394) nimmt das Bild aus dem TORZUSTAND
+            // (Torkachel·4 + 301 + (Zustand & 0x7F)) und zeichnet bei
+            // (Zustand & 0x7F) >= 4 KEIN Blatt — offen ist das Loch der
+            // Musterkachel. Wir glitten mit 6 Phasen/s auf hoechstens Bild 3
+            // (Spalt) und lasen den Zustand, den TorTakt fuehrt, gar nicht.
+            // Gebaeude ohne Torzustand (nicht in TorTakt) bleiben beim alten
+            // Weg. --torphase-alt.
+            if (!TorphaseAlt && k < e.TorZustand.Count)
+            {
+                int phase = e.TorZustand[k] & 0x7F;
+                if (phase >= 4) { _doorsOffen++; continue; }
+                have = phase;
+            }
+            else
+            {
+                float want = _nav != null && _nav.OccupantAt(c, r) >= 0
+                           ? Import.BuildingPatterns.DoorPhases - 1 : 0;
+                have = _doorPhase.TryGetValue(key, out float p) ? p : 0f;
+                have = Mathf.MoveToward(have, want, DoorOpenSpeed * (float)GetProcessDeltaTime());
+                _doorPhase[key] = have;
+            }
 
             // ⭐ 12.09.2026 — DAS TOR GEHOERT MIT UMGEFAERBT (bug-244). Seine
             // Meldung, nachdem die Gebäude selbst schon wechselten: »nur noch
@@ -17839,9 +17866,18 @@ public partial class MapEntityLayer : Node2D
     /// the weapons out of `weapons.json`'s rows 1..19, the equipment out of
     /// `research.json`'s rows 65..79 — the ones a design can actually carry,
     /// which is where the research work drew the line.</summary>
+    /// <summary><c>--entwurf-alle-teile</c> — Stand bis 0.6.6: das Erstellen-
+    /// Fenster bietet in der Kampagne alle Bauteile an. Nullmodell zu bug-460.</summary>
+    public static bool EntwurfAlleTeile;
+
+    /// <summary>Wie viele Bauteile der Besitzfilter zuletzt herausgenommen hat.</summary>
+    public int EntwurfGefiltert;
+
     private void LoadDesignParts()
     {
-        if (Designer.Propulsions.Count > 0) return;
+        // bug-460: neu fuellen, denn der Besitz waechst waehrend der Mission
+        // (Skript, Forschung) — die Listen sind klein.
+        Designer.Propulsions.Clear(); Designer.Weapons.Clear(); Designer.Equipment.Clear();
         LoadCatalog();
         if (_catalog != null)
             // the catalogue entry is (tier, name) — the NAME is what a player
@@ -17854,6 +17890,22 @@ public partial class MapEntityLayer : Node2D
 
         ReadParts("Maps/weapons.json", "types", Designer.Weapons);
         ReadParts("Maps/research.json", "technologies", Designer.Equipment, 65, 79);
+
+        // ⭐ 06.10.2026, bug-460 (KayelGee R4, Meldung 19): »in Mission 2 koennen
+        // alle Technologien genutzt werden statt nur die freigeschalteten«. Den
+        // Besitz verteilt im Original NUR das Missionsskript (set_part 0x4D0520,
+        // nach dem Nullen 0x4B23C0); ForschungBesitzt fragt genau diese Menge.
+        // ⚠ Dass das Erstellen-Fenster nur Besessenes anbietet, ist V (wie das
+        // Forschungsangebot 0x4AA9D2), der Fenstercode selbst ist ungelesen.
+        // Gefecht unveraendert. --entwurf-alle-teile.
+        if (!EntwurfAlleTeile && UI.SkirmishSetup.CampaignMission > 0)
+        {
+            int vorher = Designer.Propulsions.Count + Designer.Weapons.Count + Designer.Equipment.Count;
+            Designer.Propulsions.RemoveAll(p => !ForschungBesitzt(ViewPlayer, p.Id));
+            Designer.Weapons.RemoveAll(p => !ForschungBesitzt(ViewPlayer, p.Id));
+            Designer.Equipment.RemoveAll(p => !ForschungBesitzt(ViewPlayer, p.Id));
+            EntwurfGefiltert = vorher - (Designer.Propulsions.Count + Designer.Weapons.Count + Designer.Equipment.Count);
+        }
         GD.Print($"designer: {Designer.Propulsions.Count} Fahrwerke, " +
                  $"{Designer.Weapons.Count} Waffen, {Designer.Equipment.Count} Ausruestungen");
     }
@@ -22256,7 +22308,12 @@ public partial class MapEntityLayer : Node2D
         // ist die Rückabbildung Satz → Entwurf; ein GEFAHRENES Stück von der
         // Karte hat keine Entwurfsnummer. Lieber sagen als raten.
         if (k >= 0 && k < e.Garage.Count)
-        { _order = "eine hereingefahrene Einheit laesst sich hier nicht verwerten"; return; }
+        {
+            if (RecycleGarageAlt)
+            { _order = "eine hereingefahrene Einheit laesst sich hier nicht verwerten"; return; }
+            GarageVerwerten(e, k);
+            return;
+        }
         k -= e.Garage.Count;
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
         if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
@@ -22280,6 +22337,46 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie oft verwertet wurde. ⚠ Ohne die Zahl ist »der Knopf tut
     /// nichts« nicht von »es lag nichts im Depot« zu unterscheiden.</summary>
     public int RecycledParts;
+
+    /// <summary><c>--recycle-garage-alt</c> — Stand bis 0.6.6: eine eingefahrene
+    /// Einheit laesst sich nicht verwerten. Nullmodell zu bug-459.</summary>
+    public static bool RecycleGarageAlt;
+
+    /// <summary>
+    /// ⭐ 06.10.2026, bug-459 (KayelGee R4, Meldung 21): »im Depot funktioniert die
+    /// Recycle-Taste nicht«. In M2 liegen nach der Einnahme nur EINGEFAHRENE Saetze,
+    /// und genau die wies der Knopf ab. 0x4B28E0 (Befehl 506, ganz gelesen) rechnet
+    /// an JEDEM Satz der Liste: pct = 100·Leben/LebenMax (ganzzahlig), W =
+    /// Preis[+0x0D]+0x20 · pct/100, F = Preis[+0x0F]+0x21 · pct/100, S =
+    /// Preis[+0x0E]+0x22 · pct/100 + Preis[+0x10]+0x22 · pct/100; Lager +=, v190..192,
+    /// Satz geloescht (0x410E60). ⚠ Die Preise kommen bei uns aus der Bauteiltafel
+    /// der EXE, nicht aus der Forschungskopie je Spieler (200·Sp) — V: gleich, solange
+    /// die Forschung keine Preise aendert.
+    /// </summary>
+    private void GarageVerwerten(Entity b, int k)
+    {
+        var u = b.Garage[k];
+        int pct = u.HpMax > 0 ? 100 * System.Math.Max(0, u.Hp) / u.HpMax : 0;
+        int w = UI.UnitStatBook.WeaponPrice(u.Comp0D) * pct / 100;
+        int f = UI.UnitStatBook.ChassisPrice(u.Comp0F) * pct / 100;
+        int sp = UI.UnitStatBook.EquipPrice(u.Part) * pct / 100
+               + UI.UnitStatBook.EquipPrice(u.Equipment) * pct / 100;
+        b.StockW += w; b.StockF += f; b.StockS += sp;
+        b.Garage.RemoveAt(k);
+        u.InGebaeude = null;
+        u.Verbraucht = true;
+        u.Hp = 0; u.Dead = true; u.DeadTime = 0; u.Path = null; u.Target = -1;
+        _sel.Remove(_entities.IndexOf(u));
+        RecycledParts++;
+        GarageVerwertet++;
+        SkriptvarRecycling(w, f, sp);
+        _order = $"{EinheitenWort(u)} verwertet ({pct} %) — zurueck: W{w} F{f} S{sp} "
+               + $"(Lager jetzt W{b.StockW} F{b.StockF} S{b.StockS})";
+        UpdatePanel();
+        QueueRedraw();
+    }
+
+    public int GarageVerwertet;
 
     /// <summary>Wie oft verlegt wurde, und wie oft es an der Verbindung
     /// scheiterte.</summary>

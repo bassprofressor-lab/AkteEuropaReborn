@@ -193,7 +193,29 @@ public partial class MapEntityLayer : Node2D
 
     public static bool Untergestellt(Entity e)
         => e.Ukol == UkolUntergestellt
-           || (!TuerbandAlt && e.Ukol >= 0x32 && e.Ukol < 0x64);
+           || (!TuerbandAlt && e.Ukol >= 0x32 && e.Ukol < 0x64
+               // bug-456 (KayelGee R4, Meldung 22): im Original ist eine
+               // ausgesandte Einheit nur unsichtbar, solange sie IN DER LISTE
+               // steht; wer das imap belegt, ist sichtbar und faehrt (0x43C6F0
+               // → 0x40AFE0). Unsere 51 auf der Tuerzelle ist darum sichtbar.
+               && !(!AuslassUnsichtbarAlt && e.Ukol == UkolVerlaesst
+                    && (e.InGebaeude == null || !e.InGebaeude.Garage.Contains(e))));
+
+    /// <summary><c>--auslass-unsichtbar-alt</c> — Stand bis 0.6.6: eine
+    /// ausgesandte Einheit (51) ist auf der Tuerzelle unsichtbar und erscheint
+    /// erst eine Zelle weiter. Nullmodell zu bug-456.</summary>
+    public static bool AuslassUnsichtbarAlt;
+
+    /// <summary><c>--auslass-nur-tuer-alt</c> — Stand bis 0.6.6: der Depot-
+    /// auslass prueft nur die Tuerzelle; ist die Zelle darunter belegt, bleibt
+    /// die Einheit auf der Tuer stecken. Nullmodell zu bug-456.</summary>
+    public static bool AuslassNurTuerAlt;
+
+    /// <summary><c>--wait-ab-aus</c> — Stand bis 0.6.6: die wartende Einheit
+    /// schickt den Blockierer an der Tuer nicht weg. Nullmodell zu bug-457.</summary>
+    public static bool WaitAbAus;
+
+    public int WaitAbWeggeschickt;
 
     /// <summary>
     /// <c>--tuerband-alt</c> — der Stand vor dem 09.09.2026 zurueck: das
@@ -414,9 +436,24 @@ public partial class MapEntityLayer : Node2D
                 if (u.Ukol != UkolVerlaesst) continue;
                 bool fuss = u.Infantry >= 0;
                 int tx = b.Col + b.DoorCol, ty = b.Row + b.DoorRow;
-                if (!fuss && !_nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle))
+                // ⭐ 06.10.2026, bug-456 (KayelGee R4, Meldung 20): »beim
+                // Hineinfahren ins Depot bleiben unsichtbare Einheiten zurueck
+                // und blockieren«. Der Depottakt @0x43E1C6 laesst ein Fahrzeug
+                // nur heraus, wenn Tuerzelle UND die Zelle darunter frei sind;
+                // wir fragten nur die Tuer, und StepOutOfDoor (das beide fragt)
+                // liess die Einheit dann auf der Tuer stehen.
+                if (!fuss && (!_nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle)
+                              || (!AuslassNurTuerAlt && ZelleDarunterBelegt(tx, ty + 1))))
                 {
                     DepotWartetAnTuer++;
+                    // bug-457 (Meldung 40): »wait B/C« — der UKOL-0x33-Arm
+                    // 0x409B59..0x409C89 schickt einen verbuendeten, untaetigen
+                    // Blockierer auf Tuer oder Zelle darunter per 0x40AFE0 weg.
+                    if (!WaitAbAus)
+                    {
+                        WartendeSchicktWeg(u, tx, ty);
+                        WartendeSchicktWeg(u, tx, ty + 1);
+                    }
                     continue;
                 }
                 if (AusfahrenAusGarage(b, k)) { DepotAusgelassen++; break; }
@@ -426,6 +463,43 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Die Einfahrt selbst — <c>@0x43D61A..0x43D65B</c>.</summary>
+    /// <summary>
+    /// bug-457: »wait B« (Tuerzelle, @0x409BB7..0x409BFF) und »wait C« (Zelle
+    /// darunter, @0x409C16..0x409C3A): steht dort eine Einheit ohne Auftrag
+    /// (UKOL 0 — bei uns: kein Weg, keine Befehle, kein Ziel) und ist sie mit
+    /// der Wartenden verbuendet (neutok != 0), bekommt sie 0x40AFE0 =
+    /// order(x + 2 − rand%5, y + 5 − rand%3) — von IHRER Zelle aus, nach Sueden.
+    /// </summary>
+    /// <summary>bug-456: @0x43E1C6 fragt die BELEGUNG (imap), nicht die
+    /// Befahrbarkeit — Fussvolk zaehlt als frei. Eine dauerhaft unbefahrbare Zelle
+    /// unter der Tuer darf den Auslass nicht fuer immer sperren.</summary>
+    private bool ZelleDarunterBelegt(int c, int r)
+    {
+        if (_nav == null || !_nav.InBounds(c, r)) return false;
+        int g = _nav.OccupantAt(c, r);
+        if (g < 0 || g >= _entities.Count) return false;
+        var o = _entities[g];
+        return !o.Dead && !o.IsBuilding && o.Infantry < 0;
+    }
+
+    private void WartendeSchicktWeg(Entity wartend, int c, int r)
+    {
+        if (_nav == null || !_nav.InBounds(c, r)) return;
+        int g = _nav.OccupantAt(c, r);
+        if (g < 0 || g >= _entities.Count) return;
+        var b = _entities[g];
+        if (b.IsBuilding || b.IsProp || b.Dead || !b.Mobile || b.DugIn) return;
+        if (b.Ukol != UkolFrei || b.Path is { Count: > 0 } || b.Orders.Count > 0 || b.Target >= 0) return;
+        if (b.Owner != wartend.Owner && !Allied(wartend.Owner, b.Owner)) return;
+        if (b.FuelMax > 0 && b.Fuel <= 0 && b.Infantry < 0) return;
+        int zx = Mathf.Clamp(b.Col + 2 - Simulation.Determinism.Roll(5), 0, _nav.Width - 1);
+        int zy = Mathf.Clamp(b.Row + 5 - Simulation.Determinism.Roll(3), 0, _nav.Height - 1);
+        var weg = _nav.FindPath(new Vector2I(b.Col, b.Row), new Vector2I(zx, zy), b.Move, g);
+        if (weg == null || weg.Count == 0) return;
+        b.Path = weg; b.PathIdx = 0; b.Goal = new Vector2I(zx, zy); b.StepCost = 0;
+        WaitAbWeggeschickt++;
+    }
+
     private void Einfahren(Entity b, int ui, Entity u)
     {
         if (GarageBelegt(b) >= DepotSlots)
@@ -863,13 +937,14 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Wo die verfolgte Einheit gerade steht.</summary>
-    public (int Ukol, bool AufTuer, bool Untergestellt, int WegLaenge)? TuerauslassStand()
+    public (int Ukol, bool AufTuer, bool Untergestellt, int WegLaenge, bool InListe)? TuerauslassStand()
     {
         if (_tuerprobeEinheit < 0 || _tuerprobeEinheit >= _entities.Count) return null;
         var e = _entities[_tuerprobeEinheit];
         var b = e.InGebaeude;
         bool aufTuer = b != null && e.Col == b.Col + b.DoorCol && e.Row == b.Row + b.DoorRow;
-        return (e.Ukol, aufTuer, Untergestellt(e), e.Path?.Count ?? 0);
+        bool inListe = b != null && b.Garage.Contains(e);
+        return (e.Ukol, aufTuer, Untergestellt(e), e.Path?.Count ?? 0, inListe);
     }
 
     /// <summary>Einen Simulationstakt von Hand — nur fuer Pruefstaende.</summary>

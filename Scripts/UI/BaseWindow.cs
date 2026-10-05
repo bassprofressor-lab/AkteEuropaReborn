@@ -371,6 +371,33 @@ public sealed partial class BaseWindow : PanelContainer
     /// zu bug-445.</summary>
     public static bool SchriftWeich;
 
+    /// <summary><c>--depotreiter-einzelwahl</c> — Stand bis 0.6.6: im Depotreiter
+    /// ist genau eine Zeile gewaehlt. Nullmodell zu bug-461.</summary>
+    public static bool DepotreiterEinzelwahl;
+
+    /// <summary>bug-461: die Zeilen, auf die Aussenden/Recycle wirken —
+    /// absteigend, damit ein Verwerten die Nummern der noch folgenden nicht
+    /// verschiebt.</summary>
+    private List<int> DepotWahl()
+    {
+        var l = new List<int>();
+        if (_sheet.Mehrfach) l.AddRange(_sheet.Marked);
+        else if (_sheet.Selected >= 0) l.Add(_sheet.Selected);
+        l.Sort((a, b) => b.CompareTo(a));
+        return l;
+    }
+
+    private bool DepotHatWahl(int zeilen)
+        => _sheet.Mehrfach ? _sheet.Marked.Count > 0
+                           : _sheet.Selected >= 0 && _sheet.Selected < zeilen;
+
+    /// <summary>Nur Pruefstand: eine Depotzeile wie ein Mausklick umschalten,
+    /// dann Aussenden bzw. Recycle druecken.</summary>
+    public void ProbeDepotKlick(int zeile) { SetTab(0); _sheet.OnPick?.Invoke(zeile); }
+    public void ProbeAussenden() => _make.EmitSignal(BaseButton.SignalName.Pressed);
+    public void ProbeRecycle() => _recycle.EmitSignal(BaseButton.SignalName.Pressed);
+    public int ProbeMarkiert => _sheet.Marked.Count;
+
     public BaseWindow()
     {
         MouseFilter = MouseFilterEnum.Stop;
@@ -491,7 +518,16 @@ public sealed partial class BaseWindow : PanelContainer
         listBox.AddThemeStyleboxOverride("panel", lb);
         listBox.SizeFlagsVertical = SizeFlags.ExpandFill;
         left.AddChild(listBox);
-        _sheet.OnPick = i => { _sheet.Selected = i; Refresh(); };
+        _sheet.OnPick = i =>
+        {
+            _sheet.Selected = i;
+            // ⭐ 06.10.2026, bug-461 (KayelGee R4, Meldung 24): »im Depot kann man im
+            // Original mehrere Einheiten auswaehlen und dann aussenden/recyclen/
+            // transportieren«. Art-6-Arm 0x44A097, Treffer 17..22 (die sechs
+            // Depotzeilen) @0x44A98C..0x44A9CB: Flagge UMSCHALTEN — mehrere zugleich.
+            if (_tab == 0 && !DepotreiterEinzelwahl && !_sheet.Marked.Remove(i)) _sheet.Marked.Add(i);
+            Refresh();
+        };
         _sheet.OnConfirm = i => { Produce?.Invoke(i); Refresh(); };
         listBox.AddChild(_sheet);
 
@@ -537,7 +573,12 @@ public sealed partial class BaseWindow : PanelContainer
         {
             switch (_tab)
             {
-                case 0: OnSendOut?.Invoke(_sheet.Selected); break;
+                // bug-461: Aussenden (Treffer 5, 0x44A1D6..0x44A244) schickt Befehl 504
+                // fuer JEDE markierte Zeile.
+                case 0:
+                    foreach (int k in DepotWahl()) OnSendOut?.Invoke(k);
+                    _sheet.Marked.Clear();
+                    break;
                 case 2: OnResearch?.Invoke(_sheet.Selected); break;
                 case 3: OnRepair?.Invoke(); break;
                 default:
@@ -551,8 +592,23 @@ public sealed partial class BaseWindow : PanelContainer
         _prodUp.Pressed += () => { OnUpgrade?.Invoke(false); Refresh(); };
         _cancel.Pressed += () => { OnCancelBuild?.Invoke(); Refresh(); };
         _launch.Pressed += () => { OnLaunch?.Invoke(); Refresh(); };
-        _recycle.Pressed += () => { OnRecycle?.Invoke(_sheet.Selected); Refresh(); };
-        _transport.Pressed += () => { OnTransport?.Invoke(_sheet.Selected); Refresh(); };
+        // bug-461: Recycle (Treffer 7, 0x44A33C..0x44A3DF) Befehl 506 je markierter
+        // Zeile; absteigend, weil das Verwerten die Zeile aus der Liste nimmt.
+        _recycle.Pressed += () =>
+        {
+            foreach (int k in DepotWahl()) OnRecycle?.Invoke(k);
+            _sheet.Marked.Clear();
+            Refresh();
+        };
+        // Transportieren (Treffer 6, 0x44A249): verlangt eine markierte Zeile.
+        // ⚠ Wie viele der spaetere Befehl 518 verlegt, ist ungelesen — wir geben
+        // die erste markierte weiter (V).
+        _transport.Pressed += () =>
+        {
+            int k = _sheet.Mehrfach ? (_sheet.Marked.Count > 0 ? System.Linq.Enumerable.Min(_sheet.Marked) : -1) : _sheet.Selected;
+            OnTransport?.Invoke(k);
+            Refresh();
+        };
 
         var right = new VBoxContainer();
         right.AddThemeConstantOverride("separation", 4);
@@ -679,6 +735,7 @@ public sealed partial class BaseWindow : PanelContainer
         }
         // Jeder andere Reiter haelt eine laufende Reparatur an — Befehl 525.
         if (which != _tab) OnRepairStop?.Invoke();
+        if (which != _tab) _sheet.Marked.Clear();       // bug-461: Markierungen gehoeren zum Reiter
         _tab = which;
         for (int i = 0; i < _tabs.Length; i++) _tabs[i].ButtonPressed = i == which;
         Refresh();
@@ -744,6 +801,7 @@ public sealed partial class BaseWindow : PanelContainer
                     : "Nichts zu bauen.")
                  : "",
         };
+        _sheet.Mehrfach = _tab == 0 && !DepotreiterEinzelwahl;      // bug-461
         _sheet.Fill(rows);
         // ⚠ 17.08.2026 — die Beschriftung folgt dem Reiter. Ein Knopf, der auf
         // dem Forschungsreiter »Produzieren« heisst und forscht, wäre schlimmer
@@ -761,8 +819,7 @@ public sealed partial class BaseWindow : PanelContainer
                  _sheet.Selected >= rows.Count || !rows[_sheet.Selected].Affordable,
             3 => OnRepair == null,
             // Im Depot gibt es nichts zu bezahlen — nur etwas zu waehlen.
-            0 => OnSendOut == null || _sheet.Selected < 0 ||
-                 _sheet.Selected >= rows.Count,
+            0 => OnSendOut == null || !DepotHatWahl(rows.Count),
             // ⭐ 17.09.2026 GELESEN: der Produzieren-Knopf des Originals ist IMMER
             // drückbar. Ohne Teile antwortet er mit dem Meldungsfenster »Sie besitzen
             // nicht genügend Einzelteile. / Verzeihung.« (0x44A769), bei vollem Depot
@@ -809,8 +866,7 @@ public sealed partial class BaseWindow : PanelContainer
         // dort, neben »Aussenden«. ⚠ Und nicht am Flughafen: dessen Liste ist
         // der Hangar, und fuer den kennt das Original kein Verwerten.
         _recycle.Visible = _tab == 0 && !markt && hangar is not > 0;
-        _recycle.Disabled = OnRecycle == null || _sheet.Selected < 0 ||
-                            _sheet.Selected >= rows.Count;
+        _recycle.Disabled = OnRecycle == null || !DepotHatWahl(rows.Count);
 
         // »Transportieren« steht neben »Recycle«, unter denselben Bedingungen.
         // ⚠ Wartet gerade eine Zielwahl, sagt die Beschriftung das — sonst
@@ -1163,6 +1219,11 @@ public sealed partial class BaseWindow : PanelContainer
         private int _hover = -1;
 
         public int Selected { get; set; } = 0;
+        /// <summary>bug-461: die markierten Zeilen des Depotreiters (Flaggen
+        /// +0xACA4 + 4·Treffer des Originals).</summary>
+        public readonly HashSet<int> Marked = new();
+        /// <summary>Mehrfachwahl an: der Balken zeigt die Markierten, nicht Selected.</summary>
+        public bool Mehrfach;
         public string Note = "";
         public Action<int>? OnPick;
         public Action<int>? OnConfirm;
@@ -1184,6 +1245,7 @@ public sealed partial class BaseWindow : PanelContainer
             _rows.AddRange(rows);
             if (Selected >= _rows.Count) Selected = _rows.Count - 1;
             if (Selected < 0 && _rows.Count > 0) Selected = 0;
+            Marked.RemoveWhere(m => m >= _rows.Count);
             QueueRedraw();
         }
 
@@ -1213,7 +1275,7 @@ public sealed partial class BaseWindow : PanelContainer
                 // ⭐ Der Balken des Originals: (30, y) 195×14 — eingerückt und eine Spur
                 // niedriger als die Zeile (15), nicht über die volle Breite
                 // (0x469202, F 0x467AF2).
-                if (idx == Selected)
+                if (Mehrfach ? Marked.Contains(idx) : idx == Selected)
                     DrawRect(new Rect2(2, top, Size.X - 4, Step * 14f / 15f), RowSelBg);
                 else if (idx == _hover)
                     DrawRect(new Rect2(0, top, Size.X, Step), new Color(1, 1, 1, 0.07f));

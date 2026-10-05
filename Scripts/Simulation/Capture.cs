@@ -385,6 +385,7 @@ public partial class MapEntityLayer : Node2D
         // Simulation/EinnahmeAbschluss.cs.
         RouteGebaeudeStreichen(b.Slot);
         Hand(b, who);
+        if (!VorplatzRaeumungAus) VorplatzRaeumen(b, who);   // bug-458
         // ⭐ 14.09.2026 — eine eingenommene BASIS verliert ihre Insassen
         // (C 0x43D190 / F 0x43C1B7 -> 0x410E60). Andere Arten behalten sie.
         EinnahmeInsassenLoeschen(b);
@@ -409,6 +410,46 @@ public partial class MapEntityLayer : Node2D
         if (old == ViewPlayer) _order = $"{what} verloren";
         QueueRedraw();
         if (_selected == index) UpdatePanel();
+    }
+
+    /// <summary><c>--vorplatz-raeumung-aus</c> — Stand bis 0.6.6: nach der
+    /// Einnahme bleibt die Truppe vor der Tuer stehen und rutscht ins Depot.
+    /// Nullmodell zu bug-458.</summary>
+    public static bool VorplatzRaeumungAus;
+
+    /// <summary>Wie viele Einheiten die letzte Raeumung losgeschickt hat / gefunden hat.</summary>
+    public int VorplatzGeschickt, VorplatzGefunden;
+
+    /// <summary>
+    /// ⭐ 06.10.2026, bug-458 (KayelGee R4, Meldung 26): »nach dem Einnehmen einer
+    /// Basis fahren die Fahrzeuge direkt ins Depot — sie sollten vom Eingang
+    /// wegfahren«. Einnahmeabschluss 0x43D070..0x43D155 (F 0x43C09C..0x43C180):
+    /// jede Einheit des Eindringlings in x = Tuer−2..Tuer+2, y = Tuer+1..Tuer+4
+    /// (5 × 4 VOR der Tuer, nicht die Tuerzelle) bekommt fahre(x, y + 6) — sechs
+    /// Zeilen nach Sueden. Bei uns stand die Truppe still, geriet ueber das
+    /// Nachruecken auf die nun eigene Tuer und wurde nach 6 Takten angemeldet.
+    /// </summary>
+    private void VorplatzRaeumen(Entity b, int who)
+    {
+        if (_nav == null || b.DoorCells.Count == 0) return;
+        int tx = b.Col + b.DoorCol, ty = b.Row + b.DoorRow;
+        VorplatzGeschickt = 0; VorplatzGefunden = 0;
+        for (int x = tx - 2; x <= tx + 2; x++)
+            for (int y = ty + 1; y <= ty + 4; y++)
+            {
+                if (!_nav.InBounds(x, y)) continue;
+                int g = _nav.OccupantAt(x, y);
+                if (g < 0 || g >= _entities.Count) continue;
+                var u = _entities[g];
+                if (u.IsBuilding || u.IsProp || u.Dead || u.Owner != who || !u.Mobile) continue;
+                VorplatzGefunden++;
+                int zy = Mathf.Min(u.Row + 6, _nav.Height - 1);
+                var weg = _nav.FindPath(new Vector2I(u.Col, u.Row), new Vector2I(u.Col, zy), u.Move, g);
+                if (weg == null || weg.Count == 0) continue;
+                u.Path = weg; u.PathIdx = 0; u.Goal = new Vector2I(u.Col, zy); u.StepCost = 0;
+                u.Orders.Clear(); u.Target = -1;
+                VorplatzGeschickt++;
+            }
     }
 
     private static void Hand(Entity b, int who)

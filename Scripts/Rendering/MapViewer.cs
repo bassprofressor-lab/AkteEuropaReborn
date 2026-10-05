@@ -1712,6 +1712,8 @@ public partial class MapViewer : Node2D
     private bool _trefferCheck;
     /// <summary><c>--fensterwerte-check</c> — Simulation/FensterwerteCheck.cs (bug-441..443).</summary>
     private bool _fensterwerteCheck;
+    /// <summary><c>--depotauslass-check</c> — Simulation/DepotauslassCheck.cs (bug-456/457).</summary>
+    private bool _depotauslassCheck, _vorplatzCheck, _recycleGarageCheck, _depotreiterCheck;
 
     /// <summary><c>--fussklangsatz-check</c> — siehe Simulation/FussklangsatzCheck.cs.</summary>
     private bool _fussklangsatzCheck;
@@ -3291,18 +3293,27 @@ _mausProbePunkt = karte;
 
         // Takt fuer Takt verfolgen — hoechstens 200, das sind vier Sekunden
         // Spielzeit und mehr als genug fuer einen Schritt aus der Tuer.
-        bool warUntergestellt = false, heraus = false;
+        // ⭐ 06.10.2026, bug-456: zwei Zustaende getrennt. In der LISTE (nicht
+        // in der imap) ist sie unsichtbar (Zeichnertor 0x4300E2); eingestempelt
+        // auf der Tuerzelle ist sie im Original UKOL 2 und SICHTBAR
+        // (0x43C6F0 → 0x40AFE0). Bis heute verlangte der Stand »auf der Tuer
+        // unsichtbar« — das vermengte beides. Nullmodell --auslass-unsichtbar-alt.
+        bool warUntergestellt = false, heraus = false, sichtbarAufTuer = false, unsichtbarAufKarte = false;
+        { var st0 = _entities.TuerauslassStand();
+          if (st0 is { } v0 && v0.InListe && v0.Untergestellt) warUntergestellt = true; }   // vor dem ersten Takt: in der Liste
         int takte = 0;
         for (; takte < 200 && !heraus; takte++)
         {
             _entities.SimTickFuerProbe();
             var st = _entities.TuerauslassStand();
             if (st == null) break;
-            if (st.Value.AufTuer && st.Value.Untergestellt) warUntergestellt = true;
+            if (st.Value.InListe && st.Value.Untergestellt) warUntergestellt = true;
+            if (!st.Value.InListe && st.Value.AufTuer && !st.Value.Untergestellt) sichtbarAufTuer = true;
+            if (!st.Value.InListe && st.Value.Untergestellt) unsichtbarAufKarte = true;
             if (!st.Value.AufTuer && st.Value.Ukol == 0) heraus = true;
         }
         var ende = _entities.TuerauslassStand();
-        sb.Append($"  war unterwegs untergestellt: {warUntergestellt} "
+        sb.Append($"  in der Liste untergestellt: {warUntergestellt} "
                 + $"(erwartet {!alt})\n");
         sb.Append($"  herausgekommen nach {takte} Takten: {heraus}\n");
         if (ende != null)
@@ -3310,7 +3321,12 @@ _mausProbePunkt = karte;
                     + $"{ende.Value.AufTuer}, untergestellt {ende.Value.Untergestellt}, "
                     + $"Weg {ende.Value.WegLaenge}\n");
 
-        bool ok = heraus && warUntergestellt != alt;
+        bool neuWeg = !(MapEntityLayer.AuslassUnsichtbarAlt && !alt);   // unsichtbar auf der Karte nur im Nullmodell
+        sb.Append($"  auf der Karte (eingestempelt) unsichtbar: {unsichtbarAufKarte} (Soll False; Nullmodell --auslass-unsichtbar-alt: True), "
+                + $"sichtbar auf der Tuerzelle: {sichtbarAufTuer}\n");
+        // ⚠ Die Probe sendet ueber den NEUBAU aus (SendOutOfDepot) — der hat bei uns keine Listenstufe,
+        // »in der Liste untergestellt« steht darum nur zur Auskunft da (kommt mit P5, Meldung 23).
+        bool ok = heraus && !unsichtbarAufKarte;
         sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
         GD.Print(sb.ToString());
         GetTree().Quit(0);
@@ -4075,6 +4091,10 @@ _mausProbePunkt = karte;
             else if (a == "--gebaeudeklick-check") _gebaeudeklickCheck = true;
             else if (a == "--treffer-check") _trefferCheck = true;
             else if (a == "--fensterwerte-check") _fensterwerteCheck = true;
+            else if (a == "--depotauslass-check") _depotauslassCheck = true;
+            else if (a == "--vorplatz-check") _vorplatzCheck = true;
+            else if (a == "--depotreiter-check") _depotreiterCheck = true;
+            else if (a == "--recycle-garage-check") _recycleGarageCheck = true;
             else if (a == "--tuerauslass-check") _tuerauslassCheck = true;
             else if (a == "--cdspieler-check") _cdspielerCheck = true;
             else if (a == "--zeigerfenster-check") _zeigerfensterCheck = true;
@@ -4100,6 +4120,14 @@ _mausProbePunkt = karte;
             else if (a == "--fahrziel-check") MapEntityLayer.FahrzielCheckAn = true;
             else if (a == "--handsteuerung-klick-alt") MapEntityLayer.HandsteuerungKlickAlt = true;
             else if (a == "--muendung-alt") MapEntityLayer.MuendungAlt = true;
+            else if (a == "--torphase-alt") MapEntityLayer.TorphaseAlt = true;
+            else if (a == "--auslass-unsichtbar-alt") MapEntityLayer.AuslassUnsichtbarAlt = true;
+            else if (a == "--auslass-nur-tuer-alt") MapEntityLayer.AuslassNurTuerAlt = true;
+            else if (a == "--wait-ab-aus") MapEntityLayer.WaitAbAus = true;
+            else if (a == "--vorplatz-raeumung-aus") MapEntityLayer.VorplatzRaeumungAus = true;
+            else if (a == "--recycle-garage-alt") MapEntityLayer.RecycleGarageAlt = true;
+            else if (a == "--entwurf-alle-teile") MapEntityLayer.EntwurfAlleTeile = true;
+            else if (a == "--depotreiter-einzelwahl") UI.BaseWindow.DepotreiterEinzelwahl = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
@@ -8398,6 +8426,52 @@ _mausProbePunkt = karte;
         if (_fussklangsatzCheck && _entities.ErwartungBereit())
         {
             GD.Print(_entities.FussklangsatzCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_depotreiterCheck && _entities.ErwartungBereit())
+        {
+            // bug-461: zwei Depotzeilen markieren, Recycle — Soll 2 verwertet,
+            // Nullmodell --depotreiter-einzelwahl: 1.
+            _depotreiterCheck = false;
+            var sbd = new System.Text.StringBuilder("depotreiter-check");
+            int gb = _entities.ProbeBasisfensterWaehlen();
+            if (gb < 0 || _baseWindow == null) { GD.Print(sbd.Append(" — kein eigenes Basisfenster, NICHT GEMESSEN").ToString()); GetTree().Quit(0); return; }
+            int drin = _entities.DepotProbeBefuellen(gb, 3);
+            _baseWindow.Visible = true; _baseWindow.Refresh();
+            _baseWindow.ProbeDepotKlick(0);
+            _baseWindow.ProbeDepotKlick(2);
+            int markiert = _baseWindow.ProbeMarkiert;
+            int vor = _entities.GarageVerwertet;
+            _baseWindow.ProbeRecycle();
+            int verwertet = _entities.GarageVerwertet - vor;
+            int soll = UI.BaseWindow.DepotreiterEinzelwahl ? 1 : 2;
+            bool okd = drin == 3 && verwertet == 2;
+            GD.Print(sbd.Append($": {drin} eingefahren, Zeilen 0 und 2 angeklickt, markiert {markiert}, Recycle verwertet {verwertet} (Soll 2)"
+                   + (UI.BaseWindow.DepotreiterEinzelwahl ? " (Nullmodell --depotreiter-einzelwahl)" : "")
+                   + (okd ? " — BESTANDEN" : " — DURCHGEFALLEN")).ToString());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_recycleGarageCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.RecycleGarageCheckLine());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_vorplatzCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.VorplatzCheckLine());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_depotauslassCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.DepotauslassCheckLine());
             GetTree().Quit(0);
             return;
         }
