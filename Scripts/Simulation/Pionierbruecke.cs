@@ -327,6 +327,10 @@ public partial class MapEntityLayer
             BrueckeVerworfen++;
             return;
         }
+        // ⭐ 04.10.2026 (bug-434) — Lichtquelle (x, y, 6, 120) an der eigenen
+        // Zelle, nur fuer den Betrachter (@0x409583..0x40959D), vor dem
+        // Verbrauch des Pioniers. Simulation/Todeslicht.cs.
+        if (e.Owner == ViewPlayer) LichtAnlegen(col, row, 6, 120, "Pionier Bruecke");
         // ⭐ Der Pionier geht ZUERST — er steht am Ende auf der Kopfzelle der
         // Fahrbahn, und wer dort steht, wird von der Bruecke erschlagen.
         // ⚠ KEIN Todesprotokoll, KEIN Wrack: er wird verbraucht (bug-227).
@@ -357,6 +361,10 @@ public partial class MapEntityLayer
             Variante = (int)(GD.Randi() & 1), Tp = BrueckeTp, Slot = nr,
         };
         _stege.Add(s);
+        // ⭐ 04.10.2026 (bug-434) — 0x4CC280 legt gleich nach dem freien Platz
+        // eine Lichtquelle (x0+1, y0+1, 4, 40) an (@0x4CC2D5), jeder Besitzer.
+        var ecke = BrueckenEcke(s);
+        LichtAnlegen(ecke.X + 1, ecke.Y + 1, 4, 40, "Bruecke gesetzt");
 
         int erschlagen = 0;
         foreach (var (z, mitte) in BrueckenZellen(col, row, d, k))

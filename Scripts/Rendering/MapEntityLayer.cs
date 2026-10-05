@@ -2580,6 +2580,13 @@ public partial class MapEntityLayer : Node2D
             foreach (var m in _minen)
                 if (m.Aktiv && DecktAuf(m.Player, betrachter))
                     yield return (m.Col, m.Row, 1, 0);
+
+        // ⭐ 04.10.2026 (bug-434) — UND DIE LICHTQUELLEN (Tafel 0x6786A8, @0x420A14),
+        // nach allen anderen Oeffnern und vor dem Antiradar. Nur fuer den
+        // Betrachter: die Tafel gehoert dem Rechner, nicht einem Spieler.
+        // Simulation/Todeslicht.cs; Gegenschalter --todeslicht-aus.
+        if (betrachter == ViewPlayer)
+            foreach (var l in LichtAufdecker()) yield return l;
     }
 
     /// <summary>The fog as a W x H texture drawn over the map, the same trick
@@ -13186,6 +13193,16 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 04.10.2026 (bug-426) — Veteranenstimme 143 und Todesklang 400+rand&3
         // (@0x40B3E3, @0x40B519). Simulation/Truemmer.cs, TodesKlang.
         if (!victim.IsBuilding && !victim.IsProp && !victim.Dead) TodesKlang(victim);
+        // ⭐ 04.10.2026 (bug-434) — die LICHTQUELLE 0x4222C0: eine eigene Einheit
+        // haelt ihre Todesstelle 30/80/130 Takte offen (@0x40B442..0x40B488),
+        // ein Gebaeude jedes Besitzers 80 Takte mit Radius 10 (@0x4C995C).
+        // remove_unit/sell_unit der Skripte gehen im Original NICHT durch die
+        // Todesroutine. Simulation/Todeslicht.cs; Gegenschalter --todeslicht-aus.
+        if (!victim.Dead && !grund.StartsWith("Missionsskript"))
+        {
+            if (victim.IsBuilding) GebaeudeLicht(victim);
+            else TodeslichtTod(victim);
+        }
         victim.Hp = 0;
         victim.Dead = true;
         // ⭐⭐ 09.09.2026 — EIN ZERSTOERTES GEBAEUDE VERLIERT SEINE ART.
@@ -15062,6 +15079,9 @@ public partial class MapEntityLayer : Node2D
                 _mscript.MoveUnit = (slot, x, y) => MissionOrderAt(slot, x, y, -1);
                 // FEUERN AUF EINE ZELLE — siehe MissionFireAt.
                 _mscript.FireAt = MissionFireAt;
+                // licht: die Lichtquelle 0x4222C0 der Skripte (bug-434),
+                // Simulation/Todeslicht.cs.
+                _mscript.Licht = SkriptLicht;
                 // ⭐ 25.08.2026 - die zwei Haken zu den Wirkungsarten, die aus dem
                 // Auslesen von Mission 2 kamen. Beide Routinen lagen fertig da,
                 // nur die Zuweisung fehlte (`script-coverage: 2 blockiert`).
@@ -34297,6 +34317,9 @@ public partial class MapEntityLayer : Node2D
         // Druckwelle.cs, Simulation/Gaswerfer.cs.
         DruckwelleTakt();
         GasTakt();
+        // ⭐ 04.10.2026 (bug-434) — »Check spot« 0x422340, jeden Takt (@0x416477):
+        // die Lichtquellen zaehlen ab und schrumpfen. Simulation/Todeslicht.cs.
+        LichtTakt();
         // Erst der Wind, dann der Brand: das Uebergreifen liest die Richtung,
         // und beide muessen im SELBEN Takt stehen, sonst haengt die Ausbreitung
         // wieder an der Bildrate.

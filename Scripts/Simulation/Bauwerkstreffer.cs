@@ -227,6 +227,9 @@ public partial class MapEntityLayer
         int truemmer = (senk ? 10114 : 10108) + 120 * bildsatz;
         int weg = 0;
         var e = BrueckenEcke(st);
+        // ⭐ 04.10.2026 (bug-434) — Lichtquelle (x0+1, y0+1, 4, 80) @0x4CB118,
+        // jeder Besitzer. Simulation/Todeslicht.cs.
+        LichtAnlegen(e.X + 1, e.Y + 1, 4, 80, "Bruecke abgerissen");
         // Höhe(Fahrbahn über Wasser) := Höhe(Kopfzelle derselben Fahrbahn) —
         // @0x4CB320/0x4CB333: das nimmt das +1 des Brückenbaus zurück. Ohne das
         // säße die Wasserkachel eine Höhenstufe (15 Punkte) zu hoch.

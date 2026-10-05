@@ -96,7 +96,9 @@ public partial class MapEntityLayer : Node2D
     {
         int k = System.Array.FindIndex(_druckwellen, w => w.Radius == 0);
         if (k < 0) { DwVoll++; return; }                                       // @0x454575
-        // 0x4222C0 Lichtquelle (8, 150) — NICHT gebaut, siehe Kopf
+        // 0x4222C0 Lichtquelle (8, 150) @0x45458E — jeder Besitzer.
+        // ⭐ 04.10.2026 (bug-434) gebaut, Simulation/Todeslicht.cs.
+        LichtAnlegen(c, r, 8, 150, "Druckwelle");
         _effects.Add(new Effect { Pos = ZellMitte(c, r), Kind = "sprengung" + Simulation.Determinism.Roll(9),
                                   FrameTime = 0.04f });                        // @0x454596: 510 + rand%9
         _druckwellen[k] = new DruckwellenPlatz { Radius = 1, Col = c, Row = r, Takt = _taktNr, Quelle = quelle };

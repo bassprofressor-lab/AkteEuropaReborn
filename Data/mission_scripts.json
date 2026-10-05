@@ -6118,6 +6118,14 @@
        "c": 350,
        "d": 220,
        "kind": "text"
+      },
+      {
+       "_at": "0x49E1C2",
+       "kind": "licht",
+       "a": 5,
+       "b": 106,
+       "c": 5,
+       "d": 100
       }
      ],
      "when": [
@@ -6133,7 +6141,8 @@
        "kind": "store_energy",
        "op": ">"
       }
-     ]
+     ],
+     "_licht": "04.10.2026 bug-434: Lichtquelle 0x4222C0 von Hand eingetragen (Simulation/Todeslicht.cs)"
     },
     {
      "_at": "0x49E1EB",
@@ -6240,6 +6249,14 @@
        "kind": "text"
       },
       {
+       "_at": "0x49E2C4",
+       "kind": "licht",
+       "a": 73,
+       "b": 89,
+       "c": 5,
+       "d": 1000
+      },
+      {
        "a": 0,
        "b": 73,
        "c": 89,
@@ -6262,7 +6279,8 @@
        "kind": "time_after",
        "op": ">"
       }
-     ]
+     ],
+     "_licht": "04.10.2026 bug-434: Lichtquelle 0x4222C0 von Hand eingetragen (Simulation/Todeslicht.cs)"
     },
     {
      "_at": "0x49E305",
@@ -20762,6 +20780,14 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A38CC",
+       "kind": "licht",
+       "a": 5,
+       "b": 5,
+       "c": 10,
+       "d": 500
+      },
+      {
        "_at": "0x4A38EC",
        "a": 391,
        "b": 1,
@@ -20789,7 +20815,8 @@
        "kind": "time_gt",
        "op": ">"
       }
-     ]
+     ],
+     "_licht": "04.10.2026 bug-434: Lichtquelle 0x4222C0 von Hand eingetragen (Simulation/Todeslicht.cs)"
     },
     {
      "_at": "0x4A392D",
@@ -21317,6 +21344,14 @@
        "a": 103
       },
       {
+       "_at": "0x4A3C43",
+       "kind": "licht",
+       "a": 5,
+       "b": 5,
+       "c": 10,
+       "d": 500
+      },
+      {
        "kind": "text",
        "a": 392,
        "b": 1,
@@ -21351,7 +21386,8 @@
        "b": 8,
        "op": ">"
       }
-     ]
+     ],
+     "_licht": "04.10.2026 bug-434: Lichtquelle 0x4222C0 von Hand eingetragen (Simulation/Todeslicht.cs)"
     },
     {
      "_at": "0x4A3CAB",
@@ -26944,6 +26980,28 @@
      ]
     },
     {
+     "_at": "0x499CF2",
+     "_von_hand": "04.10.2026 bug-434: Lichtquelle 0x4222C0 von Hand eingetragen (Simulation/Todeslicht.cs) — v5 (0xBC569A) == 1, der Ausleser hat die Regel ohne Wirkung verworfen",
+     "then": [
+      {
+       "_at": "0x499D07",
+       "kind": "licht",
+       "a": 8,
+       "b": 56,
+       "c": 12,
+       "d": 2500
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x499D24",
      "then": [
       {
@@ -28830,6 +28888,14 @@
      "once": 0,
      "then": [
       {
+       "_at": "0x49AC74",
+       "kind": "licht",
+       "a": 14,
+       "b": 16,
+       "c": 5,
+       "d": 300
+      },
+      {
        "_at": "0x49AC81",
        "a": 3000,
        "kind": "sell_unit"
@@ -28846,13 +28912,22 @@
        "kind": "unit_energy",
        "op": "<"
       }
-     ]
+     ],
+     "_licht": "04.10.2026 bug-434: Lichtquelle 0x4222C0 von Hand eingetragen (Simulation/Todeslicht.cs)"
     },
     {
      "_at": "0x49ACAC",
      "_tut_ausserdem": "0x4222C0 0x4D0EC0",
      "once": 0,
      "then": [
+      {
+       "_at": "0x49ACB7",
+       "kind": "licht",
+       "a": 14,
+       "b": 16,
+       "c": 5,
+       "d": 300
+      },
       {
        "_at": "0x49ACC4",
        "a": 3000,
@@ -28871,7 +28946,8 @@
        "kind": "imap",
        "op": "<"
       }
-     ]
+     ],
+     "_licht": "04.10.2026 bug-434: Lichtquelle 0x4222C0 von Hand eingetragen (Simulation/Todeslicht.cs)"
     },
     {
      "_at": "0x49AD05",

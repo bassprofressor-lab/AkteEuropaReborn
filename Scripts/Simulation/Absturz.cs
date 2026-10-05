@@ -151,6 +151,10 @@ public partial class MapEntityLayer
         a.Dead = true;
         AbstuerzeAufgeschlagen++;
         _effects.Add(new Effect { Pos = a.Pos, Kind = "explosion", FrameTime = 0.05f });
+        // ⭐ 04.10.2026 (bug-434) — Lichtquelle (X, Y, 6, 140), nur wenn der
+        // Besitzer (+0x09) der Betrachter ist (@0x423AD1..0x423AE8).
+        // Simulation/Todeslicht.cs.
+        if (a.Owner == ViewPlayer) LichtAnlegen(a.Col, a.Row, 6, 140, "Absturz " + a.Name);
 
         int treffer = Wirken(a.Col, a.Row, AbsturzSchadenZelle);
         for (int dr = -1; dr <= 1; dr++)

@@ -5745,6 +5745,7 @@ _mausProbePunkt = karte;
             if (_zeigerCheck) GD.Print(_entities.ZeigerCheckLine());
             if (MapEntityLayer.PlasmaCheckAn) GD.Print(_entities.PlasmaCheckLine());
             GD.Print(_entities.AntiradarZeile());
+            GD.Print(_entities.TodeslichtZeile());          // bug-434
             if (MapEntityLayer.AntiradarProbeAn) GD.Print(_entities.AntiradarProbeZeile());
             if (MapEntityLayer.K21LagerCheckAn) GD.Print(_entities.K21LagerCheckLine());
             if (MapEntityLayer.GleisreparaturCheckAn) GD.Print(_entities.GleisreparaturCheckLine());

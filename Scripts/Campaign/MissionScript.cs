@@ -2031,6 +2031,13 @@ public sealed class MissionScript
     /// unsere Setzung bleibt.</summary>
     public Action<int, int, int>? FireAt;            // einheit, x, y
 
+    /// <summary>⭐ 04.10.2026 (bug-434) — LICHTQUELLE <c>0x4222C0(x, y, Radius,
+    /// Dauer)</c>: die Sicht an (x, y) fuer Dauer Takte offen. Skriptstellen
+    /// M4 @0x499D07, M7 @0x49AC74/@0x49ACB7, M17 @0x49E1C2/@0x49E2C4,
+    /// M29 @0x4A38CC/@0x4A3C43 (M24 @0x4A1075: Regel fehlt). Siehe
+    /// Rendering/MapEntityLayer, Simulation/Todeslicht.cs.</summary>
+    public Action<int, int, int, int>? Licht;         // x, y, radius, dauer
+
     /// <summary>
     /// <b>EINE ZELLE ANSCHLAGEN — OHNE SCHUETZEN.</b>
     ///
@@ -3090,6 +3097,10 @@ public sealed class MissionScript
             case "fire_at":
                 FireAt?.Invoke(a.A, a.B, a.C);
                 break;
+            // licht(a = x, b = y, c = Radius, d = Dauer) — 0x4222C0, bug-434
+            case "licht":
+                Licht?.Invoke(a.A, a.B, a.C, a.D);
+                break;
             // hit_cell(a = Spalte, b = Zeile) — ein Treffer OHNE Schuetzen,
             // Angreifer 40050 = Schaden 50. Siehe HitCell; das ist NICHT
             // fire_at.
@@ -3907,6 +3918,7 @@ public sealed class MissionScript
         "set_ai" => SetAi != null,
         "ai_mode" => AiMode != null,
         "fire_at" => FireAt != null,
+        "licht" => Licht != null,                    // bug-434
         "hit_cell" => HitCell != null,
         "set_unit_field" => SetUnitField != null && UnitField != null,
         "add_target" => AddTarget != null,
