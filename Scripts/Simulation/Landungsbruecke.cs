@@ -731,9 +731,15 @@ public partial class MapEntityLayer
                 + $"{(baOk ? "richtig" : "FALSCH")}\n  {MoleNote}\n");
 
         // ---- 4) der Abriss --------------------------------------------------
-        RampeTrifft(platz.X, platz.Y, 200);
+        // ⚠ 05.10.2026 — TP + 4, nicht 200. Seit dem 13.09. (c235ee7) wuerfelt
+        // BauwerkTreffer wie 0x40D820: s = Angriff − rand%5 + rand%5, also
+        // 196…204 bei 200 — gegen 200 TP ein Muenzwurf, und Punkt 4 fiel je
+        // nach Zufallsstand (am 04.10. »9 Rampen stehen«, heute mal so, mal so).
+        // Mit TP + 4 ist s >= TP bei jedem Wurf.
+        int abrissSchaden = (RampeAn(platz.X, platz.Y)?.Tp ?? 200) + 4;
+        RampeTrifft(platz.X, platz.Y, abrissSchaden);
         bool wiederRau = _nav?.GroundAt(platz.X, platz.Y) == Simulation.NavGrid.Ground.Rough;
-        sb.Append($"  4. Abriss (200 Schaden): Zelle wieder rau {wiederRau}, "
+        sb.Append($"  4. Abriss ({abrissSchaden} Schaden, TP + Wurfbreite): Zelle wieder rau {wiederRau}, "
                 + $"Rampen jetzt {_moleSaetze.Count} — {(wiederRau ? "richtig" : "FALSCH")}\n");
 
         var probe = StreifenKachel(Import.MapBaker.RampenKachelBasis);
