@@ -87,10 +87,19 @@ public partial class MapEntityLayer
     /// keiner) über dieser Einheit steht. Rein — keine Zeichnung, kein Zustand;
     /// <see cref="TabBalkenMalen"/> und der Prüfstand nehmen beide diese Zeile.
     /// </summary>
+    /// <summary><c>--gebaeudebalken-tab-alt</c> — Stand bis 0.6.6: auch
+    /// Kulissen ab Art 18 bekommen in Stellung 1 einen Balken. Nullmodell zu
+    /// bug-440.</summary>
+    public static bool GebaeudebalkenTabAlt;
+
     public TabBalken? TabBalkenFuer(Entity e, int art)
     {
         if (art == 0) return null;                           // 0x42AAA3: AUS
         if (e.IsProp || e.Dead || e.HpMax <= 0) return null; // UKOL 100 sterbend → keiner
+        // bug-440 (KayelGee Runde 4, Meldung 5): der Gebaeudezweig des
+        // Art-10-Zeichners laesst Typ >= 0x12 ohne Balken (@0x42B237) — die
+        // Kulissen (Wrack M1 Art 27..31, Bunker 57) haben im Original keinen.
+        if (e.IsBuilding && e.BType >= 18 && !GebaeudebalkenTabAlt) return null;
         bool fuss = e.Infantry >= 0 || e.GameUnitType == 1;
         if (!e.IsBuilding && !fuss && e.GameUnitType == 2) return null;   // 0x4B78B5
         int hoehe = fuss ? 4 : e.GameUnitType is 3 or 4 or 5 ? 6 : 5;

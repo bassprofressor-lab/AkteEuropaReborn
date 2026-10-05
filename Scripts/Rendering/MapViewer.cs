@@ -1707,6 +1707,8 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--gebaeudeklick-check</c> — siehe MapEntityLayer.GebaeudeklickCheck.</summary>
     private bool _gebaeudeklickCheck;
+    /// <summary><c>--treffer-check</c> — siehe Simulation/TrefferCheck.cs (bug-438..440).</summary>
+    private bool _trefferCheck;
 
     /// <summary><c>--fussklangsatz-check</c> — siehe Simulation/FussklangsatzCheck.cs.</summary>
     private bool _fussklangsatzCheck;
@@ -4058,6 +4060,7 @@ _mausProbePunkt = karte;
             else if (a == "--werteliste-check") _wertelisteCheck = true;
             else if (a == "--einsteigen-check") _einsteigenCheck = true;
             else if (a == "--gebaeudeklick-check") _gebaeudeklickCheck = true;
+            else if (a == "--treffer-check") _trefferCheck = true;
             else if (a == "--tuerauslass-check") _tuerauslassCheck = true;
             else if (a == "--cdspieler-check") _cdspielerCheck = true;
             else if (a == "--zeigerfenster-check") _zeigerfensterCheck = true;
@@ -4922,6 +4925,11 @@ _mausProbePunkt = karte;
             else if (a == "--zeigerprobe-flach") MapEntityLayer.ZeigerprobeFlach = true;
             // Nullmodell zu bug-298: Gebaeude wieder ueber das Bildrechteck treffen.
             else if (a == "--gebaeudepick-rechteck") MapEntityLayer.GebaeudepickRechteck = true;
+            else if (a == "--pick-vorderster-alt") MapEntityLayer.PickVordersterAlt = true;
+            else if (a == "--gebaeudepick-bbox-alt") MapEntityLayer.GebaeudepickBboxAlt = true;
+            else if (a == "--neutralzeiger-alt") MapEntityLayer.NeutralzeigerAlt = true;
+            else if (a == "--postenfenster-ohne-einheit") MapEntityLayer.PostenfensterOhneEinheit = true;
+            else if (a == "--gebaeudebalken-tab-alt") MapEntityLayer.GebaeudebalkenTabAlt = true;
             // Nullmodell zu bug-301: Fadenkreuz ueber dem tuerlosen fremden Gebaeude.
             else if (a == "--gebaeudefadenkreuz-alt") MapEntityLayer.GebaeudefadenkreuzAlt = true;
             // Nullmodell zu bug-303: die Schiffszeilen bleiben die rohe EXE-Vorgabe.
@@ -8338,6 +8346,13 @@ _mausProbePunkt = karte;
         if (_fussklangsatzCheck && _entities.ErwartungBereit())
         {
             GD.Print(_entities.FussklangsatzCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_trefferCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.TrefferCheckLine());
             GetTree().Quit(0);
             return;
         }

@@ -3685,6 +3685,13 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private readonly HashSet<(int Col, int Row)> _koerperZelle = new();
 
+    /// <summary>bug-439: jede Zelle mit imap 60000+n -> Platz n, AUCH die
+    /// Flachbauzellen (Lage 98) — fuer den Treffer zaehlt der Griff, nicht ob
+    /// die Kachel aufragt. <see cref="_griffPlaetze"/> sagt, welche Plaetze
+    /// ueberhaupt Griffzellen haben (sonst Rueckfall auf das Rechteck).</summary>
+    private readonly Dictionary<(int Col, int Row), int> _griffZelle = new();
+    private readonly HashSet<int> _griffPlaetze = new();
+
     /// <summary>Wieviele Koerperzellen die Karte hergegeben hat - fuer den
     /// Pruefstand, damit "0 aufragende Kacheln" nicht mit "die Karte hatte
     /// keine" verwechselt wird.</summary>
@@ -3705,6 +3712,8 @@ public partial class MapEntityLayer : Node2D
     private void DropSteppingFootprints(JObj root)
     {
         _koerperZelle.Clear();
+        _griffZelle.Clear();
+        _griffPlaetze.Clear();
         FlachbauZellen = 0;
 
         // ⭐⭐ 28.08.2026 — GEBAEUDEZELLEN MIT LAGE 1..98 SIND BODEN.
@@ -3762,6 +3771,8 @@ public partial class MapEntityLayer : Node2D
             if (v is >= 60000 and <= 60299)
             {
                 var zelle = (GetI(c, "col"), GetI(c, "row"));
+                _griffZelle[zelle] = v - 60000;
+                _griffPlaetze.Add(v - 60000);
                 if (flachbau.Contains(zelle)) FlachbauZellen++;
                 else _koerperZelle.Add(zelle);
             }
@@ -7075,6 +7086,13 @@ public partial class MapEntityLayer : Node2D
             }
         }
         _selAir = -1;
+        // bug-440: ein herrenloses Gebaeude, das im Original keinen
+        // Auswahlzeiger bekommt (Kulisse, Posten ohne Einheit auf der Platte),
+        // nimmt auch keinen Klick an — Zeiger 0 ohne Auswahl tut nichts
+        // (@0x4370F4 `ret`). Die Auswahl bleibt dabei stehen.
+        if (hit >= 0 && hit < _entities.Count && _entities[hit] is { IsBuilding: true } hb
+            && hb.Owner is < 0 or > 7 && !HerrenlosWaehlbar(hb))
+            return;
         bool mine = Commandable(hit);
         if (!additive) _sel.Clear();
         if (mine)
@@ -37511,6 +37529,7 @@ public partial class MapEntityLayer : Node2D
         // Damit ist `Pos` fuer den Treffer gleichgueltig, und der Riss zwischen
         // BodyCenter und BodyCenterAt kann hier nichts mehr anrichten.
         var pz = GebaeudepickRechteck ? null : CellAt(p);
+        if (!PickVordersterAlt) return PickWieOriginal(p, pz);
         int best = -1, bestRow = int.MinValue;
         for (int i = 0; i < _entities.Count; i++)
         {
@@ -37542,6 +37561,144 @@ public partial class MapEntityLayer : Node2D
             best = i; bestRow = e.Row;
         }
         return best;
+    }
+
+    /// <summary><c>--pick-vorderster-alt</c> — der Stand bis 0.6.6: in
+    /// <see cref="Pick"/> gewinnt die SUEDLICHSTE Einheit (groesste Zeile), und
+    /// Einheit und Gebaeude konkurrieren nur ueber die Zeile. Nullmodell zu
+    /// bug-438.</summary>
+    public static bool PickVordersterAlt;
+
+    /// <summary><c>--neutralzeiger-alt</c> — Stand bis 0.6.6: JEDES herrenlose
+    /// Gebaeude bekommt den Auswahlzeiger und laesst sich anklicken. Nullmodell
+    /// zu bug-440.</summary>
+    public static bool NeutralzeigerAlt;
+
+    /// <summary><c>--postenfenster-ohne-einheit</c> — Stand seit dem 25.08.:
+    /// der Nachschubposten ist auch ohne eigene Einheit auf der Platte
+    /// waehlbar (nur dieser Teil von bug-440 zurueck).</summary>
+    public static bool PostenfensterOhneEinheit;
+
+    /// <summary>
+    /// ⭐⭐ 05.10.2026, bug-440 — WELCHES HERRENLOSE GEBAEUDE DEN AUSWAHLZEIGER
+    /// BEKOMMT (KayelGee Runde 4, Meldungen 5 und 16; Zeigerwahl Schritt 8
+    /// @0x4324A2..0x432647, berichte/auswahl-treffer-fable.md §1.2):
+    /// <list type="bullet">
+    /// <item>Art 13 (Kraftwerk) mit built != 0 (@0x43252A, @0x432506);</item>
+    /// <item>Art 17 (Handelsposten), wenn ein eigenes Fahrzeug auf einer der
+    /// vier Platten steht (@0x432569);</item>
+    /// <item>Art 14 (Nachschubposten), wenn ein eigenes Fahrzeug auf
+    /// (x+3, y+3) steht (@0x4325FC, imap/1000 == Betrachter — Fussvolk traegt
+    /// 10000+k und trifft darum nie).</item>
+    /// </list>
+    /// Alles andere — die Wrack-Kulissen in M1, der leere Posten in M2 — bekommt
+    /// Zeiger 0: ohne Auswahl tut der Klick nichts, mit Auswahl ist er Fahrt.
+    /// ⚠ Dass das built-Tor @0x432506 nur den Besitzerblock (Art 13) sperrt und
+    /// nicht auch 14/17, ist UNSERE Lesart: alle 76 Handelsposten tragen
+    /// built 0 und sind laut Enzyklopaedie trotzdem aufrufbar.
+    /// </summary>
+    private bool HerrenlosWaehlbar(Entity e)
+    {
+        if (NeutralzeigerAlt) return true;
+        if (e.BType == 13) return e.Built != 0;
+        if (e.BType == MarketType) return MarktfensterAlt || MarktFahrzeugAufPlatte(e, ViewPlayer);
+        if (e.BType == SupplyDepotType)
+            return PostenfensterOhneEinheit || PostenPlatteBesetzt(e, ViewPlayer);
+        return false;
+    }
+
+    /// <summary>Steht auf der Platte (x+3, y+3) des Nachschubpostens ein
+    /// Fahrzeug dieses Spielers? (@0x4325F6..0x432634)</summary>
+    public bool PostenPlatteBesetzt(Entity b, int player)
+    {
+        if (_nav == null) return false;
+        int who = _nav.OccupantAt(b.Col + 3, b.Row + 3);
+        if (who < 0 || who >= _entities.Count) return false;
+        var u = _entities[who];
+        return !u.IsBuilding && !u.IsProp && !u.Dead && u.Owner == player && u.Infantry < 0;
+    }
+
+    /// <summary><c>--gebaeudepick-bbox-alt</c> — der Stand bis 0.6.6: ein
+    /// Gebaeude wird ueber das Rechteck seines Musters getroffen (Basis 7x6 =
+    /// 42 Zellen samt Tuer und Vorplatz) statt ueber seine Griffzellen.
+    /// Nullmodell zu bug-439.</summary>
+    public static bool GebaeudepickBboxAlt;
+
+    /// <summary>
+    /// ⭐⭐ 05.10.2026, bug-438/439 — DER TREFFERTEST WIE IM ORIGINAL (KayelGee
+    /// Runde 4, Meldungen 2 und 36; berichte/auswahl-treffer-fable.md §1, §2, §6).
+    ///
+    /// <para><b>Einheiten (bug-438):</b> der Treffertest @0x431C31 laeuft die
+    /// Zeichenlisten 0 → 69 ab (Liste = Kartenzeile − Rollzeile + 2, @0x4301B3),
+    /// in der Liste Satz 0 → n, und der ERSTE Kasten, der die Maus enthaelt,
+    /// gewinnt (`jmp 0x43200A` @0x431D05). Also die NOERDLICHSTE Einheit, in der
+    /// Zeile die fruehere. Wir nahmen die suedlichste — bei drei Panzern
+    /// uebereinander gewann an der Rumpfmitte des mittleren der untere, dessen
+    /// Kasten 24 px ueber seine Zelle reicht (sein Bild
+    /// kayelgeenaheeinheiten.png). ⚠ Reihenfolge in der Zeile = Satznummer
+    /// aufsteigend ist eine VERMUTUNG (Rufer des Erzeugers 0x4300C0 ungelesen).</para>
+    ///
+    /// <para><b>Einheit vor Gebaeude:</b> Schritt 10 der Zeigerwahl (@0x4327F8)
+    /// ueberschreibt den Gebaeudetreffer aus Schritt 8 mit dem Einheitentreffer
+    /// (§1.4). Die Einnahme geht im Original noch davor — das bleibt in
+    /// <see cref="CursorHintAt"/>, wie bisher.</para>
+    ///
+    /// <para><b>Gebaeude (bug-439):</b> das Original findet ein Gebaeude ueber
+    /// den Griff der MAUSZELLE (sec52, @0x432150), und 60000+n steht nur auf den
+    /// Rumpfzellen. Die Basis Krumlov in M2 hat 19 davon; unser Rechteck hatte
+    /// 42, und 23 davon waren Tuer, Vorplatz und Rand — ein Fahrbefehl vor die
+    /// Tuer waehlte die Basis. Gebaeude ohne jede Griffzelle (Neubauten, aeltere
+    /// Importe) fallen auf das Rechteck zurueck.</para>
+    /// </summary>
+    private int PickWieOriginal(Vector2 p, Vector2I? pz)
+    {
+        int einheit = -1, einheitRow = int.MaxValue;
+        int gebaeude = -1, gebaeudeRow = int.MinValue;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.Dead) continue;
+            if (Untergestellt(e)) continue;
+            if (!PickOhneNebel && ImNebelVerborgen(e)) continue;
+            if (e.NoStructure && !Anfassbar(e)) continue;
+            if (!e.IsBuilding)
+            {
+                // strikt kleiner: bei gleicher Zeile bleibt der fruehere Satz
+                if (e.Row >= einheitRow) continue;
+                if (!BodyRect(e).HasPoint(p)) continue;
+                einheit = i; einheitRow = e.Row;
+                continue;
+            }
+            if (e.Row <= gebaeudeRow) continue;
+            bool treffer;
+            if (!e.IsProp && !GebaeudepickRechteck)
+            {
+                if (pz is not { } z) continue;
+                treffer = GebaeudeAufZelle(e, z.X, z.Y);
+            }
+            else treffer = BodyRect(e).HasPoint(p);
+            if (!treffer) continue;
+            gebaeude = i; gebaeudeRow = e.Row;
+        }
+        return einheit >= 0 ? einheit : gebaeude;
+    }
+
+    /// <summary>Traegt diese Zelle das Gebaeude? Ueber die Griffzellen der
+    /// Karte (imap 60000+Platz), sonst ueber das Musterrechteck.</summary>
+    private bool GebaeudeAufZelle(Entity e, int col, int row)
+    {
+        if (!GebaeudepickBboxAlt && e.Slot >= 0 && _griffPlaetze.Contains(e.Slot))
+        {
+            // Die TUERZELLE traegt im Original keinen Griff (imap 0xFFFE
+            // @0x43CAD9), aber die Tuermarke — Einfahrzeiger 5 (@0x4323E6) und
+            // Einnahmezeiger 6 (@0x4323F5) haengen an ihr. Bei uns fragen beide
+            // erst nach dem Pick-Treffer, darum gehoert sie hier dazu.
+            foreach (var d in e.DoorCells)
+                if (col == e.Col + d.Col && row == e.Row + d.Row) return true;
+            return _griffZelle.TryGetValue((col, row), out int platz) && platz == e.Slot;
+        }
+        int w = Mathf.Max(1, e.FootW), h = Mathf.Max(1, e.FootH);
+        return col >= e.Col && col < e.Col + w && row >= e.Row && row < e.Row + h;
     }
 
     /// <summary>
@@ -38074,7 +38231,7 @@ public partial class MapEntityLayer : Node2D
         if (e.IsBuilding && !GebaeudezeigerAlt)
         {
             if (EinnahmezeigerGilt(e, mapPos)) return Hint.Einnahme;
-            if (e.Owner is < 0 or > 7) return Hint.Neutral;
+            if (e.Owner is < 0 or > 7) return HerrenlosWaehlbar(e) ? Hint.Neutral : Hint.Ground;
             // ⭐⭐⭐ 19.09.2026, bug-301 — UEBER EINEM GEBAEUDE STEHT OHNE STRG
             // NIE DAS FADENKREUZ, auch nicht ueber einem TUERLOSEN.
             //

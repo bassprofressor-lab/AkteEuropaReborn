@@ -272,7 +272,11 @@ public partial class MapEntityLayer
             sb.AppendLine("  kein fremdes Gebaeude OHNE Tuer — ungeprueft");
         else
         {
-            var anker = MitteVon(ohneTuer.Col, ohneTuer.Row);
+            // ⚠ 05.10.2026, bug-439: geklickt wird eine GRIFFZELLE, nicht der
+            // Anker. Seit der Treffer ueber imap 60000+n laeuft wie im Original,
+            // gehoert die Ankerzelle (12,18) des Postens bzw. (121,65) des
+            // Kraftwerks K3 nicht zum Gebaeude — ein Klick dort ist Boden.
+            var anker = GriffpunktVon(ohneTuer);
             bool zeigtEin = EinnahmezeigerHier(anker);
             bool schluckt = PostCapture(anker);
             // ⚠ Und die andere Haelfte der Frage: was macht der Strg-Zweig

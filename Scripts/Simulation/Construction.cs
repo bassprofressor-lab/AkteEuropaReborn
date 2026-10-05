@@ -415,6 +415,9 @@ public partial class MapEntityLayer
 
         int slot = FreeBuildingSlot();
         if (slot < 0) return null;                       // "Too many buildings..."
+        // bug-439: ein Neubau auf einem frei gewordenen Platz hat keine Griffzellen
+        // aus der Karte — die alten gehoeren dem Vorgaenger. Rechteck statt Griff.
+        _griffPlaetze.Remove(slot);
 
         // types 13 and 14 belong to nobody (@0x4C8F3D writes 0xff)
         int realOwner = typ is 13 or 14 ? -1 : owner;
