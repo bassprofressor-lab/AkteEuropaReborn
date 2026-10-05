@@ -1827,6 +1827,14 @@ public partial class MapEntityLayer
     /// Tank leer ist.</summary>
     public int KeinWegGemeldet;
 
+    /// <summary><c>--fahrbefehl-raeumt-ziel</c> — Stand bis 0.6.6: jeder
+    /// Fahrbefehl loescht das Ziel, der Turm dreht zum Endziel. Nullmodell zu
+    /// bug-452.</summary>
+    public static bool FahrbefehlRaeumtZiel;
+
+    /// <summary>Wie oft ein Fahrbefehl ein Einheitsziel behalten hat.</summary>
+    public int FahrzielBehalten;
+
     private bool ApplyMove(in CommandRecord c)
     {
         if (_nav == null) return false;
@@ -1856,7 +1864,23 @@ public partial class MapEntityLayer
             return true;
         }
 
-        e.Target = -1;                 // ein Fahrbefehl bricht den Angriff ab
+        // ⭐ 05.10.2026, bug-452 (KayelGee R4, Meldung 10): »bei einem
+        // Bewegungsbefehl im Kampf schaut die Kanone in Fahrtrichtung, sollte
+        // aber auf dem Gegner bleiben, bis er aus der Reichweite ist«.
+        // `fahre` 0x40B070 raeumt UTOK_NA (+0x36, das BEFOHLENE Ziel) immer,
+        // STRILI_NA (+0x34) aber nur, wenn es eine Zelle oder ein Gebaeude ist
+        // (> 8000, @0x40B103..0x40B10E) — ein EINHEITSziel bleibt, die Schiessuhr
+        // feuert im Fahren weiter und laesst erst los, wenn der Probeschuss nach
+        // dem Nachladen faellt (@0x40E7CB). Bei uns: Ordered = false, Target bleibt.
+        // ⚠ UNSERE EINGRENZUNG: nur wer bei uns im Fahren schiesst (imFahren in
+        // UpdateCombat: Fahrzeug mit Waffe) — sonst hielte UpdateCombat die
+        // Einheit fuer den Schuss an, und der Fahrbefehl waere verloren.
+        // --fahrbefehl-raeumt-ziel.
+        bool zielBleibt = !FahrbefehlRaeumtZiel && e.Target >= 0 && e.Target < _entities.Count
+            && !_entities[e.Target].IsBuilding && !_entities[e.Target].Dead
+            && e.Infantry < 0 && e.Weapon != 0 && !KeinFeuerImFahren;
+        if (zielBleibt) { e.Ordered = false; FahrzielBehalten++; }
+        else e.Target = -1;            // ein Fahrbefehl bricht den Angriff ab
         e.Orders.Clear();
         AuftragLoeschen(e);            // bug-417: auch den Zellangriff (fahre 0x40B070: UKOL := 2)
         if (e.FuelMax > 0 && e.Fuel <= 0) return false;

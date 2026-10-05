@@ -1282,6 +1282,7 @@ public partial class MapViewer : Node2D
         }
         if (MapEntityLayer.HangfahrtCheckAn) { _ = HangfahrtLauf(); return; }
         if (MapEntityLayer.DrehenCheckAn) { _ = DrehenLauf(); return; }
+        if (MapEntityLayer.FahrzielCheckAn) { _ = FahrzielLauf(); return; }
         // ⭐ 03.10.2026 — bug-411/412/414, siehe MausTabLauf.cs.
         if (RollenCheckAn) { _ = RollenLauf(); return; }
         if (MapEntityLayer.TabbalkenCheckAn) { _ = TabbalkenLauf(); return; }
@@ -2024,6 +2025,16 @@ public partial class MapViewer : Node2D
         for (int bild = 0; bild < 60 * 300 && !_entities.DrehenFertig; bild++)
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         GD.Print(_entities.DrehenFertig ? _entities.DrehenBerichtText : "drehen-check: ZEIT ABGELAUFEN");
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--fahrziel-check</c> (bug-452): Simulation/FahrzielCheck.cs.</summary>
+    private async System.Threading.Tasks.Task FahrzielLauf()
+    {
+        _entities.EnsureMissionScript();
+        for (int bild = 0; bild < 60 * 120 && !_entities.FahrzielFertig; bild++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(_entities.FahrzielFertig ? _entities.FahrzielBericht : "fahrziel-check: ZEIT ABGELAUFEN");
         GetTree().Quit(0);
     }
 
@@ -4086,6 +4097,9 @@ _mausProbePunkt = karte;
             else if (a == "--turm-alt") MapEntityLayer.TurmAlt = true;
             else if (a == "--dreh-protokoll") MapEntityLayer.DrehProtokoll = true;
             else if (a == "--drehen-check") MapEntityLayer.DrehenCheckAn = true;
+            else if (a == "--fahrziel-check") MapEntityLayer.FahrzielCheckAn = true;
+            else if (a == "--handsteuerung-klick-alt") MapEntityLayer.HandsteuerungKlickAlt = true;
+            else if (a == "--muendung-alt") MapEntityLayer.MuendungAlt = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
@@ -4738,6 +4752,8 @@ _mausProbePunkt = karte;
             // stellen und nachsehen, ob die Streife sie aufnimmt. Siehe KiProbe.cs.
             else if (a == "--ki-probe") _kiProbe = true;
             else if (a == "--ausweich-probe") _ausweichProbe = true;
+            else if (a == "--ausweichen-ohne-sprit") MapEntityLayer.AusweichenOhneSprit = true;
+            else if (a == "--fahrbefehl-raeumt-ziel") MapEntityLayer.FahrbefehlRaeumtZiel = true;
             else if (a == "--aufgeben-probe") _aufgebenProbe = true;
             else if (a == "--bodenangriff-probe") _bodenangriffProbe = true;
             else if (a == "--fussschuss-probe") _fussSchussProbe = true;
@@ -8752,7 +8768,11 @@ _mausProbePunkt = karte;
                         // VERBRAUCHT (@0x437567). Er geht vor, sonst waehlte der
                         // Klick eine Einheit an und der Menuedruck verfiele.
                         // Siehe Simulation/Zeigermerker.cs.
-                        if (_leftDown && !_boxSelect && _entities.Zeigermerker >= 0
+                        // bug-453: unter der Handsteuerung (Zeigerart 1000) schiesst
+                        // der Linksklick, und nur das (Klickverteiler @0x4370C4).
+                        if (_leftDown && !_boxSelect && _entities.HandsteuerungKlick(KartenMaus()))
+                        { }
+                        else if (_leftDown && !_boxSelect && _entities.Zeigermerker >= 0
                             && _entities.MerkerKlick(KartenMaus()))
                         {
                             if (_entities.ZeigerNote.Length > 0)

@@ -12522,6 +12522,35 @@ public partial class MapEntityLayer : Node2D
     /// hinausragt.</summary>
     private const float MuzzleReach = 14f;
 
+    /// <summary><c>--muendung-alt</c> — Stand bis 0.6.6: das Muendungsfeuer sitzt
+    /// in ZIELrichtung vor der Turmmitte, auch wenn der Turm noch woanders hinzeigt.
+    /// Nullmodell zu bug-454.</summary>
+    public static bool MuendungAlt;
+
+    /// <summary>Schuesse mit Muendungsfeuer / davon mit Turm neben der Zielrichtung.</summary>
+    public int MuendungSchuesse, MuendungAmTurm;
+
+    /// <summary>
+    /// bug-454 (KayelGee R4, Meldung 9): »das Muendungsfeuer ist an der falschen
+    /// Stelle und passt nicht immer zur Rotation des Turms«. Im Original haengt es
+    /// am AKTUELLEN Turmbild (Zeichner 0x42A15F: SHOOT.CWT-Satz (Waffe·48 + Bild)),
+    /// nicht am Ziel. Seit bug-406 dreht unser Turm stufig und der Schuss wartet
+    /// nicht — dann stand das Feuer beim Ziel, das Rohr woanders. Hier: die
+    /// Richtung des Turms. ⚠ UNSERE SETZUNG bleibt die Rohrlaenge (14 px) und
+    /// dass der Effekt weltfest steht statt mit Turm und Fahrt zu wandern
+    /// (Anhaengsel + SHOOT.CWT-Import offen, berichte/turm-flieger-fable.md §1.3 B).
+    /// </summary>
+    private Vector2 MuendungsRichtung(Entity shooter, Vector2 zielRichtung)
+    {
+        if (MuendungAlt || shooter.GameUnitType > 2) return zielRichtung;
+        int f = TurmRichtung(shooter);
+        if (f is < 0 or > 7) return zielRichtung;
+        float w = Mathf.DegToRad(90f + 45f * f);         // Umkehrung von DirToFacing
+        MuendungSchuesse++;
+        if (f != DirToFacing(zielRichtung)) MuendungAmTurm++;
+        return new Vector2(Mathf.Cos(w), Mathf.Sin(w));
+    }
+
     /// <summary>
     /// <b>WO EIN SCHUSS DIE EINHEIT VERLÄSST</b> — der Punkt am BILD, nicht am
     /// Grundriss.
@@ -12737,7 +12766,7 @@ public partial class MapEntityLayer : Node2D
         if (shooter.Weapon < InfantryWeaponFirst && mzf >= 0)
             _effects.Add(new Effect
             {
-                Pos = ShotOrigin(shooter) + dir * MuzzleReach,
+                Pos = ShotOrigin(shooter) + MuendungsRichtung(shooter, dir) * MuzzleReach,
                 Kind = $"mzf{mzf}", FrameTime = 0.035f,
             });
 
@@ -34360,6 +34389,7 @@ public partial class MapEntityLayer : Node2D
         // Reihenfolgeabhängigkeit — siehe die Warnung bei der Schiffsdrehung.
         _taktNr++;
         if (DrehenCheckAn) DrehenCheckTakt();   // --drehen-check (bug-406..408), Simulation/DrehenCheck.cs
+        if (FahrzielCheckAn) FahrzielCheckTakt(); // --fahrziel-check (bug-452), Simulation/FahrzielCheck.cs
 
         // Was noch abzusetzen ist: EINES je Takt und Traeger. Siehe
         // Entity.UnloadRest — das Original fuehrt denselben Zaehler im Satz.

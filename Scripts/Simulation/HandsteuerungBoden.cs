@@ -44,6 +44,50 @@ using Godot;
 public partial class MapEntityLayer
 {
     public static bool HandsteuerungBodenAlt;
+
+    /// <summary><c>--handsteuerung-klick-alt</c> — Stand bis 0.6.6: unter der
+    /// Handsteuerung waehlt der Linksklick ab oder befiehlt Fahrt/Angriff.
+    /// Nullmodell zu bug-453.</summary>
+    public static bool HandsteuerungKlickAlt;
+
+    /// <summary>Wie oft der Linksklick unter Handsteuerung geschossen hat.</summary>
+    public int HandKlickSchuesse, HandKlickGeklemmt;
+
+    /// <summary>
+    /// ⭐ 05.10.2026, bug-453 (KayelGee R4, Meldung 37): »wenn man eine
+    /// Einheit manuell steuert, sollte man mit der linken Maustaste schiessen
+    /// koennen und nicht die Einheit abwaehlen«. Klickverteiler 0x437060:
+    /// Zeigerart 1000 → 0x43788C → 0x40B9A0 — es gibt KEINEN anderen Zweig.
+    /// 0x40B9A0: d = √((dx·40)² + (dy·40)²), r = Reichweite·40; liegt die
+    /// Zelle weiter, wird auf die Reichweite entlang der Klicklinie geklemmt
+    /// (0x40BA34..0x40BA7A); dann Bus-Befehl 9 = fire_at (0x40C8C0).
+    /// Gibt true, wenn der Klick der Handsteuerung gehoert (auch ohne Schuss).
+    /// </summary>
+    /// <summary>NUR PRUEFSTAND: Nachladen abkuerzen, damit ein Klick misst, was er soll.</summary>
+    public int ProbeZielVon(int idx) => idx >= 0 && idx < _entities.Count ? _entities[idx].Target : -1;
+    public void ProbeNachladenAus(int idx) { if (idx >= 0 && idx < _entities.Count) _entities[idx].Cooldown = 0; }
+
+    public bool HandsteuerungKlick(Vector2 mapPos)
+    {
+        if (HandsteuerungKlickAlt || HandsteuerungIdx < 0 || HandsteuerungIdx >= _entities.Count) return false;
+        var e = _entities[HandsteuerungIdx];
+        if (e.Dead) return false;
+        if (CellAt(mapPos) is not { } z) return true;
+        int dx = z.X - e.Col, dy = z.Y - e.Row;
+        float d = Mathf.Sqrt(dx * 40f * dx * 40f + dy * 40f * dy * 40f);
+        int weit = e.Range > 0 ? e.Range : Mathf.RoundToInt(RangeOf(e));
+        float r = weit * 40f;
+        int col = z.X, row = z.Y;
+        if (d > r && d > 0f)
+        {
+            col = e.Col + (int)(dx * r / d);
+            row = e.Row + (int)(dy * r / d);
+            HandKlickGeklemmt++;
+        }
+        if (FireAtAusfuehren(HandsteuerungIdx, col, row)) HandKlickSchuesse++;
+        else if (FireAtGrund.Length > 0) Say("Handsteuerung: " + FireAtGrund);
+        return true;
+    }
     public static bool HandsteuerungBodenCheckAn;
 
     /// <summary>Die Maus auf der Karte, je Bild von der Oberfläche abgelegt

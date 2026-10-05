@@ -124,6 +124,13 @@ public partial class MapEntityLayer : Node2D
     /// Sprungwaechter in MapEntityLayer.</summary>
     public static bool AusweichenSpringt;
 
+    /// <summary><c>--ausweichen-ohne-sprit</c> — Stand bis 0.6.6: eine trockene
+    /// Einheit faehrt den Ausweichschritt gratis. Nullmodell zu bug-451.</summary>
+    public static bool AusweichenOhneSprit;
+
+    /// <summary>Wie oft ein zugesagter Ausweichschritt am leeren Tank hing.</summary>
+    public int AusweichTrocken;
+
     /// <summary>Bequemlichkeit: der alte Name, damit die Abfragen unten lesbar
     /// bleiben.</summary>
     private static bool KeinAusweichen => !AusweichenAn;
@@ -230,6 +237,18 @@ public partial class MapEntityLayer : Node2D
             if (e.Path is { Count: > 0 } || e.Orders.Count > 0)
             {
                 e.Ukol = UkolFrei;
+                continue;
+            }
+            // ⭐ 05.10.2026, bug-451 (KayelGee R4, Meldung 1): »Einheiten ohne
+            // Treibstoff weichen trotzdem aus«. Im Original faellt bei Sprit 0
+            // (Gattung != 1) der GANZE Auftragsverteiler aus (0x407F09 → jmp
+            // 0x409EEE), und der Ausweicharm UKOL 3 (0x40A130[3] → 0x408E45) ist
+            // einer seiner Arme. UKOL 3 bleibt stehen; die naechste Anfrage setzt
+            // ihn zurueck und antwortet nein (wie 0x404DD0). --ausweichen-ohne-sprit.
+            if (!AusweichenOhneSprit && e.FuelMax > 0 && e.Fuel <= 0
+                && e.Infantry < 0 && e.GameUnitType != 1)
+            {
+                AusweichTrocken++;
                 continue;
             }
 

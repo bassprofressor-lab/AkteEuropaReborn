@@ -254,6 +254,41 @@ public partial class MapEntityLayer : Node2D
                        + $"  -> {(dFrag > 0 && dFeind == 0 ? "WIE ERWARTET (ein Eigener WIRD gefragt)" : "NICHT wie erwartet")}");
                 GD.Print($"ausweich-probe ERGEBNIS: Feind [{_awFeindfall}] | "
                        + $"Eigener [{_awFreundfall}]");
+
+                // ---- FALL 3 (bug-451): ein eigenes Fahrzeug mit LEEREM Tank ----
+                // Direkt gefragt statt angefahren: Anfrage (0x404D20) → UKOL 3,
+                // dann EIN Ausweichtakt. Soll: kein Ausweichweg, Zelle bleibt;
+                // die naechste Anfrage setzt UKOL 3 zurueck und sagt nein.
+                int tank = -1;
+                for (int i = 0; i < _entities.Count && tank < 0; i++)
+                {
+                    var e = _entities[i];
+                    if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile || i == _awFahrer) continue;
+                    if (e.Owner != _entities[_awFahrer].Owner || e.FuelMax <= 0 || e.Infantry >= 0 || e.GameUnitType != 0) continue;
+                    tank = i;
+                }
+                if (tank < 0) { GD.Print("ausweich-probe: Fall 3 entfaellt (kein eigenes Fahrzeug mit Tank)"); _awProbe = -1; return; }
+                var b3 = _entities[tank];
+                b3.Path = null; b3.Orders.Clear(); b3.Ukol = UkolFrei; b3.Target = -1;
+                int altFuel = b3.Fuel;
+                b3.Fuel = 0;
+                var zelle = new Vector2I(b3.Col, b3.Row);
+                int zusagen = 0, wege = 0, zweiteNein = 0;
+                for (int versuch = 0; versuch < 20; versuch++)
+                {
+                    b3.Ukol = UkolFrei; b3.Path = null;
+                    if (!AusweichenAnfragen(_awFahrer, tank, versuch & 7)) continue;   // 2 %-Wurf
+                    zusagen++;
+                    AusweichTakt();
+                    if (b3.Path is { Count: > 0 }) wege++;
+                    if (b3.Ukol == UkolAusweichen && !AusweichenAnfragen(_awFahrer, tank, 0) && b3.Ukol == UkolFrei) zweiteNein++;
+                }
+                b3.Path = null; b3.Ukol = UkolFrei; b3.Fuel = altFuel;
+                bool ok3 = zusagen > 0 && wege == 0 && zweiteNein > 0;   // einzelne zweite Anfragen faellt der 2-%-Wurf (rand%50==13) VOR dem Ruecksetzen
+                GD.Print($"ausweich-probe FALL 3: Platz {b3.Slot} (Sprit 0) auf ({zelle.X},{zelle.Y}): {zusagen} Zusagen, "
+                       + $"{wege} Ausweichwege gesetzt, {zweiteNein} zweite Anfragen mit nein"
+                       + $"  -> {(ok3 ? "BESTANDEN" : "DURCHGEFALLEN")}"
+                       + (AusweichenOhneSprit ? " (Nullmodell --ausweichen-ohne-sprit)" : ""));
                 _awProbe = -1;
                 return;
             }

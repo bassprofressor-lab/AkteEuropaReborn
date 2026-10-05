@@ -304,6 +304,46 @@ public partial class MapViewer
         bool ok = wechsel >= 2 && e.HandBodenPostMove == 0 && e.HandBodenSchritte >= 2 && nachher <= 1;
         sb.Append($"  Gegenschalter --handsteuerung-boden-alt: {MapEntityLayer.HandsteuerungBodenAlt}"
                 + (MapEntityLayer.HandsteuerungBodenAlt ? " (Nullmodell: PostMove > 0 erwartet -> DURCHGEFALLEN)" : "") + "\n");
+        // ---- bug-453: der Linksklick schiesst (0x43788C → 0x40B9A0 → Befehl 9) ----
+        int hand = e.HandsteuerungIdx, schussVor = e.HandKlickSchuesse, klemmVor = e.HandKlickGeklemmt;
+        int fireVor = e.FireAtSchuesse;
+        async System.Threading.Tasks.Task Klick(Vector2 p)
+        {
+            _mausProbePunkt = p;
+            var vp = GetViewport().GetMousePosition();
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = vp, GlobalPosition = vp }); Input.FlushBufferedEvents();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            e.ProbeNachladenAus(hand);
+            int zielVor = e.ProbeZielVon(hand);
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = vp, GlobalPosition = vp }); Input.FlushBufferedEvents();   // sofort — sonst schiesst die Einheit vorher selbst und laedt nach
+            GD.Print($"   [klick] Ziel der Einheit vor dem Loslassen: {zielVor}, Grund danach »{e.FireAtGrund}«, Schuesse {e.HandKlickSchuesse}");
+            for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        string klickZeile;
+        if (hand < 0) klickZeile = "  Linksklick: Handsteuerung nicht mehr aktiv — nicht gemessen\n";
+        else
+        {
+            for (int i = 0; i < 180; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);   // nachladen
+            e.ProbeNachladenAus(hand);
+            await Klick(e.HandBodenProbePos(hand) + new Vector2(-r.Y, r.X) * 80f);      // 2 Zellen quer: in Reichweite
+            string grund1 = $"Klick 1: {e.HandKlickSchuesse - schussVor} Schuss, Grund »{e.FireAtGrund}«";
+            e.ProbeNachladenAus(hand);
+            for (int i = 0; i < 300; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            // 12 Zellen quer, auf der Seite, die noch auf der Karte liegt: wird geklemmt
+            var weit = e.HandBodenProbePos(hand) + new Vector2(-r.Y, r.X) * 480f;
+            if (e.CellAt(weit) == null) weit = e.HandBodenProbePos(hand) - new Vector2(-r.Y, r.X) * 480f;
+            await Klick(weit);
+            _mausProbePunkt = null;
+            int sch = e.HandKlickSchuesse - schussVor, klemm = e.HandKlickGeklemmt - klemmVor;
+            bool klickOk = sch == 2 && klemm >= 1 && e.HandsteuerungIdx == hand && e.HasSelection;
+            ok &= klickOk || MapEntityLayer.HandsteuerungBodenAlt;
+            klickZeile = $"  Linksklick (bug-453): {sch} Schuss/Schuesse, {klemm} auf die Reichweite geklemmt, "
+                       + $"Zellschuesse gesamt +{e.FireAtSchuesse - fireVor} ({grund1}; Klick 2 Grund »{e.FireAtGrund}«), "
+                       + $"Handsteuerung {(e.HandsteuerungIdx == hand ? "bleibt" : "WEG")}, Auswahl {(e.HasSelection ? "bleibt" : "WEG")}"
+                       + (MapEntityLayer.HandsteuerungKlickAlt ? " (Nullmodell --handsteuerung-klick-alt)" : "")
+                       + (klickOk ? "\n" : "   ⚠\n");
+        }
+        sb.Append(klickZeile);
         sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
         GD.Print(sb.ToString());
         GetTree().Quit(0);
