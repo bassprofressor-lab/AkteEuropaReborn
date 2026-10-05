@@ -51,6 +51,7 @@ public partial class MapViewer
             case "--schiffstod-alt": MapEntityLayer.SchiffstodAlt = true; return true;   // bug-433
             case "--todeslicht-check": _todeslichtCheck = true; return true;             // bug-434
             case "--todeslicht-aus": MapEntityLayer.TodeslichtAus = true; return true;   // bug-434
+            case "--nebeltakt-alt": MapEntityLayer.NebeltaktAlt = true; return true;     // bug-435
         }
         if (a.StartsWith("--schiffstod-gattung=") && int.TryParse(a["--schiffstod-gattung=".Length..], out int sg))
         { _schiffstodGattung = sg; return true; }

@@ -2102,10 +2102,16 @@ public partial class MapEntityLayer : Node2D
     private static int NebelHub => NebelFlach ? 0 : Import.MapBaker.ElevStep * FogSub / TileH;
 
     /// <summary>The original runs its "unexplored" step on every fifth tick
-    /// (@0x41678c: `[0x4fa240] % 5 == 1`). At the 25 ticks a second the movies
-    /// run at, that is a fifth of a second — the interval is the game's, the
-    /// seconds are ours.</summary>
-    private const float FogEverySec = 5f / 25f;
+    /// (@0x41678c: `[0x4fa240] % 5 == 1`).
+    /// <para>⭐ 05.10.2026 (bug-435): bei SimHz 50 sind das 0,1 s. Die alten
+    /// 5/25 s stammten aus der Zeit, als wir 25 Takte/s (Filmtakt) annahmen,
+    /// und liessen die Nebelrunde nur jeden 10. Takt laufen. Gegenschalter
+    /// <c>--nebeltakt-alt</c>.</para></summary>
+    private static float FogEverySec => NebeltaktAlt ? 5f / 25f : 5f / SimHz;
+
+    /// <summary><c>--nebeltakt-alt</c> — Stand 5b069b2: Nebelrunde alle 0,2 s
+    /// (10 Takte) statt jeden 5. Takt.</summary>
+    public static bool NebeltaktAlt;
 
     /// <summary>
     /// Wie eine Zelle aussieht, die schon gesehen wurde, aber gerade niemand
@@ -35202,7 +35208,10 @@ public partial class MapEntityLayer : Node2D
 
         // 'unexplored' — auf eigenem, langsamerem Schlag
         _fogTick += dt;
-        if (_fogTick >= FogEverySec)
+        // ⚠ bug-435: 5 x 0,02f summiert sich in float nicht sicher auf >= 0,1f —
+        // ohne die Toleranz liefe die Runde jeden 6. Takt. Das Alt-Modell bleibt
+        // unangetastet, wie es war.
+        if (_fogTick >= FogEverySec - (NebeltaktAlt ? 0f : 1e-4f))
         {
             _fogTick = 0;
             UpdateFog();
