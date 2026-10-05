@@ -14,6 +14,314 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.6 — 05.10.2026 · Kampagne 21 bis 24, und drei Runden Meldungen von KayelGee
+
+> Vier weitere Missionen, jede einzeln durchgespielt — dazu drei Runden Meldungen
+> von **KayelGee**, der 0.6.5 als Beta-Tester gespielt und mit dem Original
+> verglichen hat. Jeder Punkt unten ist ein Befund: was auffiel, was jetzt
+> passiert, und wie das Original es macht. Wo wir etwas selbst festgelegt haben,
+> steht das dabei.
+
+### Danke an KayelGee
+
+KayelGee hat 0.6.5 durchgespielt, Bildschirmfotos gemacht, Abläufe beschrieben
+und uns auf rund dreissig Abweichungen gestossen, die wir allein nicht gesehen
+hätten — von den Mauszeigern über die Turmdrehung bis zur Kante des Nebels.
+Seine Meldungen stehen unten im Abschnitt **»Gemeldet von KayelGee«**, jede
+einzeln mit dem, was daraus geworden ist. Er steht ab dieser Fassung als
+**Beta-Tester in den Credits** des Spiels.
+
+### ⚠ Wichtig: die Spieldaten einmal neu einlesen
+
+Mehrere Funde unten brauchen Bilder, die erst beim Einlesen entstehen: die
+Kippbilder am Hang, die Wracks, die Nebelmasken und die Kacheln eines
+gefundenen Terranium-Vorkommens. Wer von 0.6.5 kommt, löscht einmal den Ordner
+
+`%APPDATA%\Godot\app_userdata\AkteEuropaReborn\data`
+
+und startet das Spiel — dann erscheint der Einleseschirm wie beim ersten Mal
+(CD 1 einlegen; nach CD 2 wird gefragt). Spielstände und Einstellungen liegen
+nicht in diesem Ordner und bleiben erhalten. Ohne das Neueinlesen läuft alles,
+nur fehlen die genannten Bilder. Die Mauszeiger holt sich das Spiel beim Start
+selbst nach.
+
+### Gemeldet von KayelGee — Runde 1
+
+- **Die Enzyklopädie zeigt ihre Bilder.** Im Original steht über jedem Eintrag
+  ein Bild; bei uns fehlte es ganz, und der Einleser hatte bei 46 von 96
+  Einträgen ohnehin die falsche Bildnummer gelesen. Jetzt stehen alle 96 Bilder
+  im Rahmen über dem Titel.
+- **Die Filme der Kampagne laufen.** Gesucht wurde nur an drei festen Pfaden;
+  lag die CD in einem anderen Laufwerk, fiel der Film still aus. Jetzt wird jedes
+  Laufwerk und jeder übliche Installationsort durchsucht, und das Protokoll sagt,
+  warum ein Film fehlt (ab Film 16 liegt er auf CD 2).
+- **Der Musikregler regelt.** Er war seit August eine Attrappe: die Musik lief
+  über einen Windows-Weg, der keine Lautstärke kennt. Jetzt spielt ein eigener
+  MIDI-Abspieler die Stücke und rechnet die Lautstärke in jede Note ein — ohne
+  dabei das ganze Spiel leiser zu stellen. ⚠ Den Regler hat das Original nicht;
+  er ist unsere Zutat.
+- **Die Züge in den Demos im Hauptmenü** hielten vor Gebäuden, hatten falsche
+  Farben, überlappten und fuhren neben den Schienen. Sechs Ursachen, alle
+  behoben: 713 Geisterwaggons aus leeren Sätzen, die falsche Zeichenreihenfolge,
+  sichtbar stehende Waggons am Bahnsteig, pendelnde Züge auf toten Linien, das
+  Rohbild ohne Parteifarbe und gestauchte Waggonabstände.
+- **Der Raketenwerfer richtet sich vor dem Schuss auf.** Die Pose (flach oder
+  aufgerichtet) wählt das Original allein aus dem Nachladezustand; bei uns hing
+  sie an einer Munitionsregel, die nur einen der fünf Werfer kannte.
+- **Der leere Werfer liegt flach und ohne Rakete** (Runde 1, Nachtrag): ohne
+  Munition zeigt das Original den Werfer unten und leer — bei uns lief die Uhr
+  ab und zeigte geladene Raketen.
+- **Einlesen mit Fortschrittsbalken, und es fragt nach CD 2.** Der Einleser lief
+  bisher im Hauptfaden — minutenlang ohne ein Lebenszeichen. Jetzt zeigt ein
+  Balken Schritt für Schritt den Fortschritt. Und wer nur ein Laufwerk hat,
+  bekam bisher stillschweigend nur die Missionen 1 bis 15: jetzt fragt das Spiel
+  nach dem Lesen von CD 1 nach CD 2 und liest beide zusammen ein.
+- **Das Spieltempo lässt sich einstellen.** Das Original hat keine feste
+  Taktrate; unsere 50 Takte je Sekunde sind eine Setzung, gestützt auf
+  Messungen an Aufnahmen. In den Optionen gibt es jetzt einen Regler
+  **Grundtempo 20…50**.
+
+### Gemeldet von KayelGee — Runde 2
+
+- **Turm und Rumpf drehen getrennt.** Im Original schaut der Turm während der
+  Fahrt zum Fahrziel, im Gefecht zum Gegner und erst nach dem Nachladen wieder
+  nach vorn — eine Stufe je zwei Takte. Bei uns sprang er sofort aufs Ziel und
+  klebte sonst am Rumpf.
+- **Der Rumpf dreht langsamer.** Die Bremse von drei Takten je Richtungsstufe
+  hatten bei uns nur Schiffe; im Original gilt sie für alle. Eine halbe Drehung
+  dauert jetzt 9 Takte statt 4, und der Turm ist in Mission 1 wieder vor dem
+  Rumpf fertig.
+- **Ein schneller Gegenbefehl lässt nichts mehr gleiten.** Wer kurz nacheinander
+  zwei Fahrbefehle gab, sah die Einheit schneller werden oder schräg gleiten —
+  der angefangene Schritt wurde mit den Kosten einer ganzen Zelle neu angesetzt.
+  Jetzt wird er zu Ende gefahren, wie im Original.
+- **Die ersten Gegner in Mission 1 greifen an**, statt vorbeizufahren. Der
+  Skriptbefehl der Mission ist im Original ein ANGRIFF auf ein Ziel; wir hatten
+  daraus eine Fahrt zur Startzelle des Spielers gemacht. Dasselbe betrifft
+  Mission 2, die dadurch etwas härter wird.
+- **Am Hang stehen Einheiten an der richtigen Stelle.** KayelGees drei
+  Bildschirmfotos zeigten die Fahrzeuge 11 Bildpunkte zu hoch — das war ein
+  Fehler, der schon in der Arbeitsfassung behoben war (Fahrzeuganker 45 statt
+  55, siehe unten). Beim Nachsehen kamen vier weitere Punkte dazu: der
+  **Lebensbalken** sitzt wieder über der Einheit und sieht aus wie im Original
+  (Rahmen in Spielerfarbe), die **Hangpose** wechselt auf halbem Weg statt am
+  Zellende, das **Kippbild** quer zum Hang ist da, und Fahrzeuge **zittern** beim
+  Fahren leicht — auch das ist Original.
+- **Rechts ziehen schwenkt wie im Original.** Die Kamera bewegte sich schon nach
+  5 Bildpunkten und in Greifrichtung, mit sichtbarem Zeiger — darum wurde
+  manchmal geschwenkt statt befohlen. Jetzt verschwindet der Zeiger, die Karte
+  folgt in Schubrichtung, und nur ein Klick ohne Kamerabewegung wählt ab. Die
+  mittlere Maustaste schwenkt nicht mehr — sie hat im Original keine Belegung.
+- **Tab schaltet die Balken durch**: aus → Leben → Sprit → Munition → aus. Bei
+  uns sprang Tab zur letzten Meldung (unsere Zutat), und es gab nur
+  Lebensbalken. In Stellung »aus« zeigt das Original gar keinen Balken.
+- **Kein Hänger mehr beim Liedwechsel.** Der MIDI-Abspieler schloss bei jedem
+  Stück das Gerät und öffnete es neu — rund 230 Millisekunden Standbild. Jetzt
+  bleibt es offen.
+- **Die Handsteuerung am Boden** reagiert je Spieltakt und lässt die Pfeiltasten
+  halten, statt je Tastendruck einen Befehl abzusetzen; das Rohr folgt der Maus,
+  ein Rechtsklick gibt die Steuerung ab.
+
+### Gemeldet von KayelGee — Runde 3
+
+- **Die Mauszeiger des Originals sind da.** Die Zeigerbank wurde nur von einem
+  Entwicklerschalter geschrieben, nie beim normalen Einlesen — jeder andere
+  Spieler sah die Windows-Zeiger. Jetzt holt das Spiel sie beim Start selbst
+  nach, dazu die fehlenden Zeiger für Fahrt, Formation und Handsteuerung.
+  Der Bildtakt der Zeiger bleibt bei 0,10 s — die Wahl des Spielers.
+- **Dazu die Zeiger der Befehlsarten**: Brücke, Mole, Ausbessern, Depot, Mine,
+  Generator und Terranium-Suche zeigen je nach gültiger oder ungültiger Zelle
+  das Bild des Originals.
+- **Mit Strg lässt sich der Boden angreifen.** Bei uns endete ein Zellangriff im
+  ersten Takt, wenn dort nichts stand — eine Abbruchregel, die das Original
+  nicht hat.
+- **Nach »Baum angreifen« nimmt die Einheit wieder Fahrbefehle an.** Das
+  Bodenziel blieb an ihr hängen, bis der Wald weg war; jeder neue Auftrag löscht
+  es jetzt, wie im Original.
+- **Shift fährt in Formation.** Im Original fährt eine Gruppe mit gehaltener
+  Shift-Taste in ihrer Aufstellung; bei uns war Shift eine Befehlswarteschlange
+  (unsere Zutat), die ganz entfällt. In den Einstellungen gibt es dazu den
+  Schalter des Originals »Gruppe Standard / Formation Standard«.
+- **Untermissionen lassen sich wieder anzeigen.** Der Menüpunkt war gedimmt; jetzt
+  öffnet er die aktiven Untermissionen oder meldet »Keine Untermissionen im
+  Moment« wie das Original.
+- **Das Einheitenbild unten links ist durchsichtig**, ohne schwarzen Kasten.
+- **Die Starteinheit heisst »Panzer«**, nicht »SCHWERE BORDKANONE«. Das
+  Infofenster nimmt jetzt den Entwurfsnamen samt Rangzeichen, wie das Original —
+  dieselbe Art Namensfehler hatten wir schon dreimal, jetzt am Ursprung behoben.
+- **Ohne Auswahl zeigt das Infofenster wieder alle Zeilen**: Mission, Kontostand,
+  Sprit gesamt, Munition gesamt, Ausgeschaltet und Verluste. Sie wurden richtig
+  gerechnet, aber auf einen Streifen von 34 Punkten abgeschnitten. Ein gewähltes
+  Gebäude zeigt dieselben Zeilen, wie im Original.
+- **Die erste Zeile heisst »Mission 1«**, nicht »Airborne Ambush« — so steht es
+  im Original (gefunden am Vergleich mit einer Aufnahme).
+- **Die Schrift füllt ihre Kästen.** Die Bitmapschrift des Originals wurde bei
+  doppelter Grösse trotzdem in einfacher Grösse gezeichnet. Die Grösse ist jetzt
+  wie im Original (am Let's-Play-Verhältnis gemessen).
+- **Der Lokator sieht aus wie die anderen Fenster** — mit den Kacheln, dem Titel,
+  den Zeilen F5…F8 und den Knöpfen »Lokalisieren« und »Sichern« des Originals.
+- **Einheiten fahren auch bei verstelltem Ziel los.** Die Reaktionszeit ist
+  gleich (ein Takt), aber steht auf der Zielzelle ein Fahrzeug, verlegten wir
+  das Ziel vorab — oder schickten gar keinen Befehl. Jetzt nimmt jede Einheit
+  die Klickzelle und sucht notfalls ein Ersatzziel wie das Original.
+- **Explosionen sehen aus wie im Original.** Die Trümmer fliegen in einem echten
+  Bogen (bisher drei- bis achtmal zu flach), schlagen am Boden auf und glühen
+  nach; Wolke, Teile und Rauch laufen auf einer gemeinsamen Uhr. Dazu der
+  Todesklang und die Stimme eines Veteranen, und der Rumpf bleibt sechs Takte
+  stehen, bevor er zum Wrack wird.
+- **Der Sichtnebel hat keine rechteckigen Kanten mehr.** Unter erhöhten Zellen
+  zog sich eine gleichförmige Schürze; jetzt wird der Nebel wie im Original mit
+  den Masken je Kachel gezeichnet (KayelGees Bild aus Mission 1 hat die Stelle
+  gezeigt).
+
+### Kampagne 21 — Rakete, Antiradar und die Bahn
+
+- **Die Mittelstreckenrakete schiesst nicht mehr von selbst.** Ein Gegner hat
+  uns aus 190 Zellen Entfernung permanent beschossen, ohne uns sehen zu können.
+  Im Original sucht sich diese Waffe nie selbst ein Ziel — sie feuert nur auf
+  Befehl. In der Kampagne gilt das jetzt; im Gefecht ist es unverändert, dort
+  steht die Entscheidung noch aus.
+- **Der Antiradar wirkt.** Ein feindliches Fahrzeug mit Antiradar schliesst die
+  Sicht im Umkreis von 8 Zellen; danach sieht jede eigene Einheit dort nur noch
+  ihre eigene Zelle. Bisher hatte das Bauteil gar keine Wirkung.
+- **Bahnlinien lassen sich umstellen.** Wir konnten keine Einheiten bauen, weil
+  die Teile nicht ankamen: zwischen zwei Bahnhöfen fährt von selbst nichts, der
+  Spieler stellt die Linien von Hand. Das Transportsystem mit seiner Karte und
+  seinem Fenster gab es bei uns nicht — jetzt ist es da.
+- **Das Bahnhofsfenster ist das des Originals**, nicht mehr unser Eigenbau, und
+  Einheiten lassen sich über die Bahn verlegen: sie kommen an der Tür an, nicht
+  im Depot.
+- **Die Rohstoffleiste oben fällt nicht mehr ab**, wenn ein Zug eine Fabrik
+  leerlädt — sie zählt jetzt auch Bahnhöfe und die Ladung eigener Züge mit.
+  ⚠ Die Leiste ist unsere Zutat; das Original hat keine.
+- **Züge tragen die Farbe ihres Besitzers.**
+- **Der Kartenschirm heisst »Luft-Einsatzplanung«**, nicht »Luft-Einsatzplan« —
+  der Titel war beim Lesen abgeschnitten worden.
+- **Das Schliesskreuz der Transportkarte schliesst.**
+- **Züge fahren nicht mehr über zerstörte Gleise.** Steht ein Waggon auf einem
+  zerschossenen Stück, explodiert der Zug samt Ladung, wie im Original.
+- **Gleise lassen sich reparieren** — mit dem Boden-Techniker über den
+  Schraubenschlüssel-Zeiger. Erkannt wird er wie im Original am Bauteil, nicht
+  an der Ausrüstung; unser Prüfstand hatte das falsche Feld selbst beschrieben
+  und darum bestanden.
+- **Hubschrauber sind nicht mehr »sau langsam«** — sie haben im Original eine
+  eigene Tempo-Regelung, getrennt von den Flugzeugen.
+- **Der Plasmawerfer** dreht seine Kugel und sucht sich kein Fussvolk und kein
+  schon gelähmtes Ziel mehr aus.
+- **Raketen fliegen über abgebrannte Baumstümpfe**, statt daran hängen zu
+  bleiben.
+- **Der Plasma-Effekt lässt sich loswerden**: wer in ein Depot einfährt und wieder
+  herauskommt, hat sein volles Tempo zurück, wie im Original. Die Heilung im
+  Depot lief rund vierzigmal zu schnell.
+- **Eingefahrene Einheiten lassen sich aus der Basis per Bahn verlegen**, und
+  ohne markierte Zeile meldet der Knopf »Es besteht keine Verbindung zu diesem
+  Gebäude«, statt ausgegraut zu sein.
+- **Die Maustasten sind die des Originals**: links wählt UND befiehlt (je nach
+  Zeiger), rechts wählt ab. Unsere Belegung war die moderner Strategiespiele.
+
+### Kampagne 22 bis 24
+
+- **Der Terranium-Finder sucht.** Bisher konnte man ein Vorkommen sofort bebauen;
+  im Original muss es erst gefunden werden. Jetzt fährt der Finder hin, bohrt
+  zwei bis vier Mal, und erst ein Fund macht das Vorkommen bebaubar.
+- **Die eingegrabenen Abwehrstellungen in Mission 24** ragten seltsam aus dem
+  Boden: 35 der 83 Stellungen zeigten in eine Richtung, für die es kein Bild gibt,
+  und der Turm sass falsch. Beides wie im Original.
+- **Am Anfang von Mission 24 fliehen die gegnerischen Radardroiden**, statt
+  stehen zu bleiben — die KI gab ihre Aufträge vorher an die eingegrabenen
+  Stellungen, die im Original nie fahren.
+- **Fahrzeuge stehen auf ihrer Zelle**, nicht 10 Bildpunkte darüber.
+- **Der Angriff auf eine Bodenzelle misst die Entfernung wie das Original**
+  (euklidisch); diagonal schoss eine Einheit bisher weiter, als sie darf.
+
+### Die Missionsskripte
+
+- **Untermissionen zahlen aus.** Eine Prüfung aller 33 Missionen fand 26 Regeln,
+  die beim Auslesen verloren gegangen waren — Untermissionen ohne Geld oder ganz
+  tot in den Missionen 3, 7, 9, 12, 16, 22, 24, 28, 29, 30 und 31. **Mission 28
+  war dadurch nicht zu gewinnen.**
+- **Prämien für zerstörte Abwehrstellungen und Gebäude, Marktlieferungen und
+  Recycling** werden gezählt — die Missionen fragen danach, aber niemand schrieb
+  die Zähler.
+- **Wer einen Spion entkommen lässt, bekommt keine Belohnung mehr** (Mission 19),
+  und die Übergaben in Mission 24 und 29 lassen sich erfüllen: der Raumfrachter
+  holt die Person ab, wie im Original, statt dass sie sofort verschwindet.
+- **Drei Regeln in Mission 24 und 29 fragten die falsche Einheit ab**; eine davon
+  hätte bei jedem Durchlauf 300 $ gezahlt.
+- **Die KI nimmt Gebäude ein.** Ein Missionsziel mit Tür heisst im Original
+  »einnehmen«, nicht »angreifen«; die Betriebsarten der KI und ihr Abstand zu
+  fremden Türen fehlten. ⚠ In **Mission 26** hat das Original dafür nur eine
+  tote Regel; damit die Mission lösbar ist, haben wir das Ziel selbst gesetzt
+  (eine Setzung, mit Schalter).
+- **Wer nichts mehr hat, scheidet aus.** Die Lebensprüfung der KI fehlte: ein
+  Gegner ohne Basis, Einheit und Flugzeug schied nie aus, und seine Gebäude
+  blieben ihm.
+- **Die Missionsskripte wecken ausgeschiedene Gegner wieder auf.** Neunzehn
+  Stellen in elf Missionen geben einem schon ausgeschiedenen Gegner Verstärkung
+  und schalten seine KI wieder ein. Bei uns standen diese Einheiten nur herum —
+  **die Missionen 11, 13, 20, 22, 24, 28 und 31 werden dadurch spürbar härter**,
+  wie im Original. In Mission 28 schaltet das Skript einen Gegner auch für eine
+  Weile ab.
+- **Die Verstärkung in Mission 24** (eine Einheit, Lichtkreis, zwei
+  Angriffsziele), sobald Gebäudeplatz 14 frei ist, fehlte ganz und ist jetzt da.
+- **Die KI bildet ihre Gruppen wie im Original** — in Mission 26 eine Gruppe von
+  drei statt dreizehn bis zweiunddreissig, und sie schickt nicht mehr bis zu neun
+  Gruppen auf dasselbe Ziel.
+
+### Tod, Wracks, Nebel und Licht
+
+- **Ein Wrack nur für Fahrzeuge.** Schiffe, Fussvolk und die Gattungen 2 und 3
+  hinterlassen im Original keins; bei uns taten es auch die Gattungen 2 und 3.
+- **Schiffe gehen unter** wie im Original: mit eigenem Todesbild aus Wolken,
+  Flammen und Glut, der Rumpf steht noch sechs Takte, und danach ist an seiner
+  Stelle wieder Wasser.
+- **Die Todesstelle einer eigenen Einheit bleibt kurz sichtbar.** Im Original
+  bleibt dort ein Lichtkreis 30 (Fussvolk), 80 oder 130 Takte offen und zieht
+  sich zusammen; dasselbe bei zerstörten Gebäuden, Druckwellen, Abstürzen,
+  Brücken und an Skriptstellen in fünf Missionen. Bei uns schloss sich der
+  Nebel sofort.
+- **Der Nebel folgt doppelt so schnell.** Das Original rechnet ihn jeden fünften
+  Takt neu, bei uns lief er nur jeden zehnten.
+
+### Züge
+
+- **Züge fahren in die Gebäude hinein**, statt davor zu verschwinden — Waggon für
+  Waggon, hinter der Hallenfront.
+- **Feinheiten an den Zügen**: Waggons lagen 5 Bildpunkte zu hoch, stauchten sich
+  an Rampen und waren im Nebel sichtbar.
+- **Züge fahren Schritt für Schritt über ihre Route** wie das Original, statt
+  gleichmässig über unsere Kette zu gleiten; der Abstand der Waggons stimmt
+  jetzt auch auf senkrechten Strecken.
+
+### Unsere Prüfstände, berichtigt
+
+Diese Punkte ändern nichts am Spiel — es waren unsere Messungen, die falsch
+lagen. Sie stehen hier, weil ein falscher Prüfstand einen echten Fehler
+verdecken kann.
+
+- **Reichweite**: der Prüfstand erwartete noch eine Lesung, die am 07.09.
+  berichtigt worden war, und fiel seither bei jedem Lauf durch.
+- **Einnahme durch die KI in Mission 26**: gemessen wurde zu kurz und mit nur
+  einem Zufallskeim; das Ergebnis war Lotterie. Jetzt über zehn Keime und 840
+  Sekunden — 10 von 10.
+- **Überfahren**: der Prüfstand wertete jeden Tod als Regelbruch, auch wenn ein
+  Dritter den Probanden erschossen hatte.
+- **Wracks**: die Erwartung zählte noch Schiffe mit.
+- **Landungsbrücke**: der Abriss im Prüfstand war ein Münzwurf, weil der Schaden
+  an Bauwerken wie im Original würfelt.
+
+### Was bekannt und noch offen ist
+
+- Die **Mittelstreckenrakete im Gefecht** sucht sich weiterhin selbst Ziele — ob
+  das im Gefecht so bleibt, ist noch nicht entschieden.
+- Der **Minenleger-Befehl** und **»Bunker ausgraben«** fehlen noch, und damit
+  ihre Zeiger.
+- Fussvolk steht noch etwas zu tief, Schiffe etwas zu hoch.
+- Das erste Öffnen des MIDI-Geräts nach dem Start dauert auf manchen Rechnern
+  rund zehn Sekunden.
+- Die Missionen 25 bis 33 sind noch nicht durchgespielt — das ist der Weg zu
+  0.7.0.
+
 ## 0.6.5 — 20.09.2026 · Kampagne 15 bis 20: Minen, Flugabwehr, die Bahn und der Flughafen
 
 > Sechs Missionen, jede einzeln durchgespielt. Jeder Punkt unten ist ein Befund

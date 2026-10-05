@@ -109,7 +109,7 @@ braucht, in **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)** — samt der Fälle, in den
 sich eine frühere Erklärung von uns als falsch herausgestellt hat. Beides wird
 mitgeführt, nicht nachträglich geschrieben.
 
-⭐ **Stand heute (20.09.2026, Release 0.6.5):** die Missionen 1 bis 20 sind
+⭐ **Stand heute (05.10.2026, Release 0.6.6):** die Missionen 1 bis 24 sind
 durchgespielt. Unterwegs wurde Mission 2 zum ersten Mal abschliessbar, die
 Kraftwerke in Mission 4 und die Bunker in Mission 7 zerstörbar, und der Gegner
 spielt jetzt mit der KI des Originals. **0.6.2 kam aus dem GEFECHT** (der
@@ -122,7 +122,10 @@ die mitsehen und selbst spielen; **0.6.5 kommt aus der LUFT** — der Flughafen
 mit Handsteuerung, eigenem Kartenschirm, Recycle und einer Patrouille, die
 wirklich aufsteigt, dazu die Flugabwehr und ein Satzfeld, das ein Jahr lang
 falsch gelesen wurde und jedes Flugzeug im Spiel in die falsche Richtung fliegen
-liess. **Jede davon ist ein Halt auf diesem Weg, nicht sein Ende.** Was sich geändert hat, in einfachen Worten:
+liess; **0.6.6 umfasst die Missionen 21 bis 24** — die Bahn mit Transportsystem
+und Gleisreparatur, die Terranium-Suche, Missionsskripte, die Untermissionen
+auszahlen und ausgeschiedene Gegner wieder wecken, und drei Runden Meldungen
+unseres Beta-Testers **KayelGee**. **Jede davon ist ein Halt auf diesem Weg, nicht sein Ende.** Was sich geändert hat, in einfachen Worten:
 [CHANGELOG.de.md](CHANGELOG.de.md).
 
 **Mitmachen ist ausdrücklich erwünscht.** Wer eine Mission spielt und etwas

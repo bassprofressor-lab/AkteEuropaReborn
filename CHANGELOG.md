@@ -12,6 +12,303 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.6 — 2026-10-05 · missions 21 to 24, and three rounds of reports from KayelGee
+
+> Four more missions, each played through on its own — plus three rounds of
+> reports from **KayelGee**, who played 0.6.5 as a beta tester and compared it
+> with the original. Every point below is a finding: what stood out, what
+> happens now, and how the original does it. Where we made a call of our own,
+> it says so.
+
+### Thanks to KayelGee
+
+KayelGee played through 0.6.5, took screenshots, described what happened and
+pointed us at some thirty differences we would not have seen on our own — from
+the mouse cursors to the turret rotation to the edge of the fog. His reports
+are listed below under **"Reported by KayelGee"**, each with what came of it.
+From this release on he is in the game's **credits as beta tester**.
+
+### ⚠ Important: re-read the game data once
+
+Several findings below need images that are only created while reading the
+game data: the tilt frames on slopes, the wrecks, the fog masks and the tiles
+of a discovered terranium deposit. Coming from 0.6.5, delete the folder
+
+`%APPDATA%\Godot\app_userdata\AkteEuropaReborn\data`
+
+once and start the game — the import screen then appears as on the first run
+(insert CD 1; it asks for CD 2). Saves and settings are not in that folder and
+are kept. Without re-reading everything runs, only those images are missing.
+The game fetches the mouse cursors by itself on start.
+
+### Reported by KayelGee — round 1
+
+- **The encyclopedia shows its pictures.** The original has a picture above
+  every entry; ours had none, and the importer had read the wrong picture
+  number for 46 of 96 entries anyway. All 96 pictures now sit in their frame
+  above the title.
+- **The campaign movies play.** Only three fixed paths were searched; with the
+  CD in any other drive the movie silently dropped out. Every drive and every
+  usual install location is searched now, and the log says why a movie is
+  missing (from movie 16 on it is on CD 2).
+- **The music slider works.** It had been a dummy since August: the music went
+  through a Windows path that knows no volume. Our own MIDI player now plays
+  the pieces and works the volume into every note — without turning the whole
+  game down. ⚠ The original has no such slider; it is our addition.
+- **The trains in the main menu demos** stopped in front of buildings, had the
+  wrong colours, overlapped and ran beside the rails. Six causes, all fixed: 713
+  ghost wagons from empty records, the wrong drawing order, wagons visibly
+  standing at the platform, trains shuttling on dead lines, the raw image
+  without a player colour, and squeezed wagon spacing.
+- **The rocket launcher raises itself before it fires.** The original picks the
+  pose (flat or raised) from the reload state alone; ours hung on an ammunition
+  rule that knew only one of the five launchers.
+- **An empty launcher lies flat without a rocket** (round 1, follow-up): with no
+  ammunition the original shows it down and empty — ours ran out the clock and
+  showed loaded rockets.
+- **The import shows a progress bar, and it asks for CD 2.** The importer ran on
+  the main thread — minutes without a sign of life. A bar now shows the
+  progress step by step. And anyone with a single drive used to get missions 1
+  to 15 only, without a word: after CD 1 the game now asks for CD 2 and reads
+  both together.
+- **The game speed can be set.** The original has no fixed tick rate; our 50
+  ticks a second are a call of ours, backed by measurements on recordings. The
+  options now have a **base speed 20…50** slider.
+
+### Reported by KayelGee — round 2
+
+- **Turret and hull turn separately.** In the original the turret looks at the
+  destination while driving, at the enemy in combat, and back ahead only after
+  reloading — one step every two ticks. Ours snapped onto the target and
+  otherwise stuck to the hull.
+- **The hull turns more slowly.** The brake of three ticks per direction step
+  only applied to ships here; in the original it applies to everything. Half a
+  turn now takes 9 ticks instead of 4, and in mission 1 the turret is done
+  before the hull again.
+- **A quick counter-order no longer makes units glide.** Two move orders in
+  quick succession made a unit speed up or slide sideways — the started step
+  was restarted at the cost of a whole cell. It is now driven to its end, as in
+  the original.
+- **The first enemies in mission 1 attack** instead of driving past. The
+  mission's script order is an ATTACK on a target in the original; we had turned
+  it into a drive to the player's start cell. The same applies to mission 2,
+  which gets a little harder.
+- **Units on slopes are drawn in the right place.** KayelGee's three screenshots
+  showed vehicles 11 pixels too high — a bug already fixed in the working
+  version (vehicle anchor 45 instead of 55, see below). Looking into it turned
+  up four more points: the **health bar** sits above the unit again and looks
+  like the original (frame in the player colour), the **slope pose** changes
+  half way instead of at the end of the cell, the **tilt frame** across a slope
+  is there, and vehicles **jitter** slightly while driving — that is the
+  original too.
+- **Right-dragging scrolls like the original.** The camera moved after 5 pixels
+  and in grab direction, with the cursor visible — which is why it sometimes
+  scrolled instead of giving an order. Now the cursor disappears, the map
+  follows in push direction, and only a click without camera movement
+  deselects. The middle mouse button no longer scrolls — the original has no
+  binding for it.
+- **Tab cycles the bars**: off → health → fuel → ammunition → off. Ours jumped
+  to the last message (our addition), and there were only health bars. In the
+  "off" position the original shows no bar at all.
+- **No more hitch when the music changes.** The MIDI player closed and reopened
+  the device for every piece — about 230 milliseconds of frozen picture. It now
+  stays open.
+- **Hand control on the ground** reacts every game tick and lets you hold the
+  arrow keys, instead of issuing one order per key press; the barrel follows the
+  mouse, and a right click gives up control.
+
+### Reported by KayelGee — round 3
+
+- **The original mouse cursors are there.** The cursor bank was only written by
+  a developer switch, never by the normal import — every other player saw the
+  Windows cursors. The game now fetches them on start, plus the missing cursors
+  for driving, formation and hand control. The cursor animation stays at
+  0.10 s — the player's choice.
+- **Plus the cursors of the order modes**: bridge, landing ramp, repair, depot,
+  mine, generator and terranium search show the original's image for a valid or
+  an invalid cell.
+- **Ctrl attacks the ground.** A cell attack ended in its first tick when
+  nothing stood there — a stop rule the original does not have.
+- **After "attack tree" a unit takes move orders again.** The ground target
+  stuck to it until the forest was gone; every new order now clears it, as in
+  the original.
+- **Shift moves in formation.** In the original a group keeps its formation
+  while Shift is held; ours used Shift for an order queue (our addition), which
+  is gone entirely. The settings now have the original's "Group default /
+  Formation default" switch.
+- **Sub-missions can be shown again.** The menu entry was greyed out; it now
+  opens the active sub-missions or says "No sub-missions at the moment" like the
+  original.
+- **The unit picture at the bottom left is transparent**, without a black box.
+- **The starting unit is called "Panzer"**, not "SCHWERE BORDKANONE". The info
+  panel now takes the design name with its rank badge, like the original — we had
+  had the same kind of naming bug three times before; it is now fixed at the
+  source.
+- **With nothing selected the info panel shows all its lines again**: mission,
+  balance, total fuel, total ammunition, destroyed and losses. They were
+  computed correctly but cut off to a 34-point strip. A selected building shows
+  the same lines, as in the original.
+- **The first line reads "Mission 1"**, not "Airborne Ambush" — that is what the
+  original shows (found by comparing with a recording).
+- **The font fills its boxes.** The original's bitmap font was still drawn at
+  single size in the double-size layout. The size now matches the original
+  (measured against a Let's Play).
+- **The locator looks like the other windows** — with the original's tiles,
+  title, the F5…F8 lines and the "Lokalisieren" and "Sichern" buttons.
+- **Units start moving even when the target is blocked.** The reaction time is
+  the same (one tick), but with a vehicle on the target cell we moved the target
+  beforehand — or sent no order at all. Every unit now takes the clicked cell
+  and finds a substitute target the way the original does.
+- **Explosions look like the original.** Debris flies in a real arc (so far
+  three to eight times too flat), hits the ground and glows; cloud, parts and
+  smoke run on one shared clock. Plus the death sound and a veteran's voice, and
+  the hull stays for six ticks before it becomes a wreck.
+- **The fog of war has no rectangular edges any more.** A uniform apron hung
+  below raised cells; the fog is now drawn with the original's per-tile masks
+  (KayelGee's picture from mission 1 showed the spot).
+
+### Mission 21 — the missile, the anti-radar and the railway
+
+- **The medium-range missile no longer fires on its own.** An enemy shelled us
+  permanently from 190 cells away without being able to see us. In the original
+  this weapon never picks a target by itself — it only fires on order. That now
+  holds in the campaign; skirmish is unchanged, the decision there is still open.
+- **The anti-radar works.** An enemy vehicle with anti-radar closes the view
+  within 8 cells; after that each of our own units there only sees its own cell.
+  The part had no effect at all before.
+- **Rail lines can be switched.** We could not build units because the parts
+  never arrived: nothing runs between two stations by itself, the player sets
+  the lines by hand. The transport system with its map and window did not exist
+  here — now it does.
+- **The station window is the original's**, no longer our own build, and units
+  can be moved by rail: they arrive at the door, not in the depot.
+- **The resource bar at the top no longer drops** when a train empties a
+  factory — it now counts stations and the cargo of our own trains as well.
+  ⚠ The bar is our addition; the original has none.
+- **Trains carry their owner's colour.**
+- **The map screen is titled "Luft-Einsatzplanung"**, not "Luft-Einsatzplan" —
+  the title had been cut off when it was read.
+- **The close button of the transport map closes it.**
+- **Trains no longer run over destroyed track.** A wagon on a shot-up piece
+  makes the train explode with its cargo, as in the original.
+- **Track can be repaired** — by the ground technician, through the wrench
+  cursor. He is recognised by his part, as in the original, not by his
+  equipment; our test bench had written the wrong field itself and therefore
+  passed.
+- **Helicopters are no longer painfully slow** — in the original they have a
+  speed control of their own, separate from aircraft.
+- **The plasma thrower** spins its ball and no longer picks infantry or an
+  already crippled target by itself.
+- **Missiles fly over burnt tree stumps** instead of getting stuck on them.
+- **The plasma effect can be shaken off**: driving into a depot and out again
+  restores full speed, as in the original. Healing in the depot ran about forty
+  times too fast.
+- **Units parked in the base can be sent by rail**, and without a marked line
+  the button reports "There is no connection to this building" instead of being
+  greyed out.
+- **The mouse buttons are the original's**: left selects AND orders (depending
+  on the cursor), right deselects. Ours were the layout of modern strategy
+  games.
+
+### Missions 22 to 24
+
+- **The terranium finder searches.** A deposit could be built on straight away;
+  in the original it has to be found first. The finder now drives there, drills
+  two to four times, and only a find makes the deposit buildable.
+- **The dug-in defence positions in mission 24** stuck out of the ground oddly:
+  35 of the 83 positions faced a direction there is no image for, and the
+  turret sat wrong. Both as in the original now.
+- **At the start of mission 24 the enemy radar droids flee** instead of standing
+  still — the AI used to hand their orders to the dug-in positions, which never
+  move in the original.
+- **Vehicles stand on their cell**, not 10 pixels above it.
+- **An attack on a ground cell measures distance like the original**
+  (Euclidean); diagonally a unit used to fire farther than it may.
+
+### The mission scripts
+
+- **Sub-missions pay out.** A check of all 33 missions found 26 rules that had
+  been lost when the scripts were read — sub-missions without money or dead
+  altogether in missions 3, 7, 9, 12, 16, 22, 24, 28, 29, 30 and 31. **Mission 28
+  could not be won because of it.**
+- **Rewards for destroyed defence positions and buildings, market deliveries and
+  recycling** are counted — the missions ask for them, but nobody wrote the
+  counters.
+- **Letting a spy escape no longer earns a reward** (mission 19), and the
+  hand-overs in missions 24 and 29 can be completed: the space freighter picks
+  the person up, as in the original, instead of the person vanishing at once.
+- **Three rules in missions 24 and 29 asked about the wrong unit**; one of them
+  would have paid $300 on every pass.
+- **The AI captures buildings.** A mission target with a door means "capture" in
+  the original, not "attack"; the AI's operating modes and its distance to
+  foreign doors were missing. ⚠ In **mission 26** the original only has a dead
+  rule for this; so that the mission can be completed we set the target
+  ourselves (our call, with a switch).
+- **A player with nothing left is out.** The AI's test of life was missing: an
+  opponent without base, unit or aircraft was never eliminated, and kept his
+  buildings.
+- **The mission scripts wake eliminated opponents up again.** Nineteen places in
+  eleven missions give an already eliminated opponent reinforcements and switch
+  his AI back on. Here those units just stood around — **missions 11, 13, 20, 22,
+  24, 28 and 31 get noticeably harder**, as in the original. In mission 28 the
+  script also switches an opponent off for a while.
+- **The reinforcement in mission 24** (a unit, a circle of light, two attack
+  targets) once building slot 14 is free was missing entirely and is there now.
+- **The AI forms its groups like the original** — a group of three in mission 26
+  instead of thirteen to thirty-two, and it no longer sends up to nine groups at
+  the same target.
+
+### Death, wrecks, fog and light
+
+- **Only vehicles leave a wreck.** Ships, infantry and classes 2 and 3 leave none
+  in the original; ours did for classes 2 and 3.
+- **Ships sink** like the original: with their own death picture of clouds,
+  flames and embers, the hull stays for six more ticks, and afterwards there is
+  water in its place again.
+- **The spot where one of your units died stays visible for a moment.** In the
+  original a circle of light stays open there for 30 (infantry), 80 or 130 ticks
+  and shrinks; the same for destroyed buildings, blast waves, crashes, bridges
+  and at script spots in five missions. Ours closed the fog at once.
+- **The fog follows twice as fast.** The original recomputes it every fifth
+  tick; ours only every tenth.
+
+### Trains
+
+- **Trains drive into the buildings**, instead of vanishing in front of them —
+  wagon by wagon, behind the hall front.
+- **Fine points on the trains**: wagons sat 5 pixels too high, bunched up on
+  ramps and were visible in the fog.
+- **Trains move step by step along their route** like the original, instead of
+  gliding evenly along our chain; the wagon spacing is now right on vertical
+  stretches too.
+
+### Our test benches, corrected
+
+These points change nothing in the game — it was our measurements that were
+wrong. They are listed because a wrong test bench can hide a real bug.
+
+- **Range**: the test bench still expected a reading that had been corrected on
+  09-07 and failed on every run since.
+- **AI capture in mission 26**: measured too briefly and with a single random
+  seed; the result was a lottery. Now over ten seeds and 840 seconds — 10 of 10.
+- **Running over**: the test bench counted every death as a rule violation,
+  even when a third party had shot the test unit.
+- **Wrecks**: the expectation still counted ships.
+- **Landing ramp**: the demolition in the test bench was a coin toss, because
+  damage to structures is rolled as in the original.
+
+### Known and still open
+
+- The **medium-range missile in skirmish** still picks its own targets — whether
+  it stays that way in skirmish is not decided yet.
+- The **mine layer order** and **"dig up bunker"** are still missing, and with
+  them their cursors.
+- Infantry still stands a little too low, ships a little too high.
+- Opening the MIDI device for the first time after start takes about ten
+  seconds on some machines.
+- Missions 25 to 33 have not been played through yet — that is the road to
+  0.7.0.
+
 ## 0.6.5 — 2026-09-20 · missions 15 to 20: mines, anti-aircraft fire, the railway and the airfield
 
 > Six missions, each played through on its own. Every point below is a finding

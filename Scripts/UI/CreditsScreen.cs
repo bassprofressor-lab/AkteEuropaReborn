@@ -80,6 +80,9 @@ public partial class CreditsScreen : Control
 
         Head(box, "Reborn", 18, new Color(0.72f, 0.76f, 0.82f));
         Line(box, "Reverse Engineering, Engine, Alles", RebornAuthor);
+        // 05.10.2026 — seine Entscheidung zu 0.6.6: KayelGee meldete ab 0.6.5
+        // drei Runden Befunde (bug-374..382, 406..428), siehe CHANGELOG.
+        Line(box, "Beta-Test", "KayelGee");
         Line(box, "Quelltext", "github.com/bassprofressor-lab/AkteEuropaReborn");
         Line(box, "Webseite", "openreborn.com");
         Line(box, "Lizenz", "GPL-3.0");
