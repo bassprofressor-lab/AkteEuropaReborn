@@ -33456,7 +33456,7 @@ public partial class MapEntityLayer : Node2D
                 if (s.Dead || s.Stored) continue;
                 if (pass < 1 && UI.PortraitBank.PictureOfAircraft(s.Kind) <= 0) continue;
                 tried++;
-                SelectAt(s.Pos - new Vector2(0, AirShadowDrop));
+                SelectAt(s.Pos - new Vector2(0, AirHoehePx(s)));
                 if (_selAir != i) continue;              // etwas anderes lag davor
                 pick = i;
                 break;
@@ -33474,7 +33474,7 @@ public partial class MapEntityLayer : Node2D
                  $"({a.KindName}) P{a.Owner} {(a.Stored ? "im Hangar" : "fliegt")} " +
                  $"-> Bild {(p.ChassisPic > 0 ? "p" + p.ChassisPic.ToString("00") : "keines")}" +
                  (p.Why.Length > 0 ? $" ({p.Why})" : ""));
-        return a.Pos - new Vector2(0, AirShadowDrop);
+        return a.Pos - new Vector2(0, AirHoehePx(a));
     }
 
     /// <summary>
@@ -34581,6 +34581,7 @@ public partial class MapEntityLayer : Node2D
         _taktNr++;
         if (DrehenCheckAn) DrehenCheckTakt();   // --drehen-check (bug-406..408), Simulation/DrehenCheck.cs
         if (FahrzielCheckAn) FahrzielCheckTakt(); // --fahrziel-check (bug-452), Simulation/FahrzielCheck.cs
+        HeliZappelZaehlen();                      // bug-463, Messung fuer die luft:-Zeile
 
         // Was noch abzusetzen ist: EINES je Takt und Traeger. Siehe
         // Entity.UnloadRest — das Original fuehrt denselben Zaehler im Satz.
@@ -38242,15 +38243,15 @@ public partial class MapEntityLayer : Node2D
             // dasselbe Loch, das `Commandable` für Einheiten längst schliesst.
             if (s.Owner != ViewPlayer) continue;
             if (!AirRect(s).HasPoint(p)) continue;
-            float d = p.DistanceTo(s.Pos - new Vector2(0, AirShadowDrop));
+            float d = p.DistanceTo(s.Pos - new Vector2(0, AirHoehePx(s)));
             if (d < bd) { bd = d; best = i; }
         }
         return best;
     }
 
-    private static Rect2 AirRect(Special s)
+    private Rect2 AirRect(Special s)
     {
-        var at = s.Pos - new Vector2(0, AirShadowDrop);
+        var at = s.Pos - new Vector2(0, AirHoehePx(s));
         return new Rect2(at - new Vector2(TileW / 2f, TileH / 2f),
                          new Vector2(TileW, TileH));
     }
@@ -39051,6 +39052,23 @@ public partial class MapEntityLayer : Node2D
     private const int AirFuelHome = 300;
     private const float AirShadowDrop = 26f;    // how high above the ground it flies
 
+    /// <summary><c>--flughoehe-bild-alt</c> — Stand bis 0.6.6: jedes Flugzeug
+    /// wird fest 26 px ueber seinem Schatten gezeichnet. Nullmodell zu bug-464.</summary>
+    public static bool FlughoeheBildAlt;
+
+    /// <summary>
+    /// ⭐ 06.10.2026, bug-464 (KayelGee R4, Meldungen 12 und 17): der Zeichner des
+    /// Originals zieht die Flughoehe vom Sprite ab (0x42B8A6..0x42B8BD:
+    /// y −= alt), der Schatten bleibt am Boden. Unsere Flugzeuge hatten eine
+    /// geregelte Hoehe (FlughoeheTakt), aber das Bild stand fest 26 px darueber —
+    /// ein Absturz (135 → 0) war darum nicht zu sehen, und ein Nachschubheli flog
+    /// sichtbar nie hoch und nie runter. ⚠ Alt ist absolut (Gelaende·15 + Hoehe),
+    /// der Bodenpunkt traegt das Gelaende schon — darum Alt − Gelaende·15.
+    /// </summary>
+    private float AirHoehePx(Special s)
+        => FlughoeheBildAlt ? AirShadowDrop
+           : Mathf.Max(0f, s.Alt - ElevOf(s.Col, s.Row) * 15f);
+
     /// <summary>The closest airfield still standing that this aircraft may use.</summary>
     private Entity? NearestAirfield(Special a)
     {
@@ -39169,6 +39187,7 @@ public partial class MapEntityLayer : Node2D
         if (a.Cargo <= 0)                  // empty: go and fetch a new load
         {
             a.Customer = -1;
+            if (!NachschubhoeheAlt) a.Sollhoehe = FlughoeheMax;   // bug-465: leer zum Posten oben
             var depot = a.DepotSlot >= 0
                 ? _entities.Find(x => x.IsBuilding && x.Slot == a.DepotSlot && !x.Dead)
                 : null;
@@ -39240,7 +39259,21 @@ public partial class MapEntityLayer : Node2D
 
         var c = _entities[a.Customer];
         a.Goal = c.Pos;
+        // ⭐ 06.10.2026, bug-465 (KayelGee R4, Meldung 17): »Nachschubhelis fliegen
+        // im Original auf hoeherer Hoehe zu ihrem Ziel, bevor sie kurz vor dem Ziel
+        // absenken, und wenn andere Ziele in der Naehe sind, bleiben sie unten«.
+        // uk 10/11 @0x4236F0: je Takt Soll := (Gelaende(Kunde) + 2)·15 (@0x423760);
+        // die Regelung (FlughoeheTakt) steigt ueber 6 Zellen auf 135 und regelt
+        // darunter ±1 je Takt auf die Soll — daraus folgt sein Satz. Bei uns blieb
+        // die Soll auf 135. --nachschubhoehe-alt.
+        if (!NachschubhoeheAlt) a.Sollhoehe = (ElevOf(c.Col, c.Row) + 2) * 15;
         if (a.Pos.DistanceTo(c.Pos) >= reach) return;
+        // Abgabe erst auf der Soll (@0x42489C/0x424AED). ⚠ UNSERE SETZUNG: das
+        // Original verlangt dazu Stufe 0, und die erreicht es nur, weil die Einheit
+        // auf »halt still« (+0x44) wartet — das haben wir nicht; mit der
+        // Stufenbedingung kaeme die Abgabe nie.
+        if (!NachschubhoeheAlt && a.Alt != a.Sollhoehe) { NachschubWartetHoehe++; return; }
+        NachschubAbgabeHoehe = a.Alt - ElevOf(c.Col, c.Row) * 15;
 
         // arrived: fill the customer up and book the payload it took
         int missing, max;
@@ -39264,6 +39297,14 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Deliveries made this session — the harness reports it.</summary>
+    /// <summary><c>--nachschubhoehe-alt</c> — Stand bis 0.6.6: der Nachschubheli
+    /// bleibt beim Kunden auf 135 und gibt in jeder Hoehe ab. Nullmodell zu bug-465.</summary>
+    public static bool NachschubhoeheAlt;
+
+    /// <summary>Takte, in denen ein Heli ueber dem Kunden noch sank/stieg; Hoehe
+    /// ueber dem Gelaende des Kunden bei der letzten Abgabe.</summary>
+    public int NachschubWartetHoehe, NachschubAbgabeHoehe = -1;
+
     public int SupplyRuns;
 
     /// <summary>Nachladungen am Nachschub-Posten (Typ 14, wie im Original) und
@@ -39426,6 +39467,12 @@ public partial class MapEntityLayer : Node2D
     /// greift, sieht sonst genauso aus wie eine, die nichts aendert.</summary>
     public static int FlughoeheGestiegen, FlughoeheGeregelt;
 
+    /// <summary><c>--heli-heimat-alt</c> — Stand bis 0.6.6: ein Nachschubheli
+    /// ohne Kunden bleibt am einmal gewuerfelten Heimatpunkt (und zappelt), ohne
+    /// eigenes Gebaeude fliegt er geradeaus. Nullmodell zu bug-463.</summary>
+    public static bool HeliHeimatAlt;
+    public int HeliGehuepft;
+
     private bool AirHeadHome(Special a)
     {
         a.Target = -1;                           // nothing left to shoot at
@@ -39492,15 +39539,57 @@ public partial class MapEntityLayer : Node2D
                 // die Weigerung, einen Fehler nachzubauen, der im Original nur
                 // deshalb nicht auffaellt, weil ohne Gebaeude die Partie ohnehin
                 // vorbei ist.
-                else a.HomePoint = null;
+                // bug-463: die gewuerfelte Zufallszelle (unten) bleibt stehen, bis
+                // der Heli dort ist — nicht jeden Takt verwerfen.
+                else if (HeliHeimatAlt) a.HomePoint = null;
             }
             if (home != null && a.HomePoint is Vector2 hp)
             {
                 a.HomeSlot = home.Slot;
                 a.Goal = hp;
                 if (a.Pos.DistanceTo(hp) >= TileW * 0.6f) return false;
-                a.Goal = null; a.Col = home.Col; a.Row = home.Row;
+                a.Col = home.Col; a.Row = home.Row;
+                // ⭐ 06.10.2026, bug-463 (KayelGee R4, Meldung 11): »die
+                // Nachschubhelis bleiben an einer Stelle stehen und wechseln
+                // staendig die Richtung«. Gemessen (DM_4): Goal = null am
+                // Heimatpunkt → AirDrift schiebt 2 px weg → naechster Takt wieder
+                // hin — Blick wechselt jeden Takt (Heli 9: 3805 Wechsel in 90 s).
+                // Das Original hat keinen Wartezustand: angekommen → uk := m_uk →
+                // keine Kunden → air M → 0x42636E wuerfelt ein NEUES Gebaeude.
+                // Der Heli huepft. Neu gewuerfelt wird EINMAL je Ankunft, nicht je
+                // Takt (die Warnung bei Special.HomePoint bleibt gueltig).
+                if (!HeliHeimatAlt)
+                {
+                    a.HomeSlot = -1; a.HomePoint = null;
+                    var mine = _entities.FindAll(x => x.IsBuilding && !x.Dead && x.Owner == a.Owner);
+                    if (mine.Count > 0)
+                    {
+                        var neu = mine[Simulation.Determinism.Roll(mine.Count)];
+                        a.HomeSlot = neu.Slot;
+                        a.HomePoint = neu.Pos + new Vector2(
+                            Simulation.Determinism.Roll(6) * TileW,
+                            Simulation.Determinism.Roll(6) * TileH);
+                        a.Goal = a.HomePoint;
+                        HeliGehuepft++;
+                        return false;
+                    }
+                }
+                a.Goal = null;
                 return false;   // ⚠ 13/14 werden NIE eingelagert, siehe unten
+            }
+            // bug-463 Nebenbefund: kein eigenes Gebaeude — das Original laesst die
+            // gewuerfelte ZUFALLSZELLE stehen (0x42636E findet nichts). Bei uns flog
+            // der Heli mit Goal = null stur geradeaus (DM_4: 26 263 Geradeausschritte).
+            if (home == null && !HeliHeimatAlt && _nav != null)
+            {
+                if (a.HomePoint is not Vector2 zp || a.Pos.DistanceTo(zp) < TileW * 0.6f)
+                {
+                    int zc = Simulation.Determinism.Roll(_nav.Width), zr = Simulation.Determinism.Roll(_nav.Height);
+                    a.HomePoint = CellCenter(zc, zr);
+                    HeliGehuepft++;
+                }
+                a.Goal = a.HomePoint;
+                return false;
             }
         }
         home ??= a.HomeSlot < 0 ? null
@@ -40006,6 +40095,24 @@ public partial class MapEntityLayer : Node2D
     /// den Schirm sehen koennen. Nennt auch, wieviele Flugzeuge ueberhaupt in
     /// der Luft sind und wieviele davon ohne Ziel: eine 0 im ersten Feld hiesse
     /// »der Fall kommt hier gar nicht vor« und nicht »es geht nicht«.</summary>
+    /// <summary>bug-463: je Nachschubheli Lage und Blick des letzten Takts.</summary>
+    private readonly Dictionary<Special, (Vector2 Pos, int Facing)> _heliLetzt = new();
+
+    /// <summary>Blickwechsel von Nachschubhelis, die sich dabei weniger als 3 px
+    /// bewegt haben — das »Zappeln« seiner Meldung 11.</summary>
+    public int HeliZappelWechsel;
+
+    private void HeliZappelZaehlen()
+    {
+        foreach (var a in _special)
+        {
+            if (!a.IsSupply || a.Dead || a.Stored) { _heliLetzt.Remove(a); continue; }
+            if (_heliLetzt.TryGetValue(a, out var v) && a.Facing != v.Facing && a.Pos.DistanceTo(v.Pos) < 3f)
+                HeliZappelWechsel++;
+            _heliLetzt[a] = (a.Pos, a.Facing);
+        }
+    }
+
     public string AirDriftLine()
     {
         int frei = 0, ohneZiel = 0, ohneSprit = 0;
@@ -40026,6 +40133,8 @@ public partial class MapEntityLayer : Node2D
                 DecktAuf(a.Owner, ViewPlayer)) eigene++;
         return $"luft: {frei} in der Luft, {ohneZiel} davon ohne Ziel, " +
                $"{ohneSprit} ohne Sprit | {AirDrifted} Geradeausschritte gelaufen" +
+               $" | Nachschubhelis: {HeliZappelWechsel} Blickwechsel im Stand (bug-463), {HeliGehuepft}x neu gewuerfelt, "
+               + $"{SupplyRuns} Abgaben, letzte in {NachschubAbgabeHoehe} ueber dem Kunden (Soll 30, bug-465), {NachschubWartetHoehe} Takte auf die Hoehe gewartet" +
                $" | decken auf fuer Spieler {ViewPlayer}: {eigene} von {frei}" +
                (NebelOhneFlugzeuge ? "   ⚠ --nebel-ohne-flugzeuge: keines deckt auf" : "");
     }
@@ -41529,7 +41638,7 @@ public partial class MapEntityLayer : Node2D
                 && !Watched(s.Col, s.Row))
             { FlugzeugImNebelVerborgen++; continue; }
             var c = s.Pos;
-            var air = c - new Vector2(0, AirShadowDrop);
+            var air = c - new Vector2(0, AirHoehePx(s));
             // flattened ground shadow, drawn as an explicit ellipse so no
             // canvas transform is involved
             var sh = new Vector2[12];

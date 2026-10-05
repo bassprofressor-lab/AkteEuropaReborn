@@ -154,7 +154,7 @@ public partial class MapEntityLayer
                           "fuer die Auswahl neu gestartet)");
             LaunchAircraft(a.Owner);
         }
-        SelectAt(a.Pos - new Vector2(0, AirShadowDrop));
+        SelectAt(a.Pos - new Vector2(0, AirHoehePx(a)));
         bool gewaehlt = _selAir >= 0 && _special[_selAir] == a;
         sb.AppendLine($"  angewaehlt: {(gewaehlt ? "JA" : "⚠ NEIN — SelectAt trifft das Flugzeug nicht")}");
         if (!gewaehlt)
@@ -216,7 +216,7 @@ public partial class MapEntityLayer
         };
         _special.Add(a);
 
-        SelectAt(a.Pos - new Vector2(0, AirShadowDrop));
+        SelectAt(a.Pos - new Vector2(0, AirHoehePx(a)));
         bool gewaehlt = _selAir >= 0 && _special[_selAir] == a;
         int vorher = AirOrdersGiven;
         int n = PostAirMove(CellCenterFor(new Vector2I(30, 10)));

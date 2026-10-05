@@ -123,17 +123,42 @@ public partial class MapEntityLayer
         a.TurnPoint = null;
         AbstuerzeBegonnen++;
         GD.Print($"absturz: {a.Name} (Platz {a.Slot}, Spieler {a.Owner}) auf " +
-                 $"({a.Col},{a.Row}) Hoehe {a.Alt} stuerzt — {grund}");
+                 $"({a.Col},{a.Row}) Hoehe {a.Alt} (im Bild {AirHoehePx(a):0} px ueber dem Schatten) stuerzt — {grund}");
     }
 
     /// <summary>Der Fall, je Spieltakt — und der Aufprall, wenn der Boden da
     /// ist.</summary>
+    /// <summary><c>--absturz-rauch-aus</c> — Stand bis 0.6.6: ein Absturz ohne
+    /// Feuer- und Rauchfahne. Nullmodell zu bug-464.</summary>
+    public static bool AbsturzRauchAus;
+    public int AbsturzFahnen;
+
     private void AbsturzTakt()
     {
         for (int i = 0; i < _special.Count; i++)
         {
             var a = _special[i];
             if (!a.Absturz || a.Dead) continue;
+            // ⭐ 06.10.2026, bug-464 (KayelGee R4, Meldung 12): »Nachschubheli
+            // abgeschossen, aber nicht abgestuerzt«. Im Original zieht der
+            // Fallende eine Fahne: je Takt rand&3 — 1 → Feuerstoss 210+rand%3,
+            // 2 → Rauch 240+rand%3, 0/3 nichts (@0x42396E), in seiner Hoehe minus
+            // rand%20 (@0x4239AD; der weitere Abzug dort ist V und fehlt hier).
+            if (!AbsturzRauchAus)
+            {
+                int w = Simulation.Determinism.Roll(4);
+                if (w is 1 or 2)
+                {
+                    float h = Mathf.Max(0f, AirHoehePx(a) - Simulation.Determinism.Roll(20));
+                    _effects.Add(new Effect
+                    {
+                        Pos = a.Pos - new Vector2(0, h),
+                        Kind = (w == 1 ? "feuerstoss" : "rauch") + Simulation.Determinism.Roll(3),
+                        FrameTime = 0.06f,
+                    });
+                    AbsturzFahnen++;
+                }
+            }
             a.Alt -= AbsturzSinken;
             if (a.Alt > 1) continue;
             a.Alt = 0;
@@ -166,7 +191,7 @@ public partial class MapEntityLayer
         AbsturzTrefferZellen += treffer;
         GD.Print($"aufprall: {a.Name} (Platz {a.Slot}, Spieler {a.Owner}) auf " +
                  $"({a.Col},{a.Row}) — {AbsturzSchadenZelle} auf die Zelle, " +
-                 $"{AbsturzSchadenNachbar} auf acht Nachbarn, {treffer} Zellen getroffen");
+                 $"{AbsturzSchadenNachbar} auf acht Nachbarn, {treffer} Zellen getroffen; Fahnen bisher {AbsturzFahnen}, im Bild jetzt {AirHoehePx(a):0} px");
 
         // ⚠ Die vier Bodenmarken des Originals fehlen — siehe Klassenkopf.
     }

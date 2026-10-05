@@ -4130,6 +4130,10 @@ _mausProbePunkt = karte;
             else if (a == "--entwurf-alle-teile") MapEntityLayer.EntwurfAlleTeile = true;
             else if (a == "--depotreiter-einzelwahl") UI.BaseWindow.DepotreiterEinzelwahl = true;
             else if (a == "--bauzeit-alt") MapEntityLayer.BauzeitAlt = true;
+            else if (a == "--heli-heimat-alt") MapEntityLayer.HeliHeimatAlt = true;
+            else if (a == "--flughoehe-bild-alt") MapEntityLayer.FlughoeheBildAlt = true;
+            else if (a == "--absturz-rauch-aus") MapEntityLayer.AbsturzRauchAus = true;
+            else if (a == "--nachschubhoehe-alt") MapEntityLayer.NachschubhoeheAlt = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
