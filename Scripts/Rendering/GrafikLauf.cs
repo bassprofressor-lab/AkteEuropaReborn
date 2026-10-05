@@ -28,7 +28,7 @@ namespace AkteEuropaReborn.Rendering;
 /// </summary>
 public partial class MapViewer
 {
-    private bool _truemmerCheck, _nebelkanteCheck, _schiffstodCheck, _todeslichtCheck;
+    private bool _truemmerCheck, _nebelkanteCheck, _schiffstodCheck, _todeslichtCheck, _kopfCheck;
     private int _schiffstodGattung;
     private Vector2I? _nebelkanteOrt;
 
@@ -52,6 +52,8 @@ public partial class MapViewer
             case "--todeslicht-check": _todeslichtCheck = true; return true;             // bug-434
             case "--todeslicht-aus": MapEntityLayer.TodeslichtAus = true; return true;   // bug-434
             case "--nebeltakt-alt": MapEntityLayer.NebeltaktAlt = true; return true;     // bug-435
+            case "--kopf-alt": MapEntityLayer.KopfAlt = true; return true;               // bug-436
+            case "--kopf-check": _kopfCheck = true; return true;                         // bug-436
         }
         if (a.StartsWith("--schiffstod-gattung=") && int.TryParse(a["--schiffstod-gattung=".Length..], out int sg))
         { _schiffstodGattung = sg; return true; }
@@ -87,6 +89,12 @@ public partial class MapViewer
         {
             if (_shotPath.Length > 0) { _ = TodeslichtBildLauf(); return true; }
             GD.Print(_entities.TodeslichtCheck());
+            GetTree().Quit(0);
+            return true;
+        }
+        if (_kopfCheck)                                                  // bug-436
+        {
+            GD.Print(_entities.KopfCheck());
             GetTree().Quit(0);
             return true;
         }

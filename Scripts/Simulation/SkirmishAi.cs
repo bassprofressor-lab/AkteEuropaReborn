@@ -237,6 +237,10 @@ public partial class MapEntityLayer : Node2D
     private readonly List<AiPlayer> _ai = new();
     private bool _aiOn;
 
+    /// <summary>Die Stufe aus <see cref="EnableSkirmishAi"/> — für Spieler, die ein
+    /// Skript später weckt (bug-436, <c>SkriptKopf</c>).</summary>
+    private AiLevel _aiStufe = AiLevel.Normal;
+
     /// <summary>Seconds between decisions, army size a wave needs, and how many
     /// units stay home. All three are ours — tuned, not recovered.</summary>
     private static (float think, int wave, int guard) AiTuning(AiLevel l) => l switch
@@ -250,6 +254,7 @@ public partial class MapEntityLayer : Node2D
     public void EnableSkirmishAi(IEnumerable<int> players, AiLevel level = AiLevel.Normal)
     {
         _ai.Clear();
+        _aiStufe = level;
         // der Lader 0x41E070 macht 0xFF -> 1: jede Mission beginnt ohne Ausgeschiedene
         LebenspruefungZuruecksetzen();
         foreach (int p in players)

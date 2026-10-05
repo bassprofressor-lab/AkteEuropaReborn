@@ -15088,6 +15088,8 @@ public partial class MapEntityLayer : Node2D
                 // licht: die Lichtquelle 0x4222C0 der Skripte (bug-434),
                 // Simulation/Todeslicht.cs.
                 _mscript.Licht = SkriptLicht;
+                _mscript.Kopf = SkriptKopf;                     // bug-436, Simulation/Lebenspruefung.cs
+                _mscript.KopfWert = KopfWert;
                 // ⭐ 25.08.2026 - die zwei Haken zu den Wirkungsarten, die aus dem
                 // Auslesen von Mission 2 kamen. Beide Routinen lagen fertig da,
                 // nur die Zuweisung fehlte (`script-coverage: 2 blockiert`).

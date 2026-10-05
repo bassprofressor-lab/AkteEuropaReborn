@@ -2037,6 +2037,8 @@ public sealed class MissionScript
     /// M29 @0x4A38CC/@0x4A3C43 (M24 @0x4A1075: Regel fehlt). Siehe
     /// Rendering/MapEntityLayer, Simulation/Todeslicht.cs.</summary>
     public Action<int, int, int, int>? Licht;         // x, y, radius, dauer
+    public Action<int, int>? Kopf;                     // spieler, wert — bug-436
+    public Func<int, int>? KopfWert;                   // sec53[40p]: 0 Mensch, 1 Rechner, 0xFF raus
 
     /// <summary>
     /// <b>EINE ZELLE ANSCHLAGEN — OHNE SCHUETZEN.</b>
@@ -2833,6 +2835,9 @@ public sealed class MissionScript
         // Regeln fragen auf `== 0`. Darum antwortet der Nullfall mit »nicht
         // offen«, nicht mit »Bedingung unerfüllt«.
         "text_open" => Cmp((TextOpen != null && TextOpen(c.A)) ? 1 : 0, c.Op, c.B),
+        // kopf(a = Spieler, op, b) — `mov al, [0x87B140 + 40·a]; test al, al`,
+        // M28 @0x4A35C9 (bug-436). Ohne Haken unerfuellt.
+        "kopf" => KopfWert != null && Cmp(KopfWert(c.A), c.Op, c.B),
         // terrain_at unter der EIGENEN EINHEIT a (Satz a, Felder +0x00 Spalte
         // und +0x01 Zeile). Mission 1 zeigt daran #020, »Ist eine Einheit auf
         // einem @Hügel …« — die Bedingung ist wörtlich die des Textes.
@@ -3100,6 +3105,11 @@ public sealed class MissionScript
             // licht(a = x, b = y, c = Radius, d = Dauer) — 0x4222C0, bug-434
             case "licht":
                 Licht?.Invoke(a.A, a.B, a.C, a.D);
+                break;
+            // kopf(a = Spieler, b = Wert) — `mov byte [0x87B140 + 40·a], b`
+            // direkt im Missionsblock, bug-436: 1 weckt die KI, 0 = Mensch-Kopf.
+            case "kopf":
+                Kopf?.Invoke(a.A, a.B);
                 break;
             // hit_cell(a = Spalte, b = Zeile) — ein Treffer OHNE Schuetzen,
             // Angreifer 40050 = Schaden 50. Siehe HitCell; das ist NICHT
@@ -3622,6 +3632,7 @@ public sealed class MissionScript
         "event" => $"Ereignis{c.Op}{c.B}",
         "selected" => $"Auswahl{c.Op}{c.B}",
         "ticks" => $"Takt {_ticks}{c.Op}{c.B}",
+        "kopf" => $"Kopf P{c.A}={(KopfWert != null ? KopfWert(c.A) : -1)}{c.Op}{c.B}",
         "text_open" => $"Hilfefenster #{c.A} offen=" +
                        (TextOpen != null && TextOpen(c.A) ? 1 : 0) + $"{c.Op}{c.B}",
         "terrain_unit" => $"Gelaende unter Einheit {c.A}=" +
@@ -3672,6 +3683,17 @@ public sealed class MissionScript
             return r.Then.Count;
         }
         return -1;
+    }
+
+    /// <summary>bug-436 — NUR Pruefstand: die Regeln mit einer <c>kopf</c>-Wirkung,
+    /// in Ladereihenfolge (Regeladresse, Spieler, Wert).</summary>
+    public List<(int At, int Spieler, int Wert)> KopfRegelnFuerProbe()
+    {
+        var l = new List<(int, int, int)>();
+        foreach (var r in _script.Rules)
+            foreach (var a in r.Then)
+                if (a.Kind == "kopf") l.Add((r.At, a.A, a.B));
+        return l;
     }
 
     /// <summary>Dasselbe fuer eine BELIEBIGE Mission, ohne <see cref="Current"/>
@@ -3888,6 +3910,7 @@ public sealed class MissionScript
         // `ticks` braucht nur die eigene Uhr, `text_open` haengt von Haus aus.
         "ticks" => true,
         "text_open" => TextOpen != null,
+        "kopf" => KopfWert != null,                  // bug-436
         "imap" => ImapAt != null,
         // 02.10.2026 (bug-388), das Skriptvariablen-Audit
         "time_after2" => true,
@@ -3919,6 +3942,7 @@ public sealed class MissionScript
         "ai_mode" => AiMode != null,
         "fire_at" => FireAt != null,
         "licht" => Licht != null,                    // bug-434
+        "kopf" => Kopf != null,                      // bug-436
         "hit_cell" => HitCell != null,
         "set_unit_field" => SetUnitField != null && UnitField != null,
         "add_target" => AddTarget != null,

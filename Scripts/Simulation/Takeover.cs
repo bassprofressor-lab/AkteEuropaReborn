@@ -137,7 +137,7 @@ public partial class MapEntityLayer : Node2D
                 if (o.Dead || o.IsProp) continue;
                 if (o.Owner is < 0 or > 7) continue;
                 if (IsNeutralPlayer(o.Owner)) continue;      // @0x411351
-                if (o.Owner != ViewPlayer) continue;         // @0x41135E: +0x00 == 0
+                if (!KopfMensch(o.Owner)) continue;          // @0x41135E: +0x00 == 0 (bug-436: auch ein Skript-Kopf 0)
 
                 // ⚠ OURS: a building's cells are in the imap too, so the
                 // original would let a factory do this. Counted, not obeyed.

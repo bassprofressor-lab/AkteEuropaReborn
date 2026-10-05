@@ -666,6 +666,12 @@
        "c": 250,
        "d": 150,
        "kind": "text"
+      },
+      {
+       "_at": "0x49883F",
+       "a": 1,
+       "b": 1,
+       "kind": "kopf"
       }
      ],
      "when": [
@@ -1672,6 +1678,12 @@
        "b": 59,
        "c": 21,
        "kind": "move"
+      },
+      {
+       "_at": "0x49C111",
+       "a": 6,
+       "b": 1,
+       "kind": "kopf"
       },
       {
        "_at": "0x49C122",
@@ -2723,6 +2735,12 @@
      "once": 0,
      "then": [
       {
+       "_at": "0x49C832",
+       "a": 4,
+       "b": 1,
+       "kind": "kopf"
+      },
+      {
        "kind": "ai_mode",
        "a": 4,
        "b": 3,
@@ -3406,6 +3424,12 @@
        "_at": "0x49CDD8",
        "a": 4000,
        "kind": "remove_unit"
+      },
+      {
+       "_at": "0x49CDDD",
+       "a": 4,
+       "b": 1,
+       "kind": "kopf"
       },
       {
        "_at": "0x49CE11",
@@ -6838,6 +6862,12 @@
        "d": 0,
        "kind": "place_unit",
        "v": 23
+      },
+      {
+       "_at": "0x49E760",
+       "a": 3,
+       "b": 1,
+       "kind": "kopf"
       },
       {
        "kind": "ai_mode",
@@ -10985,6 +11015,12 @@
        "kind": "inc"
       },
       {
+       "_at": "0x49F48D",
+       "a": 6,
+       "b": 1,
+       "kind": "kopf"
+      },
+      {
        "_at": "0x49F4A8",
        "a": 6,
        "b": 1,
@@ -14061,7 +14097,14 @@
     {
      "_at": "0x4A0B70",
      "once": 6,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x4A0B70",
+       "a": 4,
+       "b": 1,
+       "kind": "kopf"
+      }
+     ],
      "when": [
       {
        "a": 7,
@@ -14717,6 +14760,12 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A0F19",
+       "a": 4,
+       "b": 1,
+       "kind": "kopf"
+      },
+      {
        "_at": "0x4A0F34",
        "a": 4,
        "b": 1,
@@ -14871,6 +14920,100 @@
        "b": 4,
        "c": 0,
        "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1044",
+     "_gelesen": "05.10.2026 (bug-436): 0x4A1024..0x4A10D6, C und F gleich. Fehlte ganz in der Abschrift.",
+     "_tut_ausserdem": "byte[0x87B208] := 1 (Kopf P5) als kopf; v[104] += bx (bx = 1) als inc",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A1062",
+       "a": 190,
+       "b": 108,
+       "c": 99,
+       "d": 5,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4A1075",
+       "a": 107,
+       "b": 103,
+       "c": 8,
+       "d": 500,
+       "kind": "licht"
+      },
+      {
+       "_at": "0x4A107D",
+       "a": 5,
+       "b": 1,
+       "kind": "kopf"
+      },
+      {
+       "_at": "0x4A1087",
+       "a": 5,
+       "b": 5,
+       "kind": "ai_mode"
+      },
+      {
+       "_at": "0x4A1099",
+       "a": 4,
+       "b": 4,
+       "c": 9,
+       "d": 125,
+       "e": 123,
+       "kind": "add_target"
+      },
+      {
+       "_at": "0x4A10AE",
+       "a": 5,
+       "b": 4,
+       "c": 9,
+       "d": 130,
+       "e": 127,
+       "kind": "add_target"
+      },
+      {
+       "_at": "0x4A10C7",
+       "a": 343,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A10CC",
+       "a": 104,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A10D6",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 14,
+       "b": 12,
+       "kind": "obj_owner",
        "op": "=="
       }
      ]
@@ -15148,6 +15291,12 @@
      "once": 281,
      "then": [
       {
+       "_at": "0x4A138C",
+       "a": 4,
+       "b": 1,
+       "kind": "kopf"
+      },
+      {
        "kind": "ai_mode",
        "a": 4,
        "b": 2,
@@ -15285,6 +15434,12 @@
        "kind": "set_losses",
        "a": 54,
        "b": 0
+      },
+      {
+       "_at": "0x4A150E",
+       "a": 4,
+       "b": 1,
+       "kind": "kopf"
       },
       {
        "kind": "ai_mode",
@@ -17731,6 +17886,12 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A2557",
+       "a": 1,
+       "b": 1,
+       "kind": "kopf"
+      },
+      {
        "kind": "ai_mode",
        "a": 1,
        "b": 3,
@@ -17755,6 +17916,12 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A2590",
+       "a": 2,
+       "b": 1,
+       "kind": "kopf"
+      },
+      {
        "kind": "ai_mode",
        "a": 2,
        "b": 3,
@@ -17777,6 +17944,12 @@
       {
        "a": 10,
        "kind": "inc"
+      },
+      {
+       "_at": "0x4A25C9",
+       "a": 4,
+       "b": 1,
+       "kind": "kopf"
       },
       {
        "kind": "ai_mode",
@@ -18378,6 +18551,32 @@
      ]
     },
     {
+     "_at": "0x4A2A77",
+     "_gelesen": "05.10.2026 (bug-436): 0x4A2A5A..0x4A2A77, C und F gleich (F 0x4A2383). Ohne Riegel, laeuft jeden Takt.",
+     "then": [
+      {
+       "_at": "0x4A2A77",
+       "a": 5,
+       "b": 0,
+       "kind": "kopf"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 2,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A2A9E",
      "_tut_ausserdem": "game_time",
      "once": 20,
@@ -18435,6 +18634,12 @@
       {
        "a": 20,
        "kind": "inc"
+      },
+      {
+       "_at": "0x4A2B55",
+       "a": 1,
+       "b": 1,
+       "kind": "kopf"
       },
       {
        "_at": "0x4A2B5E",
@@ -20146,6 +20351,12 @@
       {
        "a": 70,
        "kind": "inc"
+      },
+      {
+       "_at": "0x4A346A",
+       "a": 5,
+       "b": 1,
+       "kind": "kopf"
       }
      ],
      "when": [
@@ -20338,6 +20549,33 @@
        "b": 1,
        "kind": "time_after",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A35E3",
+     "_gelesen": "05.10.2026 (bug-436): 0x4A35C9..0x4A35E3, C und F gleich (F 0x4A2EEF). Ohne Riegel. Feuert nur, wenn P6 vorher Kopf 0 hat — in M28 schreibt das kein Skript, die Regel ist also stumm wie im Original.",
+     "then": [
+      {
+       "_at": "0x4A35E3",
+       "a": 6,
+       "b": 1,
+       "kind": "kopf"
+      }
+     ],
+     "when": [
+      {
+       "a": 6,
+       "b": 0,
+       "kind": "kopf",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 6,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
       }
      ]
     },
@@ -24009,6 +24247,12 @@
       {
        "a": 0,
        "kind": "inc"
+      },
+      {
+       "_at": "0x4A4653",
+       "a": 2,
+       "b": 1,
+       "kind": "kopf"
       },
       {
        "_at": "0x4A468B",

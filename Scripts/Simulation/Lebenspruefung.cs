@@ -21,11 +21,23 @@ using Godot;
 ///   0x4BAC77  sec56[p] := 0
 /// </code>
 ///
-/// <para>⭐ <b>Endgültig.</b> Kein Weg innerhalb der Mission schreibt den Kopf
-/// zurück auf 1 (13 Schreiber C/F gelesen; <c>space_in</c> 0x4C17C0…0x4B34E0 fasst
-/// sec53 nie an). Ein Spieler, der per <c>space_in</c>/<c>place_unit</c> später
-/// Einheiten bekommt, bleibt draußen — seine Einheiten stehen und wehren sich nur
-/// über den Selbstverteidiger (0x411770).</para>
+/// <para>⚠⚠ <b>NICHT endgültig — berichtigt am 05.10.2026 (bug-436).</b> Hier stand
+/// »kein Weg innerhalb der Mission schreibt den Kopf zurück auf 1 (13 Schreiber C/F
+/// gelesen)«. Die 13 waren nur die berechneten Adressen. Die MISSIONSSKRIPTE
+/// schreiben den Kopf per direktem <c>mov byte [0x87B140 + 40p], 1</c> — 18 Stellen
+/// in 11 Missionen, in C und F an denselben Regeln (M1, 11, 12, 13, 18, 20, 22, 24,
+/// 27, 28, 31), fast immer unmittelbar vor <c>ai_mode</c>/<c>set_ai</c>: so WECKT
+/// ein Skript eine ausgeschiedene KI, nachdem es ihr per <c>space_in</c>/
+/// <c>place_unit</c> Einheiten gegeben hat. Eine Stelle schreibt 0 (M28 @0x4A2A77,
+/// P5): Kopf »Mensch« — nicht mehr geprüft, kein ai_tick, und P5 sammelt wie der
+/// Mensch neutrale Einheiten ein (Takeover @0x41135E). Wirkung <c>kopf</c> im
+/// Missionsskript, <see cref="SkriptKopf"/>. Gegenschalter <c>--kopf-alt</c>:
+/// der Stand 5b069b2 (die Wirkung tut nichts).</para>
+///
+/// <para>Ohne Skript bleibt es dabei: wer per <c>space_in</c>/<c>place_unit</c>
+/// später Einheiten bekommt, bleibt draußen (<c>space_in</c> 0x4C17C0…0x4B34E0
+/// fasst sec53 nie an) — seine Einheiten stehen und wehren sich nur über den
+/// Selbstverteidiger (0x411770).</para>
 ///
 /// <para>⭐ <b>Wer geprüft wird.</b> Kampagne: der Lader 0x41E070 macht P1…P7 zu
 /// Rechnern (0xFF → 1) und P0 zum Menschen — also jeder außer dem Betrachter,
@@ -75,14 +87,82 @@ public partial class MapEntityLayer
             _kiAusgeschieden[p] = false;
             _ausgeschiedenTakt[p] = -1;
             _ausgeschiedenGebaeude[p] = 0;
+            _kopfMensch[p] = false;
+            _kopfGeweckt[p] = 0;
         }
     }
 
     /// <summary>Hat der Kopf dieses Spielers die 1 (Rechner)? Siehe Kopfkommentar.</summary>
     private bool KopfRechner(int p)
     {
-        if (p is < 0 or > 7 || _kiAusgeschieden[p] || p == ViewPlayer) return false;
+        if (p is < 0 or > 7 || _kiAusgeschieden[p] || _kopfMensch[p] || p == ViewPlayer) return false;
         return InCampaign || _ai.Any(a => a.Player == p);
+    }
+
+    // ================= bug-436: das Skript schreibt den Kopf =================
+
+    /// <summary><c>--kopf-alt</c> — Stand 5b069b2: die Skriptwirkung <c>kopf</c>
+    /// tut nichts, eine ausgeschiedene KI bleibt draußen.</summary>
+    public static bool KopfAlt;
+
+    /// <summary>sec53[40p] == 0, von einem Skript gesetzt (M28 @0x4A2A77).</summary>
+    private readonly bool[] _kopfMensch = new bool[8];
+
+    /// <summary>Wie oft ein Skript den Kopf auf 1 gesetzt hat — für den Prüfstand.</summary>
+    private readonly int[] _kopfGeweckt = new int[8];
+
+    /// <summary>Kopf == 0: der Mensch, oder ein Spieler, dem das Skript den Kopf 0
+    /// gegeben hat. Gilt für das Einsammeln neutraler Einheiten (@0x41135E).</summary>
+    private bool KopfMensch(int p)
+        => p == ViewPlayer || (p is >= 0 and <= 7 && !KopfAlt && _kopfMensch[p]);
+
+    /// <summary>Der Kopf, wie das Original ihn liest: 0 Mensch, 1 Rechner, 0xFF
+    /// ausgeschieden. ⚠ Der neutrale P7 (sec106) hat im Original Kopf 1; er wird
+    /// nur nicht geprüft — darum zählt <see cref="IsNeutralPlayer"/> hier nicht.</summary>
+    private int KopfWert(int p)
+    {
+        if (p is < 0 or > 7) return 0xFF;
+        if (p == ViewPlayer || (!KopfAlt && _kopfMensch[p])) return 0;
+        return _kiAusgeschieden[p] ? 0xFF : 1;
+    }
+
+    /// <summary>
+    /// <c>mov byte [0x87B140 + 40·p], wert</c> aus einem Missionsblock (bug-436).
+    /// 1 = Rechner: ausgeschieden zurücknehmen und — wenn er noch nicht dabei ist —
+    /// in die KI-Liste aufnehmen, mit denselben Ausschlüssen wie beim Missionsstart
+    /// (<see cref="StartCampaign"/>: neutral/sec106, Bereitschaft). 0 = Mensch:
+    /// aus der KI-Liste, nicht mehr geprüft, Gebäude bleiben beim Besitzer.
+    /// <para>⚠ Der Kopf wird geschrieben, wie er ist — auch wenn der Spieler gar
+    /// nicht ausgeschieden war; dann ändert die 1 nichts. Ob er danach lebt,
+    /// entscheidet die nächste Lebensprüfung, genau wie im Original.</para>
+    /// </summary>
+    private void SkriptKopf(int p, int wert)
+    {
+        if (KopfAlt || p is < 0 or > 7 || p == ViewPlayer) return;
+        if (wert == 0)
+        {
+            _kopfMensch[p] = true;
+            int n = _ai.Count;
+            _ai.RemoveAll(a => a.Player == p);
+            if (n != _ai.Count)
+                GD.Print($"KI: Skript setzt Kopf P{p} := 0 (Mensch) — aus der KI-Liste, nicht mehr geprueft");
+            return;
+        }
+        if (wert != 1) return;                         // 0xFF schreibt kein Skript
+        bool warAus = _kiAusgeschieden[p], warMensch = _kopfMensch[p];
+        _kiAusgeschieden[p] = false;
+        _kopfMensch[p] = false;
+        _kopfGeweckt[p]++;
+        if (_ai.Any(a => a.Player == p)) return;
+        if (IsNeutralPlayer(p) || _standby[p]) return;
+        if (VerbuendeteOhneKi && Allied(ViewPlayer, p)) return;
+        var neu = new AiPlayer(p) { Level = _aiStufe, Think = 0.5f + p * 0.13f };
+        AiLoadPlan(neu);
+        _ai.Add(neu);
+        _aiOn = true;
+        GD.Print($"KI: Skript setzt Kopf P{p} := 1 — " +
+                 (warAus ? "war ausgeschieden, " : warMensch ? "war Mensch-Kopf, " : "") +
+                 $"in die KI-Liste aufgenommen (Takt {_taktNr})");
     }
 
     /// <summary>sec106[p] != 0. ⚠ Bei uns steht das in ZWEI Feldern: der Nachbau
@@ -219,6 +299,81 @@ public partial class MapEntityLayer
             if (m == 8 && (faro == null || faro.Owner != 3)) fehler.Add("Nullmodell K8: Faro nicht mehr bei P3");
         }
         sb.AppendLine($"  Soll ausgeschieden (beim Start tot, ohne sec106, nicht Betrachter): {sollTot}");
+        foreach (var f in fehler) sb.AppendLine("  FEHLER: " + f);
+        sb.Append(fehler.Count == 0 ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    // ================= bug-436: der Prüfstand zum Skript-Kopf ================
+
+    /// <summary>
+    /// <c>--kopf-check</c>: 60 Takte laufen lassen (die Lebensprüfung in Takt 50
+    /// ist durch), dann JEDE Regel dieser Mission mit einer <c>kopf</c>-Wirkung
+    /// über <see cref="Campaign.MissionScript.ErzwingeRegelFuerProbe"/> auslösen —
+    /// also über die echte Abschrift, mit allen Wirkungen der Regel — und sofort
+    /// prüfen: Kopf 1 → nicht ausgeschieden und in der KI-Liste (außer neutral/
+    /// Bereitschaft); Kopf 0 → Kopf 0 und nicht in der KI-Liste. Danach 120 Takte:
+    /// wer geweckt wurde und ein Lebenszeichen hat, muss noch in der Liste stehen
+    /// und gezogen haben; wer keins hat, scheidet wieder aus (wie im Original).
+    /// Nullmodell <c>--kopf-alt</c>: muss DURCHFALLEN, sobald ein Geweckter vorher
+    /// ausgeschieden war.
+    /// </summary>
+    public string KopfCheck()
+    {
+        int m = UI.SkirmishSetup.CampaignMission;
+        var sb = new System.Text.StringBuilder($"kopf-check (bug-436) K{m}, --kopf-alt {KopfAlt}\n");
+        if (InCampaign) MissionScriptTick(0.001f);                 // legt _mscript erst an
+        if (!InCampaign || _mscript == null) return sb.Append("  keine Kampagne — ungeprueft\n  DURCHGEFALLEN").ToString();
+        for (int t = 0; t < 60; t++) SimTickFuerProbe();
+        sb.AppendLine("  Takt 60: ausgeschieden " + string.Join(",", Enumerable.Range(0, 8).Where(KiAusgeschieden).Select(p => "P" + p)) +
+                      "; KI-Liste " + string.Join(",", _ai.Select(a => "P" + a.Player)));
+
+        var regeln = _mscript.KopfRegelnFuerProbe();
+        if (regeln.Count == 0) return sb.Append("  keine kopf-Regel in dieser Mission\n  BESTANDEN (nichts zu pruefen)").ToString();
+
+        var fehler = new List<string>();
+        var geweckt = new HashSet<int>();
+        int warAusUndGeweckt = 0;
+        foreach (var (at, p, w) in regeln)
+        {
+            int vor = KopfWert(p);
+            bool vorKi = _ai.Any(a => a.Player == p);
+            int n = _mscript.ErzwingeRegelFuerProbe(at);
+            int nach = KopfWert(p);
+            bool nachKi = _ai.Any(a => a.Player == p);
+            bool ausgenommen = IsNeutralPlayer(p) || _standby[p] || (VerbuendeteOhneKi && Allied(ViewPlayer, p));
+            sb.AppendLine($"  Regel 0x{at:X6} kopf(P{p}, {w}): {n} Wirkungen; Kopf {vor} -> {nach}, KI-Liste {(vorKi ? "ja" : "nein")} -> {(nachKi ? "ja" : "nein")}" +
+                          (ausgenommen ? " (neutral/Bereitschaft)" : ""));
+            if (w == 1)
+            {
+                if (vor == 0xFF) warAusUndGeweckt++;
+                if (nach != 1) fehler.Add($"0x{at:X6}: Kopf P{p} ist {nach}, Soll 1");
+                if (!nachKi && !ausgenommen) fehler.Add($"0x{at:X6}: P{p} nicht in der KI-Liste");
+                if (nachKi) geweckt.Add(p);
+            }
+            else
+            {
+                geweckt.Remove(p);
+                if (nach != 0) fehler.Add($"0x{at:X6}: Kopf P{p} ist {nach}, Soll 0");
+                if (nachKi) fehler.Add($"0x{at:X6}: P{p} steht noch in der KI-Liste");
+            }
+        }
+
+        var zuegeVor = _ai.ToDictionary(a => a.Player, a => a.Zuege);
+        for (int t = 0; t < 120; t++) SimTickFuerProbe();
+        foreach (int p in geweckt.OrderBy(x => x))
+        {
+            var a = _ai.Find(x => x.Player == p);
+            bool lebt = LebtNachTestOfLife(p);
+            int z = a == null ? -1 : a.Zuege - zuegeVor.GetValueOrDefault(p, 0);
+            sb.AppendLine($"  nach 120 Takten: P{p} Kopf {KopfWert(p)}, {(lebt ? "lebt" : "ohne Lebenszeichen")}, " +
+                          (a == null ? "nicht in der KI-Liste" : $"KI-Liste ja, {z} Zuege") +
+                          (_ausgeschiedenTakt[p] > 60 ? $", erneut ausgeschieden in Takt {_ausgeschiedenTakt[p]} (wie Original)" : ""));
+            if (lebt && a == null) fehler.Add($"P{p} lebt, ist aber aus der KI-Liste gefallen");
+            if (lebt && a != null && z <= 0) fehler.Add($"P{p} hat nach dem Wecken nicht gezogen");
+        }
+        sb.AppendLine($"  {regeln.Count} kopf-Regeln, davon {warAusUndGeweckt} weckten einen Ausgeschiedenen");
+        if (KopfAlt) sb.AppendLine("  Nullmodell (--kopf-alt): muss durchfallen, sobald ein Ausgeschiedener geweckt werden sollte");
         foreach (var f in fehler) sb.AppendLine("  FEHLER: " + f);
         sb.Append(fehler.Count == 0 ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
