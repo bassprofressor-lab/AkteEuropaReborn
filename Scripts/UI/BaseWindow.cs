@@ -375,6 +375,16 @@ public sealed partial class BaseWindow : PanelContainer
     /// ist genau eine Zeile gewaehlt. Nullmodell zu bug-461.</summary>
     public static bool DepotreiterEinzelwahl;
 
+    /// <summary><c>--forschungsfarben-alt</c> — Stand bis 0.6.6: alle
+    /// Forschungszeilen in der Einheitsfarbe. Nullmodell zu bug-467.</summary>
+    public static bool ForschungsfarbenAlt;
+
+    /// <summary>Die Sinnbildpaare des Textzeichners (01.PAL), hier ihr heller
+    /// Platz: 0x99 Waffe, 0x96 Fahrwerk, 0x7C Spezial (berichte/basisfenster-werte-fable.md §7/§8).</summary>
+    public static readonly Color ArtRot = Color.Color8(240, 81, 49);
+    public static readonly Color ArtGold = Color.Color8(244, 184, 28);
+    public static readonly Color ArtLavendel = Color.Color8(163, 163, 183);
+
     /// <summary>bug-461: die Zeilen, auf die Aussenden/Recycle wirken —
     /// absteigend, damit ein Verwerten die Nummern der noch folgenden nicht
     /// verschiebt.</summary>
@@ -1284,10 +1294,19 @@ public sealed partial class BaseWindow : PanelContainer
                 // faerben sie: die Auswahl ist allein der Balken oben (Platz 140), und
                 // die Bezahlbarkeit liest der Zeichner des Originals gar nicht.
                 var fg = r.Own ? RowOwnFg : RowFg;
+                // ⭐ 06.10.2026, bug-467 (KayelGee R4, Meldung 34): »im
+                // Forschungstab sind die Textfarben falsch«. 0x46A67C waehlt nach
+                // Byte +0x03 das Paar des Teilesymbols — 0 rot 0x99, 1 gold 0x96,
+                // 2 lavendel 0x7C, sonst (Erfindung) Glyphfarbe; der Preis bleibt
+                // in Glyphfarbe (0x4BA420 @0x46A7E2). --forschungsfarben-alt.
+                var nameFg = ForschungsfarbenAlt ? fg : r.Art switch
+                {
+                    0 => ArtRot, 1 => ArtGold, 2 => ArtLavendel, _ => fg,
+                };
                 float baseline = top + Step - Mathf.Max(2f, Step * 0.2f);
                 float costW = DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: true);
                 DrawString(_font, new Vector2(4, baseline), r.Name,
-                           HorizontalAlignment.Left, Size.X - 10 - costW, _size, fg);
+                           HorizontalAlignment.Left, Size.X - 10 - costW, _size, nameFg);
                 DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: false);
             }
         }

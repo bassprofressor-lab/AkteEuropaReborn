@@ -103,6 +103,16 @@ public partial class MapEntityLayer
         bool fuss = e.Infantry >= 0 || e.GameUnitType == 1;
         if (!e.IsBuilding && !fuss && e.GameUnitType == 2) return null;   // 0x4B78B5
         int hoehe = fuss ? 4 : e.GameUnitType is 3 or 4 or 5 ? 6 : 5;
+        // bug-466: der Gebaeude-Lebensbalken (0x4B778F..0x4B78B2) — TPmax/6+2 × 8,
+        // nur Stellung 1, an der Stelle des Einnahmebalkens; laeuft eine Einnahme
+        // (+0x3A > 0), zeichnet der Art-10-Zeichner stattdessen den (0x42B20D).
+        if (art == 1 && e.IsBuilding && !GebaeudebalkenAlt)
+        {
+            if (e.CaptureProgress > 0) return null;
+            int gb = e.HpMax / 6 + 2, gf = System.Math.Max(0, e.Hp) / 6, gi = gb - 2;
+            var gfb = 2 * gf >= gi ? BarGreen : 4 * gf < gi ? BarRed : BarYellow;
+            return new TabBalken(gb, 8, gf, gfb);
+        }
         if (art == 1)
         {
             int breite = (e.HpMax >> 2) + 2;                 // 0x4B724C
@@ -126,7 +136,9 @@ public partial class MapEntityLayer
     private void TabBalkenMalen(Entity e, TabBalken b)
     {
         float bw = b.Breite, h = b.Hoehe;
-        var hb = e.Pos + new Vector2(-bw / 2f, -BalkenHub(e));
+        var hb = e.IsBuilding && !GebaeudebalkenAlt
+            ? GebaeudeBalkenPunkt(e, bw)                       // bug-466
+            : e.Pos + new Vector2(-bw / 2f, -BalkenHub(e));
         hb = new Vector2(Mathf.Floor(hb.X), Mathf.Floor(hb.Y));
         var rc = e.Owner >= 0 && e.Owner < BalkenRahmen.Length ? BalkenRahmen[e.Owner] : PropColor;
         DrawRect(new Rect2(hb, new Vector2(bw, 1)), rc);
@@ -174,6 +186,12 @@ public partial class MapEntityLayer
             bool fuss = e.Infantry >= 0 || e.GameUnitType == 1;
             if (Balkenmodus >= 2 && fuss) fussSprit++;
             if (Balkenmodus == 2 && eigen) sprit++;
+            if (e.IsBuilding && !GebaeudebalkenAlt)
+            {
+                // bug-466: Gebaeude TPmax/6+2 × 8, Fuellung TP/6
+                if (b.Value.Breite != e.HpMax / 6 + 2 || b.Value.Fuellung != e.Hp / 6 || b.Value.Hoehe != 8) fehler++;
+                continue;
+            }
             int soll = Balkenmodus switch
             {
                 1 => e.HpMax / 4 + 2,

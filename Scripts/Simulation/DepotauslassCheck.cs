@@ -154,7 +154,9 @@ public partial class MapEntityLayer
             AwStelle(fz[k], plaetze[k]);
         }
         int garageVor = basis.Garage.Count;
+        if (basis.CaptureTotal <= 0) basis.CaptureTotal = basis.Hp;
         CaptureDone(bi, basis, ViewPlayer);
+        int nachlauf0 = basis.CaptureProgress, total = basis.CaptureTotal;
         int richtig = 0;
         foreach (int k in fz)
         {
@@ -165,6 +167,15 @@ public partial class MapEntityLayer
         int drin = 0;
         foreach (int k in fz) if (basis.Garage.Contains(_entities[k]) || Untergestellt(_entities[k])) drin++;
         bool ok = richtig == 3 && drin == 0;
+        // bug-466: der Nachlauf — voll nach dem Abschluss, dann je Takt weniger.
+        int nachlauf60 = basis.CaptureProgress;
+        bool nOk = nachlauf0 == total && nachlauf60 < nachlauf0 && nachlauf60 > 0;
+        var neuP = GebaeudeBalkenPunkt(basis, total / (float)CaptureBarDiv + 2f);
+        var altP = basis.Pos + new Godot.Vector2(-(total / (float)CaptureBarDiv + 2f) / 2f, -BalkenHub(basis) - CaptureBarH - 3f);
+        sb.Append($"  Nachlauf (bug-466): nach dem Abschluss {nachlauf0}/{total}, nach 60 Takten {nachlauf60}"
+                + (EinnahmeNachlaufAus ? " (Nullmodell --einnahme-nachlauf-aus)" : "") + (nOk ? "" : "   ⚠")
+                + $"; Balkenpunkt {neuP} gegen alt {altP} ({altP.Y - neuP.Y:0} px hoeher)\n");
+        ok &= nOk || VorplatzRaeumungAus;
         sb.Append($"  Basis Platz {basis.Slot}, Tuer ({tx},{ty}); losgeschickt {VorplatzGeschickt} von {VorplatzGefunden}, "
                 + $"Ziel sechs Zeilen suedlich {richtig}/3, nach 60 Takten eingefahren {drin} (Garage vorher {garageVor}, nachher {basis.Garage.Count})"
                 + (VorplatzRaeumungAus ? " (Nullmodell --vorplatz-raeumung-aus)" : "") + "\n");

@@ -77,6 +77,14 @@ public sealed partial class DesignWindow : PanelContainer
     private static readonly Color RowSelBg = new(0.24f, 0.30f, 0.24f);
     private static readonly Color IconFg = new(0.85f, 0.20f, 0.14f);
 
+    /// <summary><c>--erstellung-farben-alt</c> — Stand bis 0.6.6: geschaetzte
+    /// Farben (blaeulich, gruene Wahlzeile, rotes Sinnbild fuer alle). Nullmodell
+    /// zu bug-468.</summary>
+    public static bool ErstellungFarbenAlt;
+
+    /// <summary>01.PAL 0x8C — die Wahlzeile der Listen (0x46CD4A, 0x46D144, 0x46D490).</summary>
+    private static readonly Color WahlBg8C = Color.Color8(127, 119, 99);
+
     /// <summary>Die Entwurfsstelle, die auch die Tasten bedienen.</summary>
     public DesignScreen? Screen;
 
@@ -302,7 +310,7 @@ public sealed partial class DesignWindow : PanelContainer
         var wp = new List<PartList.Line>();
         foreach (var w in Screen.Weapons)
             wp.Add(new PartList.Line(Name(w), BaseWindow.IconW,
-                                     UnitStatBook.WeaponPrice(w.Id)));
+                                     UnitStatBook.WeaponPrice(w.Id), w.Id >= 50));   // bug-468: Spezialaufbau lavendel
         _weapon.Fill(wp, CurrentIndex(DesignScreen.Row.Weapon),
                      Screen.Cursor == DesignScreen.Row.Weapon);
 
@@ -502,7 +510,7 @@ public sealed partial class DesignWindow : PanelContainer
     /// rechts.</summary>
     private sealed partial class PartList : Control
     {
-        public readonly record struct Line(string Text, string Icon, int Price);
+        public readonly record struct Line(string Text, string Icon, int Price, bool Spezial = false);
 
         private readonly List<Line> _lines = new();
         private Font? _font;
@@ -547,12 +555,35 @@ public sealed partial class DesignWindow : PanelContainer
                 int idx = _top + i;
                 var l = _lines[idx];
                 float top = i * Step;
-                if (idx == _sel)
-                    DrawRect(new Rect2(0, top, Size.X, Step),
-                             _active ? RowSelBg : new Color(RowSelBg, 0.55f));
-                else if (idx == _hover)
-                    DrawRect(new Rect2(0, top, Size.X, Step), new Color(1, 1, 1, 0.07f));
-                var fg = idx == _sel ? RowSelFg : RowFg;
+                // ⭐ 06.10.2026, bug-468 (KayelGee R4, Meldung 33): »im
+                // Erstellenmenue sind die Textfarben falsch«. Der Zeichner der
+                // drei Listen (0x46CD52.., 0x46D146.., 0x46D498..) nimmt das PAAR
+                // des Teilesymbols der Zeile — ] Waffe 0x99 rot, [ Fahrwerk 0x96
+                // gold, { Spezial 0x7C lavendel —, Preis im selben Paar, Wahlzeile
+                // gefuellt mit 0x8C (127,119,99). Die Dunkelstufe nach +0x23 ist
+                // ungelesen und fehlt. --erstellung-farben-alt.
+                Color fg;
+                if (!ErstellungFarbenAlt)
+                {
+                    if (idx == _sel)
+                        DrawRect(new Rect2(0, top, Size.X, Step * 14f / 15f),
+                                 _active ? WahlBg8C : new Color(WahlBg8C, 0.55f));
+                    else if (idx == _hover)
+                        DrawRect(new Rect2(0, top, Size.X, Step), new Color(1, 1, 1, 0.07f));
+                    fg = l.Spezial ? BaseWindow.ArtLavendel
+                       : l.Icon == BaseWindow.IconW ? BaseWindow.ArtRot
+                       : l.Icon == BaseWindow.IconF ? BaseWindow.ArtGold
+                       : l.Icon == BaseWindow.IconS ? BaseWindow.ArtLavendel : RowFg;
+                }
+                else
+                {
+                    if (idx == _sel)
+                        DrawRect(new Rect2(0, top, Size.X, Step),
+                                 _active ? RowSelBg : new Color(RowSelBg, 0.55f));
+                    else if (idx == _hover)
+                        DrawRect(new Rect2(0, top, Size.X, Step), new Color(1, 1, 1, 0.07f));
+                    fg = idx == _sel ? RowSelFg : RowFg;
+                }
                 float baseline = top + Step - Mathf.Max(2f, Step * 0.2f);
                 float cw = 0f;
                 if (l.Price >= 0 && l.Icon.Length > 0)
@@ -561,7 +592,7 @@ public sealed partial class DesignWindow : PanelContainer
                     cw = W(l.Icon) + W(num);
                     float x = Size.X - 4 - cw;
                     DrawString(_font, new Vector2(x, baseline), l.Icon,
-                               HorizontalAlignment.Left, -1, _size, IconFg);
+                               HorizontalAlignment.Left, -1, _size, ErstellungFarbenAlt ? IconFg : fg);
                     DrawString(_font, new Vector2(x + W(l.Icon), baseline), num,
                                HorizontalAlignment.Left, -1, _size, fg);
                 }

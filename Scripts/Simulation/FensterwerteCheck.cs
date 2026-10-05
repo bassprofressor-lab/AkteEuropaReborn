@@ -71,6 +71,24 @@ public partial class MapEntityLayer
         sb.Append($"  Erstellen-Fenster (Mission {UI.SkirmishSetup.CampaignMission}): Fahrwerke [{Ids(Designer.Propulsions)}], "
                 + $"Waffen [{Ids(Designer.Weapons)}], Ausruestung [{Ids(Designer.Equipment)}], nicht besessen {fremd}"
                 + (EntwurfAlleTeile ? " (Nullmodell --entwurf-alle-teile)" : "") + (eOk ? "\n" : "   ⚠\n"));
+        // bug-467 (Meldung 34): die Forschungszeilen — Originalform »Name(Zahl)«,
+        // jede mit Teileart 0..3 (Farbe nach Byte +0x03).
+        if (ProbeBasisfensterWaehlen() >= 0)
+        {
+            var fz = ForschungZeilen();
+            int mitArt = 0, alteForm = 0;
+            var proben = new System.Collections.Generic.List<string>();
+            foreach (var r in fz)
+            {
+                if (r.Art is >= 0 and <= 3) mitArt++;
+                if (r.Name.Contains("—")) alteForm++;
+                if (proben.Count < 4) proben.Add($"{r.Name} [Art {r.Art}]");
+            }
+            bool fOk = fz.Count == 0 || (mitArt == fz.Count && alteForm == 0);
+            ok &= fOk;
+            sb.Append($"  Forschungszeilen: {fz.Count}, mit Teileart {mitArt}, alte Form {alteForm}: {string.Join(" | ", proben)}"
+                    + (ForschungstextAlt ? " (Nullmodell --forschungstext-alt)" : "") + (fOk ? "\n" : "   ⚠\n"));
+        }
         sb.Append(ok ? "fensterwerte-check: BESTANDEN" : "fensterwerte-check: DURCHGEFALLEN");
         return sb.ToString();
     }

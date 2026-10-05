@@ -55,10 +55,15 @@ public partial class BuildPanel : Control
     public readonly struct Row
     {
         public Row(string name, string cost, bool affordable, bool current, int pic = 0,
-                   int chassis = 0, int weapon = 0, bool own = false)
+                   int chassis = 0, int weapon = 0, bool own = false, int art = -1)
         { Name = name; Cost = cost; Affordable = affordable; Current = current; Pic = pic;
-          Chassis = chassis; Weapon = weapon; Own = own; }
+          Chassis = chassis; Weapon = weapon; Own = own; Art = art; }
         public string Name { get; }
+
+        /// <summary>bug-467: die Teileart einer Forschungszeile — Byte +0x03 des
+        /// Angebotssatzes (0x46A67C): 0 Waffe, 1 Fahrwerk, 2 Spezial, 3 Erfindung;
+        /// −1 = keine Forschungszeile.</summary>
+        public int Art { get; }
 
         /// <summary>
         /// <b>Fahrwerk und Aufbauteil dieser Zeile</b> — Fall 0 des Zeichners

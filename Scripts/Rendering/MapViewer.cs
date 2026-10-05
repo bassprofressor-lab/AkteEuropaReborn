@@ -4134,6 +4134,11 @@ _mausProbePunkt = karte;
             else if (a == "--flughoehe-bild-alt") MapEntityLayer.FlughoeheBildAlt = true;
             else if (a == "--absturz-rauch-aus") MapEntityLayer.AbsturzRauchAus = true;
             else if (a == "--nachschubhoehe-alt") MapEntityLayer.NachschubhoeheAlt = true;
+            else if (a == "--gebaeudebalken-alt") MapEntityLayer.GebaeudebalkenAlt = true;
+            else if (a == "--einnahme-nachlauf-aus") MapEntityLayer.EinnahmeNachlaufAus = true;
+            else if (a == "--forschungsfarben-alt") UI.BaseWindow.ForschungsfarbenAlt = true;
+            else if (a == "--forschungstext-alt") MapEntityLayer.ForschungstextAlt = true;
+            else if (a == "--erstellung-farben-alt") UI.DesignWindow.ErstellungFarbenAlt = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;

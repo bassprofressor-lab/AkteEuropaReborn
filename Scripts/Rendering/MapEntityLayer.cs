@@ -5066,6 +5066,25 @@ public partial class MapEntityLayer : Node2D
     private const int CaptureBarDiv = 6;
     private const float CaptureBarH = 8f;
 
+    /// <summary><c>--gebaeudebalken-alt</c> — Stand bis 0.6.6: Einnahmebalken an
+    /// der Fussmitte (rund 30–40 px tiefer), schwarzer Kasten, kein Grau, und der
+    /// Gebaeude-Lebensbalken mit Einheitenmassen. Nullmodell zu bug-466.</summary>
+    public static bool GebaeudebalkenAlt;
+
+    /// <summary>Palette 01.PAL: 0xFE (235,231,231) — Rahmen; 0x28 (127,115,115) —
+    /// der abbauende Teil nach der Einnahme (berichte/basisfenster-werte-fable.md §2.2/§2.4).</summary>
+    private static readonly Color BalkenRahmenFE = Color.Color8(235, 231, 231);
+    private static readonly Color EinnahmeGrau = Color.Color8(127, 115, 115);
+
+    /// <summary>bug-466: der gemeinsame Punkt von Einnahme- und Gebaeude-Lebensbalken
+    /// (0x4B7DF0 / 0x4B778F): x-Mitte = linke Fusskante + 118, Oberkante = Ankerzeile
+    /// − 12 − Hoehe·15 (CellRect zieht die Hoehe schon ab).</summary>
+    private Vector2 GebaeudeBalkenPunkt(Entity e, float breite)
+    {
+        var at = CellRect(_ox, _oy, e.Col, e.Row, e.Elev);
+        return new Vector2(Mathf.Floor(at.Position.X + 118f - breite / 2f), Mathf.Floor(at.Position.Y - 12f));
+    }
+
     /// <summary>Wie weit über dem Bodenpunkt er sitzt — <b>die eingemessene
     /// Zahl von früher</b>, jetzt nur noch der Rückfall für
     /// <c>--balken-alt</c>. Gelesen wird die Höhe seit dem 07.09.2026, siehe
@@ -41589,6 +41608,23 @@ public partial class MapEntityLayer : Node2D
                 continue;
             float breite = e.CaptureTotal / (float)CaptureBarDiv + 2f;
             float voll = Mathf.Min(breite, e.CaptureProgress / (float)CaptureBarDiv);
+            if (!GebaeudebalkenAlt)
+            {
+                // ⭐ 06.10.2026, bug-466 (KayelGee R4, Meldung 25): »der
+                // Einnehmbalken ist im Original gleichzeitig der Lebensbalken …
+                // nach dem Einnehmen grau und fuellt sich langsam wieder; der
+                // Balken sollte viel hoeher sein«. 0x4B7DF0 → 0x4B7AC0: Lage
+                // (Anker links + 118, Anker oben − 12 − Hoehe·15), Rahmen 0xFE,
+                // links der Eindringling — im Abbau 0x43D265 (+0x3C = 0xFF) das
+                // Grau 0x28 —, rechts der Besitzer.
+                var gp = GebaeudeBalkenPunkt(e, breite);
+                DrawRect(new Rect2(gp, new Vector2(breite, CaptureBarH)), BalkenRahmenFE);
+                DrawRect(new Rect2(gp + Vector2.One, new Vector2(breite - 2, CaptureBarH - 2)), OwnerColor(e.Owner));
+                if (voll > 1f)
+                    DrawRect(new Rect2(gp + Vector2.One, new Vector2(Mathf.Min(voll, breite - 2) - 1, CaptureBarH - 2)),
+                             e.Intruder >= 0 ? OwnerColor(e.Intruder) : EinnahmeGrau);
+                continue;
+            }
             var cb = e.Pos + new Vector2(-breite / 2f, -BalkenHub(e) - CaptureBarH - 3f);
             DrawRect(new Rect2(cb - Vector2.One, new Vector2(breite + 2, CaptureBarH + 2)),
                      new Color(0, 0, 0, 0.75f));

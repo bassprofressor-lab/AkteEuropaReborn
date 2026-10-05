@@ -386,6 +386,10 @@ public partial class MapEntityLayer : Node2D
         RouteGebaeudeStreichen(b.Slot);
         Hand(b, who);
         if (!VorplatzRaeumungAus) VorplatzRaeumen(b, who);   // bug-458
+        // bug-466: +0x3A wird beim Abschluss NICHT genullt (0x43CD57..0x43CD6E);
+        // der Abbaupfad 0x43D265 zaehlt ihn je Takt herunter, grau gegen Besitzer.
+        // Das erledigt der Abbauzweig in CaptureTick (niemand Fremdes an der Tuer).
+        if (!EinnahmeNachlaufAus) b.CaptureProgress = b.CaptureTotal;
         // ⭐ 14.09.2026 — eine eingenommene BASIS verliert ihre Insassen
         // (C 0x43D190 / F 0x43C1B7 -> 0x410E60). Andere Arten behalten sie.
         EinnahmeInsassenLoeschen(b);
@@ -416,6 +420,10 @@ public partial class MapEntityLayer : Node2D
     /// Einnahme bleibt die Truppe vor der Tuer stehen und rutscht ins Depot.
     /// Nullmodell zu bug-458.</summary>
     public static bool VorplatzRaeumungAus;
+
+    /// <summary><c>--einnahme-nachlauf-aus</c> — Stand bis 0.6.6: der Balken
+    /// verschwindet mit dem Besitzerwechsel sofort. Nullmodell zu bug-466.</summary>
+    public static bool EinnahmeNachlaufAus;
 
     /// <summary>Wie viele Einheiten die letzte Raeumung losgeschickt hat / gefunden hat.</summary>
     public int VorplatzGeschickt, VorplatzGefunden;

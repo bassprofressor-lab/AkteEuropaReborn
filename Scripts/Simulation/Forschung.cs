@@ -499,6 +499,10 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Die Angebotsliste für den Reiter »Forschung« des
     /// Basisfensters — dieselbe Liste, die <see cref="ForschungKaufen"/> nach
     /// Zeilennummer bedient.</summary>
+    /// <summary><c>--forschungstext-alt</c> — Stand bis 0.6.6: »Name — Stufe a auf b
+    /// (+Was)« mit unserer Vorschau. Nullmodell zu bug-467.</summary>
+    public static bool ForschungstextAlt;
+
     public List<UI.BuildPanel.Row> ForschungZeilen()
     {
         var raus = new List<UI.BuildPanel.Row>();
@@ -516,8 +520,20 @@ public partial class MapEntityLayer : Node2D
                 // herauskommt, haengt an der Losnummer und steht erst beim
                 // Abschluss fest.
                 raus.Add(new UI.BuildPanel.Row(
-                    $"{a.Name} — eine neue Waffe erfinden",
-                    $"${a.Preis}", _money[spieler] >= a.Preis, false));
+                    ForschungstextAlt ? $"{a.Name} — eine neue Waffe erfinden" : a.Name,
+                    $"${a.Preis}", _money[spieler] >= a.Preis, false, art: 3));
+                continue;
+            }
+            // ⭐ 06.10.2026, bug-467 (KayelGee R4, Meldung 34): das Original
+            // schreibt »Name(Zahl)« (0x46A5xx..0x46A667, »(« 0x5017E4, »)«
+            // 0x5017E0) und keine Vorschau. Art nach Byte +0x03: Fahrwerk 1,
+            // Bauteil < 50 Waffe 0, sonst Spezial 2 (Zuordnung V aus den
+            // Sinnbildpaaren). --forschungstext-alt fuer den alten Wortlaut.
+            int art = a.Fahrwerk ? 1 : a.Bauteil < 50 ? 0 : 2;
+            if (!ForschungstextAlt)
+            {
+                raus.Add(new UI.BuildPanel.Row($"{a.Name}({a.Stufe})",
+                    $"${a.Preis}", _money[spieler] >= a.Preis, false, art: art));
                 continue;
             }
             // Der Arm ist die ehrliche Vorschau des Originals: was diese Stufe
