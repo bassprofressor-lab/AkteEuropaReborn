@@ -197,6 +197,10 @@ public partial class MapViewer
     /// angewählt, damit das Nullmodell in Stellung 0 sichtbar wird.
     /// Nullmodelle: <c>--balkenmodus-alt</c> und <c>--tab-alt</c> → Stellung 0
     /// zeigt Balken (die angewählte Einheit) → DURCHGEFALLEN.</summary>
+    /// <para>⚠ 05.10.2026, bug-440: auf K1 kamen die »fremden« Balken der Stellung 1
+    /// bisher allein von den vier herrenlosen Kulissen (Wrack), die im Original keinen
+    /// Balken haben (@0x42B237). Die Gegner liegen dort im Nebel — K1 also mit
+    /// <c>--kein-nebel</c> laufen lassen (fremde 36), oder K4 (fremde 4).</para>
     private async System.Threading.Tasks.Task TabbalkenLauf()
     {
         for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

@@ -102,6 +102,7 @@ public sealed partial class DesignWindow : PanelContainer
     public DesignWindow()
     {
         MouseFilter = MouseFilterEnum.Stop;
+        if (!BaseWindow.SchriftWeich) TextureFilter = TextureFilterEnum.Nearest;   // bug-445
         ProcessMode = ProcessModeEnum.Always;
 
         var frame = new StyleBoxFlat
@@ -331,7 +332,7 @@ public sealed partial class DesignWindow : PanelContainer
         _stats.Text =
             $"Energie {d.Hp}\n" +
             $"A/V {d.Attack}/{d.Defence}\n" +
-            $"Nachladen {d.Reload}\n" +
+            $"Nachladen {UnitStatBook.AnzeigeNachladen(d.Reload)}\n" +
             $"Geschw. {d.Speed}\n" +
             $"Sicht {d.Sight}\n" +
             $"Reichw. {d.Range}/{min}\n" +

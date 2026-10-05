@@ -364,9 +364,20 @@ public sealed partial class BaseWindow : PanelContainer
 
     private int _tab = 1;                       // »Produktion« ist der brauchbare
 
+    /// <summary><c>--schrift-weich</c> — Stand bis 0.6.6: Basis-, Erstellungs-
+    /// fenster und Leiste ohne eigenen Filter; die Projektvorgabe ist Linear
+    /// (project.godot:88 `renderer/texture_filter` ist kein Godot-4-Schluessel),
+    /// und die auf 26 px vergroesserte 13-px-Bitmapschrift verwaescht. Nullmodell
+    /// zu bug-445.</summary>
+    public static bool SchriftWeich;
+
     public BaseWindow()
     {
         MouseFilter = MouseFilterEnum.Stop;
+        // bug-445 (KayelGee R4, Meldung 28): »die Schrift im Basismenue sieht
+        // unscharf aus«. Bedienblock und HUD zeichnen laengst mit Nearest; das
+        // Original blittet die FONT.CWD-Glyphen 1:1 (0x4BA1C0).
+        if (!SchriftWeich) TextureFilter = TextureFilterEnum.Nearest;
         // ⚠ Always: dasselbe wie beim Abschlussfenster — das Baumenü muss auch
         // bei angehaltenem Baum bedienbar bleiben.
         ProcessMode = ProcessModeEnum.Always;
@@ -951,7 +962,7 @@ public sealed partial class BaseWindow : PanelContainer
         sb.Append("Energie : ").Append(e.Hp).Append('\n');
         string w = UnitStatBook.ComponentLabel(e.Weapon);
         if (w.Length > 0) sb.Append(w).Append('\n');
-        sb.Append("Nachladen ").Append(e.Reload).Append('\n');
+        sb.Append("Nachladen ").Append(UnitStatBook.AnzeigeNachladen(e.Reload)).Append('\n');
         string p = UnitStatBook.ComponentLabel(e.Propulsion);
         if (p.Length > 0) sb.Append(p).Append('\n');
         sb.Append("A/V ").Append(e.Attack).Append('/').Append(e.Defence).Append('\n');
@@ -1007,6 +1018,7 @@ public sealed partial class BaseWindow : PanelContainer
         Size = GetCombinedMinimumSize();
         Position = new Vector2(Mathf.Max(0f, vp.X - Size.X - 12f),
                                Mathf.Max(0f, Mathf.Min(12f, vp.Y - Size.Y)));
+        if (!SchriftWeich) Position = Position.Floor();     // bug-445: kein halber Bildpunkt
     }
 
     /// <summary>Für einen Prüflauf, der nicht auf den Bildschirm sehen kann.

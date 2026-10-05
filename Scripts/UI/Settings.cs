@@ -368,11 +368,39 @@ public static class Settings
     /// <summary>Hands the display settings to the engine. Called once when a
     /// scene comes up and again whenever the screen changes something, so a
     /// change takes effect immediately instead of at the next start.</summary>
-    public static void Apply()
+    public static void Apply() => Apply(false);
+
+    /// <summary><c>--fenster-alt</c> — Stand bis 0.6.6: jeder Szenenaufbau stellt
+    /// das Fenster auf »Fenster« und auf window_w×window_h zurueck, auch ein
+    /// maximiertes. Nullmodell zu bug-449.</summary>
+    public static bool FensterAlt;
+
+    /// <summary>
+    /// <paramref name="groesseGewaehlt"/>: der Spieler hat eben im
+    /// Auflösungswähler eine Größe gewählt — dann gilt sie auch für ein
+    /// maximiertes Fenster.
+    /// </summary>
+    public static void Apply(bool groesseGewaehlt)
     {
-        DisplayServer.WindowSetMode(Fullscreen
-            ? DisplayServer.WindowMode.Fullscreen
-            : DisplayServer.WindowMode.Windowed);
+        // ⭐ 05.10.2026, bug-449 (KayelGee R4, Meldung 30): »die Fenstergroesse
+        // aendert sich, wenn ein Video abgespielt wird. Wenn ich das Fenster
+        // maximiere, sollte das auch maximiert bleiben«. Nicht der Film: Apply()
+        // laeuft bei jedem Szenenaufbau (Hauptmenue -> Karte, gleich nach dem
+        // Film), setzte den Modus hart auf Windowed und die Groesse auf
+        // window_w×window_h — das entmaximiert. Jetzt bleibt der Modus, solange
+        // er zur Einstellung passt.
+        var modus = DisplayServer.WindowGetMode();
+        bool istVoll = modus is DisplayServer.WindowMode.Fullscreen or DisplayServer.WindowMode.ExclusiveFullscreen;
+        bool maximiert = modus == DisplayServer.WindowMode.Maximized;
+        if (FensterAlt)
+            DisplayServer.WindowSetMode(Fullscreen
+                ? DisplayServer.WindowMode.Fullscreen
+                : DisplayServer.WindowMode.Windowed);
+        else if (Fullscreen && !istVoll)
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+        else if (!Fullscreen && (istVoll || (maximiert && groesseGewaehlt)))
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
+        if (!FensterAlt && !Fullscreen && maximiert && !groesseGewaehlt) goto vsync;
 
         // Die Fenstergroesse, und nur im Fenster — siehe WindowW.
         if (!Fullscreen && WindowW > 0 && WindowH > 0)
@@ -390,6 +418,7 @@ public static class Settings
                 DisplayServer.WindowSetPosition(ecke);
             }
         }
+        vsync:
         DisplayServer.WindowSetVsyncMode(VSync
             ? DisplayServer.VSyncMode.Enabled
             : DisplayServer.VSyncMode.Disabled);

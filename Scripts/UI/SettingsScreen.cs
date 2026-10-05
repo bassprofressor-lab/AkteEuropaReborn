@@ -116,7 +116,7 @@ public partial class SettingsScreen : Control
                 var g = groessen[(int)i - 1];
                 Settings.WindowW = g.X; Settings.WindowH = g.Y;
             }
-            Settings.Apply();
+            Settings.Apply(groesseGewaehlt: true);
         };
         aufl.Disabled = Settings.Fullscreen;
 

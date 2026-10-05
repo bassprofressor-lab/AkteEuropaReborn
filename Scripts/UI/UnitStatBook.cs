@@ -61,6 +61,21 @@ using Godot;
 /// </summary>
 public static class UnitStatBook
 {
+    /// <summary><c>--nachladen-roh</c> — Stand bis 0.6.6: Basis- und
+    /// Erstellungsfenster zeigen den Rohwert (Maschinengewehr 20). Nullmodell zu
+    /// bug-441.</summary>
+    public static bool NachladenRoh;
+
+    /// <summary>
+    /// bug-441 (KayelGee R4, Meldung 31): »Nachladen« zeigt jedes Fenster des
+    /// Originals umgerechnet, <c>(16 − ⌊√x⌋)/2 + 1</c> — Produktion @0x46944D,
+    /// Depot-Reiter @0x468692, Erstellung @0x46DC68, Depot @0x47996C,
+    /// Einheitenliste @0x475431. Maschinengewehr 20 → 7, Schw. Raketenwerfer
+    /// 120 → 4. Die Nachladedauer selbst bleibt der Rohwert.
+    /// </summary>
+    public static int AnzeigeNachladen(int roh)
+        => NachladenRoh ? roh : (16 - (int)System.Math.Sqrt(System.Math.Max(0, roh))) / 2 + 1;
+
     /// <summary>Alles, was rechts im Fenster steht — zu einem Entwurf.</summary>
     public readonly struct Entry
     {

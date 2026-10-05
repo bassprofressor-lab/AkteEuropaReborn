@@ -91,8 +91,30 @@ public sealed class DesignScreen
         var p = CurrentPropulsion;
         var e = CurrentEquipment;
         if (w == null || p == null) return "";
+        if (!EntwurfsnameAlt)
+        {
+            // bug-442 (KayelGee R4, Meldung 35): Klickarm »Erstellen«
+            // 0x44AA2B..0x44AC1A — Kurzname des Aufbauteils (+0x02) + "-" +
+            // Verbesserung (80 = »keine« wird 0, @0x44AA4D) + "-" + Fahrwerk.
+            // Reifen + leichte Bordkanone heisst »Kanone-0-161«.
+            return NameWieOriginal(w.Id, w.Name, e?.Id, p.Id);
+        }
         string wn = Short(w.Name);
         return e == null ? $"{wn}-{p.Id}" : $"{wn}-{e.Id}-{p.Id}";
+    }
+
+    /// <summary><c>--entwurfsname-alt</c> — Stand bis 0.6.6: erstes Wort des
+    /// langen Waffennamens, ohne »-0« (»Leichte-161«). Nullmodell zu bug-442.</summary>
+    public static bool EntwurfsnameAlt;
+
+    /// <summary>Der Name nach 0x44AA2B..0x44AC1A (bug-442), auch fuer den
+    /// Pruefstand.</summary>
+    public static string NameWieOriginal(int waffe, string langname, int? verbesserung, int fahrwerk)
+    {
+        string kurz = UI.UnitStatBook.ComponentPlain(waffe).Trim();
+        if (kurz.Length == 0) kurz = Short(langname);
+        int verb = verbesserung is null or 80 ? 0 : verbesserung.Value;
+        return $"{kurz}-{verb}-{fahrwerk}";
     }
 
     /// <summary>Trim a weapon name down to something that fits a design name —

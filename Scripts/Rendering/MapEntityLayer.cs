@@ -3455,7 +3455,14 @@ public partial class MapEntityLayer : Node2D
         // started it outside the sound probe — which is why the game was
         // silent. Which piece belongs to which mission is OURS; see
         // Audio.MidiMusic.StartForMission.
-        Audio.MidiMusic.StartForMission(UI.SkirmishSetup.CampaignMission);
+        // bug-447 (KayelGee R4, Meldung 8): »im Hauptmenue startet die Musik
+        // beim Wechsel der Demo jedes Mal neu«. Der Demowechsel des Originals
+        // (0x415D9E..0x415ED1) ruft play_music 0x4D5310 NICHT — die Musik
+        // startet einmal vor der Hauptschleife (@0x415175) und laeuft durch.
+        // Die Kulisse legt je Demo eine frische Schicht an; laeuft schon ein
+        // Stueck, bleibt es. --demomusik-neustart.
+        if (!(Kulissenlauf && !DemomusikNeustart && Audio.MidiMusic.Track >= 0))
+            Audio.MidiMusic.StartForMission(UI.SkirmishSetup.CampaignMission);
 
         // elevation per cell (for correct vertical placement) from the map tiles.
         var elev = BuildElevLookup(meta);
@@ -10862,6 +10869,19 @@ public partial class MapEntityLayer : Node2D
     /// <para>⚠ Das angehängte Leerzeichen des Originals lassen wir weg — es ist
     /// ein Satzzeichen der Bildschirmausgabe von 1997, kein Teil des Namens.</para>
     /// </summary>
+    /// <summary><c>--gebaeudename-karte</c> — Stand bis 0.6.6: Basis- und
+    /// Gebaeudefenster zeigen den Ortsnamen der Karte (»Krumlov«). Nullmodell zu
+    /// bug-443.</summary>
+    public static bool GebaeudenameKarte;
+
+    /// <summary>Diese Schicht ist die Demokulisse des Hauptmenues (gesetzt von
+    /// <see cref="UI.MenuBackdrop"/> vor <c>Load</c>).</summary>
+    public bool Kulissenlauf;
+
+    /// <summary><c>--demomusik-neustart</c> — Stand bis 0.6.6: jede Demo startet
+    /// Stueck 1 von vorn. Nullmodell zu bug-447.</summary>
+    public static bool DemomusikNeustart;
+
     public static string BuildingName(Entity e)
         => e.IsBuilding ? $"{BuildingTypeName(e.BType)} {e.Slot + 1}"
                         : BuildingTypeName(e.BType);
@@ -19427,7 +19447,8 @@ public partial class MapEntityLayer : Node2D
         if (e == null) return null;
         var st = new UI.BuildingWindow.Stand
         {
-            Name = e.Name.Length == 0 || PlatzhalterName(e) ? BuildingTypeName(e.BType) : e.Name,
+            Name = !GebaeudenameKarte && e.BType != MarketType ? BuildingName(e)
+                 : e.Name.Length == 0 || PlatzhalterName(e) ? BuildingTypeName(e.BType) : e.Name,
             Hp = e.Hp, HpMax = e.HpMax,
             Status = e.Dead ? "zerstoert" : StateName(e),
             StockW = e.StockW, StockF = e.StockF, StockS = e.StockS, StockT = e.StockT,
@@ -20538,7 +20559,14 @@ public partial class MapEntityLayer : Node2D
         // sondern der Name. Er bleibt trotzdem stehen, denn er kostet nichts
         // und faengt einen Handelsposten ab, der ausnahmsweise einen echten
         // Namen traegt.
-        string kopf = e.BType == MarketType || e.Name.Length == 0 || PlatzhalterName(e)
+        // ⭐ 05.10.2026, bug-443 (KayelGee R4, Meldung 32): »die Basis heisst im
+        // Original Basis 2«. 0x440930 ueberschreibt beim Missionsaufbau das
+        // Namensfeld (+0x17 = Datei +0x1B) ALLER 256 Gebaeudeplaetze mit
+        // »Platz+1 «; der Fenstertitel @0x467DB2 ist »Basis « + Typname +
+        // dieses Feld. Den Ortsnamen der Karte (»Krumlov«) zeigt das Original
+        // nirgends — die Ausnahme oben war unsere Setzung. --gebaeudename-karte.
+        string kopf = !GebaeudenameKarte && e.BType != MarketType ? BuildingName(e)
+                    : e.BType == MarketType || e.Name.Length == 0 || PlatzhalterName(e)
                     ? BuildingTypeName(e.BType) : e.Name;
         return (kopf, e.Hp, e.HpMax, e.Dead ? "zerstoert" : StateName(e));
     }
@@ -34193,6 +34221,7 @@ public partial class MapEntityLayer : Node2D
         if (_nav == null) return;
         if (StumpfGeschossProbeTakt()) return;   // --stumpf-geschoss-probe, Simulation/StumpfGeschossProbe.cs
         float dt = (float)delta;
+        NebelSichtfeldPruefen();                  // bug-446, Rendering/NebelKante.cs
 
         // ⭐⭐ 19.09.2026 — DER BILDZAEHLER `word[0x4FA248]`, und er gehoert
         // hierher und NICHT in SimTick. Im Original steigt er einmal je

@@ -161,6 +161,7 @@ public sealed partial class GameHud : Control
 
     public GameHud()
     {
+        if (!BaseWindow.SchriftWeich) TextureFilter = TextureFilterEnum.Nearest;   // bug-445
         // Die Leiste nimmt keine Maus an: sie liegt über der Karte, und ein
         // Klick dort MUSS weiter die Karte treffen.
         MouseFilter = MouseFilterEnum.Ignore;

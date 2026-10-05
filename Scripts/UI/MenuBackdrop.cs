@@ -100,6 +100,21 @@ public partial class MenuBackdrop : CanvasLayer
     private ColorRect _veil = null!;
 
     private float _left;                 // Sekunden bis zum nächsten Demo
+
+    /// <summary>Ist ueber dem Startmenue ein Unterschirm offen? Gesetzt vom
+    /// <see cref="MainMenu"/> (bug-448).</summary>
+    public System.Func<bool>? UnterschirmOffen;
+
+    /// <summary><c>--demowechsel-immer</c> — Stand bis 0.6.6: die Demo wechselt
+    /// auch unter offenen Einstellungen. Nullmodell zu bug-448.</summary>
+    public static bool DemowechselImmer;
+
+    /// <summary><c>--demo-sekunden=N</c> — NUR ZUM MESSEN: jede Demo laeuft N
+    /// Sekunden (sonst mindestens 20).</summary>
+    public static float DemoSekunden;
+
+    /// <summary>Wie oft gewechselt wurde — fuer <c>--demowechsel-check</c>.</summary>
+    public int Wechsel { get; private set; }
     private Vector2 _cam;
     private readonly List<Vector2> _anchors = new();
     private int _anchorAt;
@@ -263,6 +278,7 @@ public partial class MenuBackdrop : CanvasLayer
 
     public void Next()
     {
+        Wechsel++;
         if (_demos.Count == 0) return;
         // ⚠ Beim Wechsel mitzaehlen, nicht erst beim Verlassen: wer das Menue
         // nie schliesst, saehe die Zahl sonst gar nicht — und genau der Fall
@@ -276,6 +292,7 @@ public partial class MenuBackdrop : CanvasLayer
         _at = (_at + 1) % _demos.Count;
         var (no, map) = _demos[_at];
         _left = Mathf.Max(MinSeconds, Ticks[no] / (float)Campaign.MissionScript.TicksPerSecond);
+        if (DemoSekunden > 0f) _left = DemoSekunden;        // nur Pruefstand
 
         // Das Bild ist 20 bis 33 Megapixel groß; auf dem Hauptfaden geladen
         // stünde das Menü dafür eine Sekunde still. Der Faden liest nur die
@@ -340,7 +357,12 @@ public partial class MenuBackdrop : CanvasLayer
 
         // Der Ablaufzähler des Originals, in Sekunden statt in Takten.
         _left -= dt;
-        if (_left <= 0f && _loading == null) { Next(); return; }
+        // bug-448 (KayelGee R4, Meldung 15): »im Original wechselte die Demo
+        // nur, wenn man kein Menue offen hatte«. 0x451600 zaehlt die offenen
+        // Fenster; ist nicht GENAU eines offen (das Startmenue), setzt
+        // @0x415DA5 den Zaehler auf 1 und prueft im naechsten Bild wieder.
+        if (_left <= 0f && !DemowechselImmer && UnterschirmOffen?.Invoke() == true) _left = 0f;
+        else if (_left <= 0f && _loading == null) { Next(); return; }
 
         Drift(dt);
     }
@@ -404,7 +426,7 @@ public partial class MenuBackdrop : CanvasLayer
         // genau eine Karte. Eine neue Schicht je Demo umgeht ihn ganz und gibt
         // nebenbei den Speicher der vorigen frei.
         if (_entities != null && IsInstanceValid(_entities)) _entities.QueueFree();
-        _entities = new MapEntityLayer();
+        _entities = new MapEntityLayer { Kulissenlauf = true };   // bug-447
         _world.AddChild(_entities);
         _entities.Load(map, LoadMeta(map));
         // Die Entitätenschicht bringt ihre eigene Anzeigeebene mit (CanvasLayer

@@ -237,6 +237,20 @@ public partial class MainMenu : Control
     // anfängt und wann es aufhört.
 
     private MenuBackdrop? _backdrop;
+
+    /// <summary>bug-448: ein Unterschirm ueber dem Startmenue — Laden,
+    /// Einstellungen, Enzyklopaedie, Abspann, Kampagnenwahl oder der
+    /// Gefechtsaufbau. Das Original zaehlt dafuer seine Fensterplaetze
+    /// (0x451600).</summary>
+    private bool UnterschirmOffen()
+    {
+        if (_setup is { Visible: true }) return true;
+        foreach (var k in GetChildren())
+            if (k is LoadGameScreen or SettingsScreen or EncyclopediaScreen or CreditsScreen or CampaignScreen
+                && !((Node)k).IsQueuedForDeletion() && k is CanvasItem { Visible: true })
+                return true;
+        return false;
+    }
     private ColorRect? _empty;      // der schwarze Grund, wenn kein Demo läuft
     private bool _noBackdrop;       // --no-backdrop, für Prüfläufe
 
@@ -249,7 +263,7 @@ public partial class MainMenu : Control
     {
         if (_noBackdrop || _backdrop != null) return;
         if (MenuBackdrop.Available().Count == 0) return;
-        _backdrop = new MenuBackdrop();
+        _backdrop = new MenuBackdrop { UnterschirmOffen = UnterschirmOffen };   // bug-448
         AddChild(_backdrop);
         // der schwarze Grund liegt im Standardlayer und würde die Ebene
         // darunter zudecken
@@ -257,6 +271,45 @@ public partial class MainMenu : Control
     }
 
     private int _kulissenCheck;
+    private int _demowechselCheck;
+
+    /// <summary>
+    /// <b><c>--demowechsel-check=&lt;Sekunden&gt;</c></b> — bug-447/448 (KayelGee
+    /// R4, Meldungen 8 und 15). Mit <c>--demo-sekunden=3</c>: erst die halbe Zeit
+    /// ohne Unterschirm (die Demos wechseln, die Musik startet NICHT neu), dann
+    /// die halbe Zeit mit offenen Einstellungen (KEIN Wechsel). Gezaehlt werden
+    /// die Wechsel und die Musikstarts (MidiMusic.Track bleibt; die Zeilen
+    /// »Musik: Stueck« zaehlt das Protokoll).
+    /// </summary>
+    private void DemowechselCheckGo()
+    {
+        double t = 0;
+        int phase = 0, w0 = 0, w1 = 0;
+        SettingsScreen? s = null;
+        void Takt()
+        {
+            if (_backdrop == null) return;
+            t += GetProcessDeltaTime();
+            if (phase == 0 && t >= _demowechselCheck / 2.0)
+            {
+                w0 = _backdrop.Wechsel;
+                s = new SettingsScreen();
+                AddChild(s);
+                phase = 1;
+            }
+            else if (phase == 1 && t >= _demowechselCheck)
+            {
+                GetTree().ProcessFrame -= Takt;
+                w1 = _backdrop.Wechsel - w0;
+                bool ok = w0 >= 2 && w1 == 0;
+                GD.Print($"demowechsel-check: ohne Menue {w0} Wechsel, mit offenen Einstellungen {w1} Wechsel, "
+                         + $"Musikstueck {Audio.MidiMusic.Track} — {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}"
+                         + (MenuBackdrop.DemowechselImmer ? " (Nullmodell --demowechsel-immer)" : ""));
+                GetTree().Quit(ok ? 0 : 1);
+            }
+        }
+        GetTree().ProcessFrame += Takt;
+    }
 
     /// <summary>
     /// <b>`--kulissen-check=&lt;Bilder&gt;` — TAUCHEN IM MENUE POPUPS AUF?</b>
@@ -470,6 +523,12 @@ public partial class MainMenu : Control
             if (a == "--no-backdrop") _noBackdrop = true;
             else if (a.StartsWith("--kulissen-check="))
                 _kulissenCheck = Mathf.Max(1, a["--kulissen-check=".Length..].ToInt());
+            else if (a == "--demowechsel-immer") MenuBackdrop.DemowechselImmer = true;
+            else if (a == "--fenster-alt") Settings.FensterAlt = true;
+            else if (a == "--demomusik-neustart") Rendering.MapEntityLayer.DemomusikNeustart = true;
+            else if (a.StartsWith("--demo-sekunden=")) MenuBackdrop.DemoSekunden = a["--demo-sekunden=".Length..].ToFloat();
+            else if (a.StartsWith("--demowechsel-check="))
+                _demowechselCheck = Mathf.Max(1, a["--demowechsel-check=".Length..].ToInt());
         }
         _empty = new ColorRect
         {
@@ -1166,6 +1225,7 @@ public partial class MainMenu : Control
             }
 
         if (!Core.Content.Ready) { ShowImportScreen(); return; }
+        ZwischenlagerAufraeumen();
         if (AutoStart()) return;      // ein Lauf, der gleich losspielt, braucht keine Kulisse
         StartBackdrop();
         // ⚠ NACH StartBackdrop(), im Gegensatz zu jedem anderen kopflosen
@@ -1173,6 +1233,7 @@ public partial class MainMenu : Control
         // aussteigt, misst sie nicht — und das war der Grund, warum
         // --leave-check den gemeldeten Fehler nie sehen konnte.
         if (_kulissenCheck > 0) KulissenCheckGo();
+        if (_demowechselCheck > 0) DemowechselCheckGo();
     }
 
     // ---- first start: where the content comes from --------------------------
@@ -1584,6 +1645,35 @@ public partial class MainMenu : Control
     /// <summary>Wo eine CD fuer den Wechsel liegen bleibt — NICHT unter
     /// user://data, und nach dem Import wieder weg.</summary>
     private const string StagingRoot = "user://cd_zwischenlager";
+
+    /// <summary>
+    /// bug-450 (KayelGee R4, Meldung 7): »nach der Installation bleibt der
+    /// cd_zwischenspeicher bestehen. Ist dieser noch noetig?« Nein — er traegt
+    /// die Dateien der ersten CD nur ueber den CD-Wechsel (bug-379). Geloescht
+    /// wurde er bisher nur am Ende eines vollstaendigen Laufs; brach das Spiel
+    /// waehrend der CD-2-Frage oder mit Fehler ab, blieben 140..160 MB liegen.
+    /// Beim Start: fehlt keine Mission mehr, kommt er weg. Fehlen noch welche,
+    /// bleibt er — der naechste Lauf mit CD 2 braucht ihn.
+    /// </summary>
+    private static void ZwischenlagerAufraeumen()
+    {
+        string dir = ProjectSettings.GlobalizePath(StagingRoot);
+        if (!System.IO.Directory.Exists(dir)) return;
+        if (Core.DiscCoverage.MissingImported().Count > 0)
+        {
+            GD.Print("import: Zwischenlager bleibt — es fehlen noch Missionen (CD 2)");
+            return;
+        }
+        long bytes = 0;
+        try
+        {
+            foreach (var f in System.IO.Directory.EnumerateFiles(dir, "*", System.IO.SearchOption.AllDirectories))
+                bytes += new System.IO.FileInfo(f).Length;
+        }
+        catch (System.Exception) { }
+        DropStaging();
+        GD.Print($"import: Zwischenlager {bytes / (1024 * 1024)} MB geloescht (Import vollstaendig)");
+    }
 
     private static void DropStaging()
     {

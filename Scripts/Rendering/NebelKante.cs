@@ -99,11 +99,36 @@ public partial class MapEntityLayer
         return _fogElev.Length == w * _fog.Height ? _fogElev[r * w + c] : 0;
     }
 
+    /// <summary>Das Sichtfeld (Weltkoordinaten), fuer das die Masken zuletzt
+    /// gezeichnet wurden.</summary>
+    private Rect2? _nebelSichtfeld;
+
+    /// <summary><c>--nebel-zoomrand-alt</c> — Stand bis 0.6.6: nach Zoom oder
+    /// Rollen bleibt der neu sichtbare Rand bis zur naechsten Nebelrunde ohne
+    /// Maske. Nullmodell zu bug-446.</summary>
+    public static bool NebelZoomrandAlt;
+
+    /// <summary>
+    /// bug-446 (KayelGee R4, Meldung 4): »beim Rauszoomen wird der Nebel im neu
+    /// sichtbaren Bereich kurz nicht gerendert«. Godot behaelt die Zeichenliste
+    /// bis zum naechsten QueueRedraw; eine Kameraaenderung zeichnet nicht neu,
+    /// die Masken deckten nur das alte Sichtfeld. Das Original baut jedes Bild
+    /// vollstaendig neu (0x4B472A..0x4B485E). Je Bild: liegt das jetzige
+    /// Sichtfeld nicht mehr im gezeichneten, wird neu gezeichnet.
+    /// </summary>
+    private void NebelSichtfeldPruefen()
+    {
+        if (NebelZoomrandAlt || _nebelSichtfeld is not { } alt) return;
+        var jetzt = GetGlobalTransformWithCanvas().AffineInverse() * GetViewportRect();
+        if (!alt.Encloses(jetzt)) QueueRedraw();
+    }
+
     /// <summary>Der Nebeldurchgang, nur ueber den sichtbaren Ausschnitt.</summary>
     private void NebelmaskenZeichnen()
     {
         if (_fog == null || _nebelAtlas == null) return;
         var welt = GetGlobalTransformWithCanvas().AffineInverse() * GetViewportRect();
+        _nebelSichtfeld = welt;
         int w = _fog.Width, h = _fog.Height;
         int hubMax = _fogElevMax * Import.MapBaker.ElevStep + Import.NebelMasken.Hub;
         int c0 = Mathf.Max(0, Mathf.FloorToInt((welt.Position.X - _ox) / TileW) - 1);

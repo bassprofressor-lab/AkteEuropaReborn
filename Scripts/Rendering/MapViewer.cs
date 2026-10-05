@@ -366,7 +366,7 @@ public partial class MapViewer : Node2D
             // ⭐ Als GESCHWISTER in derselben Schicht bekommt er ausserdem ESC
             // zuerst (zuletzt eingehängt = zuerst gefragt), wie die drei
             // Listenfenster auch.
-            var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+            var host = VollschirmWirt();
             if (host.GetNodeOrNull("Einstellungen") != null) return;
             var s = new UI.SettingsScreen { InGame = true, Name = "Einstellungen" };
             s.ProcessMode = Node.ProcessModeEnum.Always;
@@ -374,7 +374,7 @@ public partial class MapViewer : Node2D
         };
         w.OnEncyclopedia = () =>
         {
-            var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+            var host = VollschirmWirt();
             if (host.GetNodeOrNull("Enzyklopaedie") != null) return;
             var e = new UI.EncyclopediaScreen { Name = "Enzyklopaedie" };
             e.ProcessMode = Node.ProcessModeEnum.Always;
@@ -382,7 +382,7 @@ public partial class MapViewer : Node2D
         };
         w.OnLoad = () =>
         {
-            var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+            var host = VollschirmWirt();
             if (host.GetNodeOrNull("Laden") != null) return;
             var l = new UI.LoadGameScreen { Name = "Laden" };
             // ⚠ Der Baum STEHT, solange das Menü offen ist. Ohne diese Zeile
@@ -409,7 +409,7 @@ public partial class MapViewer : Node2D
         if (mission > 0 && UI.BriefingScreen.For(mission) is { } br)
             w.OnMissionInfo = () =>
             {
-                var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+                var host = VollschirmWirt();
                 if (host.GetNodeOrNull("Missionsinfo") != null) return;
                 var b = new UI.BriefingScreen(br.Title, br.Paragraphs, () => { }, mission)
                 { Name = "Missionsinfo" };
@@ -1709,6 +1709,8 @@ public partial class MapViewer : Node2D
     private bool _gebaeudeklickCheck;
     /// <summary><c>--treffer-check</c> — siehe Simulation/TrefferCheck.cs (bug-438..440).</summary>
     private bool _trefferCheck;
+    /// <summary><c>--fensterwerte-check</c> — Simulation/FensterwerteCheck.cs (bug-441..443).</summary>
+    private bool _fensterwerteCheck;
 
     /// <summary><c>--fussklangsatz-check</c> — siehe Simulation/FussklangsatzCheck.cs.</summary>
     private bool _fussklangsatzCheck;
@@ -4061,6 +4063,7 @@ _mausProbePunkt = karte;
             else if (a == "--einsteigen-check") _einsteigenCheck = true;
             else if (a == "--gebaeudeklick-check") _gebaeudeklickCheck = true;
             else if (a == "--treffer-check") _trefferCheck = true;
+            else if (a == "--fensterwerte-check") _fensterwerteCheck = true;
             else if (a == "--tuerauslass-check") _tuerauslassCheck = true;
             else if (a == "--cdspieler-check") _cdspielerCheck = true;
             else if (a == "--zeigerfenster-check") _zeigerfensterCheck = true;
@@ -4926,6 +4929,12 @@ _mausProbePunkt = karte;
             // Nullmodell zu bug-298: Gebaeude wieder ueber das Bildrechteck treffen.
             else if (a == "--gebaeudepick-rechteck") MapEntityLayer.GebaeudepickRechteck = true;
             else if (a == "--pick-vorderster-alt") MapEntityLayer.PickVordersterAlt = true;
+            else if (a == "--vollschirm-schicht-alt") VollschirmSchichtAlt = true;
+            else if (a == "--gebaeudename-karte") MapEntityLayer.GebaeudenameKarte = true;
+            else if (a == "--entwurfsname-alt") DesignScreen.EntwurfsnameAlt = true;
+            else if (a == "--nachladen-roh") UI.UnitStatBook.NachladenRoh = true;
+            else if (a == "--schrift-weich") UI.BaseWindow.SchriftWeich = true;
+            else if (a == "--nebel-zoomrand-alt") MapEntityLayer.NebelZoomrandAlt = true;
             else if (a == "--gebaeudepick-bbox-alt") MapEntityLayer.GebaeudepickBboxAlt = true;
             else if (a == "--neutralzeiger-alt") MapEntityLayer.NeutralzeigerAlt = true;
             else if (a == "--postenfenster-ohne-einheit") MapEntityLayer.PostenfensterOhneEinheit = true;
@@ -6994,6 +7003,33 @@ _mausProbePunkt = karte;
     }
 
     private CanvasLayer? _panelLayer;
+
+    /// <summary><c>--vollschirm-schicht-alt</c> — Stand bis 0.6.6: Einstellungen,
+    /// Enzyklopaedie, Laden und Missionsinfo haengen in der Bedienblock-Schicht 2,
+    /// und Name, Balken und Zeilenfeld des Infofensters (Schicht 3) zeichnen darueber.
+    /// Nullmodell zu bug-444.</summary>
+    public static bool VollschirmSchichtAlt;
+
+    private CanvasLayer? _vollschirmLayer;
+
+    /// <summary>
+    /// bug-444 (KayelGee R4, Meldung 3): »In den Einstellungen ueberlappt das
+    /// Infofenster unten links das Einstellungsfenster«. Die vier Vollschirme
+    /// bekommen eine eigene Schicht 97 ueber allem (Mitnahme 96). Eine reine
+    /// Frage unserer Schichtung — das Original hat im Spiel keinen
+    /// Einstellungsschirm (berichte/basisfenster-werte-fable.md §1).
+    /// </summary>
+    private CanvasLayer VollschirmWirt()
+    {
+        if (VollschirmSchichtAlt) return _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+        if (_vollschirmLayer == null || !IsInstanceValid(_vollschirmLayer))
+        {
+            _vollschirmLayer = new CanvasLayer { Layer = 97, Name = "Vollschirme" };
+            _vollschirmLayer.ProcessMode = Node.ProcessModeEnum.Always;
+            AddChild(_vollschirmLayer);
+        }
+        return _vollschirmLayer;
+    }
     /// <summary>Ein Klick auf den Bedienblock — die vier Felder aus
     /// <see cref="Panelfelder"/>. Der Punkt wird durch die Vergroesserung
     /// geteilt, damit er im 204x170-Block liegt, in dem die Rechtecke des
@@ -8346,6 +8382,13 @@ _mausProbePunkt = karte;
         if (_fussklangsatzCheck && _entities.ErwartungBereit())
         {
             GD.Print(_entities.FussklangsatzCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_fensterwerteCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.FensterwerteCheckLine());
             GetTree().Quit(0);
             return;
         }
