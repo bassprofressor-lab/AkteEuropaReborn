@@ -197,6 +197,51 @@ public static class UnitStatBook
         return r[0x01];
     }
 
+    /// <summary>⭐ 07.10.2026, bug-474 — das Byte <b>+0x23</b> einer Bauteilzeile: die
+    /// <b>TRAGKLASSE</b> 1..3 (<c>berichte/dunkelstufe-0x23-fable.md</c>). Ein Fahrwerk
+    /// trägt einen Aufbau, wenn <c>Fahrwerk.+0x23 ≥ Aufbau.+0x23</c>. Leser im Original:
+    /// Aufbauliste <c>0x46CDB8</c>, Fahrwerkliste <c>0x46D1A0</c>, Trefferprüfer
+    /// <c>0x45E319</c>, Vorschaublock <c>0x46D569</c> (F <c>0x46B6B1/0x46BA9E/0x45CE88/
+    /// 0x46BE59</c>); Schreiber die Erfindung <c>0x4AB387</c> (:= Rezept.+0x03).
+    /// −1, wenn es die Zeile nicht gibt.</summary>
+    public static int ComponentKlasse(int row)
+    {
+        Load();
+        if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r) || r.Length <= 0x23) return -1;
+        return r[0x23];
+    }
+
+    /// <summary>⭐ 07.10.2026, bug-478 — das Byte <b>+0x00</b> einer Bauteilzeile: der
+    /// <b>BESITZ</b> (0 = hat der Spieler nicht). Der Listenaufbau des Erstellen-Fensters
+    /// <c>0x46C490</c> nimmt nur Zeilen mit <c>+0x00 ≠ 0</c> (0x46C636/677/6BF/707).
+    /// ⚠ Das ist die Tafel der EXE (Spielerblock 0); in der Kampagne verteilt das
+    /// Missionsskript den Besitz, dort fragt <c>ForschungBesitzt</c>. −1 ohne Zeile.</summary>
+    public static int ComponentBesitz(int row)
+    {
+        Load();
+        if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r) || r.Length < 1) return -1;
+        return r[0x00];
+    }
+
+    /// <summary>bug-478: der lange Bauteilname (+0x25, 24 Byte) ohne Klammer — leer,
+    /// wenn die Zeile fehlt oder keinen Namen trägt.</summary>
+    public static string ComponentLongName(int row)
+    {
+        Load();
+        if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r)) return "";
+        return Import.Cp437.GetString(r, 0x25, 24).Trim();
+    }
+
+    /// <summary>bug-478: alle Zeilennummern der Bauteiltafel, aufsteigend.</summary>
+    public static IEnumerable<int> ComponentRows()
+    {
+        Load();
+        if (_comp == null) yield break;
+        var keys = new List<int>(_comp.Keys);
+        keys.Sort();
+        foreach (var k in keys) yield return k;
+    }
+
     public static string ComponentLongLabel(int row)
     {
         Load();

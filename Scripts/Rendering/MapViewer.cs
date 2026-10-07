@@ -1244,6 +1244,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_entwurfDunkelCheck)
+        {
+            GD.Print(_entities.EntwurfDunkelCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_geschossHoehenCheck)
         {
             GD.Print(_entities.GeschossHoehenCheck());
@@ -4140,6 +4146,15 @@ _mausProbePunkt = karte;
             else if (a == "--forschungsfarben-alt") UI.BaseWindow.ForschungsfarbenAlt = true;
             else if (a == "--forschungstext-alt") MapEntityLayer.ForschungstextAlt = true;
             else if (a == "--erstellung-farben-alt") UI.DesignWindow.ErstellungFarbenAlt = true;
+            // ⭐ 07.10.2026, bug-474 — Dunkelstufe +0x23 (berichte/dunkelstufe-0x23-fable.md;
+            // UI/DesignWindow.cs, Simulation/EntwurfDunkelCheck.cs)
+            else if (a == "--entwurf-dunkel-aus") UI.DesignWindow.DunkelAus = true;
+            else if (a == "--entwurf-dunkel-check") _entwurfDunkelCheck = true;
+            // bug-477: Enter erstellt wie im Original (Klickcode 1 @0x413F96); die
+            // Sperre von bug-474 nur noch als Gegenschalter
+            else if (a == "--entwurf-enter-sperre") MapEntityLayer.EntwurfEnterSperre = true;
+            // bug-478: Aufbauliste 1..79, Verbesserung 81..88 wie 0x46C490
+            else if (a == "--entwurf-listen-alt") MapEntityLayer.EntwurfListenAlt = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
@@ -5252,6 +5267,10 @@ _mausProbePunkt = karte;
     /// <summary><c>--bauliste-check</c> — siehe Simulation/BaulisteCheck.cs.
     /// Nullmodell: <c>--bauliste-alt</c>.</summary>
     private bool _baulisteCheck;
+
+    /// <summary><c>--entwurf-dunkel-check</c> — siehe Simulation/EntwurfDunkelCheck.cs (bug-474).
+    /// Nullmodell: <c>--entwurf-dunkel-aus</c>.</summary>
+    private bool _entwurfDunkelCheck;
 
     /// <summary><c>--geschoss-hoehen-check</c> — siehe Simulation/GeschossHoehenCheck.cs.
     /// Nullmodelle: <c>--kein-bodentreffer</c>, <c>--geschoss-nachfuehren</c>,

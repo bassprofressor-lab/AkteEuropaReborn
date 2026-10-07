@@ -17896,6 +17896,49 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie viele Bauteile der Besitzfilter zuletzt herausgenommen hat.</summary>
     public int EntwurfGefiltert;
 
+    /// <summary>
+    /// ⭐ 07.10.2026, bug-478 — <b>DIE LISTEN WIE DER LISTENAUFBAU 0x46C490</b>
+    /// (<c>berichte/dunkelstufe-0x23-fable.md</c> §2/§6 Nebenbefund; Zerlegung
+    /// <c>listbuilder_46C490_C.txt</c>, Grenzen <c>cmp cx,0x32/0x50/0x6E/0xC8</c>):
+    /// <b>Aufbauliste = 1..49 UND 50..79</b> (Spezialaufbauten, lavendel),
+    /// <b>Verbesserungsliste = 80..109</b>, Fahrwerk 160..199 — nur Zeilen mit
+    /// Besitz <c>+0x00 ≠ 0</c>. Bis 0.6.6 standen bei uns die Spezialaufbauten
+    /// 65..79 in der VERBESSERUNGSLISTE (Entwurfsfeld Verbesserung statt Aufbau —
+    /// ein so gebauter »Transporter« bekam <c>Equipment = 71</c> statt
+    /// <c>Part = 71</c>), und 81..88 (Schild, Kamikaze, Spiegelbild, Illusionator,
+    /// Funktionsverstärker, Reparateur, Gasabwehr, Radarweiterung) fehlten ganz.
+    /// <para>⚠ <b>UNSERE Setzungen:</b> (1) Zeile 80 »(nichts)« ist unsere feste
+    /// erste Verbesserungszeile (Klickarm 0x44AA4D macht aus 80 ohnehin 0).
+    /// (2) <b>100..109</b> (Nutzlasten des Flughafens, in der EXE-Tafel mit Besitz 1)
+    /// werden NICHT angeboten: sec46 der DM-Karten 1/4/10 trägt dort Besitz 0
+    /// (<c>cwm_sections.py</c>, Spieler 0 und 1), die 1 der EXE-Tafel ist der
+    /// Stand des Flughafen-Stellvertreters. (3) Im Gefecht laden wir kein sec46
+    /// der DM-Karte, die Grundtafel der EXE gilt — dort fehlen 65/68/69 (Besitz 0),
+    /// während 1/4/10.DM 68/69 besitzen und 65 nicht; wir bieten im Gefecht wie
+    /// bisher alle benannten Zeilen 50..79 und 81..88 an (Besitz erst in der
+    /// Kampagne über <c>ForschungBesitzt</c>). Gegenschalter
+    /// <c>--entwurf-listen-alt</c>.</para>
+    /// </summary>
+    public static bool EntwurfListenAlt;
+
+    /// <summary>bug-478: Bauteilzeilen <c>lo..hi</c> der Tafel als Listenteile
+    /// (Name = +0x25), nur benannte Zeilen; <paramref name="ausser"/> wird
+    /// übersprungen.</summary>
+    private static void TafelTeile(int lo, int hi, List<DesignScreen.Part> into, int ausser = -1)
+    {
+        foreach (int row in UI.UnitStatBook.ComponentRows())
+        {
+            if (row < lo || row > hi || row == ausser) continue;
+            string nm = UI.UnitStatBook.ComponentLongName(row);
+            if (nm.Length == 0) continue;
+            bool da = false;
+            foreach (var p in into) if (p.Id == row) { da = true; break; }
+            if (da) continue;
+            into.Add(new DesignScreen.Part { Id = row, Name = nm });
+        }
+        into.Sort((a, b) => a.Id.CompareTo(b.Id));
+    }
+
     private void LoadDesignParts()
     {
         // bug-460: neu fuellen, denn der Besitz waechst waehrend der Mission
@@ -17912,7 +17955,16 @@ public partial class MapEntityLayer : Node2D
         Designer.Propulsions.Sort((a, b) => a.Id.CompareTo(b.Id));
 
         ReadParts("Maps/weapons.json", "types", Designer.Weapons);
-        ReadParts("Maps/research.json", "technologies", Designer.Equipment, 65, 79);
+        if (EntwurfListenAlt)
+            ReadParts("Maps/research.json", "technologies", Designer.Equipment, 65, 79);
+        else
+        {
+            // bug-478: 50..79 in die AUFBAULISTE (0x46C65C..0x46C69D), 80..109 in die
+            // Verbesserungsliste (0x46C6E5); 80 ist unsere feste Zeile »(nichts)«,
+            // 100..109 bleiben draussen (Setzung, siehe EntwurfListenAlt).
+            TafelTeile(50, 79, Designer.Weapons);
+            TafelTeile(81, 99, Designer.Equipment);
+        }
 
         // ⭐ 06.10.2026, bug-460 (KayelGee R4, Meldung 19): »in Mission 2 koennen
         // alle Technologien genutzt werden statt nur die freigeschalteten«. Den
@@ -18048,18 +18100,49 @@ public partial class MapEntityLayer : Node2D
     /// factories find it like any other. It gets no slot number: it is not a
     /// record read out of sec47 but one the player drew up, and marking that
     /// with -1 keeps the two apart in the schedule's eyes.</summary>
+    /// <summary>bug-474: wie oft »Erstellen« an der Tragklasse gescheitert ist
+    /// (nur noch unter <c>--entwurf-enter-sperre</c>).</summary>
+    public int EntwurfGesperrt;
+
+    /// <summary>
+    /// ⭐ 07.10.2026, bug-477 — <b>ENTER ERSTELLT IM ORIGINAL, OHNE TRAGKLASSENPRÜFUNG</b>
+    /// (C und F gelesen). Der WM_CHAR-Zweig <c>0x413F21</c> (F <c>0x413D36</c>) legt die
+    /// Taste in das Fenster (<c>0x8C3D58</c>) und fragt <c>0x487A10</c> (Thunk
+    /// <c>0x401433</c>): für Art 7 (Index 0 der Tafel <c>0x487B08</c> → <c>0x487A56</c>)
+    /// liefert sie <c>1 + (Taste == 0x0D)</c>. Rückgabe 2 → <c>0x4FD650 := Fenster</c>,
+    /// Art-7-Tafel <c>0x414710/0x4146F8</c> → <c>0x413F96</c> (F <c>0x413DAB</c>):
+    /// <b><c>word[0x4FD654] := 1</c> = Klickcode »Erstellen«</b>, dann
+    /// <c>0x4011F9 → 0x4485D0</c> (Klickverbraucher, liest <c>0x4FD654</c> @0x4485E3) →
+    /// Art-7-Arm <c>0x44A9E7</c> → Code 1 → <c>0x44AA05</c> legt den Entwurf an.
+    /// Die Tragklasse <c>+0x23</c> hat genau elf Leser, keiner davon auf diesem Weg
+    /// (<c>berichte/dunkelstufe-0x23-fable.md</c> §2) — der Trefferprüfer sperrt nur
+    /// die MAUSFLÄCHE. Das Namensfeld selbst (<c>0x402586 → 0x4588E0</c>, F
+    /// <c>0x4575B0</c>) nimmt nur 0x20..0x7A und Backspace 8; Enter löscht es nur das
+    /// Tastenbyte, der Klickcode kommt aus dem WM_CHAR-Zweig. Die Sperre von bug-474
+    /// (UNSERE Setzung »Fahrwerk zu leicht«) ist damit widerlegt und nur noch unter
+    /// <c>--entwurf-enter-sperre</c> da.
+    /// </summary>
+    public static bool EntwurfEnterSperre;
+
+    /// <summary>bug-477: der Prüfstand legt einen Entwurf an und nimmt ihn wieder
+    /// weg — dazwischen darf <c>designs.cfg</c> nicht geschrieben werden.</summary>
+    private bool _entwurfProbe;
+
     private void AcceptDesign()
     {
         var p = Designer.CurrentPropulsion;
         var w = Designer.CurrentWeapon;
         if (p == null || w == null || _designs == null) { Designer.Say("nichts zu bauen"); return; }
+        // bug-477: nur noch als Gegenschalter — siehe EntwurfEnterSperre.
+        if (EntwurfEnterSperre && !UI.DesignWindow.Traegt(p.Id, w.Id))
+        { Designer.Say("Fahrwerk zu leicht fuer diesen Aufbau"); EntwurfGesperrt++; return; }
         string name = Designer.ProposedName();
         foreach (var d in _designs)
             if (d.Name == name) { Designer.Say("gibt es schon"); return; }
         int equip = Designer.CurrentEquipment?.Id ?? 0;
         var made = new Design(name, p.Id, equip, w.Id, true, -1);
         _designs.Add(made);
-        SaveOwnDesigns();
+        if (!_entwurfProbe) SaveOwnDesigns();
         Designer.Say($"uebernommen — {made.CostW}/{made.CostF}/{made.CostS} Teile, " +
                      $"{made.Hp} HP, Angriff {made.Attack}");
         GD.Print($"designer: '{name}' angelegt — Fahrwerk {p.Id}, Waffe {w.Id}, Ausruestung {equip}; " +

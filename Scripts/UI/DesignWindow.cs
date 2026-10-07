@@ -85,6 +85,53 @@ public sealed partial class DesignWindow : PanelContainer
     /// <summary>01.PAL 0x8C — die Wahlzeile der Listen (0x46CD4A, 0x46D144, 0x46D490).</summary>
     private static readonly Color WahlBg8C = Color.Color8(127, 119, 99);
 
+    // ⭐ 07.10.2026, bug-474 — DIE DUNKELSTUFE (berichte/dunkelstufe-0x23-fable.md).
+    // Bauteilsatz +0x23 = TRAGKLASSE 1..3. Dunkel wird in der Aufbauliste jede
+    // Zeile, die schwerer ist als das gewaehlte Fahrwerk (0x46CDB8 Waffe,
+    // 0x46CE63 Spezial), in der Fahrwerkliste jede Zeile, die leichter ist als
+    // der gewaehlte Aufbau (0x46D1A0). Dieselbe Ungleichung »Fahrwerk >= Aufbau«
+    // sperrt im Trefferpruefer (0x45E319) den Knopf »Erstellen« und im Zeichner
+    // (0x46D569 -> 0x46E510) Vorschau, Kosten, Werteliste, Name und den Knopf.
+    // Eine dunkle Zeile bleibt WAEHLBAR (Klickverbraucher 0x44ACD5/0x44AC8F
+    // prueft nichts). Beide Pushes des Paars sind dieselbe Farbe.
+    /// <summary>01.PAL 0x4A — dunkle Waffenzeile (push 0x4A,0x4A @0x46CDF6).</summary>
+    public static readonly Color Dunkel4A = Color.Color8(87, 39, 39);
+    /// <summary>01.PAL 0x82 — dunkle Spezialzeile (@0x46CE9C).</summary>
+    public static readonly Color Dunkel82 = Color.Color8(47, 47, 71);
+    /// <summary>01.PAL 0xB4 — dunkle Fahrwerkzeile (@0x46D1DD).</summary>
+    public static readonly Color DunkelB4 = Color.Color8(83, 67, 23);
+
+    /// <summary><c>--entwurf-dunkel-aus</c> — Stand bis 0.6.6: alle Zeilen hell,
+    /// »Erstellen« immer da, keine Sperre. Nullmodell zu bug-474.</summary>
+    public static bool DunkelAus;
+
+    /// <summary>Die Tragklasse eines Bauteils (+0x23), −1 ohne Zeile.</summary>
+    public static int Klasse(int id) => UnitStatBook.ComponentKlasse(id);
+
+    /// <summary>
+    /// <b>Trägt dieses Fahrwerk diesen Aufbau?</b> — <c>Fahrwerk.+0x23 ≥ Aufbau.+0x23</c>,
+    /// die eine Ungleichung hinter allen fünf Vergleichsstellen des Originals.
+    /// ⚠ Ein Teil ohne Klasse (−1, keine Tafelzeile) trägt immer — UNSERE Setzung.
+    /// Unter <c>--entwurf-dunkel-aus</c> und <c>--erstellung-farben-alt</c> (die
+    /// alten Farben kannten keine Dunkelstufe) trägt alles.
+    /// </summary>
+    public static bool Traegt(int fahrwerk, int aufbau)
+    {
+        if (DunkelAus || ErstellungFarbenAlt) return true;
+        int kF = Klasse(fahrwerk), kA = Klasse(aufbau);
+        if (kF < 0 || kA < 0) return true;
+        return kF >= kA;
+    }
+
+    /// <summary>Die drei Dunkelfarben mit ihrem Palettenplatz — für den
+    /// Prüfstand gegen <c>01.PAL</c>.</summary>
+    public static IEnumerable<(string Was, int Platz, Color Farbe)> DunkelFarben()
+    {
+        yield return ("dunkle Waffenzeile 0x4A", 0x4A, Dunkel4A);
+        yield return ("dunkle Spezialzeile 0x82", 0x82, Dunkel82);
+        yield return ("dunkle Fahrwerkzeile 0xB4", 0xB4, DunkelB4);
+    }
+
     /// <summary>Die Entwurfsstelle, die auch die Tasten bedienen.</summary>
     public DesignScreen? Screen;
 
@@ -291,15 +338,25 @@ public sealed partial class DesignWindow : PanelContainer
     {
         if (Screen == null) return;
 
+        int weapon = Screen.CurrentWeapon?.Id ?? 0;
+        int prop = Screen.CurrentPropulsion?.Id ?? 0;
+        int equip = Screen.CurrentEquipment?.Id ?? 0;
+
+        // bug-474: Fahrwerkzeile dunkel, wenn sie den GEWAEHLTEN Aufbau nicht
+        // traegt (0x46D1A0: Zeile.+0x23 < Aufbau.+0x23).
         var props = new List<PartList.Line>();
         foreach (var p in Screen.Propulsions)
             props.Add(new PartList.Line(Name(p), BaseWindow.IconF,
-                                        UnitStatBook.ChassisPrice(p.Id)));
+                                        UnitStatBook.ChassisPrice(p.Id),
+                                        Dunkel: !Traegt(p.Id, weapon)));
         _prop.Fill(props, CurrentIndex(DesignScreen.Row.Propulsion),
                    Screen.Cursor == DesignScreen.Row.Propulsion);
 
         // »(nichts)« zuerst — das Original lässt einen Entwurf ohne
-        // Verbesserung zu, und die meisten fertigen haben keine.
+        // Verbesserung zu, und die meisten fertigen haben keine. bug-478: das
+        // ist die Tafelzeile 80 »(nichts)« des Originals (Klickarm 0x44AA4D macht
+        // aus 80 die 0); die Liste dahinter ist jetzt 81..88 wie 0x46C490, die
+        // Spezialaufbauten 65..79 stehen in der Aufbauliste (lavendel).
         var eq = new List<PartList.Line> { new("(nichts)", "", -1) };
         foreach (var e in Screen.Equipment)
             eq.Add(new PartList.Line(Name(e), BaseWindow.IconS,
@@ -307,16 +364,16 @@ public sealed partial class DesignWindow : PanelContainer
         _equip.Fill(eq, CurrentIndex(DesignScreen.Row.Equipment),
                     Screen.Cursor == DesignScreen.Row.Equipment);
 
+        // bug-474: Aufbauzeile dunkel, wenn das GEWAEHLTE Fahrwerk sie nicht
+        // traegt (0x46CDB8 / 0x46CE63: Fahrwerk.+0x23 < Zeile.+0x23).
         var wp = new List<PartList.Line>();
         foreach (var w in Screen.Weapons)
             wp.Add(new PartList.Line(Name(w), BaseWindow.IconW,
-                                     UnitStatBook.WeaponPrice(w.Id), w.Id >= 50));   // bug-468: Spezialaufbau lavendel
+                                     UnitStatBook.WeaponPrice(w.Id), w.Id >= 50,    // bug-468: Spezialaufbau lavendel
+                                     Dunkel: !Traegt(prop, w.Id)));
         _weapon.Fill(wp, CurrentIndex(DesignScreen.Row.Weapon),
                      Screen.Cursor == DesignScreen.Row.Weapon);
 
-        int weapon = Screen.CurrentWeapon?.Id ?? 0;
-        int prop = Screen.CurrentPropulsion?.Id ?? 0;
-        int equip = Screen.CurrentEquipment?.Id ?? 0;
         // 03.09.2026: aus dem Bauteilblock des MENSCHEN gerechnet — der
         // Entwurfsschirm des Originals ruft 0x4B1FB0(platz, spieler) @0x4B25A5,
         // und der Spieler ist byte[0x4FA284], bei uns SkirmishSetup.Human. Ohne
@@ -347,9 +404,28 @@ public sealed partial class DesignWindow : PanelContainer
             $"Sprit {d.Fuel}\n" +
             $"Munition {d.Ammo}";
 
-        _make.Disabled = !Screen.Ready;
+        // ⭐ bug-474 — DIE SPERRE: traegt das gewaehlte Paar nicht, springt der
+        // Zeichner des Originals ab 0x46D569 nach 0x46E510 und laesst
+        // Vorschaukasten, Kosten, Werteliste, Name und »Erstellen« aus; der
+        // Trefferpruefer (0x45E309..0x45E319) laesst die Knopfflaeche aus.
+        // »Abbruch« bleibt. ⚠ Die drei Einzelbilder (unsere Zutat) bleiben stehen.
+        // ⚠ Die Stellen behalten ihren Platz (Modulate/leerer Text statt
+        // Visible = false), damit das Fenster nicht umbricht — im Original sind
+        // die Koordinaten fest.
+        bool traegt = Traegt(prop, weapon);
+        _traegt = traegt;
+        _preview.Leer = !traegt;
+        if (!traegt) { _cost.Text = ""; _name.Text = ""; _stats.Text = ""; }
+        _make.Disabled = !Screen.Ready || !traegt;
+        _make.Modulate = traegt ? Colors.White : Colors.Transparent;
+        _make.MouseFilter = traegt ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
         PlaceOnce();
     }
+
+    private bool _traegt = true;
+
+    /// <summary>Trägt das gerade gewählte Paar? — für den Prüflauf.</summary>
+    public bool PaarTraegt => _traegt;
 
     /// <summary>Der lange Bauteilname mit der Klammer des Originals; ist er
     /// nicht in der Bauteiltabelle zu finden, bleibt der Name, unter dem die
@@ -439,7 +515,8 @@ public sealed partial class DesignWindow : PanelContainer
             : $"erstellung: {(Visible ? "offen" : "zu")}, " +
               $"{Screen.Propulsions.Count} Fahrwerke / {Screen.Weapons.Count} Aufbauteile / " +
               $"{Screen.Equipment.Count} Verbesserungen, Zeile {Screen.Cursor}, " +
-              $"\"{Screen.ProposedName()}\", {_cost.Text}, Vorschau: {_preview.WatchLine()}";
+              $"\"{Screen.ProposedName()}\", {_cost.Text}, Vorschau: {_preview.WatchLine()}, " +
+              $"traegt: {(_traegt ? "ja" : "NEIN (Erstellen/Vorschau/Kosten/Werte/Name weg)")}";
 
     // =========================================================================
 
@@ -455,6 +532,15 @@ public sealed partial class DesignWindow : PanelContainer
         /// sagt, prüft nichts; das hier ist die Zahl, die die Mechanik ausübt.
         /// </summary>
         public int Drawn { get; private set; } = -1;
+
+        /// <summary>bug-474: das Paar trägt nicht — der Kasten wird wie im
+        /// Original (0x46D569 → 0x46E510) GAR NICHT gezeichnet.</summary>
+        public bool Leer
+        {
+            get => _leer;
+            set { if (value != _leer) { _leer = value; QueueRedraw(); } }
+        }
+        private bool _leer;
 
         public Preview()
         {
@@ -472,6 +558,7 @@ public sealed partial class DesignWindow : PanelContainer
         public override void _Draw()
         {
             var box = new Rect2(Vector2.Zero, Size);
+            if (_leer) { Drawn = 0; return; }
             if (PortraitBank.Ready) Drawn = PortraitBank.DrawUnit(this, box, _chassis, _weapon);
             else { DrawRect(box, BoxBg); Drawn = 0; }
             DrawRect(box, new Color(0.16f, 0.16f, 0.15f), false, 1f);
@@ -480,7 +567,8 @@ public sealed partial class DesignWindow : PanelContainer
         public string WatchLine()
             => $"Fahrwerk {_chassis} (Bild {PortraitBank.IconOfComponent(_chassis)}) + " +
                $"Aufbauteil {_weapon} (Bild {PortraitBank.IconOfComponent(_weapon)}) " +
-               $"= {Drawn} Bilder auf {Size.X:0}x{Size.Y:0} an {GlobalPosition.X:0},{GlobalPosition.Y:0}";
+               $"= {Drawn} Bilder auf {Size.X:0}x{Size.Y:0} an {GlobalPosition.X:0},{GlobalPosition.Y:0}" +
+               (_leer ? " (LEER, Paar traegt nicht)" : "");
     }
 
     /// <summary>Ein einzelnes Bauteilbild — Fall 5 des Zeichners. ⚠ Unsere
@@ -510,7 +598,10 @@ public sealed partial class DesignWindow : PanelContainer
     /// rechts.</summary>
     private sealed partial class PartList : Control
     {
-        public readonly record struct Line(string Text, string Icon, int Price, bool Spezial = false);
+        /// <param name="Dunkel">bug-474: die Zeile trägt das gewählte Gegenstück
+        /// nicht — dunkles Paar 0x4A / 0x82 / 0xB4, bleibt wählbar.</param>
+        public readonly record struct Line(string Text, string Icon, int Price, bool Spezial = false,
+                                           bool Dunkel = false);
 
         private readonly List<Line> _lines = new();
         private Font? _font;
@@ -560,8 +651,10 @@ public sealed partial class DesignWindow : PanelContainer
                 // drei Listen (0x46CD52.., 0x46D146.., 0x46D498..) nimmt das PAAR
                 // des Teilesymbols der Zeile — ] Waffe 0x99 rot, [ Fahrwerk 0x96
                 // gold, { Spezial 0x7C lavendel —, Preis im selben Paar, Wahlzeile
-                // gefuellt mit 0x8C (127,119,99). Die Dunkelstufe nach +0x23 ist
-                // ungelesen und fehlt. --erstellung-farben-alt.
+                // gefuellt mit 0x8C (127,119,99). --erstellung-farben-alt.
+                // ⭐ 07.10.2026, bug-474: die Dunkelstufe nach +0x23 ist gelesen —
+                // dunkle Zeile im Paar 0x4A (Waffe) / 0x82 (Spezial) / 0xB4
+                // (Fahrwerk), Sinnbild und Preis im selben Paar (0x46CDF6..0x46CE18).
                 Color fg;
                 if (!ErstellungFarbenAlt)
                 {
@@ -570,10 +663,14 @@ public sealed partial class DesignWindow : PanelContainer
                                  _active ? WahlBg8C : new Color(WahlBg8C, 0.55f));
                     else if (idx == _hover)
                         DrawRect(new Rect2(0, top, Size.X, Step), new Color(1, 1, 1, 0.07f));
-                    fg = l.Spezial ? BaseWindow.ArtLavendel
-                       : l.Icon == BaseWindow.IconW ? BaseWindow.ArtRot
-                       : l.Icon == BaseWindow.IconF ? BaseWindow.ArtGold
-                       : l.Icon == BaseWindow.IconS ? BaseWindow.ArtLavendel : RowFg;
+                    if (l.Dunkel && !DunkelAus)
+                        fg = l.Spezial ? Dunkel82
+                           : l.Icon == BaseWindow.IconF ? DunkelB4 : Dunkel4A;
+                    else
+                        fg = l.Spezial ? BaseWindow.ArtLavendel
+                           : l.Icon == BaseWindow.IconW ? BaseWindow.ArtRot
+                           : l.Icon == BaseWindow.IconF ? BaseWindow.ArtGold
+                           : l.Icon == BaseWindow.IconS ? BaseWindow.ArtLavendel : RowFg;
                 }
                 else
                 {
