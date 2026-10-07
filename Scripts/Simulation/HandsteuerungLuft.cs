@@ -50,18 +50,26 @@ using Godot;
 /// nicht um (die Sprit-Heimkehr prüft ausdrücklich <c>uk != 3</c>, AIR_RE 88).
 /// <b>Man kann sie leerfliegen.</b></para>
 ///
-/// <para>⚠⚠ <b>ZWEI SACHEN, DIE WIE FEHLER AUSSEHEN UND KEINE SIND:</b></para>
+/// <para>⚠⚠ <b>ZWEI SACHEN AM ARM, DIE WIE FEHLER AUSSEHEN UND KEINE SIND:</b></para>
 /// <list type="number">
-///   <item><b>Es gibt keinen Höhenboden.</b> Der Arm klemmt nur nach OBEN
-///   (135). Wer mit Z sinkt, fliegt unter das Gelände — in den Hügel hinein.
-///   Das ist gelesen, siehe @0x4C2CBA.</item>
+///   <item><b>Der ARM hat keinen Höhenboden.</b> Er klemmt nur nach OBEN
+///   (135), siehe @0x4C2CBA. ⚠⚠ <b>Berichtigt 07.10.2026 (bug-473,
+///   <c>berichte/absturz-aufprall-fable.md</c> §4):</b> hier stand »Wer mit Z
+///   sinkt, fliegt unter das Gelände — in den Hügel hinein«. Das war FALSCH.
+///   Der Boden sitzt nicht im Arm, sondern im gemeinsamen Bewegungsblock:
+///   <c>0x425144…0x42516B</c> (F <c>0x424312…0x424334</c>) fragt bei
+///   <c>uk == 3</c> nach jedem Schritt <c>0x40232E → 0x425CB0</c> »Boden
+///   erreicht?« (Gelände·15 + Schwelle nach Zelle, Absturz.cs) und ruft bei ja
+///   <c>0x401A37 → 0x425EA0</c> <b>axplode air</b>: <b>wer mit Z ins Gelände
+///   sinkt, STÜRZT AB.</b> Siehe <see cref="HandLuftBoden"/>,
+///   Gegenschalter <c>--handsteuerung-luft-boden-alt</c>.</item>
 ///   <item><b>Unter 0 springt die Höhe auf 135.</b> Die Rechnung ist ein
 ///   BYTE (<c>add cl, dl</c> @0x4C2CB2), und der Deckelvergleich ist
 ///   <b>vorzeichenlos</b> (<c>jbe</c>): aus 0 − 2 wird 254, und 254 &gt; 135,
-///   also 135. Wer ganz nach unten drückt, ist plötzlich ganz oben. Wir bilden
-///   das nach; <see cref="HandLuftUmlauf"/> zählt es, damit es nicht für einen
-///   Fehler von uns gehalten wird. Gegenschalter
-///   <c>--handhoehe-ohne-umlauf</c>.</item>
+///   also 135. Wir bilden das nach; <see cref="HandLuftUmlauf"/> zählt es.
+///   ⚠ Im Spiel tritt es seit bug-473 praktisch nie ein: bei
+///   <c>alt ≤ Boden + 2</c> kommt vorher die Explosion (§4 des Berichts).
+///   Gegenschalter <c>--handhoehe-ohne-umlauf</c>.</item>
 /// </list>
 ///
 /// <para>⚠ <b>Unsere Abweichungen, benannt:</b></para>
@@ -92,6 +100,34 @@ public partial class MapEntityLayer : Node2D
     /// Byte-Umlauf: die Höhe wird bei 0 abgefangen statt auf 135 zu springen.
     /// Darunter MUSS <see cref="HandLuftUmlauf"/> auf 0 fallen.</summary>
     public static bool HandhoeheOhneUmlauf;
+
+    /// <summary><c>--handsteuerung-luft-boden-alt</c> — Stand bis 0.6.6: die
+    /// Handsteuerung kennt keinen Boden, die Maschine sinkt ins Gelände.
+    /// Nullmodell zu bug-473 (D). ⚠ Eigener Schalter, weil
+    /// <c>--handsteuerung-boden-alt</c> schon der Boden-Handsteuerung
+    /// (bug-414, Fahrzeuge) gehört.</summary>
+    public static bool HandsteuerungLuftBodenAlt;
+
+    /// <summary>Wie oft eine handgesteuerte Maschine am Boden zerschellt ist
+    /// (<c>0x425144</c>). Unter <c>--handsteuerung-luft-boden-alt</c> MUSS das
+    /// 0 bleiben.</summary>
+    public int HandLuftBodenAbstuerze;
+
+    /// <summary>
+    /// <b>Der Boden der Handsteuerung</b> — Zeile <c>0x425144</c> des
+    /// Bewegungsblocks (F <c>0x424312</c>): <c>uk == 3</c> → <c>0x40232E</c>
+    /// »Boden erreicht?« → <c>axplode air</c>. Läuft je Takt NACH dem
+    /// Flugschritt, aus <c>UpdateAircraft</c>. Die Handsteuerung endet dann im
+    /// nächsten Takt von selbst (<see cref="HandsteuerungLuftTakt"/> sieht
+    /// <c>Absturz</c>).
+    /// </summary>
+    private void HandLuftBoden(Special a)
+    {
+        if (HandsteuerungLuftBodenAlt || a.Dead || a.Absturz || a.Stored) return;
+        if (!BodenErreicht(a)) return;
+        HandLuftBodenAbstuerze++;
+        FlugzeugAbschiessen(a, "Boden erreicht unter Handsteuerung (0x425144 -> axplode air)");
+    }
 
     /// <summary>Welche Maschine gerade von Hand fliegt — Platz in
     /// <c>_special</c>, −1 = keine. Im Original <c>uk == 3</c> plus die
@@ -312,7 +348,8 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
-        // --- +0x0E: alt += (A − Z)·2, Deckel 135, KEIN Boden ----------------
+        // --- +0x0E: alt += (A − Z)·2, Deckel 135; der Boden sitzt NICHT hier,
+        // sondern im Bewegungsblock @0x425144 (HandLuftBoden, bug-473) --------
         int dAlt = ((steigen ? 1 : 0) - (sinken ? 1 : 0)) * HandHoehenSchritt;
         if (dAlt != 0)
         {
@@ -408,7 +445,9 @@ public partial class MapEntityLayer : Node2D
              + $"(je {HandDrehSchritt}°) · Stufe +{HandLuftStufeAuf}/−{HandLuftStufeAb} "
              + $"· Hoehe +{HandLuftGehoben}/−{HandLuftGesenkt}, {HandLuftDeckel}x am "
              + $"Deckel {HandHoeheDeckel}, {HandLuftUmlauf}x Byte-Umlauf unter 0 "
-             + $"· {HandLuftSchuesse} Schuesse" + hoehe
+             + $"· {HandLuftSchuesse} Schuesse · {HandLuftBodenAbstuerze}x am Boden zerschellt" + hoehe
+             + (HandsteuerungLuftBodenAlt
+                 ? "   [--handsteuerung-luft-boden-alt: zerschellt MUSS 0 sein]" : "")
              + (HandsteuerungLuftAus
                  ? "   [--handsteuerung-luft-aus: alles 0 ist das SOLL]" : "")
              + (HandhoeheOhneUmlauf

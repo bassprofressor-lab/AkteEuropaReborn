@@ -95,9 +95,11 @@ public partial class MapEntityLayer : Node2D
                 + $"{HandLuftDeckel - deckelVor}x geklemmt {HandJa(deckelOk)}\n");
         alles &= deckelOk;
 
-        // Nach UNTEN gibt es keinen Boden — und unter 0 springt sie auf 135
+        // Der ARM hat nach unten keinen Boden — und unter 0 springt er auf 135
         // zurueck, weil das Original in einem BYTE rechnet (@0x4C2CB2) und
-        // vorzeichenlos vergleicht (@0x4C2CBD jbe).
+        // vorzeichenlos vergleicht (@0x4C2CBD jbe). ⚠ bug-473: der Boden sitzt
+        // im BEWEGUNGSBLOCK @0x425144 (Schritt 8); hier wird nur der Arm
+        // gestellt, darum laeuft HandLuftBoden in diesem Schritt nicht mit.
         a.Alt = HandHoehenSchritt;                 // zwei Schritte ueber 0
         int umlaufVor = HandLuftUmlauf;
         HandProbeTakt(sinken: true);               // -> 0
@@ -148,6 +150,48 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"  7. Austritt: Handsteuerung aus {HandJa(HandLuftIdx < 0)}, "
                 + $"Heimkehr gesetzt {HandJa(a.Heimkehr)} {HandJa(ausOk)}\n");
         alles &= ausOk;
+
+        // --- 8. DER BODEN (bug-473 D): 0x425144 -> 0x425CB0 -> axplode air ---
+        // Noch einmal uebernehmen, die Maschine auf Schwelle + 4 ueber den
+        // Boden ihrer Zelle legen und mit Z sinken: nach hoechstens drei
+        // Schritten MUSS der Absturz beginnen (Soll aus derselben Schwelle wie
+        // Absturz.cs — die Zelle ist die, auf der die Probe steht).
+        // ⚠ Stufe 0, damit kein Flugschritt die Zelle wechselt.
+        if (!a.Dead && !a.Stored && !a.Absturz)
+        {
+            bool wieder = HandsteuerungLuftBeginnen(a.Slot);
+            a.Stufe = 0;
+            int boden = ElevOf(a.Col, a.Row) * AltJeHoehenstufe;
+            int s = AbsturzSchwelle(a.Col, a.Row, out bool kg, out string zellart);
+            a.Alt = boden + s + 2 * HandHoehenSchritt;
+            a.Sollhoehe = a.Alt;
+            int bodenVor = HandLuftBodenAbstuerze, begVor = AbstuerzeBegonnen, altVor = a.Alt;
+            int sink = 0;
+            for (; sink < 6 && !a.Absturz; sink++)
+            {
+                HandProbeTakt(sinken: true);
+                HandLuftBoden(a);                   // der Bewegungsblock, @0x425144
+            }
+            int altAufprall = a.Alt;
+            int zerschellt = HandLuftBodenAbstuerze - bodenVor;
+            // Die Handsteuerung endet im naechsten Takt von selbst (Absturz).
+            HandProbeTakt();
+            if (HandLuftIdx >= 0) HandsteuerungLuftBeenden("Probe");
+            bool bodenOk = HandsteuerungLuftBodenAlt
+                ? zerschellt == 0 && AbstuerzeBegonnen == begVor && !a.Absturz
+                : zerschellt == 1 && AbstuerzeBegonnen == begVor + 1 && a.Absturz
+                  && sink <= 3 && altAufprall <= boden + s && altAufprall > boden + s - 2 * HandHoehenSchritt;
+            sb.Append($"  8. Boden (0x425144): Zelle ({a.Col},{a.Row}) Hoehe {ElevOf(a.Col, a.Row)} [{zellart}], "
+                    + $"Schwelle {(kg ? "<=" : "<")} {boden}+{s}; von {altVor} mit Z gesunken: "
+                    + $"{sink} Schritte -> Alt {altAufprall}, {zerschellt}x zerschellt, "
+                    + $"Absturz begonnen {HandJa(a.Absturz)}, uebernommen {HandJa(wieder)} "
+                    + (HandsteuerungLuftBodenAlt
+                        ? "[--handsteuerung-luft-boden-alt: Soll 0x zerschellt, kein Absturz] "
+                        : $"[Soll 1x in <= 3 Schritten, Alt in ({boden + s - 2 * HandHoehenSchritt}, {boden + s}]] ")
+                    + $"{HandJa(bodenOk)}\n");
+            alles &= bodenOk;
+        }
+        else sb.Append("  8. Boden: Maschine nicht mehr flugfaehig — NICHT GEMESSEN\n");
 
         // --- Kontrollzahl ----------------------------------------------------
         int enden = HandLuftBeendet + (HandLuftIdx >= 0 ? 1 : 0);

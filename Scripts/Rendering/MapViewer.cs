@@ -771,6 +771,7 @@ public partial class MapViewer : Node2D
         if (_einfahrtCheck) _entities.EinfahrtCheckStart();
         if (_kiProbe) _entities.KiProbeStart();
         if (_flakProbeArg) _entities.FlakProbeStart();
+        if (_absturzCheck) _entities.AbsturzCheckStart();     // bug-473, Simulation/AbsturzCheck.cs
         if (_ausweichProbe) _entities.AusweichProbeStart();
         if (_aufgebenProbe) _entities.AufgebenProbeStart();
         if (_bodenangriffProbe) _entities.BodenangriffProbeStart();
@@ -4536,6 +4537,15 @@ _mausProbePunkt = karte;
             else if (a == "--flugzeug-nebel-alt") MapEntityLayer.FlugzeugNebelAlt = true;
             else if (a == "--einschlagklang-alt") Audio.GameSounds.EinschlagklangAlt = true;
             else if (a == "--absturz-aus") MapEntityLayer.AbsturzAus = true;
+            // ⭐ 07.10.2026, bug-473 — Boden nach Zelle, Drift im Fall, Boden der
+            // Handsteuerung (berichte/absturz-aufprall-fable.md; Simulation/Absturz.cs,
+            // AbsturzCheck.cs, HandsteuerungLuft.cs)
+            else if (a == "--absturz-alt") MapEntityLayer.AbsturzAlt = true;
+            else if (a == "--absturz-drift-aus") MapEntityLayer.AbsturzDriftAus = true;
+            else if (a == "--absturz-check") _absturzCheck = true;
+            // bug-475: Aufprall mit 6 Wrackteilen, Wrack-Explosion und 4 Brandherden
+            else if (a == "--absturz-wrack-alt") MapEntityLayer.AbsturzWrackAlt = true;
+            else if (a == "--handsteuerung-luft-boden-alt") MapEntityLayer.HandsteuerungLuftBodenAlt = true;
             else if (a == "--gleisbruch-einzeln") MapEntityLayer.GleisbruchEinzeln = true;
             else if (a == "--neubautuer-alt") MapEntityLayer.NeubautuerAlt = true;
             else if (a == "--bautuer-offen") MapEntityLayer.BautuerOffen = true;
@@ -5333,6 +5343,9 @@ _mausProbePunkt = karte;
     /// Zeit, bis ein Flugzeug in ihren Ring kommt. Siehe Simulation/Flak.cs.</summary>
     private bool _flakCheck;
     private bool _flakProbeArg;
+    /// <summary><c>--absturz-check</c> — siehe Simulation/AbsturzCheck.cs (bug-473).
+    /// Nullmodelle: <c>--absturz-alt</c>, <c>--absturz-drift-aus</c>.</summary>
+    private bool _absturzCheck;
     private bool _shipCheck;
     private float _shipCheckAfter;
     private float _placeForce;

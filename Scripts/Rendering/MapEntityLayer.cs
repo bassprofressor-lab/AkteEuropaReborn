@@ -35505,6 +35505,7 @@ public partial class MapEntityLayer : Node2D
         FlakProbeTakt();
         FlakTakt();
         AbsturzTakt();
+        AbsturzCheckTakt();                      // --absturz-check, Simulation/AbsturzCheck.cs
 
         // 'unexplored' — auf eigenem, langsamerem Schlag
         _fogTick += dt;
@@ -39681,12 +39682,16 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
 
-            // ⭐ 20.09.2026 — EIN STUERZENDES FLUGZEUG TUT NICHTS MEHR.
+            // ⭐ 20.09.2026 — EIN STUERZENDES FLUGZEUG SUCHT NICHTS MEHR.
             // Es hat kein Ziel, fliegt kein Flugziel an und steigt nicht: es
             // faellt, und das erledigt AbsturzTakt mit seiner eigenen Regel.
             // Ohne diese Zeile griffe darunter die Hoehenregelung (+2 bis 135)
             // und der Sturz waere ein Steigflug.
-            if (a.Absturz) continue;
+            // ⭐ 07.10.2026, bug-473 (B): aber es FLIEGT WEITER — `je 0x425047`
+            // aus dem Absturzzweig fuehrt in den gemeinsamen Bewegungsblock,
+            // Richtung und Stufe bleiben (berichte/absturz-aufprall-fable.md §4).
+            // Hier stand `continue` = UNSERE Setzung; --absturz-drift-aus.
+            if (a.Absturz) { AbsturzDrift(a, dt); continue; }
 
             // ⭐⭐ 20.09.2026 — uk 3: DIE HANDSTEUERUNG HAT GAR KEINEN ZWEIG.
             // AIR_RE 446. Die Maschine fliegt mit dir und sp geradeaus, sucht
@@ -39694,7 +39699,11 @@ public partial class MapEntityLayer : Node2D
             // (die Sprit-Heimkehr prueft `uk != 3`, AIR_RE 88) — man kann sie
             // leerfliegen. Auch die Hoehenregelung bleibt aus: die Hoehe gibt
             // der Spieler mit A/Z. Siehe Simulation/HandsteuerungLuft.cs.
-            if (IstHandgesteuert(a)) { AirDrift(a, dt); continue; }
+            // ⭐ 07.10.2026, bug-473 (D): im Bewegungsblock @0x425144 fragt
+            // uk 3 nach jedem Schritt »Boden erreicht?« (0x40232E -> 0x425CB0)
+            // und ruft bei ja axplode air (0x401A37 -> 0x425EA0) — der Flieger
+            // STUERZT AB, er fliegt nicht in den Huegel. --handsteuerung-luft-boden-alt.
+            if (IstHandgesteuert(a)) { AirDrift(a, dt); HandLuftBoden(a); continue; }
 
             FlughoeheTakt(a);
             // ⭐⭐ 20.09.2026, bug-348 — DAS TEMPO WIRD GEREGELT, es ist keine

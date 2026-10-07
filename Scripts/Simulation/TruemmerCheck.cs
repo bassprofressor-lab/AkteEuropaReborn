@@ -153,18 +153,25 @@ public partial class MapEntityLayer
     /// Bau), faellt es auf das alte Wrack zurueck — Abhilfe
     /// <c>--reexport-effects</c> oder Neuimport.</para></summary>
     private void WrackAnlegen(Entity v)
+        => WrackTeilAnlegen(v.Pos, Simulation.Determinism.Roll(16), v.Col * 3 + v.Row);
+
+    /// <summary>bug-475: EIN Eintrag der Wracktafel <c>0x4A97C0</c> an einer
+    /// Bildstelle — der Einheitentod (0x406F47: Variante rand&amp;15, Feinlage
+    /// 0/0) und der Absturz (0x423A2F: sechs Stück mit Feinlage rand%40/rand%40)
+    /// rufen dieselbe Funktion.</summary>
+    private void WrackTeilAnlegen(Vector2 pos, int variante, int altVariante)
     {
-        string k = "wrack" + Simulation.Determinism.Roll(16);
+        string k = "wrack" + (variante & 15);
         if (WrackAlt || EffectFrames(k).Count < 4)
         {
             // the rubble variant is picked from where it fell, so two wrecks side
             // by side do not look stamped from the same mould — see DrawWreck
-            _effects.Add(new Effect { Pos = v.Pos, Kind = "wreck",
+            _effects.Add(new Effect { Pos = pos, Kind = "wreck",
                                       FrameTime = 0.25f, Hold = true,
-                                      Variant = v.Col * 3 + v.Row });
+                                      Variant = altVariante });
             return;
         }
-        _effects.Add(new Effect { Pos = v.Pos, Kind = k, FrameTime = 1f, Hold = true });
+        _effects.Add(new Effect { Pos = pos, Kind = k, FrameTime = 1f, Hold = true });
         WrackGelegt++;
     }
 

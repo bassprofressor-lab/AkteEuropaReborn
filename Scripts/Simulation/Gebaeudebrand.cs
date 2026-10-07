@@ -193,14 +193,26 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private bool BrandZuenden(int c, int r, Entity b)
     {
-        if (_gbrand.Count >= BrandPlaetze) return false;   // ⚠ wir ueberschreiben nicht
-
         int v = b.HpMax > 0 ? (b.HpMax - Mathf.Max(0, b.Hp)) * 200 / b.HpMax : 0;
         v += Simulation.Determinism.Roll(30);
         int leben = v < 100 ? v / 4 + 11
                   : v < 150 ? v / 3 + 11
                   : v < 180 ? v / 2 + 11
                             : v + 11;
+        return BrandZuenden(c, r, leben);
+    }
+
+    /// <summary>bug-475: die Lebensdauer des Zweigs <b>Art 0</b> von <c>0x4AE4C0</c>
+    /// (<c>@0x4AE549 mov byte [+5], 0x32</c>) — der Absturz zündet seine vier
+    /// Brandherde mit <c>(x, y, 0)</c>.</summary>
+    public const int BrandLebenArt0 = 50;
+
+    /// <summary><c>0x4AE4C0</c> mit fertiger Lebensdauer — der gemeinsame Schwanz
+    /// ab <c>0x4AE625</c>: Eintrag, Explosion 510..518 (@0x4AE679), Splitter
+    /// 200..204 (@0x4AE6C9), Klang 399 (leer).</summary>
+    private bool BrandZuenden(int c, int r, int leben)
+    {
+        if (_gbrand.Count >= BrandPlaetze) return false;   // ⚠ wir ueberschreiben nicht
 
         _gbrand.Add(new Gebaeudebrand { Col = c, Row = r, Alter = 1, Lebensdauer = leben });
 
