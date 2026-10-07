@@ -377,9 +377,27 @@ public partial class MenuBackdrop : CanvasLayer
     /// einer vollen Szene. Ein Schnitt zeigt in derselben Zeit dreimal etwas.
     /// ⚠ Beides ist UNSERES, gelesen ist zur Kameraführung nichts.</para>
     /// </summary>
+    /// <summary><c>--demokamera-alt</c> — Stand bis 0.6.6: die Kamera schneidet
+    /// alle 8 s zum naechsten Hauptquartier und schwenkt. Nullmodell zu bug-470.</summary>
+    public static bool DemokameraAlt;
+
+    /// <summary>bug-470: die gespeicherte Sicht der 13 Demos — Spalte (sec7, schon um
+    /// 0x4F70D0 versetzt), Zeile (sec8), Feinversatz (sec9/sec10).</summary>
+    private static readonly (int Col, int Row, int Fx, int Fy)[] DemoSicht =
+    {
+        (38, 15, 28, 6), (46, 10, 20, 12), (74, 78, 20, 16), (55, 89, 24, 8),
+        (69, 181, 0, 10), (72, 71, 36, 12), (29, 185, 12, 16), (62, 75, 16, 10),
+        (6, 15, 8, 0), (75, 91, 20, 0), (61, 26, 16, 12), (27, 6, 28, 10), (0, 46, 0, 0),
+    };
+
     private void Drift(float dt)
     {
         if (_anchors.Count == 0) return;
+        if (!DemokameraAlt && _at >= 0 && _at < _demos.Count && _demos[_at].No is >= 1 and <= 13)
+        {
+            Place();                        // bug-470: die Sicht steht still
+            return;
+        }
         _dwell -= dt;
         if (_dwell <= 0f)
         {
@@ -442,8 +460,23 @@ public partial class MenuBackdrop : CanvasLayer
         int seen = _entities.StartCampaign(-1, MapEntityLayer.AiLevel.Normal);
 
         _anchors.Clear();
-        for (int p = 0; p < 8; p++)
-            if (_entities.PlayerHome(p) is { } home) _anchors.Add(home);
+        int demoNr = _at >= 0 && _at < _demos.Count ? _demos[_at].No : 0;
+        if (!DemokameraAlt && demoNr is >= 1 and <= 13)
+        {
+            // ⭐ 06.10.2026, bug-470 (KayelGee R4, Meldung 14): »die Demos zeigen
+            // andere Stellen der Karte; ikonische Szenen fehlen«. Das Original
+            // nimmt die im Spielstand GESPEICHERTE Sicht (sec7 Spalte, sec8 Zeile,
+            // sec9/10 Feinversatz → 0x5387AC/0x5387B0) plus den Spaltenversatz
+            // der Tafel 0x4F70D0 (−4 Demo 1, −3 Demo 10) @0x415EB7, und bewegt sie
+            // danach nicht mehr. Wir flogen die Hauptquartiere ab — keine der
+            // gespeicherten Sichten steht auf einem. Werte aus D:\LEVELS\N.DM
+            // (berichte/menue-demo-video-fable.md §6.1). Mitte des 640×480-Ausschnitts.
+            var (c, r, fx, fy) = DemoSicht[demoNr - 1];
+            _anchors.Add(_entities.KartenUrsprung + new Vector2(c * 40 + fx + 320, r * 20 + fy + 240));
+        }
+        else
+            for (int p = 0; p < 8; p++)
+                if (_entities.PlayerHome(p) is { } home) _anchors.Add(home);
         if (_anchors.Count == 0) _anchors.Add(_sprite.Texture.GetSize() / 2f);
         _anchorAt = 0;
         _cam = _anchors[0];
@@ -454,7 +487,7 @@ public partial class MenuBackdrop : CanvasLayer
         _world.Modulate = new Color(1, 1, 1, 1);
         _probe = 0f; _probeFrames = 0; _probeWorst = 0f;
         Place();
-        GD.Print($"Menü: Demo {map} läuft ({_anchors.Count} Basen, Blick von Platz {seen})");
+        GD.Print($"Menü: Demo {map} läuft ({_anchors.Count} Basen, Blick von Platz {seen}, Kamera {_anchors[0]}, Karte {_sprite.Texture.GetSize()}{(DemokameraAlt ? "" : " — gespeicherte Sicht, bug-470")})");
     }
 
     // ⭐ 31.08.2026 — System.Text.Json statt Godot-Json, wie in

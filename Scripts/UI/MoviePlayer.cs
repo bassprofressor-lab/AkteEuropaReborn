@@ -124,6 +124,9 @@ public partial class MoviePlayer : CanvasLayer
         string? eigen = Ordner ?? Settings.MoviesDir;
         if (!string.IsNullOrWhiteSpace(eigen))
         { l.Add(eigen); l.Add(System.IO.Path.Combine(eigen, "MOVIES")); }
+        // bug-469: die beim Einlesen von der CD uebernommenen Filme zuerst.
+        if (!Core.DiscCoverage.FilmeNichtKopieren)
+            l.Add(ProjectSettings.GlobalizePath("user://data/Movies"));
         foreach (var env in new[] { "ProgramFiles(x86)", "ProgramFiles" })
         {
             string? pf = System.Environment.GetEnvironmentVariable(env);

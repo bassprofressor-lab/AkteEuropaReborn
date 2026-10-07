@@ -523,6 +523,24 @@ public partial class MainMenu : Control
             if (a == "--no-backdrop") _noBackdrop = true;
             else if (a.StartsWith("--kulissen-check="))
                 _kulissenCheck = Mathf.Max(1, a["--kulissen-check=".Length..].ToInt());
+            else if (a == "--filme-nicht-kopieren") Core.DiscCoverage.FilmeNichtKopieren = true;
+            else if (a == "--demokamera-alt") MenuBackdrop.DemokameraAlt = true;
+            else if (a == "--filme-probe")
+            {
+                // bug-469: was der Import uebernehmen wuerde — nur zaehlen, nicht kopieren.
+                // Eingelegte CDs gegen einen Ordner auf der Platte (Program Files).
+                var cds = Core.ContentSources.Discs();
+                int nCd = cds == null ? 0 : Core.DiscCoverage.FilmeUebernehmen(cds, "", null, nurZaehlen: true);
+                long mb = Core.DiscCoverage.FilmeGezaehltBytes >> 20;
+                string pf = System.IO.Path.Combine(System.Environment.GetEnvironmentVariable("ProgramFiles(x86)") ?? "", "Akte Europa");
+                var platte = Core.ContentSources.FromFolder(pf);
+                int nPl = platte == null ? 0 : Core.DiscCoverage.FilmeUebernehmen(platte, "", null, nurZaehlen: true);
+                GD.Print($"filme-probe: eingelegte CDs [{(cds == null ? "keine" : string.Join(", ", cds.Roots))}] -> {nCd} Filme ({mb} MB); "
+                       + $"Ordner auf der Platte {pf} -> {nPl} (Soll 0, nur von CD)"
+                       + (Core.DiscCoverage.FilmeNichtKopieren ? " (Nullmodell --filme-nicht-kopieren)" : ""));
+                GetTree().Quit(0);
+                return;
+            }
             else if (a == "--demowechsel-immer") MenuBackdrop.DemowechselImmer = true;
             else if (a == "--fenster-alt") Settings.FensterAlt = true;
             else if (a == "--demomusik-neustart") Rendering.MapEntityLayer.DemomusikNeustart = true;
@@ -1715,6 +1733,18 @@ public partial class MainMenu : Control
                     Callable.From(() => ImportProgress(s, n, line, false)).CallDeferred();
                 });
                 missing = Core.DiscCoverage.Missing(b.MissionNumbers);
+                // bug-469: die Filme dieser CD, solange sie im Laufwerk liegt
+                if (ok)
+                {
+                    int filme = Core.DiscCoverage.FilmeUebernehmen(src,
+                        ProjectSettings.GlobalizePath("user://data/Movies"), (f, d, t) =>
+                        {
+                            int dm = (int)(d >> 20), tm = (int)System.Math.Max(1, t >> 20);
+                            Callable.From(() => ImportProgress(dm, tm,
+                                $"Filme werden von der CD uebernommen: {f}", true)).CallDeferred();
+                        });
+                    if (filme > 0) GD.Print($"import: {filme} Filme von der CD in den Datenordner uebernommen");
+                }
                 // ⚠ VOR der Frage nach der anderen CD, solange diese noch im
                 // Laufwerk liegt: der zweite Lauf braucht ihr Kabinett, ihre
                 // 01.PAL und ihre Karten (Begruendung in Core.DiscCoverage)
@@ -1738,7 +1768,7 @@ public partial class MainMenu : Control
         _impBar.MaxValue = System.Math.Max(1, schritte);
         _impBar.Value = System.Math.Min(schritt, schritte);
         if (_impStep != null)
-            _impStep.Text = kopie ? $"Zwischenlager: {schritt} von {schritte} MB"
+            _impStep.Text = kopie ? $"Kopie: {schritt} von {schritte} MB"
                                   : $"Schritt {schritt} von {schritte}";
         if (_impStatus != null)
             _impStatus.Text = line.Length > 160 ? line[..157] + " …" : line;

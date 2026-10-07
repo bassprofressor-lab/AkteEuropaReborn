@@ -10924,6 +10924,10 @@ public partial class MapEntityLayer : Node2D
     /// <see cref="UI.MenuBackdrop"/> vor <c>Load</c>).</summary>
     public bool Kulissenlauf;
 
+    /// <summary>Der Ursprung des Kartenrasters im gebackenen Bild (bug-470,
+    /// fuer die gespeicherte Demosicht).</summary>
+    public Vector2 KartenUrsprung => new(_ox, _oy);
+
     /// <summary><c>--demomusik-neustart</c> — Stand bis 0.6.6: jede Demo startet
     /// Stueck 1 von vorn. Nullmodell zu bug-447.</summary>
     public static bool DemomusikNeustart;

@@ -172,6 +172,58 @@ public static class DiscCoverage
     /// Kopie unter <paramref name="stagingDir"/>. Ordner auf der Platte bleiben,
     /// wie sie sind.</para>
     /// </summary>
+    /// <summary><c>--filme-nicht-kopieren</c> — Stand bis 0.6.6: der Import
+    /// uebernimmt keine Filme. Nullmodell zu bug-469.</summary>
+    public static bool FilmeNichtKopieren;
+    public static long FilmeGezaehltBytes;
+
+    /// <summary>
+    /// ⭐ 06.10.2026, bug-469 (KayelGee R4, Meldung 6): »die Videosequenzen
+    /// werden nur abgespielt, wenn die CD eingelegt ist«. Seine Entscheidung:
+    /// die Filme beim Einlesen in den Datenordner uebernehmen — aber NUR von einer
+    /// eingelegten CD (DriveType.CDRom), nie aus einem Ordner auf der Platte und
+    /// nie mit dem Installer (rechtssicherer). Kopiert wird <c>MOVIES\*.RPL</c>
+    /// jeder CD-Wurzel der Quelle; schon vorhandene gleich lange Dateien bleiben.
+    /// Rueckgabe: Zahl der Filme, die danach im Ordner liegen.
+    /// </summary>
+    public static int FilmeUebernehmen(ContentSources.Source src, string zielDir,
+                                       Action<string, long, long>? progress = null,
+                                       bool nurZaehlen = false)
+    {
+        if (FilmeNichtKopieren) return 0;
+        var jobs = new List<(string From, string To)>();
+        foreach (string root in src.Roots)
+        {
+            bool cd;
+            try
+            {
+                string? r = Path.GetPathRoot(Path.GetFullPath(root));
+                cd = !string.IsNullOrEmpty(r) && new DriveInfo(r).DriveType == DriveType.CDRom;
+            }
+            catch (Exception) { cd = false; }
+            if (!cd) continue;
+            string m = root.TrimEnd('/', '\\') + "/MOVIES";
+            foreach (string f in SafeFiles(m))
+                if (f.EndsWith(".RPL", StringComparison.OrdinalIgnoreCase))
+                    jobs.Add((f, zielDir.TrimEnd('/', '\\') + "/" + Path.GetFileName(f)));
+        }
+        if (jobs.Count == 0) return 0;
+        if (nurZaehlen) { long sum = 0; foreach (var j in jobs) sum += new FileInfo(j.From).Length; FilmeGezaehltBytes = sum; return jobs.Count; }
+        Directory.CreateDirectory(zielDir);
+        long total = 0, done = 0;
+        foreach (var j in jobs) total += new FileInfo(j.From).Length;
+        int n = 0;
+        foreach (var (from, to) in jobs)
+        {
+            var fi = new FileInfo(from);
+            if (!(File.Exists(to) && new FileInfo(to).Length == fi.Length))
+                File.Copy(from, to, true);
+            done += fi.Length; n++;
+            progress?.Invoke(Path.GetFileName(from), done, total);
+        }
+        return n;
+    }
+
     public static ContentSources.Source Stage(ContentSources.Source src, string stagingDir,
                                               Action<string, long, long>? progress = null)
     {
