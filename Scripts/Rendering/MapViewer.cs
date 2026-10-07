@@ -4155,6 +4155,8 @@ _mausProbePunkt = karte;
             else if (a == "--entwurf-enter-sperre") MapEntityLayer.EntwurfEnterSperre = true;
             // bug-478: Aufbauliste 1..79, Verbesserung 81..88 wie 0x46C490
             else if (a == "--entwurf-listen-alt") MapEntityLayer.EntwurfListenAlt = true;
+            // bug-479: Gefecht ohne Besitz nach Techstandard (0x419CB0), Stand 0.6.6
+            else if (a == "--gefecht-besitz-alt") MapEntityLayer.GefechtBesitzAlt = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
@@ -4603,6 +4605,8 @@ _mausProbePunkt = karte;
             else if (a == "--uebernahme-alt") MapEntityLayer.UebernahmeAlt = true;
             else if (a == "--bruecke-nicht-angreifbar") MapEntityLayer.BrueckeNichtAngreifbar = true;
             else if (a == "--bauwerke-unzerstoerbar") MapEntityLayer.BauwerkeUnzerstoerbar = true;
+            // bug-480: Probehoehen ohne das Gelaende der Flak (Stand bis 07.10.2026)
+            else if (a == "--flak-probe-hoehe-absolut") MapEntityLayer.FlakProbeHoeheAbsolut = true;
             else if (a == "--auslauf-alt") MapEntityLayer.AuslaufAlt = true;
             else if (a == "--radarmast-ewig") MapEntityLayer.RadarMastEwig = true;
             // ⚠ --ship-check=<sek>: MIT Zahl laeuft das Spiel erst so lange und

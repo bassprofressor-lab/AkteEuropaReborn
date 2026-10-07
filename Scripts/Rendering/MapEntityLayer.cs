@@ -17912,12 +17912,13 @@ public partial class MapEntityLayer : Node2D
     /// (2) <b>100..109</b> (Nutzlasten des Flughafens, in der EXE-Tafel mit Besitz 1)
     /// werden NICHT angeboten: sec46 der DM-Karten 1/4/10 trägt dort Besitz 0
     /// (<c>cwm_sections.py</c>, Spieler 0 und 1), die 1 der EXE-Tafel ist der
-    /// Stand des Flughafen-Stellvertreters. (3) Im Gefecht laden wir kein sec46
-    /// der DM-Karte, die Grundtafel der EXE gilt — dort fehlen 65/68/69 (Besitz 0),
-    /// während 1/4/10.DM 68/69 besitzen und 65 nicht; wir bieten im Gefecht wie
-    /// bisher alle benannten Zeilen 50..79 und 81..88 an (Besitz erst in der
-    /// Kampagne über <c>ForschungBesitzt</c>). Gegenschalter
-    /// <c>--entwurf-listen-alt</c>.</para>
+    /// Stand des Flughafen-Stellvertreters. (3) ⭐ 07.10.2026, bug-479: im Gefecht
+    /// verteilt <c>GefechtBesitzStart</c> (0x419CB0, Techstandard) den Besitz —
+    /// die sec46 der DM-Karte zählt dafür nicht (die Routine überschreibt +0x00
+    /// jeder Zeile), und 100..107 bekommen dort nie Besitz: Setzung (2) ist damit
+    /// gelesen. Die Listen werden im Gefecht wie in der Kampagne über
+    /// <c>ForschungBesitzt</c> gefiltert (Simulation/GefechtBesitz.cs,
+    /// <c>--gefecht-besitz-alt</c>). Gegenschalter <c>--entwurf-listen-alt</c>.</para>
     /// </summary>
     public static bool EntwurfListenAlt;
 
@@ -17972,8 +17973,15 @@ public partial class MapEntityLayer : Node2D
         // nach dem Nullen 0x4B23C0); ForschungBesitzt fragt genau diese Menge.
         // ⚠ Dass das Erstellen-Fenster nur Besessenes anbietet, ist V (wie das
         // Forschungsangebot 0x4AA9D2), der Fenstercode selbst ist ungelesen.
-        // Gefecht unveraendert. --entwurf-alle-teile.
-        if (!EntwurfAlleTeile && UI.SkirmishSetup.CampaignMission > 0)
+        // --entwurf-alle-teile.
+        // ⭐ 07.10.2026, bug-479: im GEFECHT ebenso — dort hat GefechtBesitzStart
+        // (0x419CB0, Techstandard) die Blöcke beschrieben, und der Listenaufbau
+        // 0x46C490 nimmt nur Zeilen mit +0x00 != 0. Ohne Gefechtsstart (--map=
+        // zum Ansehen) oder unter --gefecht-besitz-alt bleibt es bei jeder
+        // benannten Zeile (Stand 0.6.6).
+        bool besitzFiltern = UI.SkirmishSetup.CampaignMission > 0
+                          || (GefechtBesitzVerteilt && !GefechtBesitzAlt);
+        if (!EntwurfAlleTeile && besitzFiltern)
         {
             int vorher = Designer.Propulsions.Count + Designer.Weapons.Count + Designer.Equipment.Count;
             Designer.Propulsions.RemoveAll(p => !ForschungBesitzt(ViewPlayer, p.Id));
@@ -17982,7 +17990,10 @@ public partial class MapEntityLayer : Node2D
             EntwurfGefiltert = vorher - (Designer.Propulsions.Count + Designer.Weapons.Count + Designer.Equipment.Count);
         }
         GD.Print($"designer: {Designer.Propulsions.Count} Fahrwerke, " +
-                 $"{Designer.Weapons.Count} Waffen, {Designer.Equipment.Count} Ausruestungen");
+                 $"{Designer.Weapons.Count} Waffen, {Designer.Equipment.Count} Ausruestungen" +
+                 (besitzFiltern && UI.SkirmishSetup.CampaignMission <= 0
+                     ? $" (Gefecht: Besitz nach Techstandard {AirProbeTechstandard}, {EntwurfGefiltert} herausgenommen)"
+                     : ""));
     }
 
     private static void ReadParts(string rel, string key, List<DesignScreen.Part> into,

@@ -823,6 +823,11 @@ public partial class MapEntityLayer : Node2D
                       "nichts Neutrales zu besetzen und kein Platz mit Fabrik — die Karte " +
                       "wird gespielt, wie sie gezeichnet ist, mit ihren Truppen"));
         if (res) GD.Print(ResourceWatchLine());
+        // ⭐ 07.10.2026, bug-479 — der Bauteilbesitz nach Techstandard, 0x419CB0
+        // aus gefecht_starten @0x41AC68 (Simulation/GefechtBesitz.cs). Steht im
+        // Original hinter der Spielerschleife (Konto, Namen) und vor den Toren
+        // fuer Flugzeuge/Schiffe — hier am Ende des Gefechtsstarts. --gefecht-besitz-alt.
+        GefechtBesitzStart(AirProbeTechstandard);
         return human;
     }
 

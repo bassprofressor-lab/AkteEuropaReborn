@@ -563,6 +563,11 @@ public partial class MapEntityLayer
     /// <summary><c>--flak-probe</c> anwerfen.</summary>
     public void FlakProbeStart() => _flakProbe = true;
 
+    /// <summary><c>--flak-probe-hoehe-absolut</c> — bug-480: die Probehoehen wieder
+    /// absolut (ohne das Gelaende der Flak), der Stand bis zum 07.10.2026. Auf einer
+    /// Flak ueber Gelaende 0 (map_DM_4: 90) MUSS die Probe damit durchfallen.</summary>
+    public static bool FlakProbeHoeheAbsolut;
+
     /// <summary>Der Aufbau, einmal — und dann N Takte laufen lassen.</summary>
     private void FlakProbeAufbauen()
     {
@@ -596,7 +601,8 @@ public partial class MapEntityLayer
         if (gegner < 0) { GD.Print("flak-probe: KEIN URTEIL — kein verfeindeter Spieler"); return; }
 
         GD.Print($"flak-probe: Flak = Platz {s.Slot} auf ({s.Col},{s.Row}), Gelaende*15 = {g}; " +
-                 $"Ziele gehoeren Spieler {gegner}");
+                 $"Ziele gehoeren Spieler {gegner}; Probehoehen = Gelaende*15 + Fallhoehe" +
+                 (FlakProbeHoeheAbsolut ? " ⚠ --flak-probe-hoehe-absolut: Fallhoehe ohne Gelaende (Stand bis bug-480)" : ""));
 
         // (Titel, Spaltenabstand, Zeilenabstand, Hoehe, Soll)
         //
@@ -631,6 +637,19 @@ public partial class MapEntityLayer
         foreach (var x in _special) slot = Mathf.Max(slot, x.Slot + 1);
         foreach (var f in faelle)
         {
+            // ⚠⚠ 07.10.2026, bug-480 — DIE SOLLWERTE KENNEN DAS GELAENDE NICHT.
+            // Die Faelle oben sind fuer »Gelaende 0« gerechnet (dz = 130/13 = 10),
+            // und auf K17 steht die Flak auf Hoehe 0. Auf map_DM_4 steht der
+            // erste eigene Schuetze auf Gelaende 6 (Gelaende*15 = 90): ein
+            // Flieger auf ABSOLUT 130 ist dort nur 40 ueber dem Rohr, dz 3, Ring
+            // 1..3 — und die Probe meldete 3 von 8 »FALSCH«, unter jedem
+            // Nullmodell gleich, weil die REGEL reine Rechnung ist. Das war
+            // kein Spielfehler (Kegel und Probe rechnen beide gegen
+            // ElevOf(Flak)*15, wie das Original @0x4283xx), sondern ein
+            // Pruefstand, dessen Erwartung die Hoehe der Flak nicht kannte.
+            // Die Fallhoehen sind seitdem RELATIV zum Gelaende der Flak:
+            // Hoehe = Gelaende*15 + Fallhoehe. --flak-probe-hoehe-absolut = alt.
+            int alt = FlakProbeHoeheAbsolut ? f.Alt : g + f.Alt;
             var a = new Special
             {
                 Slot = slot++, Kind = 4, Name = "Probeflieger", TypeName = "Probeflieger",
@@ -639,7 +658,7 @@ public partial class MapEntityLayer
                 Pos = s.Pos + new Vector2(f.Dc * TileW, f.Dr * TileH),
                 Hp = FlakProbeHuelle, HpMax = FlakProbeHuelle, Defence = 0, Attack = 0,
                 Ammo = 0, AmmoMax = 0, Fuel = 9999, FuelMax = 9999,
-                Alt = f.Alt, Sollhoehe = f.Alt,
+                Alt = alt, Sollhoehe = alt,
             };
             // ⚠ Goal auf die eigene Lage: sonst greift der Steigflug (Abstand
             // zum Flugziel > 6 Zellen -> +2 je Takt) und die Hoehe wandert
@@ -647,7 +666,7 @@ public partial class MapEntityLayer
             a.Goal = a.Pos;
             _special.Add(a);
             _flakProbeFaelle.Add((f.T, a.Slot, f.Soll));
-            _flakProbeHalt.Add((a.Slot, a.Pos, a.Col, a.Row, f.Alt));
+            _flakProbeHalt.Add((a.Slot, a.Pos, a.Col, a.Row, alt));
         }
         _flakProbeTakte = 1;
     }
@@ -740,6 +759,16 @@ public partial class MapEntityLayer
         if (FlughoeheAlt)
             sb.Append("   ⚠ --flughoehe-alt aendert HIER nichts: die Probe heftet die Hoehe " +
                       "fest. Der Schalter wirkt im echten Lauf, siehe --flak-check");
+        // bug-480: ein Urteil, das die Regression lesen kann. Die REGEL muss ganz
+        // stimmen; die KETTE braucht mindestens einen beschossenen Flieger (unter
+        // --flak-kegel-aus / --flak-treffer-aus faellt genau sie).
+        bool bestanden = ok == _flakProbeFaelle.Count && getroffen >= 1;
+        sb.Append(bestanden
+            ? $"\n   ✅ BESTANDEN — Regel {ok}/{_flakProbeFaelle.Count}, Kette {getroffen} beschossen " +
+              $"(Flak auf Gelaende*15 = {_flakProbeGelaende})"
+            : $"\n   ❌ DURCHGEFALLEN — Regel {ok}/{_flakProbeFaelle.Count}, Kette {getroffen} beschossen");
+        if (FlakProbeHoeheAbsolut)
+            sb.Append("   [Nullmodell --flak-probe-hoehe-absolut: ueber Gelaende > 0 MUSS die Regel durchfallen]");
         GD.Print(sb);
     }
 }

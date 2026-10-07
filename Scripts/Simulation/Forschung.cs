@@ -231,10 +231,11 @@ public partial class MapEntityLayer : Node2D
     /// hat null <c>set_part</c>-Rufe. Wer dort forschen will, kann nur
     /// ERFINDEN — und die Erfindung ist bei uns noch nicht gebaut.</para>
     ///
-    /// <para>⚠ Im GEFECHT verteilt das Original nach der Technikstufe
-    /// (<c>0x419CB0</c> mit <c>byte[0x540EB8]</c>), und die haben wir im
-    /// Einstellschirm nicht. Dort bleibt es bei »jede benannte Zeile« —
-    /// <b>[Setzung]</b>, dieselbe wie vor heute.</para></summary>
+    /// <para>⭐ 07.10.2026, bug-479: im GEFECHT verteilt das Original nach der
+    /// Technikstufe (<c>0x419CB0</c> mit <c>byte[0x540EB8]</c>), und das tut
+    /// jetzt <c>GefechtBesitzStart</c> beim Gefechtsstart in die Blöcke — hier
+    /// genügt darum das Byte +0x00 (Simulation/GefechtBesitz.cs,
+    /// <c>--gefecht-besitz-alt</c> = jede benannte Zeile wie bis 0.6.6).</para></summary>
     private bool ForschungBesitzt(int spieler, int bauteil)
     {
         var c = BauteilFuer(spieler, bauteil);

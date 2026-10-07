@@ -24,6 +24,12 @@ using Godot;
 /// <c>--entwurf-listen-alt</c>) und der <b>Tastenpfad Enter</b>, der im Original
 /// ERSTELLT (Klickcode 1 @0x413F96, F 0x413DAB; Nullmodell
 /// <c>--entwurf-enter-sperre</c> = die alte Setzung von bug-474).</para>
+///
+/// <para>⭐ 07.10.2026, bug-479: <b>T9 Gefechtsbesitz</b> — nur auf einer
+/// Gefechtskarte (<c>--skirmish=map_DM_4</c>): <c>0x419CB0</c> je Techstandard 1/4/8
+/// gegen aus der EXE-Tafel abgelesene Sollmengen, Kopie auf Spieler 7, und die drei
+/// Listen des Fensters = alle Teile ∩ Besitz (Nullmodell <c>--gefecht-besitz-alt</c>).
+/// Siehe Simulation/GefechtBesitz.cs.</para>
 /// </summary>
 public partial class MapEntityLayer
 {
@@ -192,9 +198,82 @@ public partial class MapEntityLayer
         }
         alles &= tastenpfad && listen;
 
+        // ---- T9 (bug-479): der Besitz im GEFECHT nach Techstandard, 0x419CB0 ------
+        // Nur auf einer Gefechtskarte (--skirmish=map_DM_4). Die Sollmengen sind aus
+        // der EXE-Tafel ABGELESEN (scratchpad gefecht/sec46_dump.py, 07.10.2026) und
+        // nicht aus der Regel gerechnet: Stufe 1 = 12 Zeilen, Stufe 4 = 35, Stufe 8 = 59.
+        // Geprueft wird (a) Block 0 gegen das Soll, (b) Block 7 = Block 0 (0x4B2290),
+        // (c) die drei Listen des Erstellen-Fensters = alle Teile ∩ Besitz.
+        // Nullmodell --gefecht-besitz-alt: kein Verteilen (EXE-Tafel: 2 S.Kanone
+        // besessen, 68/69 nicht), keine Filterung -> Stufe 1 MUSS durchfallen.
+        bool gefecht = true;
+        if (UI.SkirmishSetup.CampaignMission <= 0)
+        {
+            var soll = new (int Stufe, int[] Zeilen)[]
+            {
+                (1, new[] { 1, 4, 67, 71, 72, 73, 74, 78, 80, 161, 167, 169 }),
+                (4, new[] { 1, 2, 4, 5, 6, 9, 12, 15, 16, 18, 66, 67, 68, 69, 71, 72, 73, 74, 75, 77, 78,
+                            80, 81, 87, 88, 160, 161, 162, 163, 164, 167, 169, 170, 171, 174 }),
+                (8, Enumerable.Range(1, 19).Concat(Enumerable.Range(65, 24)).Concat(Enumerable.Range(160, 16)).ToArray()),
+            };
+            // die ungefilterten Listen, einmal
+            bool alleVor = EntwurfAlleTeile;
+            EntwurfAlleTeile = true;
+            LoadDesignParts();
+            var alleW = Designer.Weapons.Select(p => p.Id).ToHashSet();
+            var alleE = Designer.Equipment.Select(p => p.Id).ToHashSet();
+            var alleP = Designer.Propulsions.Select(p => p.Id).ToHashSet();
+            EntwurfAlleTeile = alleVor;
+
+            HashSet<int> Besitz(int spieler)
+            {
+                var h = new HashSet<int>();
+                for (int r = 0; r < 200; r++)
+                    if (BauteilFuer(spieler, r) is { Length: >= 1 } c && c[0] != 0) h.Add(r);
+                return h;
+            }
+
+            foreach (var (stufe, zeilen) in soll)
+            {
+                int n = GefechtBesitzStart(stufe);
+                var s = zeilen.ToHashSet();
+                var ist0 = Besitz(0);
+                var ist7 = Besitz(7);
+                bool block = ist0.SetEquals(s);
+                bool kopie = ist7.SetEquals(ist0);
+                LoadDesignParts();
+                var w = Designer.Weapons.Select(p => p.Id).ToHashSet();
+                var e = Designer.Equipment.Select(p => p.Id).ToHashSet();
+                var pr = Designer.Propulsions.Select(p => p.Id).ToHashSet();
+                bool lw = w.SetEquals(alleW.Where(s.Contains));
+                bool le = e.SetEquals(alleE.Where(s.Contains));
+                bool lp = pr.SetEquals(alleP.Where(s.Contains));
+                bool ok = block && kopie && lw && le && lp;
+                gefecht &= ok;
+                var fehlt = s.Where(x => !ist0.Contains(x)).OrderBy(x => x).ToList();
+                var zuviel = ist0.Where(x => !s.Contains(x)).OrderBy(x => x).ToList();
+                sb.AppendLine($"   {(ok ? "ok  " : "⚠ FALSCH")} T9 Gefechtsbesitz Techstandard {stufe}: " +
+                              $"Block 0 {ist0.Count} Zeilen (Soll {s.Count}{(block ? "" : $"; fehlt {{{string.Join(",", fehlt)}}}, zuviel {{{string.Join(",", zuviel)}}}")}), " +
+                              $"Block 7 {(kopie ? "= Block 0" : "≠ Block 0 ⚠")}, " +
+                              $"Listen Aufbau {w.Count}/{alleW.Count(s.Contains)}{(lw ? "" : "⚠")} " +
+                              $"Verbesserung {e.Count}/{alleE.Count(s.Contains)}{(le ? "" : "⚠")} " +
+                              $"Fahrwerk {pr.Count}/{alleP.Count(s.Contains)}{(lp ? "" : "⚠")}" +
+                              (n < 0 ? "   [--gefecht-besitz-alt: nicht verteilt]" : ""));
+            }
+            // zurueck auf den Stand des Gefechtsstarts
+            GefechtBesitzStart(AirProbeTechstandard);
+            LoadDesignParts();
+        }
+        else
+            sb.AppendLine("   T9 Gefechtsbesitz (0x419CB0): nur auf einer Gefechtskarte messbar (--skirmish=map_DM_4) — hier nicht gestellt");
+        alles &= gefecht;
+
         sb.Append(alles
-            ? "   ✅ BESTANDEN — Dunkelstufe nach Tragklasse +0x23 wie gelesen (T1..T8, Farben, Tastenpfad Enter)"
+            ? "   ✅ BESTANDEN — Dunkelstufe nach Tragklasse +0x23 wie gelesen (T1..T8, Farben, Tastenpfad Enter" +
+              (UI.SkirmishSetup.CampaignMission <= 0 ? ", T9 Gefechtsbesitz 0x419CB0)" : ")")
             : "   ❌ DURCHGEFALLEN — mindestens ein Fall weicht ab");
+        if (GefechtBesitzAlt)
+            sb.Append("   [Nullmodell --gefecht-besitz-alt: T9 MUSS durchfallen (Stufe 1 und 4)]");
         if (UI.DesignWindow.DunkelAus)
             sb.Append("   [Nullmodell --entwurf-dunkel-aus: T1/T2/T4/T5/T6 MUESSEN durchfallen]");
         if (EntwurfEnterSperre)
