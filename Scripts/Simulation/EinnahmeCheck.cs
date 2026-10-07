@@ -18,7 +18,9 @@ using Godot;
 /// Depot leer, die Einheit geloescht. Nullmodell <c>--einnahme-insassen-alt</c>.</para>
 ///
 /// <para><b>Fall T (Gebaeudetod):</b> eine Route mit Ziel = ein Gebaeude, das
-/// Gebaeude stirbt (<c>Kill</c>). Soll: Ziel leer, Route steht.</para>
+/// Gebaeude stirbt (<c>Kill</c>). Soll: Ziel leer, Route steht. ⚠ Gibt es kein
+/// viertes Gebaeude der Arten 1..4 (K3: nur zwei Basen und eine Fabrik), stirbt
+/// die Basis aus Fall I — der ist dann schon ausgewertet (07.10.2026).</para>
 ///
 /// <para>⚠ EINGRIFFE: Besitzer von Fabrik, Basis und Wagen; ein Fahrzeug wird zum
 /// Transporter; Lager der Fabrik W/F/S := 40; die Einnahme wird direkt
@@ -139,14 +141,22 @@ public partial class MapEntityLayer
             if (x.IsBuilding && !x.IsProp && !x.Dead && k != _enFabrik && k != _enBasis && k != basisI && x.BType is (2 or 3 or 4 or 1))
             { opfer = k; break; }
         }
+        // ⚠ 07.10.2026: K3 hat nur DREI Gebaeude der Arten 1..4 (zwei Basen, eine Fabrik;
+        // die uebrigen drei sind Art 13 »Init«-Plaetze ohne Bauwerk, map_03.entities.json).
+        // R und I verbrauchen alle drei, T fand nie eines (»kein Gebaeude — sagt NICHTS«,
+        // seit der Geburt des Falls am 14.09.). Fall I ist an dieser Stelle schon
+        // ausgewertet — seine Basis darf also als Ersatzopfer sterben.
+        string ersatz = "";
+        if (opfer < 0 && basisI >= 0 && !_entities[basisI].Dead) { opfer = basisI; ersatz = " [Ersatz: Basis aus Fall I, dort schon ausgewertet]"; }
         if (opfer >= 0)
         {
             rt = new Transportroute { Ziel = _entities[opfer].Slot, Gestartet = true };
             rt.Quelle[0] = _entities[opfer].Slot;
             _routen.Add(rt);
+            int art = _entities[opfer].BType;          // VOR dem Tod lesen — Kill nullt den Satz
             Kill(opfer, _entities[opfer], -1, "einnahme-check Fall T");
             _enTodOk = rt.Ziel == -1 && rt.Quelle[0] == -1 && !rt.Gestartet;
-            _enTod = $"Gebaeude {opfer} Art {_entities[opfer].BType}: Route danach Ziel {rt.Ziel} Quelle0 {rt.Quelle[0]} "
+            _enTod = $"Gebaeude {opfer} Platz {_entities[opfer].Slot} Art {art}{ersatz}: Route danach Ziel {rt.Ziel} Quelle0 {rt.Quelle[0]} "
                    + $"gestartet {rt.Gestartet}";
             _routen.Remove(rt);
         }

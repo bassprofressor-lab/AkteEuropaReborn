@@ -44,6 +44,10 @@ public partial class MapEntityLayer
     // A Gegenbefehl
     private float _drWegNormal, _drWegNach;
     private int _drAbbruchVor, _drAbbrueche = -1, _drGeister = -1, _drSprungVor, _drSpruenge;
+    /// <summary>Schrittabbrüche NUR der Messeinheit (07.10.2026): <see cref="SchrittAbgebrochen"/>
+    /// zählt alle Sätze, und auf K4 brechen fremde (ausweichendes Fußvolk, KI) mit — Fremdabbruch
+    /// ist nicht der gemessene Abbruch. Gezählt an der Zählstelle im Fahrtakt.</summary>
+    private int _drAbbruecheEigen, _drAbbruecheFremd;
     private int _drGegenTakt = -1;
     // C Nachladen
     private int _drHaltStart = -1, _drNachladen = -1, _drTurmLos = -1, _drHaltBlick = -1, _drTurmZurueck = -1;
@@ -93,7 +97,14 @@ public partial class MapEntityLayer
                     for (int n = -3; n <= 4 && frei; n++)
                     {
                         var z = x + d * n;
-                        frei = _nav.CanEnter(z.X, z.Y, e.Move) && _nav.IsFree(z.X, z.Y, e.Move, i);
+                        // ⚠ 07.10.2026: IsFree sagt bei FUSSVOLK »frei« (crushable, ein Fahrzeug
+                        // überrollt es) — auf K4 stand so eigenes Fußvolk AUF der Geraden
+                        // (Platz 76/78 auf (4,12)/(5,12)), wich per Zufallstafel 0x4F5B10 aus
+                        // und bog die »Gerade« zur Diagonalen (135° statt 180°: Rumpf 6,
+                        // Turm 2 statt 9/6). Die Gerade muss von JEDEM Satz frei sein.
+                        int wer = _nav.OccupantAt(z.X, z.Y);
+                        frei = _nav.CanEnter(z.X, z.Y, e.Move) && _nav.IsFree(z.X, z.Y, e.Move, i)
+                               && (wer < 0 || wer == i);
                     }
                     if (!frei) continue;
                     if (x != new Vector2I(e.Col, e.Row))
@@ -148,6 +159,10 @@ public partial class MapEntityLayer
             case 1:                                     // Anlauf auf +2
                 if (_drTakt > 5 && DrSteht(e))
                 {
+                    // ⚠ seit bug-425 (Zielwahl wie 0x4352E0/Ringtafel) landet ein Fahrbefehl auf
+                    // eine BESETZTE Zelle daneben — dann ist die Kehrtwende keine 180° mehr.
+                    if (e.Col != DrZelle(2).X || e.Row != DrZelle(2).Y)
+                    { _drStart += $" — +2 nicht erreicht, steht auf ({e.Col},{e.Row})"; DrehenAbschluss(); return; }
                     DrFahre(DrZelle(-3));
                     _drPhase = 2; _drTakt = 0;
                     _drSprungVor = SprungZahl;
@@ -167,7 +182,7 @@ public partial class MapEntityLayer
                 if (_drGegenTakt < 0 && e.Col == DrZelle(1).X && e.Row == DrZelle(1).Y
                     && e.Reserved != null && e.SchrittAnteil is > 0.3f and < 0.5f)
                 {
-                    _drAbbruchVor = SchrittAbgebrochen;
+                    _drAbbruchVor = SchrittAbgebrochen; _drAbbruecheEigen = 0;
                     DrFahre(DrZelle(4));
                     _drGegenTakt = _drGesamt;
                     _drPhase = 3; _drTakt = 0;
@@ -187,7 +202,8 @@ public partial class MapEntityLayer
                 }
                 if (_drTakt > 5 && DrSteht(e))
                 {
-                    _drAbbrueche = SchrittAbgebrochen - _drAbbruchVor;
+                    _drAbbrueche = _drAbbruecheEigen;
+                    _drAbbruecheFremd = SchrittAbgebrochen - _drAbbruchVor - _drAbbruecheEigen;
                     _drSpruenge = SprungZahl - _drSprungVor;
                     _drGeister = 0;
                     for (int r = 0; r < _nav!.Height; r++)
@@ -298,7 +314,7 @@ public partial class MapEntityLayer
         bool a = GegenbefehlAlt
             ? _drAbbrueche >= 1 && (_drStartLage > 1.1f || _drGeister > 0)
             : _drAbbrueche == 0 && _drStartLage is > 0 and <= 1.01f && _drGeister == 0;
-        sb.AppendLine($"  A Gegenbefehl: Schrittabbrüche {_drAbbrueche}, Weg je Takt max {_drWegNach:0.00} px gegen normal "
+        sb.AppendLine($"  A Gegenbefehl: Schrittabbrüche {_drAbbrueche} (fremde Sätze {_drAbbruecheFremd}, zählen nicht), Weg je Takt max {_drWegNach:0.00} px gegen normal "
                     + $"{_drWegNormal:0.00} px (Verhältnis {verh:0.00}), Geisterzellen {_drGeister}, Sprünge {_drSpruenge} "
                     + $"; Schrittstrecke/Zellstrecke max {_drStartLage:0.00} "
                     + (GegenbefehlAlt ? "(Nullmodell: Abbruch ≥ 1 und Strecke > 1,1 oder Geist)" : "(Soll Abbruch 0, Strecke 1,00, Geist 0)"));

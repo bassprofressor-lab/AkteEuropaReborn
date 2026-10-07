@@ -35039,7 +35039,13 @@ public partial class MapEntityLayer : Node2D
                     // geerbten Fortschritt.
                     e.StepFrom = e.Pos;
                     e.Progress = 0;
-                    if (abgebrochen) SchrittAbgebrochen++;
+                    if (abgebrochen)
+                    {
+                        SchrittAbgebrochen++;
+                        // --drehen-check zaehlt NUR die Messeinheit: der Zaehler oben ist global,
+                        // und auf K4 brechen fremde Saetze (ausweichendes Fussvolk, KI) Schritte ab.
+                        if (DrehenCheckAn && i == _drE) _drAbbruecheEigen++;
+                    }
                 }
                 else e.StepFrom = mitte;
                 e.StepCost = Simulation.NavGrid.StepCostMilli(new Vector2I(e.Col, e.Row), next);
