@@ -4562,6 +4562,12 @@ _mausProbePunkt = karte;
             else if (a == "--absturz-check") _absturzCheck = true;
             // bug-475: Aufprall mit 6 Wrackteilen, Wrack-Explosion und 4 Brandherden
             else if (a == "--absturz-wrack-alt") MapEntityLayer.AbsturzWrackAlt = true;
+            // bug-482: Abschussklang 70/138, Brandklang 399 -> 400+rand%6 (Zuender und
+            // Ticker, JEDER Gebaeudebrand), Wrackteil-Feinlage wie gelesen
+            // (berichte/aufprall-klang-wrack-fable.md)
+            else if (a == "--abschussklang-aus") MapEntityLayer.AbschussklangAus = true;
+            else if (a == "--brandklang-aus") MapEntityLayer.BrandklangAus = true;
+            else if (a == "--wrackteil-lage-alt") MapEntityLayer.WrackteilLageAlt = true;
             else if (a == "--handsteuerung-luft-boden-alt") MapEntityLayer.HandsteuerungLuftBodenAlt = true;
             else if (a == "--gleisbruch-einzeln") MapEntityLayer.GleisbruchEinzeln = true;
             else if (a == "--neubautuer-alt") MapEntityLayer.NeubautuerAlt = true;
@@ -4599,14 +4605,14 @@ _mausProbePunkt = karte;
             else if (a == "--bauanim-zellanimation-alt")
                 MapEntityLayer.BauanimZellanimationAlt = true;
             else if (a == "--flak-probe") _flakProbeArg = true;
+            // bug-480: Probehoehen ohne das Gelaende der Flak (Stand bis 07.10.2026)
+            else if (a == "--flak-probe-hoehe-absolut") MapEntityLayer.FlakProbeHoeheAbsolut = true;
             else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
             else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;
             else if (a == "--generator-check") _generatorCheck = true;
             else if (a == "--uebernahme-alt") MapEntityLayer.UebernahmeAlt = true;
             else if (a == "--bruecke-nicht-angreifbar") MapEntityLayer.BrueckeNichtAngreifbar = true;
             else if (a == "--bauwerke-unzerstoerbar") MapEntityLayer.BauwerkeUnzerstoerbar = true;
-            // bug-480: Probehoehen ohne das Gelaende der Flak (Stand bis 07.10.2026)
-            else if (a == "--flak-probe-hoehe-absolut") MapEntityLayer.FlakProbeHoeheAbsolut = true;
             else if (a == "--auslauf-alt") MapEntityLayer.AuslaufAlt = true;
             else if (a == "--radarmast-ewig") MapEntityLayer.RadarMastEwig = true;
             // ⚠ --ship-check=<sek>: MIT Zahl laeuft das Spiel erst so lange und

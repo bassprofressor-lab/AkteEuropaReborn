@@ -114,16 +114,42 @@ using Godot;
 /// <para>Die Wrackteile und die Wrack-Explosion sitzen auf <b>(X, Y+1)</b>, die
 /// Brandherde auf dem 2×2 ab (X, Y), der Schaden auf (X, Y) — so steht es da,
 /// der Grund ist ungelesen (vermutlich der Zeilenversatz des Flugzeugbilds).
-/// ⚠ UNSERE Näherungen: die Feinlagen (0..39 je Zelle, Y auch 0..59) werden
-/// auf <c>TileW/TileH</c> umgerechnet und an die Zellmitte (mit Höhe) gelegt;
-/// der Wrackzeichner des Originals ist ungelesen (V, Argumentbedeutung aus der
-/// Signatur und dem Tafelbild <c>0x9C6FB8</c>: +0 x, +1 y, +6 Variante, +8/+9
-/// Feinlage); der Klang der Explosion ist weiter ungelesen (kein Klangruf im
-/// Zweig). Die Brandherde laufen im Brandticker <c>0x4AE760</c>
+/// Die Brandherde laufen im Brandticker <c>0x4AE760</c>
 /// (Simulation/Gebaeudebrand.cs) und erlöschen mit ihm. Gegenschalter
 /// <c>--absturz-wrack-alt</c> (= die eine <c>"explosion"</c> von vor dem
 /// 07.10.). <c>--absturz-check</c> zählt je Aufprall Wrackteile, Brandherde,
 /// Explosionsbilder und Teilchen.</para>
+///
+/// <para>⭐⭐ <b>07.10.2026, bug-482 — KLANG UND WRACK-FEINLAGE GELESEN</b>
+/// (<c>berichte/aufprall-klang-wrack-fable.md</c>, Fable, C und F):</para>
+/// <list type="bullet">
+/// <item><b>Abschuss:</b> <c>axplode air</c> ruft bedingungslos <b>Klang 70,
+/// Modus 1 am Flugzeug</b> (20000+i → X/Y der Flugzeugtafel) @0x425F0F
+/// (F 0x4250EF); bei Typ ≥ 13 (Nachschubheli) zusätzlich <b>138, Modus 0</b>
+/// (ohne Ort, Sprachregler) @0x425F53 (F 0x425133). Der Fall ist still.
+/// Gegenschalter <c>--abschussklang-aus</c>. ⚠ UNSERE Setzung: 138 läuft bei
+/// uns über <c>GameSounds.Play</c> mit dem Effekteregler — wir haben nur
+/// einen Regler (Settings.MixDb).</item>
+/// <item><b>Aufprall:</b> kein eigener Klang im Zweig — aber jeder der vier
+/// Zünder <c>0x4AE4C0</c> ruft im Schwanz @0x4AE664 (F 0x4ADF94) Klang 399
+/// Modus 2 an der Zelle, und <b>399 ist ein Platzhalter, den die Klangroutine
+/// @0x4048F8 (F 0x4048D8) in <c>400 + rand%6</c> umsetzt</b>. Vier Zünder ⇒
+/// vier Explosionsklänge 400..405 im Aufpralltakt; danach der Ticker mit
+/// 20 % Klang je Zelle und Takt (Alter 1..10). Gebaut in Gebaeudebrand.cs,
+/// Gegenschalter <c>--brandklang-aus</c>.</item>
+/// <item><b>Wrackteil-Feinlage:</b> der Listenbauer <c>0x42EE10</c> (F 0x42DFE0)
+/// holt die Ellipse <c>0x431090</c> (POHYB 0/KOLIK 0 → Zellmitte (20,10) von
+/// (X, Y+1)) und addiert <b>FeinX in Bildpunkten nach RECHTS</b> (1/40 Zelle,
+/// Umbruch bei 40 @0x42EF03) und <b>FeinY in Bildpunkten nach OBEN</b> (1/20
+/// Zelle, Umbruch bei 20 → Zeile −1 @0x42EF35; F 0x42E0C6/0x42E0FB). Die sechs
+/// Teile liegen also einseitig rechts und oberhalb der Mitte von (X, Y+1):
+/// 0..39 px rechts, 0..39 px hoch. <see cref="WrackFeinlageAuf"/>;
+/// Gegenschalter <c>--wrackteil-lage-alt</c> (= die alte mittige Setzung
+/// ±½ Zelle). ⚠ Offen bleibt der Sprite-Anker (Oberkante + Kopfbyte +1 des
+/// Blitters 0x4AC1B0) — dieselbe Unbekannte wie beim Fahrzeugwrack (bug-426).
+/// Die Bilder der Wrack-EXPLOSION (0x4AF000 → Effektleger 0x4357F0) bleiben
+/// bei der alten Näherung, ihr Zeichner ist ungelesen.</item>
+/// </list>
 ///
 /// <para>⭐ <b>bug-476 — Fall 5b (Lage 98 ohne Gebäude → nie) wird NICHT
 /// nachgebaut, und zwar begründet:</b> das Lagenbyte 98 tragen in den Karten
@@ -159,6 +185,19 @@ public partial class MapEntityLayer
     /// EINE <c>"explosion"</c>, ohne Wrackteile, Wrack-Explosion und Brandherde.
     /// Nullmodell zu bug-475 (E).</summary>
     public static bool AbsturzWrackAlt;
+
+    /// <summary><c>--abschussklang-aus</c> — Stand bis 0.6.7: der Abschuss ist
+    /// stumm (70/138 waren definiert, aber nie gerufen). Nullmodell zu bug-482 (A).</summary>
+    public static bool AbschussklangAus;
+
+    /// <summary><c>--wrackteil-lage-alt</c> — Stand bis 0.6.7: die sechs
+    /// Wrackteile mittig um (X, Y+1), ±½ Zelle, Y-Spanne halbiert, nach unten.
+    /// Nullmodell zu bug-482 (D).</summary>
+    public static bool WrackteilLageAlt;
+
+    /// <summary>Wie oft der Abschuss geklungen hat (70) und wie oft die
+    /// Sprachzeile 138 dazukam — für den Prüfstand.</summary>
+    public int AbschussKlaenge, AbschussKlaenge138;
 
     /// <summary>bug-475: die Zahlen des Aufpralls für den Prüfstand — über alle
     /// Aufpralle summiert. Soll je Aufprall: 6 / 4 / 12 / 30..39.</summary>
@@ -280,11 +319,13 @@ public partial class MapEntityLayer
             a.Hp = 0; a.Dead = true; a.Target = -1; a.Goal = null;
             _effects.Add(new Effect { Pos = a.Pos, Kind = "explosion", FrameTime = 0.05f });
             AbstuerzeSofortTot++;
+            AbschussKlang(a);                        // derselbe Abschuss, nur ohne Fall
             GD.Print($"absturz-aus: {a.Name} (Platz {a.Slot}, Spieler {a.Owner}) " +
                      $"sofort tot — {grund}");
             return;
         }
         a.Absturz = true;
+        AbschussKlang(a);
         a.Target = -1;
         a.Goal = null;
         a.PlayerGoal = null;
@@ -294,6 +335,26 @@ public partial class MapEntityLayer
         GD.Print($"absturz: {a.Name} (Platz {a.Slot}, Spieler {a.Owner}) auf " +
                  $"({a.Col},{a.Row}) Hoehe {a.Alt} (im Bild {AirHoehePx(a):0} px ueber dem Schatten) stuerzt — {grund}");
     }
+
+    /// <summary>bug-482 (A): <b>Klang 70, Modus 1 am Flugzeug</b> @0x425F0F
+    /// (F 0x4250EF), und bei Typ ≥ 13 (<c>cmp byte [+0x08], 13</c> @0x425F17)
+    /// zusätzlich <b>138, Modus 0</b> @0x425F53 (F 0x425133). Beide VOR
+    /// <c>uk := 100</c>, also im Abschusstakt, nicht beim Aufprall.</summary>
+    private void AbschussKlang(Special a)
+    {
+        if (AbschussklangAus) return;
+        Audio.GameSounds.PlayAt(Audio.GameSounds.AircraftExplodes, a.Col, a.Row);
+        AbschussKlaenge++;
+        if (a.Kind >= AbschussSprachzeileAbTyp)
+        {
+            Audio.GameSounds.Play(Audio.GameSounds.AircraftExplodes2);
+            AbschussKlaenge138++;
+        }
+    }
+
+    /// <summary>Ab welchem Typ (+0x08) die Sprachzeile 138 kommt — die 13 von
+    /// @0x425F17 (<c>cmp byte [edi+0x6DDF78], 0xD</c>): Nachschubhelis 13/14.</summary>
+    public const int AbschussSprachzeileAbTyp = 13;
 
     /// <summary>Der Fall, je Spieltakt — und der Aufprall, wenn der Boden da
     /// ist.</summary>
@@ -438,6 +499,7 @@ public partial class MapEntityLayer
                 treffer += Wirken(a.Col + dc, a.Row + dr, AbsturzSchadenNachbar);
             }
         AbsturzTrefferZellen += treffer;
+        AbsturzCheckNachSchaden(a);                      // bug-482: Fremdzündungen durch den Schaden
         GD.Print($"aufprall: {a.Name} (Platz {a.Slot}, Spieler {a.Owner}) auf " +
                  $"({a.Col},{a.Row}) — {AbsturzSchadenZelle} auf die Zelle, " +
                  $"{AbsturzSchadenNachbar} auf acht Nachbarn, {treffer} Zellen getroffen; " +
@@ -448,10 +510,27 @@ public partial class MapEntityLayer
     }
 
     /// <summary>Eine Feinlage <c>0..39</c> je Zelle (Y darf bis 59 laufen) auf
-    /// eine Bildstelle — an die Zellmitte MIT Höhe gelegt. ⚠ UNSERE Näherung,
-    /// siehe Klassenkopf.</summary>
+    /// eine Bildstelle — an die Zellmitte MIT Höhe gelegt, mittig. ⚠ UNSERE
+    /// Näherung für die Bilder der Wrack-Explosion (Effektleger 0x4357F0,
+    /// Zeichner ungelesen) — und das Nullmodell <c>--wrackteil-lage-alt</c>
+    /// für die Wrackteile.</summary>
     private Vector2 FeinlageAuf(int c, int r, int feinX, int feinY)
         => CellCenter(c, r) + new Vector2((feinX - 20) * TileW / 40f, (feinY - 20) * TileH / 40f);
+
+    /// <summary>bug-482 (D): <b>die Feinlage eines WRACKTEILS, wie gelesen</b>
+    /// (Listenbauer 0x42EE10, F 0x42DFE0): Bezug ist die Zellmitte von (X, Y+1)
+    /// (Ellipse 0x431090 bei POHYB 0/KOLIK 0 → (20, 10)), FeinX in Bildpunkten
+    /// nach rechts (1/40 Zelle, @0x42EEF6), FeinY in Bildpunkten nach OBEN
+    /// (1/20 Zelle, @0x42EF2B; bei ≥ 20 wandert der Eintrag in die Zeile
+    /// darüber, @0x42EF35). Nicht zentriert: 0..39 rechts, 0..39 hoch.</summary>
+    private Vector2 WrackFeinlageAuf(int c, int r, int feinX, int feinY)
+        => WrackteilLageAlt
+            ? FeinlageAuf(c, r, feinX, feinY)
+            : CellCenter(c, r) + new Vector2(feinX * TileW / 40f, -feinY * TileH / 20f);
+
+    /// <summary>Die Versätze der zuletzt gelegten Wrackteile gegen die Zellmitte
+    /// von (X, Y+1) — für den Prüfstand (Soll dx ∈ [0, TileW), dy ∈ (−2·TileH, 0]).</summary>
+    private readonly System.Collections.Generic.List<Vector2> _wrackteilVersatz = new();
 
     /// <summary><b>6 × <c>0x4A97C0</c>(X, Y+1, 0, 0, rand%40, rand%40, rand&amp;0xF)</b>
     /// (<c>0x423A2F…0x423A77</c>, <c>bl = 6; dec bl</c>). Die Würfe in der
@@ -459,11 +538,15 @@ public partial class MapEntityLayer
     private int AbsturzWrackteileLegen(int c, int r)
     {
         int n = 0;
+        _wrackteilVersatz.Clear();
+        var mitte = CellCenter(c, r);
         for (int k = 0; k < 6; k++)
         {
             int fx = Simulation.Determinism.Roll(40), fy = Simulation.Determinism.Roll(40);
             int variante = Simulation.Determinism.Roll(16);
-            WrackTeilAnlegen(FeinlageAuf(c, r, fx, fy), variante, c * 3 + r + k);
+            var pos = WrackFeinlageAuf(c, r, fx, fy);
+            _wrackteilVersatz.Add(pos - mitte);
+            WrackTeilAnlegen(pos, variante, c * 3 + r + k);
             n++;
         }
         return n;
@@ -538,6 +621,9 @@ public partial class MapEntityLayer
                $", Wrackteile {AbsturzWrackteile} / Brandherde {AbsturzBrandherde} / Explosionsbilder {AbsturzWrackBilder} / " +
                $"Teilchen {AbsturzWrackTeilchen} (Soll je Aufprall 6 / 4 / 12 / 30..39)" +
                (AbsturzWrackAlt ? "   [--absturz-wrack-alt: alles 0]" : "") +
+               $", Abschussklang 70 {AbschussKlaenge}x / 138 {AbschussKlaenge138}x" +
+               (AbschussklangAus ? " [--abschussklang-aus: MUESSEN 0 sein]" : "") +
+               (WrackteilLageAlt ? "   [--wrackteil-lage-alt: Wrackteile mittig]" : "") +
                (AbsturzAus
                    ? $"   ⚠ Nullmodell --absturz-aus: {AbstuerzeSofortTot} sofort tot, " +
                      "begonnen und aufgeschlagen muessen 0 sein"

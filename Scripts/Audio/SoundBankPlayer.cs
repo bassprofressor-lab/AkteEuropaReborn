@@ -196,7 +196,22 @@ public static class SoundBankPlayer
     public static int Gezaehlt(int slot)
         => _klangZaehler.TryGetValue(slot, out int n) ? n : 0;
 
+    /// <summary>⭐ 07.10.2026 (bug-482) — <b>der Horcher der Pruefstaende</b>:
+    /// wird fuer JEDEN angestossenen Klang gerufen, mit Platz und Zelle (NaN ohne
+    /// Ort), und zwar VOR jedem Riegel (Entfernung, Suppressed, SoundOn). Wer
+    /// eine Wirkung misst, muss die ANKUNFT mitmessen — der Zaehler
+    /// <see cref="Gezaehlt"/> kennt keinen Takt und keine Zelle, und
+    /// <see cref="PlayAt"/> sprang vor dem Mitschnitt ab, wenn das Ohr zu weit
+    /// weg war. <c>--absturz-check</c> haengt sich hier ein.</summary>
+    public static System.Action<int, float, float>? Horcher;
+
     public static void Play(int slot, float volumeDb = 0f, float pan = 0f)
+    {
+        Horcher?.Invoke(slot, float.NaN, float.NaN);
+        PlayIntern(slot, volumeDb, pan);
+    }
+
+    private static void PlayIntern(int slot, float volumeDb, float pan)
     {
         Mitschnitt(slot, "Klang");
         if (Suppressed) { SuppressedCount++; return; }
@@ -316,9 +331,10 @@ public static class SoundBankPlayer
     /// <summary>Ein Klang, der irgendwo auf der Karte entsteht.</summary>
     public static void PlayAt(int slot, float col, float row, float volumeDb = 0f)
     {
+        Horcher?.Invoke(slot, col, row);
         float d = DistanceDb(col, row);
         if (d <= -100f) return;      // -10000 ist die Stille selbst
-        Play(slot, volumeDb + d, PanOf(col));
+        PlayIntern(slot, volumeDb + d, PanOf(col));
     }
 
     /// <summary>

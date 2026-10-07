@@ -157,9 +157,16 @@ public static class GameSounds
     /// "Check seeker: new target found".</summary>
     public const int TargetFound = 37;
 
-    /// <summary>An aircraft explodes — @0x425f0f, right after "axplode air";
-    /// the same routine plays <see cref="AircraftExplodes2"/> a few
-    /// instructions later, so both belong to one explosion.</summary>
+    /// <summary>An aircraft is shot down — @0x425F0F (F 0x4250EF), right after
+    /// "axplode air": sound 70 in mode 1 AT THE AIRCRAFT (unit 20000+i, read
+    /// from the aircraft table @0x404834). ⚠ 07.10.2026 (bug-482,
+    /// <c>berichte/aufprall-klang-wrack-fable.md</c> §2): the earlier note here,
+    /// that <see cref="AircraftExplodes2"/> "belongs to the same explosion", was
+    /// WRONG — 138 is played @0x425F53 (F 0x425133) ONLY when the aircraft type
+    /// (+0x08) is ≥ 13 (supply helicopter), in mode 0 (no place) and through the
+    /// SPEECH slider (120..299 take [0x500E14]); by its features it is a spoken
+    /// line. Both calls live in <c>MapEntityLayer.FlugzeugAbschiessen</c>
+    /// (Simulation/Absturz.cs), counter-switch <c>--abschussklang-aus</c>.</summary>
     public const int AircraftExplodes = 70;
     public const int AircraftExplodes2 = 138;
 

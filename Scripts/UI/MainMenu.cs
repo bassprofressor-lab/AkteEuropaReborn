@@ -272,6 +272,64 @@ public partial class MainMenu : Control
 
     private int _kulissenCheck;
     private int _demowechselCheck;
+    private int _demodauerCheck;
+
+    /// <summary>
+    /// <b><c>--demodauer-check[=N]</c></b> — bug-483 (KayelGee R4, Meldung 14,
+    /// <c>berichte/demo-dauer-fable.md</c> §5). Lässt N Demos (Vorgabe 5)
+    /// durchlaufen und misst je Demo die Zeit vom ersten Bild bis zum Wechsel
+    /// (<see cref="MenuBackdrop.DauerProtokoll"/> — ab der Zeile »läuft«, nicht
+    /// ab dem Ladebeginn, sonst zählt das 30-MB-PNG mit). Soll je Demo
+    /// <c>Tafel[Nr] / Bildrate ± 0,4 s</c>, Reihenfolge aufsteigend (1, 2, 3,
+    /// 4, 5 …), und wenn Demo 3 und 5 dabei sind: t(3)/t(5) = 3,67 ± 0,3.
+    /// Gedacht mit <c>--demo-bildrate=100</c> (4,0 / 3,5 / 5,5 / 3,5 / 1,5 s).
+    /// Nullmodell <c>--demo-dauer-alt</c>: alle 20 s → DURCHGEFALLEN.
+    /// </summary>
+    private void DemodauerCheckGo()
+    {
+        double t = 0;
+        int n = _demodauerCheck;
+        double limit = n * (MenuBackdrop.DemoDauerAlt ? 25.0 : 400.0 / MenuBackdrop.DemoBildrate + 6.0) + 30.0;
+        void Takt()
+        {
+            if (_backdrop == null) return;
+            t += GetProcessDeltaTime();
+            var p = _backdrop.DauerProtokoll;
+            if (p.Count < n && t < limit) return;
+            GetTree().ProcessFrame -= Takt;
+            var sb = new System.Text.StringBuilder("demodauer-check\n");
+            bool ok = p.Count >= n;
+            if (!ok) sb.AppendLine($"   ⚠ nach {t:0} s erst {p.Count} von {n} Demos beendet");
+            int[] tafel = { 0, 400, 350, 550, 350, 150, 350, 550, 300, 300, 400, 400, 400, 220 };
+            float t3 = -1f, t5 = -1f;
+            int vorher = 0;
+            for (int i = 0; i < p.Count && i < n; i++)
+            {
+                var (no, sek) = p[i];
+                float soll = tafel[Mathf.Clamp(no, 0, 13)] / MenuBackdrop.DemoBildrate;
+                bool zeitOk = Mathf.Abs(sek - soll) <= 0.4f;
+                bool folgeOk = i == 0 || no > vorher || (vorher == MenuBackdrop.DemoCount && no == 1);
+                if (no == 3) t3 = sek; if (no == 5) t5 = sek;
+                if (!zeitOk || !folgeOk) ok = false;
+                sb.AppendLine($"   {(zeitOk && folgeOk ? "ok  " : "⚠ FALSCH")} Demo {no}: {sek:0.00} s (Soll {soll:0.00} ± 0,4 = {tafel[Mathf.Clamp(no, 0, 13)]} Bilder / {MenuBackdrop.DemoBildrate:0} Bilder/s)"
+                              + (folgeOk ? "" : $" — Reihenfolge: nach {vorher} kam {no}"));
+                vorher = no;
+            }
+            if (t3 > 0f && t5 > 0f)
+            {
+                float q = t3 / t5;
+                bool qOk = Mathf.Abs(q - 3.67f) <= 0.3f;
+                if (!qOk) ok = false;
+                sb.AppendLine($"   {(qOk ? "ok  " : "⚠ FALSCH")} t(3)/t(5) = {q:0.00} (Soll 3,67 ± 0,3 — bildratenunabhaengig)");
+            }
+            sb.Append(ok ? "   ✅ BESTANDEN — Dauer = Tafel / Bildrate, Reihenfolge 1..13 wie gelesen"
+                         : "   ❌ DURCHGEFALLEN");
+            if (MenuBackdrop.DemoDauerAlt) sb.Append("   [Nullmodell --demo-dauer-alt: alle 20 s, MUSS durchfallen]");
+            GD.Print(sb);
+            GetTree().Quit(ok ? 0 : 1);
+        }
+        GetTree().ProcessFrame += Takt;
+    }
 
     /// <summary>
     /// <b><c>--demowechsel-check=&lt;Sekunden&gt;</c></b> — bug-447/448 (KayelGee
@@ -547,6 +605,11 @@ public partial class MainMenu : Control
             else if (a.StartsWith("--demo-sekunden=")) MenuBackdrop.DemoSekunden = a["--demo-sekunden=".Length..].ToFloat();
             else if (a.StartsWith("--demowechsel-check="))
                 _demowechselCheck = Mathf.Max(1, a["--demowechsel-check=".Length..].ToInt());
+            // bug-483: Demo-Dauer = Tafel (Bilder) / Bildrate (berichte/demo-dauer-fable.md)
+            else if (a.StartsWith("--demo-bildrate=")) MenuBackdrop.DemoBildrate = Mathf.Max(1f, a["--demo-bildrate=".Length..].ToFloat());
+            else if (a == "--demo-dauer-alt") MenuBackdrop.DemoDauerAlt = true;
+            else if (a == "--demodauer-check") _demodauerCheck = 5;
+            else if (a.StartsWith("--demodauer-check=")) _demodauerCheck = Mathf.Max(1, a["--demodauer-check=".Length..].ToInt());
         }
         _empty = new ColorRect
         {
@@ -1252,6 +1315,7 @@ public partial class MainMenu : Control
         // --leave-check den gemeldeten Fehler nie sehen konnte.
         if (_kulissenCheck > 0) KulissenCheckGo();
         if (_demowechselCheck > 0) DemowechselCheckGo();
+        if (_demodauerCheck > 0) DemodauerCheckGo();
     }
 
     // ---- first start: where the content comes from --------------------------

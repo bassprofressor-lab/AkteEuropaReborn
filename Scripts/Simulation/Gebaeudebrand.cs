@@ -59,13 +59,25 @@ namespace AkteEuropaReborn.Rendering;
 ///   <item>Der Rauch ist im Original ein <b>Geschossobjekt</b> mit Höhe +50, das
 ///   aufsteigt (<c>0x4AD8B0</c>); wir setzen einen stehenden Effekt etwas höher.
 ///   Unsere Effektliste kennt keine fliegenden Teilchen mit eigener Höhe.</item>
-///   <item>Der Klang beim Zünden ist <b>399</b> und im Vorrat LEER (<c>0</c>
-///   Byte) — er bleibt stumm, so wie im Original. Die Klänge 410..415 des
-///   Tickers sind belegt und werden geworfen.</item>
+///   <item>⚠⚠ <b>FEHLLESUNG, berichtigt am 07.10.2026 (bug-482,
+///   <c>berichte/aufprall-klang-wrack-fable.md</c> §3/§4):</b> hier stand bis
+///   dahin »der Klang beim Zünden ist 399 und im Vorrat leer — er bleibt
+///   stumm«. 399 kommt NIE beim Vorrat an: die Klangroutine <c>0x4047E0</c>
+///   setzt @0x4048F8 (F 0x4048D8, <c>cmp si,0x18F / idiv 6 / lea
+///   esi,[edx+0x190]</c>) <b>399 in 400 + rand%6</b> um, BEVOR sie den Platz
+///   lädt. Der Zünder-Schwanz @0x4AE664 (F 0x4ADF94) ruft 399 Modus 2 an der
+///   Zelle ohne Weiche — JEDER Brand zündet also hörbar (400..405), und der
+///   Ticker klingt bei Alter 1..10 mit 20 % je Zelle und Takt (r == 1: 2/3
+///   399→400..405, 1/3 410+rand%6 @0x4AE8C8; r == 2,3: 399 @0x4AE970).
+///   Die Würfelfolge des Originals: rand%40, rand%20 (Feinlage des Bilds),
+///   [rand%3], rand%6 (in der Klangroutine), dann rand%9 bzw. rand%6 fürs
+///   Bild. Gegenschalter <c>--brandklang-aus</c> (= der stumme Stand bis 0.6.7,
+///   auch ohne die Feinlage-Würfe).</item>
 /// </list>
 ///
 /// <para>Gegenschalter <c>--gebaeudebrand-aus</c>, Prüfstand
-/// <c>--gebaeudebrand-probe</c>.</para>
+/// <c>--gebaeudebrand-probe</c>; der Klang wird in <c>--absturz-check</c>
+/// (Simulation/AbsturzCheck.cs) mit dem Horcher gemessen.</para>
 /// </summary>
 public partial class MapEntityLayer : Node2D
 {
@@ -189,7 +201,7 @@ public partial class MapEntityLayer : Node2D
     /// <para>Die Lebensdauer ist die des GEBÄUDEZWEIGS (<c>@0x4AE593</c>, Wert
     /// im Band 60000..60300): <b>je kaputter, desto länger</b>. Beim Zünden
     /// fällt eine Explosion (510..518) und ein Splitter (200..204, Streuung
-    /// 12); der Klang 399 ist im Vorrat leer und bleibt stumm.</para>
+    /// 12), dazu der Klang 399 → 400+rand%6 (bug-482, siehe Klassenkopf).</para>
     /// </summary>
     private bool BrandZuenden(int c, int r, Entity b)
     {
@@ -207,18 +219,53 @@ public partial class MapEntityLayer : Node2D
     /// Brandherde mit <c>(x, y, 0)</c>.</summary>
     public const int BrandLebenArt0 = 50;
 
+    /// <summary><c>--brandklang-aus</c> — Stand bis 0.6.7: Zünder und Ticker
+    /// stumm, Bilder ohne Feinlage. Nullmodell zu bug-482 (B/C).</summary>
+    public static bool BrandklangAus;
+
+    /// <summary>Wie oft Zünder (399 → 400..405) und Ticker (400..405 / 410..415)
+    /// einen Klang angestoßen haben — für Prüfstände.</summary>
+    public int BrandZuendKlaenge, BrandTickerKlaenge, BrandTickerKlaenge410;
+
+    /// <summary>bug-482: der Platzhalter <b>399</b> des Originals — die
+    /// Klangroutine macht @0x4048F8 (F 0x4048D8) daraus <c>400 + rand%6</c>.
+    /// Wir würfeln an derselben Stelle der Folge (der Ruf steht VOR den
+    /// Bildwürfen rand%9 / rand%6).</summary>
+    private void BrandKlang399(int c, int r)
+        => Audio.GameSounds.PlayAt(400 + Simulation.Determinism.Roll(6), c, r);
+
+    /// <summary>bug-482 (E): die Feinlage der Brandbilder — <c>rand%40</c>
+    /// Bildpunkte nach rechts ab der linken Zellkante, <c>rand%20</c> auf die
+    /// Höhe (Höhe·15 + rand%20 @0x4AE66C, also nach oben). ⚠ UNSERE Näherung
+    /// für die Umrechnung der Höhe (1 Einheit = 1/20 Zelle senkrecht); der
+    /// Effektleger 0x4357F0 ist ungelesen.</summary>
+    private Vector2 BrandFeinlage(int c, int r)
+    {
+        int fx = Simulation.Determinism.Roll(40), fy = Simulation.Determinism.Roll(20);   // @0x4AE625
+        return CellCenter(c, r) + new Vector2((fx - 20) * TileW / 40f, -6f - fy * TileH / 20f);
+    }
+
     /// <summary><c>0x4AE4C0</c> mit fertiger Lebensdauer — der gemeinsame Schwanz
-    /// ab <c>0x4AE625</c>: Eintrag, Explosion 510..518 (@0x4AE679), Splitter
-    /// 200..204 (@0x4AE6C9), Klang 399 (leer).</summary>
+    /// ab <c>0x4AE625</c>: Eintrag, Feinlage rand%40/rand%20, <b>Klang 399 →
+    /// 400+rand%6 an der Zelle (@0x4AE664, F 0x4ADF94)</b>, Explosion 510..518
+    /// (@0x4AE679), Splitter 200..204 (@0x4AE6C9).</summary>
     private bool BrandZuenden(int c, int r, int leben)
     {
         if (_gbrand.Count >= BrandPlaetze) return false;   // ⚠ wir ueberschreiben nicht
 
         _gbrand.Add(new Gebaeudebrand { Col = c, Row = r, Alter = 1, Lebensdauer = leben });
 
+        Vector2 pos;
+        if (BrandklangAus) pos = CellCenter(c, r) - new Vector2(0, 6);
+        else
+        {
+            pos = BrandFeinlage(c, r);                           // rand%40, rand%20 @0x4AE625
+            BrandKlang399(c, r);                                 // rand%6  @0x4AE664 -> 0x4048F8
+            BrandZuendKlaenge++;
+        }
         _effects.Add(new Effect
         {
-            Pos = CellCenter(c, r) - new Vector2(0, 6),
+            Pos = pos,
             Kind = "sprengung" + Simulation.Determinism.Roll(9),   // @0x4AE679
             FrameTime = 0.04f,
         });
@@ -248,15 +295,33 @@ public partial class MapEntityLayer : Node2D
             if (f.Alter < 11)                                   // @0x4AE786
             {
                 int w = Simulation.Determinism.Roll(15);
-                if (w == 1)
+                if (w == 1)                                       // @0x4AE843
                 {
+                    // bug-482 (C): rand%40, rand%20, dann rand%3 != 0 -> 399
+                    // (-> 400+rand%6) | == 0 -> 410+rand%6, beide Modus 2 an der
+                    // Zelle (@0x4AE8C8); erst danach das Bild 510+rand%9.
+                    if (!BrandklangAus)
+                    {
+                        pos = BrandFeinlage(f.Col, f.Row);
+                        if (Simulation.Determinism.Roll(3) != 0) BrandKlang399(f.Col, f.Row);
+                        else { Audio.GameSounds.PlayAt(410 + Simulation.Determinism.Roll(6), f.Col, f.Row); BrandTickerKlaenge410++; }
+                        BrandTickerKlaenge++;
+                    }
                     _effects.Add(new Effect { Pos = pos, FrameTime = 0.04f,
                                               Kind = "sprengung" + Simulation.Determinism.Roll(9) });
                     EinTeil(new Entity { Col = f.Col, Row = f.Row }, sorte: 2, streuung: 12);
                     BrandExplosionen++;
                 }
-                else if (w == 2 || w == 3)
+                else if (w == 2 || w == 3)                        // @0x4AE931
                 {
+                    // bug-482 (C): rand%40, rand%20, Klang 399 (@0x4AE970), dann
+                    // die Flamme 310+rand%6.
+                    if (!BrandklangAus)
+                    {
+                        pos = BrandFeinlage(f.Col, f.Row);
+                        BrandKlang399(f.Col, f.Row);
+                        BrandTickerKlaenge++;
+                    }
                     _effects.Add(new Effect { Pos = pos, FrameTime = 0.05f,
                                               Kind = "flamme" + Simulation.Determinism.Roll(6) });
                     BrandFlammen++;
@@ -341,6 +406,7 @@ public partial class MapEntityLayer : Node2D
         // 1. Der Stufenwechsel zuendet
         _gbrand.Clear();
         BrandZuendungen = BrandStellen = BrandRauch = BrandFlammen = BrandExplosionen = 0;
+        BrandZuendKlaenge = BrandTickerKlaenge = BrandTickerKlaenge410 = 0;
         b.Schadensstufe = DamageFrame(b);
         // ⚠ Der Schritt muss mit DEM Teiler gerechnet werden, den DamageFrame
         // nimmt (HpMax / PatternCount) — mit `letzte` gerechnet blieb die Stufe
@@ -380,6 +446,11 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  {takte} Takte bis alles aus war: {BrandRauch} Rauchbilder, "
                     + $"{BrandFlammen} Flammen, {BrandExplosionen} Explosionen: "
                     + (rauchOk ? "es raucht, richtig" : "KEIN RAUCH — genau seine Meldung"));
+        // bug-482: und es KLINGT — Zuender je Herd, Ticker 20 % je Zelle und Takt (Alter 1..10)
+        sb.AppendLine($"  Klang: {BrandZuendKlaenge} Zuenderklaenge 400..405 (Soll = {BrandStellen} Brandstellen), "
+                    + $"{BrandTickerKlaenge} Tickerklaenge (davon {BrandTickerKlaenge410} aus 410..415; "
+                    + $"Soll ~0,2 x {BrandStellen} x 10 = {BrandStellen * 2})"
+                    + (BrandklangAus ? " [--brandklang-aus: alles 0]" : ""));
 
         // 4. Und es hoert wieder auf. ⚠ Ohne diese Frage koennte ein Brand ewig
         // laufen und die Tafel verstopfen — im Original ist die Lebensdauer
@@ -396,6 +467,7 @@ public partial class MapEntityLayer : Node2D
         // Stufen, und die Lebensdauer waechst mit dem Schaden.
         _gbrand.Clear();
         BrandZuendungen = BrandStellen = BrandRauch = BrandFlammen = BrandExplosionen = 0;
+        BrandZuendKlaenge = BrandTickerKlaenge = BrandTickerKlaenge410 = 0;
         b.Hp = b.HpMax; b.Schadensstufe = 1;
         int gesamtTakte = 0;
         for (int stufe = 2; stufe < letzte; stufe++)

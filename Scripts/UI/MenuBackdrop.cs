@@ -48,17 +48,40 @@ using JObj = System.Text.Json.Nodes.JsonObject;
 /// vor: 0x415db9 in der Fassung vom Januar 1998 (1.421.824 B) und 0x415bf9 in
 /// der vom September 1997 (1.420.800 B). Dreizehn Demos in beiden.</para>
 ///
+/// <para>⭐⭐ <b>07.10.2026, bug-483 — DIE DAUER IST GELESEN</b>
+/// (<c>berichte/demo-dauer-fable.md</c>, Fable, C und F; KayelGee R4 #14
+/// »Demos laufen kürzer«):</para>
+/// <list type="bullet">
+/// <item>Die <b>Zeiteinheit</b> des Zählers <c>dword[0x540740]</c> (F
+/// <c>0x53F7A0</c>) ist das <b>gezeichnete BILD</b>, nicht der Spieltakt: der
+/// Abzug steht am Anfang von <c>Main_funct</c> (C <c>0x415D8B</c> / F
+/// <c>0x415BCB</c>), VOR der Pausen- und Geschwindigkeitsschleife
+/// (<c>0x41605A</c>/<c>0x416077</c>). Geschwindigkeit 1/2/3 ändert die Dauer
+/// nicht, eine Pause auch nicht. Nullmodell: wäre es ein Takt, stünde der Abzug
+/// im Schleifenrumpf hinter <c>0x416077</c>.</item>
+/// <item>Die Tafel C <c>0x4F70B0</c> / F <c>0x4F60A8</c>: <b>400 350 550 350 150
+/// 350 550 300 300 400 400 400 220</b> Bilder, beide Bauten byteweise gleich;
+/// ein Umlauf 4720 Bilder. Reihenfolge fest 1 → 13 → 1, beim Programmstart
+/// immer Demo 1 (<c>1.dm</c> C <c>0x4150E9</c>). Nur der Zähler und die
+/// Menüzeile (Zähler := 2) beenden ein Demo — alle 7 (C) / 6 (F) Verweise
+/// gelesen, kein Maus-, Tasten- oder Spielweg.</item>
+/// <item>⚠ <b>Die Bildrate steht NICHT in der EXE</b> (<c>SetDisplayMode(640,
+/// 480, bpp)</c> ohne Rate, <c>Flip</c> wartet auf den Strahlrücklauf): Bilder/s
+/// ≤ Monitorrate, auf einem Pentium von 1997 darunter. <see cref="DemoBildrate"/>
+/// = <b>20 Bilder/s ist UNSERE Setzung</b> — seine eigene Angabe »Original ca.
+/// 20 fps« (bug-380). Zu ersetzen durch seine Stoppuhr: Bilder/s = 400 /
+/// Sekunden(Demo 1). Schalter <c>--demo-bildrate=N</c>.</item>
+/// <item>Bis 0.6.7 lief jedes Demo <c>max(20 s, Tafel/50)</c> = immer 20 s
+/// (Nullmodell <c>--demo-dauer-alt</c>). Das Original hat je Demo eine andere
+/// Länge (150..550 = 1 : 3,67) — DAS war die Abweichung, unabhängig von der
+/// Bildrate. Der Zähler läuft bei uns ab dem BILD (<see cref="Show"/>), nicht
+/// ab dem Ladebeginn — das Laden des 30-MB-PNG zählt nicht mit (das Original
+/// lädt synchron und zählt ab dem ersten Bild). Prüfstand
+/// <c>--demodauer-check</c> (MainMenu.cs).</item>
+/// </list>
+///
 /// <para><b>⚠ UNSERE SETZUNGEN</b>, weil dazu nichts gelesen wurde:</para>
 /// <list type="bullet">
-/// <item>Die <b>Zeiteinheit</b> des Zählers 0x540740. Die Tabelle 0x4f70b0
-/// enthält für Demo 1..13 die Werte 400, 350, 550, 350, 150, 350, 550, 300,
-/// 300, 400, 400, 400, 220. Genommen sind sie als Simulationstakte zu 50 Hz
-/// (<see cref="Campaign.MissionScript.TicksPerSecond"/>), also 3 bis 11
-/// Sekunden. Wieviele Takte das Original pro Sekunde durch diese Stelle
-/// schickt, steht hier nicht.</item>
-/// <item>Die <b>Untergrenze</b> <see cref="MinSeconds"/>. Unsere Karten sind
-/// gebackene PNG von 20 bis 33 Megapixeln, ein Wechsel kostet Ladezeit; mit
-/// den 3 Sekunden von Demo 5 wäre das Menü eine Diaschau aus Rucklern.</item>
 /// <item>Die <b>Kameraführung</b>. Das Original schiebt den Ausschnitt im Demo
 /// selbst irgendwie — gelesen ist davon nichts. Hier steht die Kamera bei
 /// einem Hauptquartier, schwenkt dort ein wenig und schneidet nach acht
@@ -80,9 +103,27 @@ public partial class MenuBackdrop : CanvasLayer
     private static readonly int[] Ticks =
     { 0, 400, 350, 550, 350, 150, 350, 550, 300, 300, 400, 400, 400, 220 };
 
-    /// <summary>⚠ UNSERE SETZUNG: kürzer als das lassen wir kein Demo laufen,
-    /// weil ein Wechsel bei uns eine große PNG kostet.</summary>
+    /// <summary>⚠ Die alte Untergrenze (bis 0.6.7): kürzer als das lief kein
+    /// Demo, »weil ein Wechsel eine große PNG kostet«. Seit bug-483 nur noch
+    /// unter <c>--demo-dauer-alt</c>; der Ladeschutz ist <c>_loading</c>.</summary>
     private const float MinSeconds = 20f;
+
+    /// <summary>bug-483: <c>--demo-bildrate=N</c> — mit wie vielen Bildern je
+    /// Sekunde die Tafel <see cref="Ticks"/> in Sekunden umgerechnet wird.
+    /// ⚠ <b>UNSERE SETZUNG 20</b> = KayelGees »Original ca. 20 fps« (bug-380);
+    /// die EXE kennt keine Bildrate. Demo 1 = 400 Bilder = 20,0 s.</summary>
+    public static float DemoBildrate = 20f;
+
+    /// <summary>bug-483: <c>--demo-dauer-alt</c> — Stand bis 0.6.7: jedes Demo
+    /// <c>max(20 s, Tafel/50)</c>, also immer 20 s. Nullmodell.</summary>
+    public static bool DemoDauerAlt;
+
+    /// <summary>bug-483: wie lange jedes beendete Demo auf dem Schirm war —
+    /// ab dem ersten Bild (<see cref="Show"/>) bis zum Wechsel. Für
+    /// <c>--demodauer-check</c>.</summary>
+    public readonly List<(int No, float Sekunden)> DauerProtokoll = new();
+    private float _laeuftSeit = -1f;     // -1: noch kein Bild
+    private float _leftSoll;             // bug-483: der Zähler startet erst mit dem Bild
 
     /// <summary>⚠ UNSERE SETZUNG: wie weit die Karte vergrößert wird. 2 zeigt
     /// bei 1280x720 denselben Weltausschnitt wie die 640x360 des Originals in
@@ -289,10 +330,18 @@ public partial class MenuBackdrop : CanvasLayer
                      + $"der Demo abgefangen (insgesamt {Audio.SoundBankPlayer.SuppressedCount})");
             _tonMerker = Audio.SoundBankPlayer.SuppressedCount;
         }
+        if (_at >= 0 && _laeuftSeit >= 0f) DauerProtokoll.Add((_demos[_at].No, _laeuftSeit));
+        _laeuftSeit = -1f;
         _at = (_at + 1) % _demos.Count;
         var (no, map) = _demos[_at];
-        _left = Mathf.Max(MinSeconds, Ticks[no] / (float)Campaign.MissionScript.TicksPerSecond);
-        if (DemoSekunden > 0f) _left = DemoSekunden;        // nur Pruefstand
+        // bug-483: Dauer = Bilder der Tafel / Bildrate (Setzung 20), ohne
+        // Untergrenze; der Zaehler laeuft erst ab dem Bild (Show). Unter
+        // --demo-dauer-alt der Stand bis 0.6.7: max(20 s, Tafel/50).
+        _leftSoll = DemoDauerAlt
+            ? Mathf.Max(MinSeconds, Ticks[no] / (float)Campaign.MissionScript.TicksPerSecond)
+            : Ticks[no] / Mathf.Max(1f, DemoBildrate);
+        if (DemoSekunden > 0f) _leftSoll = DemoSekunden;    // nur Pruefstand
+        _left = 0f;                                         // bis das Bild steht: _loading sperrt den Wechsel
 
         // Das Bild ist 20 bis 33 Megapixel groß; auf dem Hauptfaden geladen
         // stünde das Menü dafür eine Sekunde still. Der Faden liest nur die
@@ -304,7 +353,7 @@ public partial class MenuBackdrop : CanvasLayer
 
     /// <summary>Welches Demo gerade läuft — für die Fußzeile des Menüs.</summary>
     public string Caption => _at < 0 || _demos.Count == 0
-        ? "" : $"Demo {_demos[_at].No} von {DemoCount}";
+        ? "" : $"Demo {_demos[_at].No} von {DemoCount}" + (_laeuftSeit >= 0f ? $" · noch {Mathf.Max(0f, _left):0} s" : "");
 
     public override void _Process(double delta)
     {
@@ -314,7 +363,11 @@ public partial class MenuBackdrop : CanvasLayer
         {
             var img = _loading.Result;
             _loading = null;
-            if (img == null) GD.PrintErr($"Menü: {_loadingMap}.png liess sich nicht laden");
+            if (img == null)
+            {
+                GD.PrintErr($"Menü: {_loadingMap}.png liess sich nicht laden");
+                _left = 2f; _laeuftSeit = 0f;        // bug-483: nicht je Bild weiterschalten
+            }
             else Show(img, _loadingMap);
         }
 
@@ -355,8 +408,8 @@ public partial class MenuBackdrop : CanvasLayer
         // Nur die HELLIGKEIT haengt nicht mehr daran.
         if (_fade < 1f) _fade = 1f;
 
-        // Der Ablaufzähler des Originals, in Sekunden statt in Takten.
-        _left -= dt;
+        // Der Ablaufzähler des Originals, in Sekunden statt in Bildern (bug-483).
+        if (_laeuftSeit >= 0f) { _left -= dt; _laeuftSeit += dt; }
         // bug-448 (KayelGee R4, Meldung 15): »im Original wechselte die Demo
         // nur, wenn man kein Menue offen hatte«. 0x451600 zaehlt die offenen
         // Fenster; ist nicht GENAU eines offen (das Startmenue), setzt
@@ -487,7 +540,8 @@ public partial class MenuBackdrop : CanvasLayer
         _world.Modulate = new Color(1, 1, 1, 1);
         _probe = 0f; _probeFrames = 0; _probeWorst = 0f;
         Place();
-        GD.Print($"Menü: Demo {map} läuft ({_anchors.Count} Basen, Blick von Platz {seen}, Kamera {_anchors[0]}, Karte {_sprite.Texture.GetSize()}{(DemokameraAlt ? "" : " — gespeicherte Sicht, bug-470")})");
+        _left = _leftSoll; _laeuftSeit = 0f;             // bug-483: ab jetzt zählt es
+        GD.Print($"Menü: Demo {map} läuft {_leftSoll:0.0} s ({Ticks[Mathf.Clamp(demoNr, 0, DemoCount)]} Bilder / {DemoBildrate:0} Bilder/s{(DemoDauerAlt ? ", --demo-dauer-alt" : "")}; {_anchors.Count} Basen, Blick von Platz {seen}, Kamera {_anchors[0]}, Karte {_sprite.Texture.GetSize()}{(DemokameraAlt ? "" : " — gespeicherte Sicht, bug-470")})");
     }
 
     // ⭐ 31.08.2026 — System.Text.Json statt Godot-Json, wie in
