@@ -1330,6 +1330,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_k26EndeCheck.Length > 0)
+        {
+            { var teile = _k26EndeCheck.Split(':'); GD.Print(_entities.K26EndeCheck(teile[0], teile.Length > 1 && int.TryParse(teile[1], out int ks) ? ks : 20)); }
+            GetTree().Quit(0);
+            return;
+        }
         if (_k24FluchtCheck > 0)
         {
             GD.Print(_entities.K24FluchtCheck(_k24FluchtCheck));
@@ -1580,6 +1586,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--k24-flucht-check[=sekunden]</c> — siehe Simulation/K24FluchtCheck.cs
     /// (02.10.2026, bug-400). 0 = aus.</summary>
     private int _k24FluchtCheck;
+    /// <summary><c>--k26-ende-check=FALL[:sekunden]</c> (spieler|leer|p3|start, Vorgabe 20 s) — siehe
+    /// Simulation/K26EndeCheck.cs (12.10.2026). Leer = aus.</summary>
+    private string _k26EndeCheck = "";
     /// <summary><c>--stellung-check</c> — siehe Simulation/Stellungen.cs (02.10.2026, bug-399).</summary>
     private bool _stellungCheck;
 
@@ -4494,6 +4503,10 @@ _mausProbePunkt = karte;
                      int.TryParse(a["--k24-flucht-check=".Length..], out int kfs)) _k24FluchtCheck = kfs;
             else if (a == "--zellabstand-schach") MapEntityLayer.ZellabstandSchach = true;
             else if (a == "--m26-tuergriff-aus") Campaign.MissionScript.SetzungAus.Add(a);
+            // ⭐ 12.10.2026 — der Endblock von M26 (berichte/k26-ende.md): Gegenschalter
+            // nimmt die vier von Hand abgeschriebenen Zweige zurueck, Pruefstand je Fall.
+            else if (a == "--m26-endregeln-alt") Campaign.MissionScript.SetzungAus.Add(a);
+            else if (a.StartsWith("--k26-ende-check=")) _k26EndeCheck = a["--k26-ende-check=".Length..];
             // ⭐ 02.10.2026 (bug-388..392) — das Skriptvariablen-Audit: Pruefstand,
             // Sammelschalter und die fuenf Engine-Schreiber einzeln.
             // Simulation/Skriptvariablen.cs.

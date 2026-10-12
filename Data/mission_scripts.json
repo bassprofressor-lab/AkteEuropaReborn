@@ -17755,7 +17755,7 @@
     },
     {
      "_at": "0x4A24C5",
-     "_von": "mission_loserules",
+     "_von": "mission_loserules, von Hand ergaenzt 12.10.2026 (Tor v0, berichte/k26-ende.md)",
      "then": [
       {
        "a": 0,
@@ -17764,10 +17764,96 @@
      ],
      "when": [
       {
+       "_at": "0x4A2488",
+       "_schalter": "--m26-endregeln-alt",
+       "a": 0,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
        "a": 1,
        "b": 3,
        "c": 0,
        "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A24C5",
+     "_von_hand": "12.10.2026 (berichte/k26-ende.md): der Endblock 0x4A2468..0x4A250B (C; F Dateiversatz 0xA1181, dieselbe Bytefolge bis auf die rel32) hat VERZWEIGUNGEN, die mission_endrules/mission_loserules nicht abbilden: ein Tor v0 um die erste Niederlage, je ein ODER-Zweig an beiden Niederlagestellen und eine ZWEITE Siegstelle. Diese Regel ist die Abschrift von Hand; Gegenschalter --m26-endregeln-alt = Stand vor dem 12.10. (nur die gelesenen Einzelglieder). Niederlage-Zweig A: v0==0 (@0x4A2488 jne 0x4A24D4) UND g_robot_class_count(0,0)==0 (@0x4A2496/jne 0x4A24B4) UND count_objects(1,0)==0 (@0x4A24A7/je 0x4A24C5).",
+     "_schalter": "--m26-endregeln-alt",
+     "then": [
+      {
+       "a": 0,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A24E5",
+     "_von_hand": "12.10.2026 (berichte/k26-ende.md): der Endblock 0x4A2468..0x4A250B (C; F Dateiversatz 0xA1181, dieselbe Bytefolge bis auf die rel32) hat VERZWEIGUNGEN, die mission_endrules/mission_loserules nicht abbilden: ein Tor v0 um die erste Niederlage, je ein ODER-Zweig an beiden Niederlagestellen und eine ZWEITE Siegstelle. Diese Regel ist die Abschrift von Hand; Gegenschalter --m26-endregeln-alt = Stand vor dem 12.10. (nur die gelesenen Einzelglieder). Sieg-Zweig B: v0!=0 (@0x4A24CA je 0x4A24EA) UND g_robot_class_count(0,0)==0 (@0x4A24D8/jne 0x4A24EA) -> mission_end @0x4A24E5. mission_endrules.py liest diese Stelle (read_exe: [var 0 != 0, units(0,0) == 0]), sie stand aber nie in der Datei. V: wirkt wie ein Versehen des Missionsbauers (Spieler 0 statt 1), ist aber so im Code beider EXE.",
+     "_schalter": "--m26-endregeln-alt",
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2506",
+     "_von_hand": "12.10.2026 (berichte/k26-ende.md): der Endblock 0x4A2468..0x4A250B (C; F Dateiversatz 0xA1181, dieselbe Bytefolge bis auf die rel32) hat VERZWEIGUNGEN, die mission_endrules/mission_loserules nicht abbilden: ein Tor v0 um die erste Niederlage, je ein ODER-Zweig an beiden Niederlagestellen und eine ZWEITE Siegstelle. Diese Regel ist die Abschrift von Hand; Gegenschalter --m26-endregeln-alt = Stand vor dem 12.10. (nur die gelesenen Einzelglieder). Niederlage-Zweig: obj_owner(13)==0 (@0x4A24EC test al,al / je 0x4A2506) - nimmt der SPIELER Myre selbst ein, ist die Mission verloren (der Verbuendete P3 uebergeht ein verbuendetes Ziel @0x4BEE30 und kann es nie mehr nehmen).",
+     "_schalter": "--m26-endregeln-alt",
+     "then": [
+      {
+       "a": 0,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 13,
+       "b": 0,
+       "kind": "obj_owner",
        "op": "=="
       }
      ]
