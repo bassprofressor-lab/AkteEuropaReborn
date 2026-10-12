@@ -1337,6 +1337,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_minenEinnahmeCheck > 0)
+        {
+            GD.Print(_entities.MinenEinnahmeCheck(_minenEinnahmeCheck));
+            GetTree().Quit(0);
+            return;
+        }
         if (_flughafenEinnahmeCheck > 0)
         {
             GD.Print(_entities.FlughafenEinnahmeCheck(_flughafenEinnahmeCheck));
@@ -1605,6 +1611,8 @@ public partial class MapViewer : Node2D
     /// <summary><c>--flughafen-einnahme-check[=sekunden]</c> (bug-497, Vorgabe 600 s Wartezeit) — siehe Simulation/FlughafenEinnahmeCheck.cs.
     /// Nullmodell <c>--flughafen-einnahme-alt</c>.</summary>
     private int _flughafenEinnahmeCheck;
+    /// <summary><c>--minen-einnahme-check[=sekunden]</c> — siehe Simulation/MinenEinnahmeCheck.cs.</summary>
+    private int _minenEinnahmeCheck;
     /// <summary><c>--stellung-check</c> — siehe Simulation/Stellungen.cs (02.10.2026, bug-399).</summary>
     private bool _stellungCheck;
 
@@ -4112,6 +4120,12 @@ _mausProbePunkt = karte;
             else if (a == "--einnahme-insassen-alt") MapEntityLayer.EinnahmeInsassenAlt = true;
             // bug-497: Flugzeuge gehen mit dem eingenommenen Flughafen (C 0x43D214).
             else if (a == "--flughafen-einnahme-alt") MapEntityLayer.FlughafenEinnahmeAlt = true;
+            else if (a == "--minen-einnahme-check") _minenEinnahmeCheck = 900;
+            else if (a == "--minen-check-belagert") MapEntityLayer.MinenCheckBelagert = true;
+            else if (a == "--minen-check-liste") MapEntityLayer.MinenNurListe = true;
+            else if (a.StartsWith("--minen-check-platz=") && int.TryParse(a["--minen-check-platz=".Length..], out int mcp)) MapEntityLayer.MinenCheckPlatz = mcp;
+            else if (a.StartsWith("--minen-einnahme-check=") &&
+                     int.TryParse(a["--minen-einnahme-check=".Length..], out int mes)) _minenEinnahmeCheck = mes;
             else if (a == "--flughafen-einnahme-check") _flughafenEinnahmeCheck = 600;
             else if (a.StartsWith("--flughafen-einnahme-check=") &&
                      int.TryParse(a["--flughafen-einnahme-check=".Length..], out int fes)) _flughafenEinnahmeCheck = fes;
