@@ -37536,11 +37536,35 @@ public partial class MapEntityLayer : Node2D
     /// <para>Diese Weiche gibt darum seit dem 24.08.2026 <c>false</c> zurück.
     /// Sie bleibt als Schalter stehen, weil sie die einzige Stelle ist, an der
     /// die Entscheidung hängt.</para>
+    /// <para>⭐⭐⭐ <b>NACHTRAG 12.10.2026 (bug-487) — DAS ORIGINAL HAT DOCH EINEN
+    /// WERT.</b> »Wrong chassis of ship« @0x42ADCE steht im Arm der <b>Klasse 4</b>
+    /// (0x42AC50); die Schlachtschiffe 157/158 sind <b>Klasse 5</b> und haben einen
+    /// eigenen Arm @<c>0x42AEF7</c> (Tafel 0x42BC10): Turm FEST bei Rumpf +
+    /// <b>(74, 16)</b> — <c>0x42B046 lea edx,[esi+0x10]</c>, <c>0x42B04A lea
+    /// edx,[ebx+0x4A]</c>, Blit 0x401D7A @0x42B06D; keine Blickweiche, keine Tafel
+    /// (F: 0x42A233/0x42A237, dieselben Zahlen). Die Aussage oben (»das Original hat
+    /// selbst keinen«) war von Klasse 4 auf Klasse 5 übertragen, ohne 0x42AEF7 zu
+    /// öffnen. Unsere gemessenen <c>mount_facings_unser</c> lagen bis 13 px daneben
+    /// — gemeldet: »der Raketenwerfer sitzt nicht auf seinem Slot (Kreis)«.
+    /// Bericht <c>berichte/schlachtschiff-turm-fable.md</c>. Gegenschalter
+    /// <c>--schiffsturm-alt</c>, Prüfstand <c>--schiffsturm-check</c>.</para>
     private static bool HullCarriesItsOwnGun(int unitType) => false;
+
+    /// <summary><c>--schiffsturm-alt</c> — Stand bis bug-487: Klasse 5 nimmt
+    /// unsere gemessenen Montagepunkte je Blick statt (74,16).</summary>
+    public static bool SchiffsturmAlt;
+
+    /// <summary>Der feste Turmsitz der Klasse 5, 0x42B046/0x42B04A.</summary>
+    private static readonly Vector2 SchiffsturmKlasse5 = new(74, 16);
+
+    private static bool IstKlasse5Rumpf(int unitType, Entity? e) =>
+        unitType is 157 or 158 || e?.GameUnitType == 5;
 
     private Vector2 TurretOffset(int unitType, int col, int row, int facing = -1, Entity? e = null)
     {
         LoadMounts();
+        // ⭐⭐⭐ 12.10.2026 (bug-487): Klasse 5 = fest (74,16), 0x42AEF7 — siehe oben.
+        if (!SchiffsturmAlt && IstKlasse5Rumpf(unitType, e)) return SchiffsturmKlasse5;
         // ⭐⭐ 24.08.2026 — UNSERE Montagepunkte je Blickrichtung gehen VOR dem
         // Nichts, aber NICHT vor dem Original: `_mountF` ist nur fuer die zwei
         // Ruempfe belegt, fuer die die Weiche @0x42ADB7 keinen Fall hat.
@@ -37670,6 +37694,40 @@ public partial class MapEntityLayer : Node2D
     /// <para>⚠ Die Mitte der sichtbaren Fläche ist NICHT der Drehpunkt der
     /// Waffe — sie ist nur ein Maß, das für beide Bilder gleich gebildet wird.
     /// Was sie belegt, ist der ABSTAND, nicht der Sollwert.</para></summary>
+    /// <summary><b>PRÜFSTAND bug-487</b> (<c>--schiffsturm-check</c>): Klasse 5
+    /// (157/158) muss in allen 16 Blicken (74,16) liefern (0x42B046/0x42B04A);
+    /// Klasse 4 (150..153) bleibt, wie sie unter <c>--schiffsturm-alt</c> ist.
+    /// Unter <c>--schiffsturm-alt</c> muss er DURCHFALLEN (Nullmodell).</summary>
+    public string SchiffsturmCheck()
+    {
+        LoadMounts();
+        var sb = new System.Text.StringBuilder("schiffsturm-check (bug-487):\n");
+        bool alt = SchiffsturmAlt;
+        int ok5 = 0, n5 = 0; float maxDx = 0, maxDy = 0;
+        foreach (int ut in new[] { 157, 158 })
+            for (int f = 0; f < 16; f++)
+            {
+                var v = TurretOffset(ut, 0, 0, f);
+                n5++;
+                if (v == SchiffsturmKlasse5) ok5++;
+                maxDx = Mathf.Max(maxDx, Mathf.Abs(v.X - 74)); maxDy = Mathf.Max(maxDy, Mathf.Abs(v.Y - 16));
+            }
+        sb.Append($"   Klasse 5 (157/158, 16 Blicke): {ok5}/{n5} auf (74,16), groesste Abweichung ({maxDx:0},{maxDy:0}) px\n");
+        int ok4 = 0, n4 = 0;
+        foreach (int ut in new[] { 150, 151, 152, 153 })
+            for (int f = 0; f < 16; f++)
+            {
+                SchiffsturmAlt = false; var neu = TurretOffset(ut, 0, 0, f);
+                SchiffsturmAlt = true;  var vorher = TurretOffset(ut, 0, 0, f);
+                n4++; if (neu == vorher) ok4++;
+            }
+        SchiffsturmAlt = alt;
+        sb.Append($"   Klasse 4 (150..153) unveraendert: {ok4}/{n4}\n");
+        bool bestanden = ok5 == n5 && ok4 == n4 && _mount != null && _mount.Count > 0;
+        sb.Append($"   → {(bestanden ? "BESTANDEN" : "⚠ DURCHGEFALLEN")}{(alt ? " (unter --schiffsturm-alt: muss durchfallen)" : "")}");
+        return sb.ToString();
+    }
+
     public string TurretSeatCheck()
     {
         LoadMounts();

@@ -4765,6 +4765,9 @@ _mausProbePunkt = karte;
             // Der Waffensitz auf dem Schiff — gemeldet am 13.08.2026 als »die
             // Waffe sitzt einige Felder daneben«. Er braucht ein paar Bilder,
             // bis die Bildpaare geladen sind.
+            // bug-487 (12.10.2026): Klasse-5-Turm fest (74,16) wie 0x42AEF7
+            else if (a == "--schiffsturm-alt") MapEntityLayer.SchiffsturmAlt = true;
+            else if (a == "--schiffsturm-check") { _schiffsturmCheck = true; _turretSeatCheckAt = 20; }
             else if (a == "--waffensitz-check" || a.StartsWith("--waffensitz-check="))
                 _turretSeatCheckAt = a.Length > 19
                     ? Mathf.Max(1, a["--waffensitz-check=".Length..].ToInt()) : 20;
@@ -6666,6 +6669,7 @@ _mausProbePunkt = karte;
     /// <summary>Wann der Waffensitz-Prüfstand meldet, in Bildern; −1 = nie.
     /// <c>--waffensitz-check[=n]</c>.</summary>
     private int _turretSeatCheckAt = -1;
+    private bool _schiffsturmCheck;
     private int _turretSeatFrames;
 
     /// <summary>Meldet EINMAL, wo die Waffe auf dem Schiff sitzt — siehe
@@ -6677,7 +6681,7 @@ _mausProbePunkt = karte;
         if (_turretSeatCheckAt < 0) return;
         if (_turretSeatFrames++ < _turretSeatCheckAt) return;
         _turretSeatCheckAt = -1;
-        GD.Print(_entities.TurretSeatCheck());
+        GD.Print(_schiffsturmCheck ? _entities.SchiffsturmCheck() : _entities.TurretSeatCheck());
         if (_shotPath.Length == 0) GetTree().Quit(0);
     }
 
