@@ -186,14 +186,16 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Die Technikstufe dieser Mission — <c>0x503AF0[Mission]</c>.
-    /// ⚠ Im Gefecht steht dort <c>byte[0x540EB8]</c>, die eingestellte
-    /// Technikstufe; die haben wir nicht, darum <b>1</b> wie in Mission 0
-    /// (dieselbe Setzung wie beim Grundpreis).</summary>
+    /// Im Gefecht steht dort <c>byte[0x540EB8]</c>, die eingestellte
+    /// Technikstufe — ⭐ 12.10.2026 (bug-490) jetzt <see cref="AirProbeTechstandard"/>
+    /// wie im Original, vorher die Setzung <b>1</b>. Unter
+    /// <c>--forschungspreis-gefecht-alt</c> wieder 1.</summary>
     private static int ErfindungTechstufe()
     {
         ErfindungTafelnLaden();
         int mission = UI.SkirmishSetup.CampaignMission;
-        if (mission <= 0 || _techLeiter == null || _techLeiter.Length == 0) return 1;
+        if (mission <= 0) return ForschungspreisGefechtAlt ? 1 : AirProbeTechstandard;
+        if (_techLeiter == null || _techLeiter.Length == 0) return 1;
         return _techLeiter[Mathf.Clamp(mission, 0, _techLeiter.Length - 1)];
     }
 

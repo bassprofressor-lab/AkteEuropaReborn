@@ -53,6 +53,11 @@ public partial class MapEntityLayer
     /// Besitz nach Techstandard, das Erstellen-Fenster zeigt jede benannte Zeile.</summary>
     public static bool GefechtBesitzAlt;
 
+    /// <summary><c>--alle-einheiten-bauteile-alt</c> — der Stand bis bug-489:
+    /// »Alle Einheiten« gibt nur Flugzeuge/Schiffe frei, die Bauteile folgen
+    /// weiter dem Techstandard.</summary>
+    public static bool AlleEinheitenBauteileAlt;
+
     /// <summary>Ob <see cref="GefechtBesitzStart"/> auf dieser Ebene gelaufen ist —
     /// nur dann filtert <c>LoadDesignParts</c> im Gefecht nach Besitz. Eine Ebene
     /// ohne Gefechtsstart (<c>--map=</c> zum Ansehen) bleibt beim alten Stand.</summary>
@@ -72,6 +77,16 @@ public partial class MapEntityLayer
     public int GefechtBesitzStart(int techstufe)
     {
         if (GefechtBesitzAlt) return -1;
+        // ⭐ 12.10.2026 (bug-489) — UNSERE OPTION »Alle Einheiten« (es gibt sie im
+        // Original nicht) gibt auf seine Entscheidung auch ALLE Bauteile frei:
+        // gerechnet wird mit Stufe 8, der hoechsten des Gefechtsschirms. Stufe 8
+        // gibt schon jede benannte Zeile frei (Dateikopf: T8 = 59); die erfundene
+        // Zeile 20 »Hiff-64« der 4.DM (Stufe 10) bleibt wie im Original draussen.
+        if (UI.SkirmishSetup.AllUnits && !AlleEinheitenBauteileAlt && techstufe < 8)
+        {
+            GD.Print($"gefecht-besitz: »Alle Einheiten« an -> Stufe 8 statt {techstufe} (bug-489, unsere Option)");
+            techstufe = 8;
+        }
         BauteileVorbereiten();
         var b0 = _bauteile![0];
         int zeilen = 0;

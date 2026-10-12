@@ -4157,6 +4157,10 @@ _mausProbePunkt = karte;
             else if (a == "--entwurf-listen-alt") MapEntityLayer.EntwurfListenAlt = true;
             // bug-479: Gefecht ohne Besitz nach Techstandard (0x419CB0), Stand 0.6.6
             else if (a == "--gefecht-besitz-alt") MapEntityLayer.GefechtBesitzAlt = true;
+            // bug-488..490 (12.10.2026): Techstandard je Gefecht, Alle Einheiten -> Bauteile, Forschungspreis Stufe*100
+            else if (a == "--techstandard-merken-alt") MapEntityLayer.TechstandardMerkenAlt = true;
+            else if (a == "--alle-einheiten-bauteile-alt") MapEntityLayer.AlleEinheitenBauteileAlt = true;
+            else if (a == "--forschungspreis-gefecht-alt") MapEntityLayer.ForschungspreisGefechtAlt = true;
             // bug-409 (03.10.2026): Skriptbefehl order/order_at wieder als Fahrbefehl
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;

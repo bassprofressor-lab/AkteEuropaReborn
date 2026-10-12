@@ -300,15 +300,22 @@ public partial class MapEntityLayer : Node2D
     /// Kampagne: <c>LEITER[Missionsnummer]</c>. Gefecht: <c>Technikstufe · 100</c>
     /// (<c>byte[0x540EB8]</c>).
     ///
-    /// <para>⚠ <b>[Setzung]</b> im Gefecht: wir haben keine Technikstufe im
-    /// Einstellschirm, darum 1 — dieselbe Zahl, die <c>LEITER[0]</c> gibt. Wenn
-    /// der Schirm sie einmal bekommt, ist das hier die eine Zeile, die
-    /// mitwandert.</para></summary>
+    /// <para>⭐ 12.10.2026 (bug-490): im Gefecht jetzt WIE ORIGINAL
+    /// <c>Techstandard · 100</c> (<c>0x4AA601</c>) — vorher die Setzung »wir haben
+    /// keine Technikstufe, darum 1«; die Stufe gibt es seit dem 13.08. im
+    /// Gefechtsschirm (<see cref="AirProbeTechstandard"/>). Bei Vorgabe 8 also
+    /// 800 statt 100 — und der Preis ist die Dauer. Seine Entscheidung.
+    /// Gegenschalter <c>--forschungspreis-gefecht-alt</c> (fest 100).</para></summary>
+    /// <summary><c>--forschungspreis-gefecht-alt</c> — Stand bis bug-490: Grundpreis
+    /// im Gefecht fest 100 (Technikstufe 1).</summary>
+    public static bool ForschungspreisGefechtAlt;
+
     private static int ForschungGrundpreis()
     {
         ForschungLeiterLaden();
         int mission = UI.SkirmishSetup.CampaignMission;
-        if (mission <= 0) return 100;                       // Gefecht: Technikstufe 1
+        if (mission <= 0)                                   // Gefecht: Technikstufe · 100
+            return ForschungspreisGefechtAlt ? 100 : AirProbeTechstandard * 100;
         if (_forschungLeiter == null || _forschungLeiter.Length == 0) return 0;
         int i = Mathf.Clamp(mission, 0, _forschungLeiter.Length - 1);
         return _forschungLeiter[i];

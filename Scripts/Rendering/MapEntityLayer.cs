@@ -23867,17 +23867,31 @@ public partial class MapEntityLayer : Node2D
     {
         get
         {
-            if (_probeTech.HasValue) return _probeTech.Value;
-            int v = UI.SkirmishSetup.Techstandard;
-            foreach (string a in OS.GetCmdlineUserArgs())
-                if (a.StartsWith("--techstandard="))
-                    v = Mathf.Clamp(a["--techstandard=".Length..].ToInt(), 1, 8);
+            // ⭐ 12.10.2026 (bug-488): nur der Schalter wird gemerkt. Vorher
+            // blieb der ERSTE gelesene Wert die ganze Sitzung stehen — ein zweites
+            // Gefecht mit anderem Techstandard lief mit dem alten (Besitz,
+            // seit bug-488 auch Forschungspreis). --techstandard-merken-alt.
+            if (TechstandardMerkenAlt && _probeTech.HasValue) return _probeTech.Value;
+            if (!_probeTechArgGelesen)
+            {
+                _probeTechArgGelesen = true;
+                foreach (string a in OS.GetCmdlineUserArgs())
+                    if (a.StartsWith("--techstandard="))
+                        _probeTechArg = Mathf.Clamp(a["--techstandard=".Length..].ToInt(), 1, 8);
+            }
+            int v = _probeTechArg ?? UI.SkirmishSetup.Techstandard;
             _probeTech = v;
             return v;
         }
     }
 
     private static int? _probeTech;
+    private static int? _probeTechArg;
+    private static bool _probeTechArgGelesen;
+
+    /// <summary><c>--techstandard-merken-alt</c> — der Stand bis bug-488: der erste
+    /// gelesene Techstandard gilt die ganze Sitzung.</summary>
+    public static bool TechstandardMerkenAlt;
 
     /// <summary>
     /// Was ein Techstandard am Flughafen freigibt, als Klartext — für die Zeile
