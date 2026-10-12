@@ -833,6 +833,19 @@ public partial class MapEntityLayer : Node2D
         // ---- combat state (Step B) ----
         public int AimFacing = -1;       // turret facing (-1 = follow the hull)
 
+        /// <summary>⭐ 12.10.2026 (bug-485) — der Turm der DICKEN BERTHA (Gattung 3)
+        /// in SECHZEHNTELN, so wie er im Satz steht (<c>+0x03 OT_HLAV</c>, K25: 5,
+        /// DM_6: 12). Der MM-Arm 0x42AAD9 blittet <c>Teil 61 + OT_HLAV</c> mit 16
+        /// Bildern; unsere Turmlogik rechnet in Achteln (<see cref="AimFacing"/>),
+        /// darum steht der ungerade Kartenwert hier, bis der Turm sich zum ersten Mal
+        /// dreht (dann −1, gezeichnet wird <c>AimFacing·2</c> wie 0x405148
+        /// <c>wunsch·2</c>). −1 = keiner.</summary>
+        public int Turm16 = -1;
+
+        /// <summary>Rumpf- und Turmblick, wie sie beim Laden aus dem Satz kamen —
+        /// nur fuer <c>--bertha-check</c> (die Bertha faehrt und dreht ab Takt 7).</summary>
+        public int SatzBlick = -1, SatzTurm = -1;
+
         /// <summary>⭐ 03.10.2026 (bug-406/407) — der TURMWUNSCH, Satz +0x17
         /// <c>OTOC_HLAVEN</c>: −1 = keiner (0xFF), sonst 0…7. Gedreht wird eine
         /// Stufe je zwei Takte (Simulation/TurmDrehung.cs, Rufer 0x409F82).</summary>
@@ -4056,6 +4069,11 @@ public partial class MapEntityLayer : Node2D
                 // hostility tests (@0x409bde, @0x40d058) index the alliance
                 // matrix with. The old heading-from-+0x08 conversion is gone.
                 int facing = haveRaw ? HexByte(raw, 0x02) & 7 : DefaultFacing;
+                // ⭐ 12.10.2026 (bug-485) — die DICKE BERTHA (Gattung 3) dreht ihren
+                // Rumpf in SECHZEHNTELN (0x404EC6), und ROBO-Teil 60 hat 16 Bilder;
+                // K25 traegt OT_PODV 2, DM_10 14. `& 7` machte aus 14 eine 6.
+                bool bertha = haveRaw && HexByte(raw, 0x0a) == 3 && !BerthaBildAlt;
+                if (bertha) facing = HexByte(raw, 0x02) & 15;
                 // ⚠ Fracht wird nicht aufgestellt — aber sie wird GEBAUT.
                 //
                 // ⚠⚠ 21.08.2026: hier stand ein `continue`, und damit war die
@@ -4186,7 +4204,11 @@ public partial class MapEntityLayer : Node2D
                     // Field28 ist seit 19.08.2026 nur ein Name fuer Rating28
                     // (dieselbe Zelle, vier Zeilen hoeher gesetzt).
                     Erfahrung = haveRaw ? HexByte(raw, 0x4c) : 0,
-                    AimFacing = haveRaw ? HexByte(raw, 0x03) & 7 : -1,
+                    AimFacing = bertha ? (HexByte(raw, 0x03) & 15) / 2
+                              : haveRaw ? HexByte(raw, 0x03) & 7 : -1,
+                    Turm16 = bertha ? HexByte(raw, 0x03) & 15 : -1,
+                    SatzBlick = facing,
+                    SatzTurm = bertha ? HexByte(raw, 0x03) & 15 : haveRaw ? HexByte(raw, 0x03) & 7 : -1,
                     FootW = System.Math.Max(1, GetI(e, "foot_w", 1)),
                     FootH = System.Math.Max(1, GetI(e, "foot_h", 1)),
                     Footprint = CellRect(ox, oy, col, row, el), IsProp = false,
@@ -4211,7 +4233,10 @@ public partial class MapEntityLayer : Node2D
                 // 2x2, == 5 heisst 4x4 (NavGrid.HullSide, aus Can_go gelesen).
                 // Deshalb hat sie hier das letzte Wort — und wenn die Datei
                 // widerspricht, wird das GESAGT statt still ueberschrieben.
-                if (last.GameUnitType is 4 or 5)
+                // bug-486 (12.10.2026): die Dicke Bertha (Gattung 3) ist 2x2 wie
+                // Gattung 4 — Can_go-Arm 0x406419 prueft vier Zellen.
+                if (last.GameUnitType is 4 or 5
+                    || (last.GameUnitType == 3 && !Simulation.NavGrid.BerthaRumpfAlt))
                 {
                     int soll = Simulation.NavGrid.HullSide(last.GameUnitType);
                     if (last.FootW != soll || last.FootH != soll)
@@ -5663,8 +5688,11 @@ public partial class MapEntityLayer : Node2D
                    $"{s.Col},{s.Row}, Besitzer {s.Owner}  |  Bild: " +
                    $"{PanelPortrait().Why}  |  Panel: " +
                    _panel.Text.Replace("\n", " / ");
-        return $"select: Platz {s.Slot} {LabelOf(s.UnitType)}, Waffe {s.Weapon} " +
-               $"\"{WeaponOf(s.Weapon).Name}\", Munition {s.Ammo}/{s.AmmoMax}, " +
+        // bug-485 (C1): die Dicke Bertha nach Entwurf 99 benennen, nicht nach der
+        // leeren Bauteiltafelzeile 138 (»scenery/non-combat«) bzw. »BAUTEIL 61«.
+        bool mm = s.GameUnitType == 3 && !BerthaBildAlt;
+        return $"select: Platz {s.Slot} {(mm ? BerthaName : LabelOf(s.UnitType))}, Waffe {s.Weapon} " +
+               $"\"{(mm ? BerthaWaffe : WeaponOf(s.Weapon).Name)}\", Munition {s.Ammo}/{s.AmmoMax}, " +
                $"Sprit {s.Fuel}/{s.FuelMax}  |  Panel: " +
                _panel.Text.Replace("\n", " / ");
     }
@@ -6146,6 +6174,8 @@ public partial class MapEntityLayer : Node2D
         // Dieselbe Bedingung wie im Zeichner (e.Infantry >= 0), und dieselbe
         // Textur — AuswahlBild holt fuer Fussvolk GetInfantryTexture.
         var fuss = FussVersatzFuer(e);
+        // bug-485: die Bertha liegt +4/+4 gegen ein Fahrzeug (0x430598/0x430590).
+        if (IstBertha(e) && BerthaBild(true, e.Facing) != null) fuss += BerthaVersatz;
         return PictureAnchor(e) - EinheitenAnker(e) + fuss + KoerperMitte(tex);
     }
 
@@ -6214,7 +6244,9 @@ public partial class MapEntityLayer : Node2D
     private Texture2D? AuswahlBild(Entity e)
         => e.Infantry >= 0
             ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
-            : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e))
+            : IstBertha(e) ? BerthaBild(true, e.Facing) ?? GetComposedTexture(e.Combo, e.Facing)
+            : (BerthaBildAlt && e.GameUnitType == 3
+                  ? null : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e)))
               ?? GetComposedTexture(e.Combo, e.Facing);
 
     private static readonly Dictionary<ulong, Vector2> _koerperMitte = new();
@@ -11464,6 +11496,8 @@ public partial class MapEntityLayer : Node2D
     private static string MountName(Entity e)
     {
         if (e.Weapon == 0) return "UNBEWAFFNET";
+        // bug-485 (C1): Aufsatz 61 hat keine Waffenzeile — Name der Bertha-Waffe.
+        if (e.GameUnitType == 3 && !BerthaBildAlt) return BerthaWaffe;
         if (!IsEquipmentMount(e.Weapon)) return WeaponOf(e.Weapon).Name;
 
         // ⚠⚠ 18.08.2026, zweite Fassung. Die erste nahm `e.Equipment` (+0x10) —
@@ -34652,6 +34686,7 @@ public partial class MapEntityLayer : Node2D
                    + (pi >= 0 && z.Col == _entities[pi].Col && z.Row == _entities[pi].Row
                       ? "   <<< AUF DEM ANKER" : ""));
         }
+        BerthaCheckTakt();   // bug-485/486: --bertha-check
         bool werteNeu = PanelWerteGeaendert();
         if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
         {
@@ -35777,6 +35812,9 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Best label for a unit_type: real name if recovered, else tier.</summary>
     private static string LabelOf(int unitType)
     {
+        // bug-485 (C1): Rumpf 138 hat in der Bauteiltafel keinen Satz (TP 0) — sein
+        // Name steht in der Entwurfstafel Zeile 99 (0x51DFF2).
+        if (unitType == BerthaRumpf && !BerthaBildAlt) return BerthaName;
         if (_catalog != null && _catalog.TryGetValue(unitType, out var e))
             return !string.IsNullOrEmpty(e.Name) ? e.Name
                  : !string.IsNullOrEmpty(e.Tier) ? e.Tier : "?";
@@ -35852,6 +35890,9 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Faellt sie auf eine NUMMER zurueck (»BAUTEIL 51/ZEILE 0/AUSR. 0«),
         // bleibt der Fahrwerkname stehen: eine Nummer ist kein Name, und der
         // alte Text ist immerhin lesbar. Gegenschalter --fahrzeugname-alt.
+        // bug-485 (C1, 12.10.2026): die Bertha heisst nach ihrem Entwurf (Zeile 99),
+        // nicht nach ihrer Waffe — sonst stand im Protokoll »Raketenwerfer + MG«.
+        if (e.GameUnitType == 3 && !BerthaBildAlt) return BerthaName;
         if (!FahrzeugnameAlt && !e.IsBuilding && !e.IsProp && e.Weapon != 0)
         {
             string mn = MountName(e);
@@ -35915,6 +35956,10 @@ public partial class MapEntityLayer : Node2D
     /// <see cref="Import.CwrFile.ShipFacings"/>.</summary>
     public static int FacingsOf(int unitType)
     {
+        // ⭐ 12.10.2026 (bug-485): Rumpf 138, die Dicke Bertha — 16 Blicke
+        // (ROBO-Teil 60, 16 Bilder; Drehung in Sechzehnteln 0x404EC6). Sie steht
+        // nicht in units_index.json, weil Rumpftyp 138 kein Fahrwerksbauteil hat.
+        if (unitType == BerthaRumpf && !BerthaBildAlt) return 16;
         LoadUnitIndex();
         return _unitFacings.TryGetValue(unitType, out int n) && n > 0 ? n : 8;
     }
@@ -41546,11 +41591,30 @@ public partial class MapEntityLayer : Node2D
                     DrawTexture(Parteifarbe(getaucht, e.Owner), picC - EinheitenAnker(e));
                     return;
                 }
+                // ⭐⭐ 12.10.2026 (bug-485) — DIE DICKE BERTHA hat ihren eigenen Arm
+                // (Eintragsart 3, 0x42AAD9): Koerper Teil 60 + Turm Teil 61, beide am
+                // selben Punkt, ohne Montage, ohne Hangpose. Siehe BerthaZeichnen.
+                if (IstBertha(e) && BerthaZeichnen(e, picC)) return;
                 // ⭐ bug-410 E — an der Hangkante quer gefahren: das Kippbild
                 // (Block 5); sonst der flache Weg mit dem Fahrzittern (D).
                 int kipp = KippBild(e, slope);
                 var hull = kipp >= 0 ? GetKippTexture(e.UnitType, PoseOf(e), kipp) : null;
                 bool gekippt = hull != null;
+                // --bertha-bild-alt: der Stand vorher. user://…/hull/138 war leer, und
+                // Content.Path fiel auf res://Assets/Legacy/Units/hull/138 durch — acht
+                // LEERE Bilder. Gezeichnet wurde also ein unsichtbarer Rumpf und der
+                // Turm 61 am Montagepunkt. Nach dem Neuexport liegt unter hull/138 der
+                // echte Koerper; der Gegenschalter zeigt darum nur den Turm wie vorher.
+                if (BerthaBildAlt && e.GameUnitType == 3)
+                {
+                    var t61 = GetTurretTexture(e.Weapon, aim, slope, TurmGruppe(e));
+                    if (t61 != null)
+                    {
+                        DrawTexture(Parteifarbe(t61, e.Owner), picC - EinheitenAnker(e)
+                                    + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e));
+                        return;
+                    }
+                }
                 hull ??= GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
                 if (hull != null)
                 {

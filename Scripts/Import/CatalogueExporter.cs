@@ -1089,7 +1089,10 @@ public sealed class CatalogueExporter
                 fc = false;
                 sb.Append(c);
             }
-            sb.Append($"],\"count\":{kv.Value},\"name\":\"{Esc(s.Name)}\",");
+            // bug-485 (C1): Rumpf 138 hat in der Bauteiltafel keinen Namen; die
+            // Dicke Bertha heisst nach Entwurfstafel Zeile 99 (VA 0x51DFF2).
+            string nm = s.Name.Length == 0 && ut == 138 ? "Dicke Bertha" : s.Name;
+            sb.Append($"],\"count\":{kv.Value},\"name\":\"{Esc(nm)}\",");
             sb.Append($"\"succ_name\":\"{Esc(s.SuccName)}\",\"component_id\":{s.ComponentId},");
             sb.Append($"\"table_category\":\"{TableCategory(s.ComponentId)}\",");
             sb.Append($"\"stat_A_off07\":{r[0x07]},\"class1_off09\":{r[0x09]},");
@@ -1105,9 +1108,15 @@ public sealed class CatalogueExporter
     }
 
     /// <summary>The tier is ours, read off the hit points the data gives.</summary>
+    /// <para>⚠ 12.10.2026 (bug-485, C1): hier stand fuer TP 0 »scenery/non-combat«.
+    /// TP 0 heisst aber nur, dass die BAUTEILTAFEL-Zeile keinen Wert traegt — das
+    /// gilt fuer das Fussvolk (148/149) und fuer die Dicke Bertha (138, 255 TP im
+    /// Kartensatz, Angriff 30), die beide kaempfen. Das Wort war eine Erfindung aus
+    /// einer leeren Zeile und landete als Name in der select:-Zeile. Jetzt sagt die
+    /// Stufe, was wahr ist.</para>
     private static string Tier(int hp) => hp switch
     {
-        0 => "scenery/non-combat",
+        0 => "ohne TP in der Bauteiltafel",
         <= 100 => "light",
         <= 350 => "medium",
         <= 450 => "heavy",

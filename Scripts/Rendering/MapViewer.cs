@@ -4766,6 +4766,16 @@ _mausProbePunkt = karte;
                 if (_selectForShot < 0) _selectForShot = 0;
                 _designWindowDemo = true;
             }
+            // bug-485/486 (12.10.2026): die Dicke Bertha — Bild Teil 60+61 (0x42AAD9)
+            // und Rumpf 2x2 (0x406419). Siehe Simulation/DickeBertha.cs.
+            else if (a == "--bertha-bild-alt") MapEntityLayer.BerthaBildAlt = true;
+            else if (a == "--bertha-rumpf-alt") Simulation.NavGrid.BerthaRumpfAlt = true;
+            else if (a == "--bertha-hang-alt") Simulation.NavGrid.BerthaHangAlt = true;
+            else if (a == "--bertha-check" || a.StartsWith("--bertha-check="))
+            {
+                MapEntityLayer.BerthaCheck = true;
+                if (a.Length > 15) MapEntityLayer.BerthaCheckEnde = Mathf.Max(5, a["--bertha-check=".Length..].ToInt());
+            }
             // Der Waffensitz auf dem Schiff — gemeldet am 13.08.2026 als »die
             // Waffe sitzt einige Felder daneben«. Er braucht ein paar Bilder,
             // bis die Bildpaare geladen sind.

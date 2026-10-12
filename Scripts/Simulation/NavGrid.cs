@@ -203,7 +203,61 @@ public sealed class NavGrid
     ///
     /// <para>Alles andere ist 1 — das Original prueft dort genau eine Zelle.</para>
     /// </summary>
-    public static int HullSide(int art) => art == 5 ? 4 : art == 4 ? 2 : 1;
+    /// <para>⭐⭐ <b>12.10.2026 (bug-486) — GATTUNG 3 IST 2x2.</b> Die Dicke Bertha
+    /// (Rumpf 138) hat in derselben Tafel den Arm <c>0x406419</c> (Debugname
+    /// <c>"MM"</c> @0x406425), und der prueft ebenfalls VIER Zellen:
+    /// <c>[0xBDEA80 + 2·((x&lt;&lt;8)+y)]</c> @0x406453, <c>+0x200</c> (Spalte+1)
+    /// @0x406490, <c>+2</c> (Zeile+1) @0x4064C5, <c>+0x202</c> @0x4064FA — je
+    /// <c>0xFFFE</c>, die eigene Nummer oder ueberfahrbare Infanterie (0x412980);
+    /// rau (0xFFFD) ist gesperrt wie fuer jedes gewoehnliche Fahrwerk. <c>fahre</c>
+    /// meldet sie mit Bewegungsart 4 an (Tafel 0x40B1EC), der Suchlaeufer prueft
+    /// das Ziel 2x2 (0x4D3C99 → 0x4D3390). Die Karten tragen fuer alle zehn
+    /// Gattung-3-Saetze einen 2x2-Grundriss. Bis heute war sie hier 1 und fuhr
+    /// durch jede Einzelluecke. Bericht <c>berichte/dicke-bertha-fable.md</c> §2.2.
+    /// ⚠ UNSERE Abbildung: die Suchkarte baut fuer sie dieselbe Rumpfschleife wie
+    /// fuer Schiffe (<see cref="PfadOffen"/> ueber <see cref="HullOf"/>); der
+    /// Kartenbauer der Bewegungsart 4 selbst (ab 0x4D453D) ist NICHT gelesen.
+    /// Gegenschalter <c>--bertha-rumpf-alt</c>.</para>
+    public static int HullSide(int art) => art == 5 ? 4 : art == 4 ? 2
+                                         : art == 3 && !BerthaRumpfAlt ? 2 : 1;
+
+    /// <summary><c>--bertha-rumpf-alt</c> — Stand vor bug-486: Gattung 3 ist 1x1.</summary>
+    public static bool BerthaRumpfAlt;
+
+    /// <summary>
+    /// ⭐⭐⭐ 12.10.2026 (bug-486, Nachlesung auf die Spielermeldung »sie faehrt nur
+    /// kurz rum, NICHT nach Norden«) — <b>DIE BERTHA PLANT NUR UEBER FLACHE
+    /// ZELLEN.</b> Selbst gelesen (O, EXE C):
+    /// <code>
+    /// 0x4D4559  Suchlaeufer: Bewegungsart 4..7 → 0x40244B → 0x4D2A10 (die 2x2-Suche)
+    /// 0x4D2A3D  Kartenbauer 0x4D1170(art, Spalte, Zeile), Tafel 0x4D1E7C: Art 4 → 0x4D15D5
+    /// 0x4D1618  call 0x41D110 (das FLAGBYTE der Kachel, Hangklasse/Kartenmarke)
+    /// 0x4D1620  test al,al / jne → byte := 0   ⭐ jede Zelle mit Flag ≠ 0 ist GESPERRT
+    /// 0x4D1624  imap 0xFFFE → 1; &lt;8000: der Beweger selbst (0xBC9F40) oder
+    ///           +0x0A == 0 (ein Fahrzeug) → 1; 10000..13999 mit byte[0x74EC89+22·n]==0 → 1
+    ///           sonst (auch RAU 0xFFFD, Gebaeude) → 0
+    /// 0x4D2370  Nachbar nur, wenn karte[a]==1 und die drei anderen Zellen ≠ 0
+    ///           (+0x100 = Spalte+1, +1 = Zeile+1, +0x101) — KEINE Eckenregel
+    /// 0x4D2B88  Ring 0x1388 = 5000
+    /// </code>
+    /// <para>Can_go selbst (0x406419) fragt das Flag NICHT — die Sperre gilt nur
+    /// der PLANUNG. Fuer Gattung 0 (0x4D118D) gibt es diesen Test nicht; Hover prueft
+    /// das Flag in Can_go (0x4057B5). Auf K25 heisst das: die Huegel rund um den
+    /// Start (Hangkacheln) sind fuer ihre Wegsuche Wand.</para>
+    /// <para>⚠ UNSERE Abbildung: die Ringlaenge bleibt 4096 (<see cref="UrRing1x1"/>),
+    /// Zielwahl und Ersatzziel bleiben, wie sie sind. Gegenschalter
+    /// <c>--bertha-hang-alt</c> (Planung wie ein Schiffsrumpf auf Land: Hang offen,
+    /// rau weich, Eckenregel).</para>
+    /// </summary>
+    public static bool BerthaHangAlt;
+
+    /// <summary>Plant hier eine Einheit mit der Karte der Bewegungsart 4?</summary>
+    private bool IstBerthaSuche(MoveClass mc, int mover)
+        => !BerthaHangAlt && !BerthaRumpfAlt && mc != MoveClass.Ship && HullOf(mover) == 2;
+
+    /// <summary>Alle vier Zellen des Ankers flach (Flagbyte 0, @0x4D1620)?</summary>
+    public bool BerthaRumpfFlach(int c, int r)
+        => FlagAt(c, r) == 0 && FlagAt(c + 1, r) == 0 && FlagAt(c, r + 1) == 0 && FlagAt(c + 1, r + 1) == 0;
 
     /// <summary>
     /// Die Kantenlaenge je Einheit. <b>Hier und nicht beim Aufrufer</b>, und das
@@ -1362,6 +1416,7 @@ public sealed class NavGrid
         // ---- die Karte: 0 frei, 2 gesperrt ---------------------------------
         int w = Width, h = Height;
         var karte = new byte[w * h];
+        bool berthaKarte = IstBerthaSuche(mc, mover);
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
                 // ⭐⭐ 23.08.2026 — PfadOffen statt IsFree: bewegliche Einheiten
@@ -1373,6 +1428,8 @@ public sealed class NavGrid
                            ? SchiffPfadOffen(x, y, mover)
                            : NeuePfadkarte ? PfadOffen(x, y, mc, mover)
                                            : IsFree(x, y, mc, mover);
+                // bug-486: die Bertha plant nur ueber FLACHE Zellen (BerthaHangSperrt).
+                if (offen && berthaKarte && !BerthaRumpfFlach(x, y)) offen = false;
                 // ⭐⭐⭐ 08.09.2026 — DIE 1 HAT GEFEHLT, UND SIE IST DER
                 // UNTERSCHIED ZWISCHEN »kommt hin« UND »kommt nicht hin«.
                 //
@@ -1403,7 +1460,7 @@ public sealed class NavGrid
                 // Kartenbauer (0x4D35C0/0x4D3700), und dort gibt es kein
                 // 0xFFFD. Gegenschalter --rau-ist-hart.
                 karte[y * w + x] = offen ? (byte)0
-                                 : !RauIstHart && mc != MoveClass.Ship
+                                 : !RauIstHart && mc != MoveClass.Ship && !berthaKarte
                                    && (Ground)_ground[Idx(x, y)] == Ground.Rough ? (byte)1
                                  : (byte)2;
             }
@@ -1540,7 +1597,9 @@ public sealed class NavGrid
                 if (amRand && (nx < 0 || ny < 0 || nx >= w || ny >= h)) continue;
                 int n = ny * w + nx;
                 if (karte[n] != 0) continue;
-                if ((i & 1) != 0)
+                // bug-486: die 2x2-Suche 0x4D2A10 schiebt alle acht Nachbarn ueber
+                // 0x4D2370 ohne Eckenregel (nur die vier Zellen des Ankers zaehlen).
+                if ((i & 1) != 0 && !berthaKarte)
                 {
                     // ⭐ Diagonale: BEIDE anliegenden Geraden muessen <= 1 sein.
                     // Das sind genau (i-1) und (i+1) modulo 8 -- an allen vier

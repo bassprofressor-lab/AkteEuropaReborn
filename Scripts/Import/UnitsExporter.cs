@@ -144,6 +144,17 @@ public sealed class UnitsExporter
         foreach (var (ut, weap) in seen)
         {
             int prop = ComponentOf(ut);
+            // ⭐⭐ 12.10.2026 (bug-485) — DIE DICKE BERTHA, Rumpf 138. Ihr Rumpftyp hat
+            // kein Fahrwerksbauteil (component_id 0), also schrieb dieser Weg einen
+            // LEEREN hull/138 und einen Turm allein. Der Zeichner des Originals nimmt
+            // fuer Gattung 3 die Teile 60 und 61 FEST (0x42AAD9). Siehe BerthaSchreiben.
+            if (ut == BerthaRumpf)
+            {
+                BerthaSchreiben(say);
+                if (!hulls.ContainsKey(ut)) { hulls[ut] = NameOf(ut); Hulls++; }
+                if (weap > 0 && turrets.Add(weap)) Turrets++;
+                continue;
+            }
             if (prop <= 0 && weap == 0) continue;          // pure scenery
             string name = NameOf(ut);
 
@@ -892,6 +903,48 @@ public sealed class UnitsExporter
     /// </summary>
     private static int FacingsOfPart(int comp)
         => CwrFile.IsShipPart(comp) ? CwrFile.ShipFacings : CwrFile.Facings;
+
+    /// <summary>Rumpftyp der Dicken Bertha (Gattung 3).</summary>
+    public const int BerthaRumpf = 138;
+
+    /// <summary>Die Bilder, die der MM-Arm <c>0x42AAD9</c> blittet: Koerper =
+    /// <c>Basis(Teil 60) + OT_PODV</c> (@0x42AB42, Tafelwort 0x77C962), Turm =
+    /// <c>Basis(Teil 61) + OT_HLAV</c> (@0x42ABB5, 0x77C966), je 16 Blicke, eine
+    /// Gruppe, kein Hangblock.</summary>
+    public const int BerthaTeilKoerper = 60, BerthaTeilTurm = 61, BerthaBlicke = 16;
+
+    /// <summary>Wieviele Bertha-Bilder geschrieben wurden (Koerper + Turm).</summary>
+    public int BerthaBilder;
+
+    /// <summary>
+    /// ⭐⭐ 12.10.2026 (bug-485) — <c>hull/138/f0…f15</c> = ROBO-Teil 60 und
+    /// <c>turret/61/f0…f15</c> = Teil 61, jedes Bild auf seiner eigenen Leinwand
+    /// mit demselben Ursprung (4 px Rand links, y-Versatz des Bildes) wie jeder
+    /// andere Satz. Beide stehen im Original am SELBEN Punkt (0x42AB4C/0x42ABB8:
+    /// gleiches x und y), also braucht es keine Montage und kein zusammengesetztes
+    /// Bild — der Zeichner legt sie selbst uebereinander
+    /// (<c>MapEntityLayer.BerthaZeichnen</c>).
+    ///
+    /// <para>⚠ <c>composed/138_61</c> wird NICHT neu geschrieben: der alte (Turm
+    /// allein, um [0,−12] gerueckt) ist das, was <c>--bertha-bild-alt</c> zeigen
+    /// soll. Ebenso bleiben <c>turret/61/s1…s4</c> liegen — das waren die Blicke
+    /// 8…15 und Teil 62, als Hangbloecke verlesen (Teil 61 hat 16 Bilder in einer
+    /// Gruppe); gelesen werden sie fuer die Bertha nicht mehr.</para>
+    /// </summary>
+    private void BerthaSchreiben(Action<string>? say)
+    {
+        if (BerthaBilder > 0) return;
+        int bk = _cwr.PartBase(BerthaTeilKoerper), bt = _cwr.PartBase(BerthaTeilTurm);
+        if (bk < 0 || bt < 0) { say?.Invoke("⚠ Dicke Bertha: Teil 60/61 fehlt in ROBO.CWR"); return; }
+        for (int f = 0; f < BerthaBlicke; f++)
+        {
+            int vor = Frames;
+            Save($"hull/{BerthaRumpf}/f{f}.png", _cwr.FacingImage(bk + f, _pal));
+            Save($"turret/{BerthaTeilTurm}/f{f}.png", _cwr.FacingImage(bt + f, _pal));
+            BerthaBilder += Frames - vor;
+        }
+        say?.Invoke($"Dicke Bertha: {BerthaBilder} Bilder (Teil 60 ab {bk}, Teil 61 ab {bt}, je {BerthaBlicke} Blicke)");
+    }
 
     /// <summary>Die Turmnummer zu einer Rumpfrichtung. Ein Turmsatz hat immer
     /// acht Bilder, ein Schiffsrumpf sechzehn — dieselbe Rechnung wie
