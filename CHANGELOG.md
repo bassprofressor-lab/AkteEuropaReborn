@@ -12,6 +12,413 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.7 — 2026-10-12 · missions 25 to 27, and the fourth round of reports from KayelGee
+
+> Three more missions, each played through on its own — plus the fourth round
+> of reports from **KayelGee**, forty of them this time, made on 0.6.6 against
+> the original. Every point below is a finding: what stood out, what happens
+> now, and how the original does it. Where we made a call of our own, it says
+> so. Every change has a counter-switch that brings back the old behaviour.
+
+### Thanks to KayelGee
+
+KayelGee played 0.6.6 and sent us **forty reports** — from selecting tightly
+packed tanks to the depot door to the length of the main-menu demos, many with
+a screenshot and a precise description of how the original behaves. Every
+report was read up in the original before anything was built; most are fixed
+now, a few are waiting on a follow-up question to him. They are listed below
+under **"Reported by KayelGee — round 4"**, each with its number from his list
+and what came of it.
+
+### ⚠ Recommended: re-read the game data once
+
+Two findings below only take effect once the game data is read in again — the
+game does **not** re-read it on its own after an update:
+
+- **The movies** are now copied from the CD into the data folder during import
+  (about 880 MB, report 6). Without a re-import you still need the CD in the
+  drive for the movies.
+- **The Dicke Bertha** gets her own image set with 16 facings for body and
+  turret during import (mission 25). Without a re-import the game takes the same
+  images from the parts bank — so she looks right either way; her own set is
+  just the clean path.
+
+To do so, delete the folder
+
+`%APPDATA%\Godot\app_userdata\AkteEuropaReborn\data`
+
+once and start the game — the import screen then appears as on the first run
+(insert CD 1; it asks for CD 2). The movies are taken **only from a CD drive**,
+never from a folder on disk or an installation. Saves and settings are not in
+that folder and are kept. The new fog on ice maps (mission 26) needs no
+re-import — it is computed at startup.
+
+### Reported by KayelGee — round 4
+
+The numbers in brackets are those from his list.
+
+#### Selection and hit area
+
+- **With units standing close together you get the one you point at**
+  (report 2). Clicking the hull centre of the middle of three tanks selected the
+  lower one; for the middle one you had to aim far up. We let the southernmost
+  unit win. The original checks its draw lists from north to south, and the
+  first hit wins — the **northernmost** unit; and a unit always beats a
+  building. Same now.
+- **You can drive right up to the depot again** (report 36). A click in front
+  of the door selected the base instead of giving a move order: we hit a
+  building anywhere in the rectangle of its image — for the base 42 cells
+  including door and forecourt. The original hits a building only on its own
+  body cells (19 for the base in mission 2) and on the door. The cell in front
+  of the door is ground again. Newly built buildings fall back to the
+  rectangle.
+- **The aircraft wreck in mission 1 is scenery** (report 5): no health bar, no
+  selection cursor any more. In the original such scenery is ground and has no
+  bar. With us every ownerless building got the selection cursor — an earlier
+  call of ours.
+- **Ownerless buildings are only selectable where the original allows it**
+  (report 16): the power plant, a trading post with a vehicle on its pad and a
+  supply post with one of your own vehicles on its pad. The supply post in
+  mission 2 could so far be clicked without a vehicle.
+- **"Base sometimes not selectable"** (report 27) could not be reproduced. The
+  most likely cause was a unit on the forecourt that, with the old rectangle and
+  the old ranking, caught clicks on the lower rows of the base — that is gone
+  with reports 2 and 36. Whether that settles it, we are asking KayelGee.
+
+#### Interface and windows
+
+- **The settings lie above the info panel** (report 3). The control block in the
+  lower left covered the settings screen because both sat in the same layer.
+  Settings, encyclopedia, load and mission info now have a layer of their own
+  on top.
+- **The text in the base menu is sharp** (report 28). Base and design windows
+  and the control block were scaled up with smoothing, which smeared the
+  original's bitmap font. Now pixel for pixel and placed on whole pixels.
+- **"Reload 7" instead of 20 for the machine gun** (report 31). We printed the
+  raw value from the parts table; the original converts it in every window —
+  (16 − ⌊√x⌋) / 2 + 1. 20 becomes 7, 120 becomes 4.
+- **The design is called "Kanone-0-161"** (report 35), not "Leichte-161". The
+  original builds the name from the weapon's short name, the upgrade number (0
+  for none) and the chassis; we took the first word of the long name.
+- **The first captured base in mission 2 is called "Basis 2"** (report 32), not
+  "Krumlov". Our windows showed the map's place names — the original overwrites
+  every building name with its slot plus one when loading. Only the market
+  keeps its name.
+- **The text colours in the design window** (report 33) are the original's:
+  each row in the colour of its part symbol (red, gold, lavender for special
+  bodies), the selected row in the selection colour. So far the colours were
+  guessed. The dark shade for parts that do not fit together came afterwards —
+  see **"The design window"** below.
+- **The text colours in the research tab** (report 34): every row "Name
+  (number)" in the colour of its part kind, inventions in the glyph colour — and
+  without our "+what" preview, which the original does not have.
+- **The capture bar is the building's health bar** (report 25). It now sits at
+  the original's spot, 36 pixels higher than before, with the original's frame.
+  After the capture it stays full and drains tick by tick — grey against the new
+  owner's colour, as KayelGee described. So far the progress was zeroed at once
+  on capture. The buildings' health bar in the Tab setting "health" now also has
+  the original's dimensions instead of a unit's.
+- **The resource bar at the top stays for now** (report 29). The original has
+  none — stocks are shown only in the building windows. **Decision:** the bar is
+  our addition and stays in for the time being; `Q` hides it.
+- **The fog no longer goes missing when zooming out** (report 4). The fog masks
+  were laid only for the last drawn view; zooming and scrolling did not trigger
+  a redraw. Now it redraws as soon as the view leaves the drawn area.
+- **The window stays maximised** (report 30). On a scene change, for instance
+  before a movie, our settings reset the window to its stored size. Now a
+  maximised window stays maximised unless you explicitly pick a resolution.
+
+#### Turret, manual control and fuel
+
+- **While driving, the gun stays on its target** (report 10). A move order in
+  combat cleared every target with us, and the turret turned to the direction
+  of travel. In the original a move order only clears a cell or building
+  target; a unit target stays, and the unit keeps firing on the move. Same now.
+  ⚠ Limiting this to vehicles with a weapon is our own restriction.
+- **Under manual control the left mouse button fires** (report 37) instead of
+  deselecting — clamped to the weapon's range, as in the original.
+- **The muzzle flash sits on the turret** (report 9). We placed it towards the
+  target; since the turret turns in steps, that no longer matched the image.
+  The original attaches the flash to the turret frame. ⚠ World-fixed position
+  and 14 pixels ahead of the turret centre remain our call.
+- **A unit without fuel no longer gives way** (report 1). In the original an
+  empty tank skips the whole order dispatcher, giving way included. With us the
+  dry unit still rolled aside.
+
+#### Depot and production
+
+- **The depot door opens fully** (report 38). Our gate only slid open to a gap.
+  The original takes the frame from the gate state, and from stage 4 on there is
+  no gate leaf at all — the door is open.
+- **No more invisible units at the depot door** (reports 20 and 22). Our exit
+  only checked the door cell; if the cell below was occupied, the unit stayed
+  invisible on the door and blocked others. The original only lets a unit out
+  when the door **and** the cell below are free, and a unit on the door is
+  visible. Units sent out now visibly drive out.
+- **Friendly units make way at the door** (report 40). The original sends an
+  idle allied unit standing on or in front of the door a little way south as
+  soon as a unit wants out. That rule was missing with us entirely.
+- **After a base is captured, the vehicles clear the forecourt** (report 26)
+  instead of driving into the depot. The original sends everything standing on
+  the forecourt (5 × 4 cells in front of the door) six rows south.
+- **Recycling in the depot works** (report 21). Our button rejected units that
+  had driven in — and in mission 2 the depot holds only those. Now it recycles as
+  in the original: the part prices times the share of hit points left.
+- **The design window only shows what you own** (report 19). In mission 2 every
+  technology was on offer; in the campaign there are now only parts you have
+  researched or received from the mission script.
+- **Several units can be marked in the depot** (report 24) and sent out or
+  recycled together, as in the original. ⚠ For transport the button takes the
+  first marked unit — our call.
+- **Production without build time** (report 23). In the original an order has
+  no build time: the unit lies in the base's depot at once and is sent out right
+  away through the free door. With us every build took six seconds in a queue —
+  our addition, now removed, for the base itself as well. If the depot is full,
+  the original's message "Es gibt keinen Platz mehr im Depot." appears before
+  paying. The AI builds the same way. **Decision:** this applies in skirmish as
+  well — the AI builds noticeably faster there (on NET02 in 90 seconds 28 to 35
+  units per opponent instead of 10 to 15).
+
+#### Aircraft
+
+- **Supply helicopters no longer jitter at their home point** (report 11).
+  Without a customer our helicopter flew to its home point, drifted two pixels
+  off, flew back — constantly changing direction. The original jumps to a new,
+  randomly chosen building on every arrival; without a building of its own the
+  rolled cell stays put.
+- **Aircraft are drawn at their altitude** (report 12). We drew every aircraft
+  at a fixed height; a shot-down helicopter therefore seemed not to fall. Now it
+  sits as high as it flies, click area and selection move with it, and a crash
+  trails the original's fire and smoke plume. The crash itself was then rebuilt
+  in full — see **"Aircraft crashes"**.
+- **Supply helicopters fly in high and only descend over the customer**
+  (report 17), to the original's height (two steps above the customer's
+  terrain), and only deliver there; empty, they climb again. ⚠ One extra
+  condition of the original for starting the delivery was left out — our call.
+
+#### Main menu, demos and movies
+
+- **The movies play without the CD** (report 6). During import they are now
+  copied from the CD into the data folder, and the movie player looks there
+  first. **Decision:** they are copied only from a CD drive, never from a folder
+  on disk or an installation, and nothing is shipped. Re-read the data once for
+  this (see above).
+- **The CD staging folder is cleaned up** (report 7). It was left behind when an
+  import was aborted or restarted; now it is deleted at startup as soon as no
+  mission is missing.
+- **The music no longer restarts on a demo change** (report 8). Each demo
+  loaded the map and the music afresh with us; the original lets the current
+  piece play on.
+- **The demo only changes when no menu is open** (report 15), as in the
+  original — whoever is in the settings keeps their picture.
+- **The demos show the original's spots** (report 14). Our camera toured the
+  headquarters — our invention. The original takes the view stored in the demo
+  map and stands still; same now, and with it the well-known scenes are back in
+  view.
+- **The demos run for different lengths** (report 14, second part). With us
+  every demo lasted 20 seconds. The original counts down a fixed number of drawn
+  frames per demo — 400, 350, 550, 350, 150 … 220, the longest almost four times
+  the shortest. Same now. ⚠ How many frames per second the original draws is not
+  in the EXE; we set **20 frames per second** after KayelGee's estimate — a call
+  we want to replace with a stopwatch measurement on the original.
+- **Trains in the demos "not drawn completely"** (report 13): faithful to the
+  original by our reading. A train entering a building loses its wagons one by
+  one in the original, and the last one still hangs outside when the front ones
+  are gone — exactly his picture. We asked which demo it was and whether the
+  other wagons had entered the building first.
+- **The black bar at the first bridge in mission 2** (report 18): by our
+  reading the original computes the same here — the roadway lies one step
+  higher, so two fog patterns cover each other exactly to a solid area. That
+  contradicts his observation; open.
+
+#### Still open from round 4
+
+- **Selecting supply helicopters** (report 39): in the original your own
+  helicopters can be selected, other players' never. With us the helicopters in
+  missions 1 and 2 belong to the AI — there the original behaves the same. We
+  are asking which helicopters he meant.
+
+### Aircraft crashes
+
+Report 12 turned into a complete re-reading of the crash.
+
+- **An aircraft hits when it reaches the ground** — not only at altitude 1. The
+  original runs its own ground check every tick: impact just above the terrain
+  over free ground, water, rough terrain or a building, higher over infantry,
+  higher still over a unit, and well up over blocked cells. With us an aircraft
+  over terrain of height e lay on the ground for another 7.5 × e ticks before
+  it blew up.
+- **A falling aircraft keeps flying** in its direction and speed instead of
+  stopping in mid-air, and the smoke plume sits where the original draws it.
+- **Manual control has a ground too**: after every step the original checks
+  whether the aircraft has touched down and then lets it crash. Our comment "no
+  height floor" was wrong.
+- **The impact looks as in the original**: six wreck parts, a wreck explosion
+  of its own made of blast, flames and glow with debris and splinters, and four
+  fires on the four cells of the crash site. So far it was a plain explosion.
+- **One case of the ground check is deliberately not rebuilt**: the original
+  knows a cell on which an aircraft never hits. **Decision:** that cell cannot
+  arise in play — the original clears its marking as soon as the building on it
+  is destroyed — so there is nothing to build.
+
+### Sound, wreck parts and the length of the demos
+
+- **A shot-down aircraft can be heard.** The original always plays a sound at
+  the aircraft when it is shot down, and a second one for a supply helicopter.
+  Both were defined with us but never called. ⚠ The second sound runs through
+  the effects slider — we only have one.
+- **Every building fire can be heard.** We had taken the fire sound for "empty
+  in the sound bank and therefore silent" — a misreading on our part: the
+  number is a placeholder the original turns into one of six ignition sounds
+  before playing. Now every fire ignites audibly, a crash four times (four
+  fires), and a burning building keeps crackling during its first ten ticks
+  according to the original's dice. ⚠ The exact position of the fire images is
+  an approximation.
+- **Wreck parts lie where the original puts them**: to the right of and above
+  the cell centre. Our call lay about 20 pixels too far left and 30 too low.
+- **The length of the demos** — see report 14 above. The counter now starts
+  with the first frame shown, not while loading; `--demo-bildrate=N` changes the
+  frame rate.
+
+### The design window
+
+- **Parts that do not fit together are greyed out.** A part value we did not
+  know so far is the **load class** from 1 to 3: a chassis carries a body if its
+  class is at least as high. In the body list the original darkens every row
+  too heavy for the selected chassis, and in the chassis list every row too
+  light for the selected body — in colours from the original's palette. A dark
+  row stays selectable, but then preview, cost, stats, name and the "Erstellen"
+  button are missing. ⚠ That the button keeps its place is our call.
+- **Enter creates the design**, as in the original — and without a load-class
+  check. Read up: in the original the key path leads straight to "Erstellen",
+  past no check at all. Our "chassis too light" block was a call of ours and is
+  removed.
+- **The lists are the original's.** The special bodies (lavender) belong in the
+  body list, not among the upgrades — a transporter designed that way carried
+  its cargo bed as an upgrade so far. And eight upgrades were missing entirely:
+  **shield, kamikaze, mirror image, illusionist, function amplifier, repairer,
+  gas defence, radar extension** can now be chosen. ⚠ The fixed first row
+  "(nothing)" is ours; we do not offer the airfield payloads because the maps do
+  not give them to the players.
+
+### Skirmish
+
+- **Part ownership follows the tech level.** In the original, ownership in
+  skirmish does not come from the map: at the start every player gets every
+  named part whose level does not exceed the chosen tech level. With us
+  everything was on offer in skirmish. At tech level 1 that is now 12 rows, at 4
+  it is 35, at 8 all 59 — so with the default of 8 nothing changes.
+- **A second skirmish takes the new tech level.** We kept the first value read
+  for the whole session.
+- **"All units" unlocks all parts as well.** **Decision:** this option is ours,
+  and so far it only affected aircraft and ships; now it computes ownership as
+  for tech level 8.
+- **The research price is the original's**: base price equals tech level times
+  100, and inventions count for the tech level's stage. So far skirmish always
+  used level 1 — an old call of ours. **Decision:** as in the original.
+
+### Mission 25
+
+- **The Dicke Bertha is no longer stuck in the ground.** Only half of her was
+  visible: her body was missing entirely, only the turret was drawn, and it
+  floated above the anchor line. The original draws her with a branch of her
+  own — body and turret from the parts bank, 16 facings each, both at the same
+  point. The body had never been written during import (see above:
+  re-import). She is now also called **"Dicke Bertha"**, as in the original's
+  design table, instead of "BAUTEIL 61". ⚠ The weapon name "Raketenwerfer + MG"
+  is our call, after the encyclopedia.
+- **The Dicke Bertha no longer roams across the map.** Her assignment by the AI
+  is the same as in the original; the difference was the hull. In the original
+  she occupies **2 × 2 cells**, and her path search blocks every sloped cell.
+  With us she was a 1 × 1 vehicle that found every path. Now she stays near her
+  start, as in the Let's Play.
+- **The battleship's rocket launcher sits on its mount.** For battleships the
+  original has a drawing branch of its own with the turret fixed at a set point
+  of the hull. We had assumed there was no value and measured our own — up to 13
+  pixels off.
+
+### Mission 26
+
+- **The fog on ice is a smooth veil.** On ice maps our fog showed a clear grid.
+  The original draws it as a fine checkerboard of single pixels — at original
+  size that reads as a veil, scaled up it gave a moiré, and on bright ice it was
+  well over twice as visible as on grass. **Decision:** we now draw a smooth
+  area in the original's fog colour at 50 % opacity; the picture matches what
+  you see in the Let's Play. The old look is available with
+  `--nebel-schachbrett-alt`.
+- **Mission 26 ends again.** All enemies were destroyed and nothing happened.
+  Three branches of the end rules had been lost while reading out the mission
+  script — the reader only knew AND chains, the original also has OR branches
+  there. Added back: victory when the enemy has nothing left, and **defeat when
+  the player owns Myre himself** — whoever captures Myre loses, as in the
+  original. Confirmed in play.
+
+### Mission 27
+
+- **The shipyard shows its stock, not money.** Below the list stood the account
+  balance — but the original's shipyard window knows no money: it shows the
+  three stocks of the shipyard station (W, F, S), and those are exactly what
+  "Produzieren" checks. The header now reads "WERFT W.. F.. S..". That you can
+  hardly build anything in mission 27, on the other hand, is **faithful to the
+  original**: the station holds 20/50/50, no railway line brings supplies, and
+  only one fuel or ammunition tender is affordable. Accepted in play.
+- **With the airfield its aircraft go to the new owner.** After the capture the
+  enemy aircraft were still in the hangar and had to be sent out and shot down.
+  In the original every aircraft whose home is that airfield gets the new owner
+  on capture — in the hangar or in the air; only supply helicopters stay with
+  their owner. We had read this back in September but never built it.
+
+### Stability
+
+- **No more crashes with "Internal CLR error (0x80131506)"** while loading a
+  skirmish map. Mostly our headless test runs were affected (about one in four
+  on two skirmish maps). The cause was .NET's concurrent garbage collector,
+  which Godot switches on in the development run. The game now switches it off
+  itself at startup, as in the exported game. Afterwards 0 crashes in 58 runs.
+
+### For the curious
+
+- **Two test rigs were wrong, not the game.** The turning test on mission 4
+  searched its "free straight" in a way that counted infantry as free, and then
+  measured a U-turn of 135 instead of 180 degrees. The capture test on mission 3
+  looked for a fourth building the map does not have. Both are repaired.
+- **The anti-aircraft probe on a skirmish map** failed because its expected
+  values were computed for terrain of height 0 — the flak there stands at height
+  6. A test-rig error; the probe heights are now relative to the terrain.
+- **The build-list test on missions 1 and 3** gave no verdict because there is
+  no factory of your own there. It now borrows a foreign factory for the
+  measurement and gives it back.
+- **Headless runs changed the campaign state** — our run script now restores
+  the file byte for byte.
+- **The garbage collector**: the switch in the project file only applies to the
+  project's runtime configuration; in the development run Godot starts .NET
+  through its own. An older explanation ("two instances") is refuted by this.
+- For almost every finding above there is a new headless test rig that fails
+  with the counter-switch — which shows that the measurement really sees the
+  change.
+
+### Known limitations
+
+- **An enemy transporter can get stuck in a captured mine** (mission 27). Then
+  the only remedy is to destroy the mine. A test rig is built, but the case is
+  not reproduced yet — still open.
+- **The missile strike on Skagen does not happen in mission 27.** The script
+  fires player 5's medium-range missile at the player's base; with us the
+  launcher is shot down beforehand by another enemy's aircraft. Whether that
+  can happen in the original as well depends on the dice and on the relation
+  between the two enemies — under review. It does no harm to the course of the
+  mission.
+- **A destroyed power plant shows a grass ruin on ice** (tile sets 26 and 44,
+  for example in mission 26). That is a data error **of the original**: the ruin
+  in the ice tile sets is a byte-identical copy of the grass ruin, and with the
+  ice palette it comes out blue-olive mottled. A re-check has shown that there
+  is no ice graphic of its own that we merely fail to use. For now it stays
+  faithful to the original; whether we recolour the ruin is not decided yet.
+- Open follow-up questions to KayelGee: reports **13, 18, 27 and 39** (see
+  above) and a stopwatch measurement of the demos in the original.
+- Missions 28 to 33 have not been played through yet — that is the road to
+  0.7.0.
+
 ## 0.6.6 — 2026-10-05 · missions 21 to 24, and three rounds of reports from KayelGee
 
 > Four more missions, each played through on its own — plus three rounds of

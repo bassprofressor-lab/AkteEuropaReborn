@@ -103,7 +103,7 @@ stays open or needs input goes into **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)**
 (German) — including the cases where an earlier explanation of ours turned out
 to be wrong. Both are kept as we go, not written afterwards.
 
-⭐ **Where we stand (2026-10-05, release 0.6.6):** missions 1 to 24 have been
+⭐ **Where we stand (2026-10-12, release 0.6.7):** missions 1 to 27 have been
 played through. Along the way mission 2 became completable for the first time,
 the power plants in mission 4 and the bunkers in mission 7 became destructible,
 and the enemy now plays with the original's own AI. **0.6.2 came out of
@@ -119,6 +119,10 @@ every aircraft in the game fly in the wrong direction; **0.6.6 covers missions
 21 to 24** — the railway with its transport system and track repair, the
 terranium search, mission scripts that pay out sub-missions and wake eliminated
 opponents up again, and three rounds of reports from our beta tester
+**KayelGee**; **0.6.7 covers missions 25 to 27** — the Dicke Bertha and the
+battleship turret as in the original, fog on ice maps without shimmering, a
+mission 26 that finally ends, the shipyard with its own stock, captured
+airfields that come with their aircraft, and the fourth round of reports from
 **KayelGee**. **Each is a stop along
 this road, not its end.** What changed, in
 plain words: [CHANGELOG.md](CHANGELOG.md).

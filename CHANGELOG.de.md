@@ -14,6 +14,440 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.7 — 12.10.2026 · Kampagne 25 bis 27, und die vierte Runde Meldungen von KayelGee
+
+> Drei weitere Missionen, jede einzeln durchgespielt — dazu die vierte Runde
+> Meldungen von **KayelGee**, diesmal vierzig auf einmal, gemacht an 0.6.6 im
+> Vergleich mit dem Original. Jeder Punkt unten ist ein Befund: was auffiel, was
+> jetzt passiert, und wie das Original es macht. Wo wir etwas selbst festgelegt
+> haben, steht das dabei. Jede Änderung hat einen Gegenschalter, mit dem sich
+> der alte Stand zurückholen lässt.
+
+### Danke an KayelGee
+
+KayelGee hat 0.6.6 gespielt und uns **vierzig Meldungen** geschickt — von der
+Auswahl dicht stehender Panzer über die Depottür bis zur Länge der Demos im
+Hauptmenü, viele davon mit Bildschirmfoto und genauer Beschreibung, wie das
+Original sich verhält. Jede Meldung wurde im Original nachgelesen, bevor etwas
+gebaut wurde; die meisten sind jetzt behoben, ein paar warten auf eine Rückfrage
+an ihn. Sie stehen unten im Abschnitt **»Gemeldet von KayelGee — Runde 4«**,
+jede einzeln mit ihrer Nummer aus seiner Liste und dem, was daraus geworden ist.
+
+### ⚠ Empfohlen: die Spieldaten einmal neu einlesen
+
+Zwei Funde unten wirken erst, wenn die Daten neu eingelesen werden — das Spiel
+liest nach einem Update **nicht von selbst** neu ein:
+
+- **Die Filme** werden jetzt beim Einlesen von der CD in den Datenordner
+  kopiert (rund 880 MB, Meldung 6). Wer nicht neu einliest, braucht für die
+  Filme weiterhin die eingelegte CD.
+- **Die Dicke Bertha** bekommt beim Einlesen ihren eigenen Bildersatz mit 16
+  Blickrichtungen für Körper und Turm (Kampagne 25). Ohne Neueinlesen nimmt das
+  Spiel dieselben Bilder aus der Teilebank — sie sieht also auch so richtig aus,
+  der eigene Satz ist nur der saubere Weg.
+
+Dazu einmal den Ordner
+
+`%APPDATA%\Godot\app_userdata\AkteEuropaReborn\data`
+
+löschen und das Spiel starten — dann erscheint der Einleseschirm wie beim
+ersten Mal (CD 1 einlegen; nach CD 2 wird gefragt). Die Filme werden **nur von
+einem CD-Laufwerk** übernommen, nie aus einem Plattenordner oder einer
+Installation. Spielstände und Einstellungen liegen nicht in diesem Ordner und
+bleiben erhalten. Der neue Nebel auf Eiskarten (Kampagne 26) braucht kein
+Neueinlesen — er wird beim Start gerechnet.
+
+### Gemeldet von KayelGee — Runde 4
+
+Die Nummern in Klammern sind die aus seiner Liste.
+
+#### Auswahl und Trefferfläche
+
+- **Bei dicht stehenden Einheiten wird die gewählt, auf die man zeigt**
+  (Meldung 2). Wer auf die Rumpfmitte des mittleren von drei Panzern klickte,
+  bekam den unteren; für den mittleren musste man weit nach oben zielen. Wir
+  liessen die südlichste Einheit gewinnen. Das Original prüft seine
+  Zeichenlisten von Norden nach Süden, und der erste Treffer gewinnt — also die
+  **nördlichste** Einheit; ausserdem geht eine Einheit immer vor ein Gebäude.
+  Jetzt genauso.
+- **Direkt vor das Depot lässt sich wieder fahren** (Meldung 36). Ein Klick vor
+  die Tür wählte die Basis, statt einen Fahrbefehl zu geben: wir trafen ein
+  Gebäude über das ganze Rechteck seines Bildes, bei der Basis 42 Zellen samt
+  Tür und Vorplatz. Das Original trifft ein Gebäude nur über seine eigenen
+  Körperzellen (bei der Basis in Mission 2 sind das 19) und über die Tür. Die
+  Zelle vor der Tür ist wieder Boden. Neu errichtete Gebäude fallen auf das
+  Rechteck zurück.
+- **Das Flugzeugwrack in Mission 1 ist Kulisse** (Meldung 5): kein
+  Lebensbalken, kein Auswahlzeiger mehr. Im Original sind solche Kulissen Boden
+  und haben keinen Balken. Bei uns bekam jedes herrenlose Gebäude den
+  Auswahlzeiger — eine frühere Setzung von uns.
+- **Herrenlose Gebäude sind nur noch wählbar, wo das Original es erlaubt**
+  (Meldung 16): das Kraftwerk, ein Handelsposten mit Fahrzeug auf der Platte und
+  ein Nachschubposten mit eigenem Fahrzeug auf seiner Platte. Den
+  Nachschubposten in Mission 2 konnte man bisher ohne Fahrzeug anklicken.
+- **»Basis manchmal nicht wählbar«** (Meldung 27) liess sich nicht
+  nachstellen. Die wahrscheinlichste Ursache war eine Einheit auf dem Vorplatz,
+  die mit dem alten Rechteck und der alten Rangfolge die Klicks auf die unteren
+  Basiszeilen abfing — das ist mit den Meldungen 2 und 36 entfallen. Ob es damit
+  erledigt ist, fragen wir bei KayelGee nach.
+
+#### Oberfläche und Fenster
+
+- **Die Einstellungen liegen über dem Infofenster** (Meldung 3). Der
+  Bedienblock unten links überdeckte den Einstellungsschirm, weil beide in
+  derselben Schicht lagen. Einstellungen, Enzyklopädie, Laden und Missionsinfo
+  haben jetzt eine eigene Schicht ganz oben.
+- **Die Schrift im Basismenü ist scharf** (Meldung 28). Basis- und
+  Erstellungsfenster und der Bedienblock wurden weichgezeichnet vergrössert, das
+  verwusch die Bitmapschrift des Originals. Jetzt Bildpunkt für Bildpunkt und auf
+  ganze Punkte gesetzt.
+- **»Nachladen 7« statt 20 beim Maschinengewehr** (Meldung 31). Wir druckten
+  den Rohwert aus der Bauteiltafel; das Original rechnet ihn in allen Fenstern
+  um — (16 − ⌊√x⌋) / 2 + 1. Aus 20 wird 7, aus 120 wird 4.
+- **Der Entwurf heisst »Kanone-0-161«** (Meldung 35), nicht »Leichte-161«. Das
+  Original setzt den Namen aus Kurzname der Waffe, Nummer der Verbesserung (0
+  für keine) und Fahrwerk zusammen; wir nahmen das erste Wort des langen
+  Namens.
+- **Die erste eingenommene Basis in Mission 2 heisst »Basis 2«** (Meldung 32),
+  nicht »Krumlov«. Unsere Fenster zeigten die Ortsnamen der Karte — das Original
+  überschreibt beim Laden jeden Gebäudenamen mit seinem Platz plus eins. Nur der
+  Markt behält seinen Namen.
+- **Die Textfarben im Erstellungsfenster** (Meldung 33) sind die des
+  Originals: jede Zeile in der Farbe ihres Teilesymbols (rot, gold, lavendel für
+  Spezialaufbauten), die gewählte Zeile in der Wahlfarbe. Bisher waren die
+  Farben geschätzt. Die Dunkelstufe für Teile, die nicht zusammenpassen, kam
+  danach dazu — siehe **»Das Entwurfsfenster«** unten.
+- **Die Textfarben im Forschungsreiter** (Meldung 34): jede Zeile »Name (Zahl)«
+  in der Farbe ihrer Teileart, Erfindungen in der Glyphfarbe — und ohne unsere
+  Vorschau »+Was«, die das Original nicht hat.
+- **Der Einnahmebalken ist der Lebensbalken des Gebäudes** (Meldung 25). Er
+  sitzt jetzt am Punkt des Originals, 36 Bildpunkte höher als bisher, mit dem
+  Rahmen des Originals. Nach der Einnahme bleibt er voll stehen und baut Takt um
+  Takt ab — grau gegen die Farbe des neuen Besitzers, wie KayelGee es
+  beschrieben hat. Bisher wurde der Fortschritt bei der Einnahme sofort
+  genullt. Auch der Lebensbalken der Gebäude in der Tab-Stellung »Leben« hat
+  jetzt die Masse des Originals statt der einer Einheit.
+- **Die Rohstoffleiste oben bleibt vorerst** (Meldung 29). Das Original hat
+  keine — Bestände stehen dort nur in den Gebäudefenstern. **Entscheidung:** die
+  Leiste ist unsere Zutat und bleibt fürs Erste drin; sie lässt sich mit `Q`
+  ausblenden.
+- **Der Nebel fehlt beim Herauszoomen nicht mehr** (Meldung 4). Die Nebelmasken
+  wurden nur für den zuletzt gezeichneten Ausschnitt gelegt; Zoomen und Rollen
+  lösten kein neues Zeichnen aus. Jetzt wird nachgezeichnet, sobald das
+  Sichtfeld den gezeichneten Bereich verlässt.
+- **Das Fenster bleibt maximiert** (Meldung 30). Beim Szenenwechsel, etwa vor
+  einem Film, setzten unsere Einstellungen das Fenster auf seine gespeicherte
+  Grösse zurück. Jetzt bleibt ein maximiertes Fenster maximiert, ausser man wählt
+  ausdrücklich eine Auflösung.
+
+#### Turm, Handsteuerung und Sprit
+
+- **Beim Fahren bleibt die Kanone auf dem Ziel** (Meldung 10). Ein Fahrbefehl
+  im Gefecht löschte bei uns jedes Ziel, und der Turm drehte in Fahrtrichtung. Im
+  Original räumt ein Fahrbefehl nur ein Zellen- oder Gebäudeziel; ein
+  Einheitsziel bleibt, und die Einheit schiesst im Fahren weiter. Jetzt genauso.
+  ⚠ Dass das nur für Fahrzeuge mit Waffe gilt, ist unsere Eingrenzung.
+- **Unter der Handsteuerung schiesst die linke Maustaste** (Meldung 37), statt
+  abzuwählen — auf die Reichweite der Waffe geklemmt, wie im Original.
+- **Das Mündungsfeuer sitzt am Turm** (Meldung 9). Wir legten es in die
+  Richtung des Ziels; seit der Turm stufig dreht, passte das nicht mehr zum Bild.
+  Das Original hängt das Feuer an das Turmbild. ⚠ Lage weltfest und 14
+  Bildpunkte vor der Turmmitte bleiben unsere Setzung.
+- **Eine Einheit ohne Treibstoff weicht nicht mehr aus** (Meldung 1). Im
+  Original überspringt ein leerer Tank den ganzen Auftragsverteiler, darunter
+  das Ausweichen. Bei uns rollte die trockene Einheit trotzdem zur Seite.
+
+#### Depot und Produktion
+
+- **Die Depottür öffnet ganz** (Meldung 38). Unser Tor glitt nur bis zu einem
+  Spalt auf. Das Original nimmt das Bild aus dem Torzustand, und ab Stufe 4 ist
+  gar kein Torblatt mehr zu sehen — die Tür ist offen.
+- **Keine unsichtbaren Einheiten mehr an der Depottür** (Meldungen 20 und 22).
+  Unser Auslass prüfte nur die Türzelle; war die Zelle darunter besetzt, blieb
+  die Einheit unsichtbar auf der Tür stehen und blockierte andere. Das Original
+  lässt erst hinaus, wenn Tür **und** Zelle darunter frei sind, und eine
+  Einheit auf der Tür ist sichtbar. Ausgesandte Einheiten fahren jetzt sichtbar
+  heraus.
+- **Freundliche Einheiten machen der Tür Platz** (Meldung 40). Das Original
+  schickt eine untätige verbündete Einheit, die auf der Tür oder davor steht,
+  ein Stück nach Süden, sobald eine Einheit heraus will. Diese Regel fehlte bei
+  uns ganz.
+- **Nach der Einnahme einer Basis räumen die Fahrzeuge den Vorplatz**
+  (Meldung 26), statt ins Depot zu fahren. Das Original schickt alles, was auf
+  dem Vorplatz (5 × 4 Zellen vor der Tür) steht, sechs Zeilen nach Süden.
+- **Recyceln im Depot geht** (Meldung 21). Unser Knopf wies eingefahrene
+  Einheiten ab — und in Mission 2 liegen nur solche im Depot. Jetzt wird wie im
+  Original verwertet: die Teilepreise mal dem Anteil verbliebener Lebenspunkte.
+- **Das Erstellen-Fenster zeigt nur, was man besitzt** (Meldung 19). In
+  Mission 2 standen alle Technologien zur Wahl; in der Kampagne gibt es jetzt
+  nur Bauteile, die man erforscht oder vom Missionsskript bekommen hat.
+- **Im Depot lassen sich mehrere Einheiten markieren** (Meldung 24) und
+  gemeinsam aussenden oder recyceln, wie im Original. ⚠ Beim Transport nimmt
+  der Knopf die erste markierte Einheit — unsere Setzung.
+- **Produktion ohne Bauzeit** (Meldung 23). Im Original hat eine Bestellung
+  keine Bauzeit: die Einheit liegt sofort im Depot der Basis und wird gleich an
+  der freien Tür ausgesandt. Bei uns dauerte jeder Bau sechs Sekunden in einer
+  Warteschlange — unsere Zutat, jetzt entfernt, auch bei der Basis selbst. Ist
+  das Depot voll, kommt vor dem Bezahlen die Meldung des Originals »Es gibt
+  keinen Platz mehr im Depot.« Die KI baut über denselben Weg.
+  **Entscheidung:** das gilt auch im Gefecht — dort baut die KI dadurch spürbar
+  schneller (auf NET02 in 90 Sekunden je Gegner 28 bis 35 statt 10 bis 15
+  Einheiten).
+
+#### Flieger
+
+- **Nachschubhelis zappeln nicht mehr am Heimatpunkt** (Meldung 11). Ohne
+  Kunden flog unser Heli zu seinem Heimatpunkt, trieb zwei Bildpunkte ab, flog
+  wieder hin — ständiger Richtungswechsel. Das Original springt bei jeder
+  Ankunft zu einem neuen, zufällig gewählten Gebäude; ohne eigenes Gebäude
+  bleibt die gewürfelte Zelle stehen.
+- **Flugzeuge werden in ihrer Höhe gezeichnet** (Meldung 12). Wir zeichneten
+  jedes Flugzeug in fester Höhe; ein abgeschossener Heli fiel darum scheinbar
+  nicht. Jetzt steht er so hoch, wie er fliegt, Klickfläche und Auswahl wandern
+  mit, und ein Absturz zieht die Feuer- und Rauchfahne des Originals. Der
+  Absturz selbst ist danach ganz nachgebaut worden — siehe **»Abstürze von
+  Flugzeugen«**.
+- **Nachschubhelis fliegen hoch hin und gehen erst über dem Kunden herunter**
+  (Meldung 17), auf die Höhe des Originals (zwei Stufen über dem Gelände des
+  Kunden), und geben erst dort ab; leer steigen sie wieder auf. ⚠ Eine
+  Zusatzbedingung des Originals für den Abgabestart haben wir weggelassen —
+  unsere Setzung.
+
+#### Hauptmenü, Demos und Filme
+
+- **Die Filme laufen auch ohne eingelegte CD** (Meldung 6). Beim Einlesen
+  werden sie jetzt von der CD in den Datenordner kopiert, und der Filmspieler
+  sucht dort zuerst. **Entscheidung:** kopiert wird nur von einem CD-Laufwerk,
+  nie aus einem Plattenordner oder einer Installation, und mitgeliefert wird
+  nichts. Dafür einmal neu einlesen (siehe oben).
+- **Das Zwischenlager der CDs wird aufgeräumt** (Meldung 7). Es blieb liegen,
+  wenn ein Einlesen abgebrochen oder neu gestartet wurde; jetzt wird es beim
+  Start gelöscht, sobald keine Mission mehr fehlt.
+- **Die Musik startet beim Demowechsel nicht neu** (Meldung 8). Jedes Demo lud
+  bei uns die Karte samt Musik frisch; das Original lässt das laufende Stück
+  weiterspielen.
+- **Das Demo wechselt nur, wenn kein Menü offen ist** (Meldung 15), wie im
+  Original — wer gerade in den Einstellungen ist, behält sein Bild.
+- **Die Demos zeigen die Stellen des Originals** (Meldung 14). Unsere Kamera
+  flog die Hauptquartiere ab — unsere Erfindung. Das Original nimmt die in der
+  Demokarte gespeicherte Sicht und steht still; jetzt genauso, und damit sind die
+  bekannten Szenen wieder im Bild.
+- **Die Demos laufen verschieden lang** (Meldung 14, zweiter Teil). Bei uns
+  dauerte jedes Demo 20 Sekunden. Das Original zählt je Demo eine feste Zahl
+  gezeichneter Bilder herunter — 400, 350, 550, 350, 150 … 220, das längste fast
+  viermal so lang wie das kürzeste. Jetzt genauso. ⚠ Wie viele Bilder das
+  Original je Sekunde zeichnet, steht nicht in der EXE; wir setzen **20 Bilder
+  je Sekunde** nach KayelGees Schätzung — eine Setzung, die wir mit einer
+  Stoppuhrmessung am Original ersetzen wollen.
+- **Züge in den Demos »nicht vollständig gezeichnet«** (Meldung 13): nach
+  unserer Lesung originaltreu. Ein Zug, der in ein Gebäude fährt, verliert im
+  Original seine Waggons einzeln, und der letzte hängt noch draussen, wenn die
+  vorderen schon fort sind — genau sein Bild. Wir haben nachgefragt, in welchem
+  Demo und ob die übrigen Waggons vorher ins Gebäude gefahren sind.
+- **Der schwarze Balken an der ersten Brücke in Mission 2** (Meldung 18): nach
+  unserer Lesung rechnet das Original an dieser Stelle gleich — die Fahrbahn
+  liegt eine Stufe höher, dadurch decken sich zwei Nebelmuster genau zu einer
+  vollen Fläche. Das widerspricht seiner Beobachtung; offen.
+
+#### Noch offen aus Runde 4
+
+- **Nachschubhelis wählen** (Meldung 39): eigene Helis lassen sich im Original
+  wählen, fremde nie. Bei uns sind die Helis in Mission 1 und 2 die der KI —
+  dort verhält sich das Original gleich. Wir fragen nach, welche Helis gemeint
+  waren.
+
+### Abstürze von Flugzeugen
+
+Aus Meldung 12 ist eine vollständige Nachlesung des Absturzes geworden.
+
+- **Ein Flugzeug schlägt auf, wenn es den Boden erreicht** — nicht erst bei
+  Höhe 1. Das Original fragt in jedem Takt eine eigene Bodenprüfung: Aufprall
+  knapp über dem Gelände bei freiem Boden, Wasser, rauem Gelände oder Gebäude,
+  höher über Fussvolk, noch höher über einer Einheit und schon weit oben über
+  gesperrten Zellen. Bei uns lag ein Flugzeug über Gelände der Höhe e noch
+  7,5 × e Takte am Boden, bevor es knallte.
+- **Der Fallende fliegt weiter** in seiner Richtung und Geschwindigkeit, statt
+  in der Luft stehenzubleiben, und die Rauchfahne sitzt dort, wo das Original
+  sie zeichnet.
+- **Auch unter der Handsteuerung gibt es einen Boden**: das Original prüft nach
+  jedem Schritt, ob das Flugzeug aufgesetzt hat, und lässt es dann abstürzen.
+  Unser Kommentar »kein Höhenboden« war falsch.
+- **Der Aufprall sieht aus wie im Original**: sechs Wrackteile, eine eigene
+  Wrack-Explosion aus Sprengung, Flammen und Glut mit Brocken und Splittern, und
+  vier Brandherde auf den vier Zellen der Absturzstelle. Bisher war es eine
+  einfache Explosion.
+- **Ein Fall der Bodenprüfung ist bewusst nicht nachgebaut**: das Original
+  kennt eine Zelle, auf der ein Flugzeug nie aufschlägt. **Entscheidung:** diese
+  Zelle kann im Spiel nicht entstehen — das Original löscht ihre Markierung,
+  sobald das Gebäude darauf zerstört wird —, also gibt es nichts zu bauen.
+
+### Klang, Wrackteile und die Dauer der Demos
+
+- **Ein abgeschossenes Flugzeug ist zu hören.** Das Original spielt beim
+  Abschuss immer einen Klang am Flugzeug, beim Nachschubheli einen zweiten
+  dazu. Beide waren bei uns hinterlegt, aber nie gerufen. ⚠ Der zweite Klang
+  läuft über den Effekteregler — wir haben nur einen.
+- **Jeder Gebäudebrand ist zu hören.** Wir hatten den Brandklang für »leer im
+  Klangvorrat und darum stumm« gehalten — eine Fehllesung von uns: die Nummer
+  ist ein Platzhalter, den das Original vor dem Abspielen in einen von sechs
+  Zündklängen umsetzt. Jetzt zündet jeder Brand hörbar, ein Absturz viermal
+  (vier Brandherde), und ein brennendes Gebäude knistert in den ersten zehn
+  Takten nach dem Würfel des Originals weiter. ⚠ Die genaue Lage der
+  Brandbilder ist eine Näherung.
+- **Die Wrackteile liegen, wo das Original sie hinlegt**: rechts und oberhalb
+  des Zellmittelpunkts. Unsere Setzung lag rund 20 Bildpunkte zu weit links und
+  30 zu tief.
+- **Die Dauer der Demos** — siehe Meldung 14 oben. Der Zähler läuft jetzt erst
+  ab dem ersten gezeigten Bild, nicht schon während des Ladens; mit
+  `--demo-bildrate=N` lässt sich die Bildrate verstellen.
+
+### Das Entwurfsfenster
+
+- **Teile, die nicht zusammenpassen, werden dunkel.** Ein Bauteilwert, den wir
+  bisher nicht kannten, ist die **Tragklasse** von 1 bis 3: ein Fahrwerk trägt
+  einen Aufbau, wenn seine Klasse mindestens so hoch ist. Das Original dunkelt
+  in der Aufbauliste jede Zeile ab, die zu schwer für das gewählte Fahrwerk ist,
+  und in der Fahrwerkliste jede, die zu leicht für den gewählten Aufbau ist — in
+  den Farben aus der Palette des Originals. Eine dunkle Zeile bleibt wählbar,
+  aber dann fehlen Vorschau, Kosten, Werte, Name und der Knopf »Erstellen«.
+  ⚠ Dass der Knopf dabei seinen Platz behält, ist unsere Setzung.
+- **Enter erstellt den Entwurf**, wie im Original — und zwar ohne
+  Tragklassenprüfung. Nachgelesen: der Tastenweg führt im Original direkt auf
+  »Erstellen«, an keiner Prüfung vorbei. Unsere Sperre »Fahrwerk zu leicht« war
+  eine Setzung und ist entfernt.
+- **Die Listen sind die des Originals.** Die Spezialaufbauten (lavendel)
+  gehören in die Aufbauliste, nicht in die Verbesserungen — ein so entworfener
+  Transporter trug bisher seine Ladefläche als Verbesserung. Und acht
+  Verbesserungen fehlten ganz: **Schild, Kamikaze, Spiegelbild, Illusionator,
+  Funktionsverstärker, Reparateur, Gasabwehr, Radarweiterung** sind jetzt
+  wählbar. ⚠ Die feste erste Zeile »(nichts)« ist unsere; die
+  Flughafen-Nutzlasten bieten wir nicht an, weil die Karten sie den Spielern
+  nicht geben.
+
+### Gefecht
+
+- **Der Bauteilbesitz richtet sich nach dem Techstandard.** Im Original kommt
+  der Besitz im Gefecht nicht aus der Karte: beim Start bekommt jeder Spieler
+  jedes benannte Bauteil, dessen Stufe den gewählten Techstandard nicht
+  übersteigt. Bei uns stand im Gefecht alles zur Wahl. Auf Techstandard 1 sind
+  es jetzt 12 Zeilen, auf 4 sind es 35, auf 8 alle 59 — bei der Vorgabe 8
+  ändert sich also nichts.
+- **Ein zweites Gefecht nimmt den neuen Techstandard.** Wir merkten uns den
+  ersten gelesenen Wert für die ganze Sitzung.
+- **»Alle Einheiten« gibt auch alle Bauteile frei.** **Entscheidung:** diese
+  Option ist unsere, und sie wirkte bisher nur auf Flugzeuge und Schiffe; jetzt
+  rechnet sie den Besitz wie Techstandard 8.
+- **Der Forschungspreis ist der des Originals**: Grundpreis gleich Techstandard
+  mal 100, und Erfindungen gelten für die Stufe des Techstandards. Bisher galt
+  im Gefecht immer Stufe 1 — eine alte Setzung von uns. **Entscheidung:** wie
+  im Original.
+
+### Kampagne 25
+
+- **Die Dicke Bertha steckt nicht mehr im Boden.** Sie war nur halb zu sehen:
+  ihr Körper fehlte ganz, gezeichnet wurde nur der Turm, und der schwebte über
+  der Ankerlinie. Das Original zeichnet sie mit einem eigenen Zweig — Körper und
+  Turm aus der Teilebank, je 16 Blickrichtungen, beide am selben Punkt. Der
+  Körper war beim Einlesen nie geschrieben worden (siehe oben: Neueinlesen). Sie
+  heisst jetzt auch **»Dicke Bertha«**, wie in der Entwurfstafel des Originals,
+  statt »BAUTEIL 61«. ⚠ Der Waffenname »Raketenwerfer + MG« ist unsere Setzung
+  nach der Enzyklopädie.
+- **Die Dicke Bertha fährt nicht mehr wild durch die Karte.** Ihre Zuweisung
+  durch die KI ist dieselbe wie im Original; der Unterschied lag am Rumpf. Sie
+  belegt im Original **2 × 2 Zellen**, und ihre Wegsuche sperrt jede Zelle mit
+  Hang. Bei uns war sie ein 1 × 1-Fahrzeug, das jeden Weg fand. Jetzt bleibt sie
+  wie im Let's Play in der Nähe ihres Starts.
+- **Der Raketenwerfer des Schlachtschiffs sitzt auf seinem Sockel.** Für
+  Schlachtschiffe hat das Original einen eigenen Zeichenzweig mit fest
+  verbautem Turm an einem festen Punkt des Rumpfs. Wir hatten angenommen, es gebe
+  keinen Wert, und selbst gemessen — bis zu 13 Bildpunkte daneben.
+
+### Kampagne 26
+
+- **Der Nebel auf Eis ist ein glatter Schleier.** Auf Eiskarten zeigte unser
+  Nebel ein deutliches Gitter. Das Original zeichnet ihn als feines Schachbrett
+  aus einzelnen Bildpunkten — in Originalgrösse wirkt das wie ein Schleier,
+  vergrössert gab es ein Moiré, und auf dem hellen Eis war es gut doppelt so
+  sichtbar wie auf Gras. **Entscheidung:** wir zeichnen jetzt eine glatte
+  Fläche in der Nebelfarbe des Originals zu 50 % Deckung; das Bild entspricht
+  dem, was man im Let's Play sieht. Der alte Stand ist mit
+  `--nebel-schachbrett-alt` zu haben.
+- **Mission 26 endet wieder.** Alle Gegner waren zerstört, und nichts geschah.
+  Beim Auslesen des Missionsskripts waren drei Zweige der Endregeln verloren
+  gegangen — der Leser kannte nur UND-Ketten, das Original hat dort auch
+  ODER-Zweige. Nachgetragen sind der Sieg, wenn der Gegner nichts mehr hat, und
+  die **Niederlage, wenn der Spieler Myre selbst besitzt** — wer Myre einnimmt,
+  verliert, wie im Original. Im Spiel bestätigt.
+
+### Kampagne 27
+
+- **Die Werft zeigt ihr Lager, nicht das Geld.** Unter der Liste stand der
+  Kontostand — das Werftfenster des Originals kennt aber kein Geld: dort stehen
+  die drei Lager der Werft-Station (W, F, S), und genau die prüft »Produzieren«.
+  Jetzt steht in der Kopfzeile »WERFT W.. F.. S..«. Dass man in Mission 27 kaum
+  etwas bauen kann, ist dagegen **originaltreu**: die Station hat 20/50/50, keine
+  Bahnlinie bringt Nachschub, und bezahlbar ist nur ein Treibstoff- oder
+  Munitionstender. Im Spiel abgenommen.
+- **Mit dem Flughafen gehen seine Flugzeuge an den neuen Besitzer.** Nach der
+  Einnahme standen die feindlichen Flugzeuge noch im Hangar und mussten
+  ausgesandt und abgeschossen werden. Im Original bekommt jedes Flugzeug, dessen
+  Heimat dieser Flughafen ist, mit der Einnahme den neuen Besitzer — ob im Hangar
+  oder in der Luft; nur Versorgungshelis bleiben, wem sie gehören. Gelesen hatten
+  wir das schon im September, gebaut war es nie.
+
+### Stabilität
+
+- **Keine Abstürze mehr mit »Internal CLR error (0x80131506)«** beim Laden
+  einer Gefechtskarte. Betroffen waren vor allem unsere kopflosen Prüfläufe
+  (rund jeder vierte auf zwei Gefechtskarten). Ursache war der nebenläufige
+  Müllsammler von .NET, den Godot im Entwicklungslauf einschaltet. Das Spiel
+  schaltet ihn jetzt beim Start selbst ab, wie im exportierten Spiel. Danach 0
+  Abstürze in 58 Läufen.
+
+### Für Neugierige
+
+- **Zwei Prüfstände waren falsch, nicht das Spiel.** Die Drehprüfung auf
+  Mission 4 suchte ihre »freie Gerade« so, dass Fussvolk als frei galt, und
+  maass dann eine Kehrtwende von 135 statt 180 Grad. Die Einnahmeprüfung auf
+  Mission 3 suchte ein viertes Gebäude, das die Karte nicht hat. Beide sind
+  repariert.
+- **Die Flugabwehrprobe auf einer Gefechtskarte** fiel durch, weil ihre
+  Sollwerte für Gelände der Höhe 0 gerechnet waren — die Flak dort steht auf
+  Höhe 6. Ein Prüfstandsfehler; die Probehöhen gelten jetzt relativ zum
+  Gelände.
+- **Die Baulistenprüfung auf Mission 1 und 3** gab kein Urteil, weil dort keine
+  eigene Fabrik steht. Sie leiht sich jetzt für die Messung eine fremde Fabrik
+  und gibt sie zurück.
+- **Kopflose Läufe veränderten den Kampagnenstand** — unser Laufskript setzt die
+  Datei jetzt byte-genau zurück.
+- **Der Müllsammler**: der Schalter aus der Projektdatei gilt nur für die
+  Projekt-Laufzeitkonfiguration; Godot startet .NET im Entwicklungslauf über
+  seine eigene. Eine ältere Deutung (»zwei Instanzen«) ist damit widerlegt.
+- Zu fast jedem Befund oben gibt es einen neuen kopflosen Prüfstand, der mit
+  dem Gegenschalter durchfällt — so ist belegt, dass die Messung die Änderung
+  wirklich sieht.
+
+### Bekannte Einschränkungen
+
+- **Ein feindlicher Transporter kann in einer eingenommenen Mine hängen
+  bleiben** (Kampagne 27). Dann hilft nur, die Mine zu zerstören. Ein Prüfstand
+  ist gebaut, der Fall aber noch nicht nachgestellt — noch offen.
+- **Der Raketenschlag auf Skagen fällt in Kampagne 27 aus.** Das Skript feuert
+  die Mittelstreckenrakete von Spieler 5 auf die Basis des Spielers; bei uns
+  wird der Werfer vorher von Fliegern eines anderen Gegners abgeschossen. Ob das
+  im Original ebenso passieren kann, hängt am Würfel und an der Beziehung der
+  beiden Gegner — wird geprüft. Für den Ablauf der Mission ist es harmlos.
+- **Ein zerstörtes Kraftwerk zeigt auf Eis eine Gras-Ruine** (Kachelsätze 26
+  und 44, etwa in Kampagne 26). Das ist ein Datenfehler **des Originals**: die Ruine in den
+  Eis-Kachelsätzen ist eine bytegleiche Kopie der Gras-Ruine, und mit der
+  Eispalette wird sie blau-oliv gefleckt. Eine Nachprüfung hat belegt, dass es
+  keine eigene Eisgrafik gibt, die wir nur nicht benutzen. Vorerst bleibt es
+  originaltreu; ob wir die Ruine umfärben, ist noch nicht entschieden.
+- Offene Rückfragen an KayelGee: Meldungen **13, 18, 27 und 39** (siehe oben)
+  und eine Stoppuhrmessung der Demos im Original.
+- Die Missionen 28 bis 33 sind noch nicht durchgespielt — das ist der Weg zu
+  0.7.0.
+
 ## 0.6.6 — 05.10.2026 · Kampagne 21 bis 24, und drei Runden Meldungen von KayelGee
 
 > Vier weitere Missionen, jede einzeln durchgespielt — dazu drei Runden Meldungen
