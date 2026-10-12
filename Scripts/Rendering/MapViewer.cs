@@ -1337,6 +1337,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_flughafenEinnahmeCheck > 0)
+        {
+            GD.Print(_entities.FlughafenEinnahmeCheck(_flughafenEinnahmeCheck));
+            GetTree().Quit(0);
+            return;
+        }
         if (_k26EndeCheck.Length > 0)
         {
             { var teile = _k26EndeCheck.Split(':'); GD.Print(_entities.K26EndeCheck(teile[0], teile.Length > 1 && int.TryParse(teile[1], out int ks) ? ks : 20)); }
@@ -1596,6 +1602,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--k26-ende-check=FALL[:sekunden]</c> (spieler|leer|p3|start, Vorgabe 20 s) — siehe
     /// Simulation/K26EndeCheck.cs (12.10.2026). Leer = aus.</summary>
     private string _k26EndeCheck = "";
+    /// <summary><c>--flughafen-einnahme-check[=sekunden]</c> (bug-497, Vorgabe 600 s Wartezeit) — siehe Simulation/FlughafenEinnahmeCheck.cs.
+    /// Nullmodell <c>--flughafen-einnahme-alt</c>.</summary>
+    private int _flughafenEinnahmeCheck;
     /// <summary><c>--stellung-check</c> — siehe Simulation/Stellungen.cs (02.10.2026, bug-399).</summary>
     private bool _stellungCheck;
 
@@ -4101,6 +4110,11 @@ _mausProbePunkt = karte;
             else if (a == "--minikarte-anker-alt") MapEntityLayer.MinikarteAnkerAlt = true;
             else if (a == "--einnahme-routen-alt") MapEntityLayer.EinnahmeRoutenAlt = true;
             else if (a == "--einnahme-insassen-alt") MapEntityLayer.EinnahmeInsassenAlt = true;
+            // bug-497: Flugzeuge gehen mit dem eingenommenen Flughafen (C 0x43D214).
+            else if (a == "--flughafen-einnahme-alt") MapEntityLayer.FlughafenEinnahmeAlt = true;
+            else if (a == "--flughafen-einnahme-check") _flughafenEinnahmeCheck = 600;
+            else if (a.StartsWith("--flughafen-einnahme-check=") &&
+                     int.TryParse(a["--flughafen-einnahme-check=".Length..], out int fes)) _flughafenEinnahmeCheck = fes;
             else if (a == "--zasah-sonderfaelle-aus") MapEntityLayer.ZasahSonderfaelleAus = true;
             else if (a == "--infanterie-einheitenarm") MapEntityLayer.InfanterieArmAlt = true;
             else if (a == "--skripttreffer-halbe-huelle") MapEntityLayer.SkripttrefferHalbeHuelle = true;

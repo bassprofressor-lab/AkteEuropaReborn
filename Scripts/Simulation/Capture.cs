@@ -393,6 +393,9 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 14.09.2026 — eine eingenommene BASIS verliert ihre Insassen
         // (C 0x43D190 / F 0x43C1B7 -> 0x410E60). Andere Arten behalten sie.
         EinnahmeInsassenLoeschen(b);
+        // ⭐ 12.10.2026, bug-497 — Art 9: Flugzeuge mit dieser Heimat gehen mit
+        // (C 0x43D214). Simulation/EinnahmeAbschluss.cs.
+        EinnahmeFlugzeugeUmschreiben(b, who);
         // a Werft-Station takes its Hafen with it: the dock whose sec29 +0x02
         // names this Werft (@0x43CEEC..0x43CF99, "Error in shipyard" when there
         // is none). Our dock keeps that link in Shipyard, as a building slot.

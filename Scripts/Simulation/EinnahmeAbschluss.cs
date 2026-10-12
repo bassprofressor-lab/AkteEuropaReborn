@@ -139,4 +139,40 @@ public partial class MapEntityLayer
         DepotEintraegeGeloescht += b.Depot.Count;
         b.Depot.Clear();
     }
+
+    /// <summary><c>--flughafen-einnahme-alt</c> — der Stand bis 12.10.2026: die
+    /// Flugzeuge eines eingenommenen Flughafens behalten ihren alten Besitzer
+    /// (bug-497). Nullmodell zu <c>--flughafen-einnahme-check</c>.</summary>
+    public static bool FlughafenEinnahmeAlt;
+
+    /// <summary>Wieviele Flugzeuge die letzte Einnahme umgeschrieben hat.</summary>
+    public int FlugzeugeUmgeschrieben;
+
+    /// <summary>
+    /// ⭐ 12.10.2026, bug-497 (K27: »sobald ich den Flughafen einnehme, sind die
+    /// feindlichen Einheiten dort mit drin. Ich muss die immer erst aussenden, um
+    /// sie mit Flaks abschiessen zu koennen«). <b>Art 9: die Flugzeuge wechseln
+    /// den Besitzer</b> — C <c>0x43D214…0x43D263</c> (F <c>0x43C23B…0x43C28A</c>),
+    /// gelesen in berichte/einnahme-insassen-fable.md §3.3:
+    /// <code>
+    ///   fuer k = 0 … 199:  A = 0x6DDF78 + 68·k
+    ///     typ = byte[A]; typ == 0 oder typ ≥ 13 -> weiter     ; cmp al,0xd  C 0x43D233
+    ///     word[A+0x20] ≠ Platz -> weiter                       ; Heimat     C 0x43D23D
+    ///     byte[A+1] := neuer Besitzer
+    /// </code>
+    /// Ob das Flugzeug im Hangar steht oder fliegt, fragt die Schleife nicht —
+    /// nur das Heimatwort. Die Versorgungshelis 13/14 bleiben beim alten Besitzer
+    /// (woertlich, warum ist ungelesen).
+    /// </summary>
+    private void EinnahmeFlugzeugeUmschreiben(Entity b, int who)
+    {
+        FlugzeugeUmgeschrieben = 0;
+        if (FlughafenEinnahmeAlt || b.BType != 9) return;
+        foreach (var a in _special)
+        {
+            if (a.Kind is < 1 or > 12 || a.HomeSlot != b.Slot) continue;
+            a.Owner = who;
+            FlugzeugeUmgeschrieben++;
+        }
+    }
 }
