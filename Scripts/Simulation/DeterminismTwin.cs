@@ -395,7 +395,11 @@ public sealed partial class DeterminismTwinRunner : Node
         // und `using Godot;` steht oben.
         string env = System.Environment.GetEnvironmentVariable("DOTNET_gcConcurrent") ?? "";
         string gen0 = System.Environment.GetEnvironmentVariable("DOTNET_GCgen0size") ?? "";
-        if (env is "0" or "false" || gen0.Length > 0)
+        // ⭐ 12.10.2026 (bug-484): GameManager stellt den Muellsammler selbst auf
+        // Batch (kein Hintergrund-GC) — dann ist er gebaendigt, auch ohne Variable.
+        bool batch = System.Runtime.GCSettings.LatencyMode == System.Runtime.GCLatencyMode.Batch;
+        if (batch) env = env.Length > 0 ? env : "Batch (bug-484)";
+        if (env is "0" or "false" || gen0.Length > 0 || batch)
         {
             Say($"GC gebändigt: DOTNET_gcConcurrent={(env.Length > 0 ? env : "—")} " +
                 $"DOTNET_GCgen0size={(gen0.Length > 0 ? gen0 : "—")}");
