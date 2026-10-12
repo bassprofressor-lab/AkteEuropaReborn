@@ -1244,6 +1244,13 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_werftCheck)
+        {
+            // bug-495: erst Fenster/Liste/Bestellung, dann nach der Bauzeit der Stapellauf.
+            _werftCheck = false;
+            GD.Print(_entities.WerftCheck());
+            _werftCheckDue = _werftCheckWarte;
+        }
         if (_entwurfDunkelCheck)
         {
             GD.Print(_entities.EntwurfDunkelCheck());
@@ -5032,6 +5039,11 @@ _mausProbePunkt = karte;
             // Die Farben der Bauliste, siehe Simulation/BaulisteCheck.cs.
             else if (a == "--bauliste-alt") MapEntityLayer.BaulisteAlt = true;
             else if (a == "--bauliste-check") _baulisteCheck = true;
+            // bug-495: Werft zeigt das Lager der Werft-Station, siehe Simulation/WerftCheck.cs.
+            else if (a == "--werft-check") _werftCheck = true;
+            else if (a.StartsWith("--werft-check="))
+            { _werftCheck = true; _werftCheckWarte = Mathf.Max(15f, a["--werft-check=".Length..].ToFloat()); }
+            else if (a == "--werft-titel-alt") MapEntityLayer.WerftTitelAlt = true;
             // Der Geschossflug ueber Hoehen, siehe Simulation/GeschossHoehenCheck.cs.
             else if (a == "--kein-bodentreffer") MapEntityLayer.KeinBodentreffer = true;
             else if (a == "--geschoss-nachfuehren") MapEntityLayer.GeschossNachfuehren = true;
@@ -5307,6 +5319,9 @@ _mausProbePunkt = karte;
     /// <summary><c>--bauliste-check</c> — siehe Simulation/BaulisteCheck.cs.
     /// Nullmodell: <c>--bauliste-alt</c>.</summary>
     private bool _baulisteCheck;
+    /// <summary><c>--werft-check</c> (bug-495) — Nullmodell <c>--werft-titel-alt</c>.</summary>
+    private bool _werftCheck;
+    private float _werftCheckDue, _werftCheckWarte = 30f;
 
     /// <summary><c>--entwurf-dunkel-check</c> — siehe Simulation/EntwurfDunkelCheck.cs (bug-474).
     /// Nullmodell: <c>--entwurf-dunkel-aus</c>.</summary>
@@ -5550,6 +5565,16 @@ _mausProbePunkt = karte;
         // abgerechnet wird, hat noch nichts abgearbeitet, und der Prueflauf
         // haette »0 von 3 angekommen« gemeldet und dabei die Wartezeit gemessen
         // statt die Schlange.
+        if (_werftCheckDue > 0f)
+        {
+            _werftCheckDue -= (float)delta;
+            if (_werftCheckDue <= 0f)
+            {
+                GD.Print(_entities.WerftCheckAbschluss());
+                GetTree().Quit(0);
+                return;
+            }
+        }
         if (_queueCheckAt > 0f)
         {
             _queueCheckAt -= (float)delta;

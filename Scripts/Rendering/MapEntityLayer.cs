@@ -20835,6 +20835,14 @@ public partial class MapEntityLayer : Node2D
             // verschwunden.
             return $"LAGER  W{e.StockW} F{e.StockF} S{e.StockS}  " +
                    $"Platz {e.Capacity}  Tempo {e.ProdSpeed}  T{e.StockT}";
+        // ⭐ 12.10.2026, bug-495 — DERSELBE FEHLER WIE C12 ZUM DRITTEN MAL, jetzt
+        // an der WERFT (gemeldet K27: »zeigt mir dort $ anstatt Rohstoffe«). Das
+        // Werftfenster 0x471800 kennt kein Geld: unter der Liste stehen die drei
+        // Lager der WERFT-STATION (0x4726CC..0x4728B9, Gebaeude +0x19 -> sec29
+        // 0x87A1FA -> +0x2C/+0x2E/+0x30), und genau die prueft »Produzieren«
+        // 0x44B253. Siehe Simulation/WerftCheck.cs; --werft-titel-alt.
+        if (IsDock(e) && !WerftTitelAlt)
+            return WerftTitel(e);
         int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
         return $"PRODUKTION  ${_money[owner]}";
     }
