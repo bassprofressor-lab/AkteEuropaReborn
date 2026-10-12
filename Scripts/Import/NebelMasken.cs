@@ -161,6 +161,38 @@ public static class NebelMasken
         }
     }
 
+    /// <summary>
+    /// bug-493: die FLAECHE einer Maske statt ihrer Punkte — ein Punkt gehoert
+    /// dazu, wenn er selbst oder mindestens zwei seiner vier Nachbarn (in
+    /// derselben 40×70-Zelle) Maskenpunkte sind. Im Innern eines Schachbretts
+    /// hat jeder Leerpunkt vier, am Rand weniger. Weiss, voll deckend; die
+    /// Farbe und die 50 % gibt der Schleier (Rendering/NebelSchleier.cs).
+    /// ⚠ UNSERE Regel, keine Lesung.
+    /// </summary>
+    public static Image Flaeche(Image atlas)
+    {
+        var d = Deckung(atlas);
+        var px = new byte[AtlasB * AtlasH * 4];
+        for (int y = 0; y < AtlasH; y++)
+            for (int x = 0; x < AtlasB; x++)
+            {
+                int i = y * AtlasB + x;
+                bool an = d[i];
+                if (!an)
+                {
+                    int n = 0, zx = x / ZelleB, zy = y / ZelleH;
+                    if (x > 0 && (x - 1) / ZelleB == zx && d[i - 1]) n++;
+                    if (x + 1 < AtlasB && (x + 1) / ZelleB == zx && d[i + 1]) n++;
+                    if (y > 0 && (y - 1) / ZelleH == zy && d[i - AtlasB]) n++;
+                    if (y + 1 < AtlasH && (y + 1) / ZelleH == zy && d[i + AtlasB]) n++;
+                    an = n >= 2;
+                }
+                if (!an) continue;
+                px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = px[i * 4 + 3] = 255;
+            }
+        return Image.CreateFromData(AtlasB, AtlasH, false, Image.Format.Rgba8, px);
+    }
+
     /// <summary>Dieselben Masken als Bitfeld (true = Maskenpunkt), damit der
     /// Pruefstand ohne GPU zusammensetzen kann, was gezeichnet wird.</summary>
     public static bool[] Deckung(Image atlas)

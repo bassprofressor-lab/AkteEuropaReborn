@@ -31,6 +31,8 @@ public partial class MapViewer
     private bool _truemmerCheck, _nebelkanteCheck, _schiffstodCheck, _todeslichtCheck, _kopfCheck;
     private int _schiffstodGattung;
     private Vector2I? _nebelkanteOrt;
+    private bool _nebelRasterCheck;                 // bug-493, Rendering/NebelSchleier.cs
+    private float[]? _nebelRasterZooms;
 
     /// <summary>true = Schalter erkannt.</summary>
     private bool GrafikSchalter(string a)
@@ -47,6 +49,8 @@ public partial class MapViewer
             case "--wrack-gattung-alt": MapEntityLayer.WrackGattungAlt = true; return true;   // bug-432
             case "--nebel-rampe-alt": MapEntityLayer.NebelRampeAlt = true; return true;
             case "--nebelkante-check": _nebelkanteCheck = true; return true;
+            case "--nebel-schachbrett-alt": MapEntityLayer.NebelSchachbrettAlt = true; return true;   // bug-493
+            case "--nebel-raster-check": _nebelRasterCheck = true; return true;                      // bug-493
             case "--schiffstod-check": _schiffstodCheck = true; return true;              // bug-433
             case "--schiffstod-alt": MapEntityLayer.SchiffstodAlt = true; return true;   // bug-433
             case "--todeslicht-check": _todeslichtCheck = true; return true;             // bug-434
@@ -57,6 +61,13 @@ public partial class MapViewer
         }
         if (a.StartsWith("--schiffstod-gattung=") && int.TryParse(a["--schiffstod-gattung=".Length..], out int sg))
         { _schiffstodGattung = sg; return true; }
+        if (a.StartsWith("--nebel-raster-check="))                                                   // bug-493
+        {
+            _nebelRasterZooms = System.Array.ConvertAll(a["--nebel-raster-check=".Length..].Split(','),
+                t => float.Parse(t, System.Globalization.CultureInfo.InvariantCulture));
+            _nebelRasterCheck = true;
+            return true;
+        }
         if (a.StartsWith("--nebelkante-check="))
         {
             var q = a["--nebelkante-check=".Length..].Split(',');
@@ -95,6 +106,12 @@ public partial class MapViewer
         if (_kopfCheck)                                                  // bug-436
         {
             GD.Print(_entities.KopfCheck());
+            GetTree().Quit(0);
+            return true;
+        }
+        if (_nebelRasterCheck)                                           // bug-493
+        {
+            GD.Print(_entities.NebelRasterCheck(_nebelRasterZooms));
             GetTree().Quit(0);
             return true;
         }

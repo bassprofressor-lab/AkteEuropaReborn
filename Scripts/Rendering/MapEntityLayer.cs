@@ -34607,6 +34607,7 @@ public partial class MapEntityLayer : Node2D
         if (StumpfGeschossProbeTakt()) return;   // --stumpf-geschoss-probe, Simulation/StumpfGeschossProbe.cs
         float dt = (float)delta;
         NebelSichtfeldPruefen();                  // bug-446, Rendering/NebelKante.cs
+        NebelSchleierTakt();                      // bug-493, Rendering/NebelSchleier.cs
 
         // ⭐⭐ 19.09.2026 — DER BILDZAEHLER `word[0x4FA248]`, und er gehoert
         // hierher und NICHT in SimTick. Im Original steigt er einmal je
@@ -42168,7 +42169,10 @@ public partial class MapEntityLayer : Node2D
         {
             // ⭐ 04.10.2026 (bug-427): die 285 Originalmasken wie 0x4B47A8,
             // Rendering/NebelKante.cs; --nebel-rampe-alt = die Rampe.
-            if (NebelmaskenAktiv) NebelmaskenZeichnen();
+            // ⭐ 12.10.2026 (bug-493): als Schleier in eigener CanvasGroup
+            // (Rendering/NebelSchleier.cs); --nebel-schachbrett-alt = Schachbrett.
+            if (NebelSchleierAktiv) { }
+            else if (NebelmaskenAktiv) NebelmaskenZeichnen();
             else
             {
                 if (_fogTex == null || _fogDrawn != _fog.Version) BuildFogTexture();
@@ -42176,8 +42180,8 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
-        // rubber-band selection rectangle
-        if (_band is { } band)
+        // rubber-band selection rectangle (bei Schleier: _bandKnoten darueber)
+        if (_band is { } band && !(FogActive && NebelSchleierAktiv))
         {
             var b = band.Abs();
             DrawRect(b, new Color(0.3f, 1f, 0.5f, 0.12f));

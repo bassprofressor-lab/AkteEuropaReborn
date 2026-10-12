@@ -69,6 +69,7 @@ public partial class MapEntityLayer
         if (img == null) { GD.Print($"nebelmasken: {Import.NebelMasken.Herkunft} — es bleibt die Rampe"); return; }
         _nebelAtlas = ImageTexture.CreateFromImage(img);
         _nebelDeckung = Import.NebelMasken.Deckung(img);
+        NebelFlaecheLaden(img);        // bug-493, Rendering/NebelSchleier.cs
         GD.Print($"nebelmasken: Kachelsatz {tileset:00}, {Import.NebelMasken.Herkunft}");
     }
 
@@ -127,6 +128,15 @@ public partial class MapEntityLayer
     private void NebelmaskenZeichnen()
     {
         if (_fog == null || _nebelAtlas == null) return;
+        NebelmaskenGezeichnet = NebelmaskenZeichnenIn(this, _nebelAtlas);
+    }
+
+    /// <summary>Der Durchgang in ein beliebiges Zeichenziel mit beliebigem
+    /// Atlas — bug-493 zeichnet damit die FLAECHEN in die Schleiergruppe
+    /// (Rendering/NebelSchleier.cs). Gibt die Zahl der Masken zurueck.</summary>
+    private int NebelmaskenZeichnenIn(CanvasItem ziel, Texture2D atlas)
+    {
+        if (_fog == null) return 0;
         var welt = GetGlobalTransformWithCanvas().AffineInverse() * GetViewportRect();
         _nebelSichtfeld = welt;
         int w = _fog.Width, h = _fog.Height;
@@ -145,10 +155,10 @@ public partial class MapEntityLayer
                 int b = k / Import.NebelMasken.Hangformen, hf = k % Import.NebelMasken.Hangformen;
                 float x = _ox + c * TileW;
                 float y = _oy + r * TileH - NebelElev(c, r) * Import.MapBaker.ElevStep - Import.NebelMasken.Hub;
-                DrawTextureRectRegion(_nebelAtlas, new Rect2(x, y, ZB, ZH), new Rect2(hf * ZB, b * ZH, ZB, ZH));
+                ziel.DrawTextureRectRegion(atlas, new Rect2(x, y, ZB, ZH), new Rect2(hf * ZB, b * ZH, ZB, ZH));
                 n++;
             }
-        NebelmaskenGezeichnet = n;
+        return n;
     }
 
     // ---- der Pruefstand --------------------------------------------------------
