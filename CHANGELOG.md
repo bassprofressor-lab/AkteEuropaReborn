@@ -12,6 +12,296 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.8 — 2026-10-13 · the fifth round of reports from KayelGee
+
+> An interim release with no new missions: the fifth round of reports from
+> **KayelGee**, twenty-four of them, made on 0.6.7 against the original. The
+> biggest chunk is the **save game** — loading and saving were broken in several
+> places. Every point below is a finding: what stood out, what happens now, and
+> how the original does it. Where we made a call of our own, it says so. Every
+> change has a counter-switch that brings back the old behaviour.
+
+### Thanks to KayelGee
+
+KayelGee played 0.6.7 right after it came out and sent us **twenty-four
+reports** — from the muzzle flash to the supply helicopters to the save game
+that drew buildings as water after loading, plus screenshots of the mission
+screen, the muzzle flash and the supply depot. Several reports show that a
+round-4 finding was only half fixed; without his close look it would have stayed
+that way. Every report was read up in the original before anything was built.
+All but one are fixed; for the one (mission 2) no fault turned up in today's
+build. They are listed below under **"Reported by KayelGee — round 5"**, each
+with its number from his list. Thank you!
+
+### ⚠ Important: the briefing arrows need new images
+
+The two arrows on the mission screen (the **"new technologies"** box, report 2)
+are **new images taken from the original import**. An installation that has
+already been imported does **not** get them on its own. Two ways:
+
+- delete the folder
+
+  `%APPDATA%\Godot\app_userdata\AkteEuropaReborn\data`
+
+  — the game then re-imports on the next start (import screen as on the first
+  run; saves and settings are not in that folder and are kept), **or**
+- start the game once with
+  `--briefing-knoepfe-export=<folder of your Akte Europa installation>`;
+  that writes only the arrow images.
+
+Without this the arrow buttons still work — they are just invisible, as
+before.
+
+### Saves from 0.6.7
+
+The save format is now **format 2** and reads formats 1 and 2. Saves from 0.6.7
+therefore still load. But a save made in 0.6.7 lacks the new fields (building
+state, doors, depot, aircraft, mission script, see below) — whatever is missing
+the game takes from the map. To be safe, save once more after the update.
+
+### Reported by KayelGee — round 5
+
+The numbers in brackets are those from his list. "Round 4" means: already
+reported back then and not, or only half, fixed.
+
+#### Save game: loading and saving
+
+- **A save can be loaded again while a game is running** (report 15). Until
+  now the game hung afterwards. The game menu pauses the game, and the scene
+  change to the loaded state carried that pause along — the new map stood
+  still. Now we tidy up before the change, as when leaving to the main menu.
+  Counter-switch `--laden-pause-alt`.
+- **After loading, buildings look like buildings again** (report 16). The
+  supply depot in mission 2 appeared as water or rock, and this hit every
+  building; the base in mission 2 could then be neither selected nor captured.
+  Our reader rebuilt every building from the roughly 40 fields in the file: the
+  image kind stayed 0 (only 1 and up is drawn), the footprint was a single cell,
+  there were no doors, and depot and garage were not saved at all. Now the
+  record from the map serves as the template, and the save also writes the
+  state, the doors, the footprint, the depot, the build list, the hangar and the
+  garage. Units in the garage no longer go into the grid. Counter-switch
+  `--laden-vorlage-alt` (the whole old reader).
+- **After loading, fuel, ammunition, money and stores are right** (report 18).
+  After a load the mission start simply carried on: the carried-over units came
+  onto the map a second time and fully fuelled, the starting money overwrote the
+  balance, and the start rules reset the stores. Now a loaded game skips the
+  mission start. On top of that, **aircraft and supply helicopters** were gone
+  entirely after loading — they are now saved with all their fields, including
+  their customer and their target. Counter-switch `--laden-mitnahme-alt`.
+- **The mission script carries on after loading where it was** (on reports 18
+  and 14). The script's state — its variables, ticks, grace periods and freighters
+  — was not in the save at all; after loading the script started again at tick
+  0, and events already triggered could come a second time or not at all. Now it
+  is saved and restored. The test rig compares the state before saving and after
+  loading character by character — identical on missions 2, 17 and 21.
+- **Saving now says so** (report 4). "Save game" wrote the file but said
+  nothing — the message only went to the console. Now there is a message line
+  in the game. ⚠ The original's actual **save window** (window kind 15,
+  `0x473750`) is not built yet; it is still to be read up. See **"Known
+  limitations"**.
+
+#### Depot and base
+
+- **In mission 2 you can only build what you have** (report 11, round 4).
+  Instead of just "machine gun" and your own designs, the production list once
+  more offered everything. In 0.6.7 we had only filtered the design window;
+  production itself had three more open doors: the skirmish option **"All
+  units"** also applied in the campaign (the main menu carried it over), the
+  build list took the EXE's base table and fell back to "everything" when in
+  doubt, and the branch for carriers did the same. Now the campaign has: the
+  mission's schedule, your own designs and the carriers you own or have
+  researched in the mission — nothing else. "All units" only works in
+  skirmish. In mission 2 that is now **5 rows instead of 76**. Our test rig from
+  0.6.7 had measured the wrong thing — the window instead of the list.
+  Counter-switch `--bauliste-grundtafel-alt`.
+- **No more invisible units in the depot that can be attacked** (reports 10
+  and 13, round 4). A unit that had driven in, or had just been produced, was
+  invisible but still showed its health bar, stood on the minimap and could be
+  shot — projectiles in flight still hit it, and anyone who already had it as a
+  target kept it. Now a unit in the garage is out of the bars, the Tab display,
+  the minimap, combat and projectile hits, and whoever drives in is cleared as a
+  target. Counter-switches `--garage-balken-alt` and `--garage-ziel-alt`.
+- **A unit in front of the base door can be sent into the depot again**
+  (report 9). With one of your units standing right in front of the door, a
+  click on the door selected that unit: its image reaches 35 pixels beyond its
+  cell and covers the door cell, and our click test gave the unit priority
+  before asking about driving in. Now, with a selected, mobile unit of your own,
+  the drive-in cursor on the door cell comes first. ⚠ **Our call**: the order
+  in the original (cursor kind 5 at `0x4327F8`) has not been read yet.
+  Counter-switch `--tuerklick-einheit-alt`.
+- **The base opens its menu again when you select it again** (report 12,
+  probably round 4 report 27). Closing the base menu and clicking the base once
+  more gave no menu: closing set a flag that only fell back when no building at
+  all was selected. Now every click on the base opens its menu again.
+  Counter-switch `--basisfenster-zu-bleibt-alt`.
+
+#### Controls
+
+- **A double click opens the unit menu only on the selected unit** (report
+  20). With us it opened on any double click anywhere on the map. The original
+  checks three things (`0x414239`): exactly one object is marked, it is a unit,
+  and the object under the mouse **is** that unit. Same now; any other double
+  click is an ordinary click. Counter-switch `--doppelklick-alt`.
+- **The mouse cursor no longer stays invisible** (report 19). Scrolling the
+  map with the right mouse button while a help window opened left you with an
+  invisible, captured cursor: the help window pauses the game, so neither the
+  button release nor our scroll guard ran. Now scrolling ends as soon as the
+  game pauses. Counter-switch `--rollen-pause-alt`.
+
+#### Aircraft and supply helicopters
+
+- **Bombs fall again** (report 21). In the main-menu bomber demo the bombs
+  stood still in the air. Since 0.6.5 every projectile fired by aircraft flew
+  **fifty times too slowly**: its speed was not converted with the scale of the
+  other projectiles (measured on DM_5 and DM_1: now 1750 instead of 35 pixels
+  per second). Counter-switch `--luftschuss-tempo-alt`.
+- **Supply helicopters no longer lift the fog** (report 5). With us every
+  aircraft gave sight. The original skips aircraft from type 13 up — the
+  suppliers — both when revealing and for radar sight (`0x420826`, `0x420C04`).
+  Counter-switch `--nachschub-sicht-alt`.
+- **Supply helicopters no longer hop over hills and gullies** (report 3). A
+  relapse from round 4: we subtracted from the flight height the terrain of the
+  cell **under** the helicopter, but the helicopter's position already carried a
+  smoothly rising lift towards the flight target — together they made it jump at
+  every change of terrain. Now the lift is carried along in the position.
+  ⚠ **Our call**, until the aircraft position is computed flat.
+  Counter-switch `--flughuepfen-alt`.
+- **A selected aircraft wears the units' selection frame** (report 6) instead
+  of a green rectangle. We had drawn the green frame ourselves; the original
+  uses the same selection image for aircraft as for ground units (`0x42BB7C`).
+  It now sits around the centre of the hull image. Counter-switch
+  `--flugzeug-rahmen-alt`. ⚠ Checked in the game only, no test rig.
+- **A supply helicopter can be sent to a unit** (report 7). In the original the
+  cursor over a suitable unit shows the fuel or ammunition image, and a click
+  sends the selected helicopter to exactly that unit to refill it (cursors 8/9,
+  orders 14/15, `0x427E30`/`0x427EE0`) — in the campaign too. With us cursor
+  and order were missing; the click became an ordinary flight target and was
+  discarded in the campaign. Rebuilt now: in the test rig the helicopter flies
+  58 cells and has its customer full after 27 seconds. ⚠ **Our calls**: the
+  original's spoken acknowledgement of this order has not been read yet and is
+  missing, and a full customer is released straight away as before.
+  Counter-switch `--nachschubbefehl-alt`.
+
+#### Weapons
+
+- **Machine gun and light infantry no longer fire lasers** (report 23). With
+  us every weapon without a flight image drew a yellow line. In the original
+  that tracer has exactly one user — kind 12, the lightning thrower
+  (`0x451CCD`). Only the infantry's laser weapons (Laser and LaserXXL) fire a
+  **green beam**, through the same spawner as the attack helicopter; every other
+  weapon without a flight image hits without an image. Same now. ⚠ **Our
+  call**: **one** beam per shot (the attack helicopter has two muzzles, the hand
+  weapon one) and the green beam dot. Counter-switch `--leuchtspur-alt`.
+- **The Dicke Bertha fires rockets** (report 24). In the data her weapon is
+  the turret part, for which there is no weapon row — with us that became a
+  yellow line with an instant hit. The original fixes the shot kind for this
+  vehicle class (`0x40BF56`): up to four cells of distance one kind, beyond that
+  the **double rocket**. In the test rig on mission 25 two rockets now fly per
+  salvo. ⚠ **Our reading**: that the distance is measured as Euclidean — which
+  norm the original forms has not been counted out. Counter-switch
+  `--bertha-waffe-alt`.
+- **The Dicke Bertha turns her chassis to the right angles** (report 22). In
+  the demos she drove at a slant to her direction of travel. We computed the
+  facing in 16 steps, and on diagonals that produced odd steps. For the Bertha
+  and for ships the original computes **8** directions and doubles them
+  (`0x404ECC`). Same now; on a diagonal drive there is no odd step any more
+  (371 before). Counter-switch `--blick16-alt`, for ships
+  `--blick16-schiffe-alt`.
+- **The muzzle flash sits at the barrel** (report 1, round 4). In 0.6.7 we had
+  only corrected the direction; the image still lay visibly off, because the
+  visible content of the flash images sits in the lower right of their canvas
+  and we took the canvas centre as the anchor — a good 7 and 9 pixels off. Now
+  the anchor is the centre of the visible area. ⚠ **Our call, an interim
+  solution**: the original places the flash at a point from the file SHOOT.CWT,
+  which we do not read out yet. Counter-switch `--mzf-anker-alt`.
+
+#### Interface
+
+- **The arrows in the briefing are visible** (report 2). On the mission screen
+  the "new technologies" box had two empty buttons — they worked but were
+  invisible. The background image carries only empty plates; the original lays
+  the arrows over them from an image bank of their own, and **only when there is
+  more than one new technology**. We had never exported those images. Now they
+  are written during import (see **"Important"** above), and paging runs
+  **round** as in the original — after the last entry comes the first again; we
+  had stopped at the end. ⚠ **Our call**: the red, pressed arrow stays **as long
+  as the button is held**; how long the original shows it has not been read.
+  Counter-switch `--techpfeile-alt`.
+- **The engineer's bridge preview is fully visible** (report 17). After the
+  lower bridge in mission 2 was demolished, the preview of a new bridge was only
+  partly visible: the rubble and water tiles of the demolition were painted
+  opaquely **after** the preview. Now the preview comes last. Counter-switch
+  `--brueckenvorschau-alt`. ⚠ Checked in the game only.
+
+#### Mission 2
+
+- **"Protect the supply depot" starts** (reports 8 and 14). KayelGee saw no
+  "The enemy approaches" when driving past the fuel depot, and the sub-mission
+  did not start — in 0.6.6 it still did. **No fault turned up in today's
+  build.** A new test rig plays the route: first capture a Krumlov base through
+  the real click path, **then** drive a ground unit south across the western
+  bridge (cell 3,60). The script's rule fires, seven partisans appear, and the
+  text comes. The order matters: capture first, then the bridge. The most likely
+  cause during the test was loading — after loading the base could not be
+  captured (report 16, fixed above); it is also possible that the bridge was
+  crossed before the capture. We are asking KayelGee whether that settles it.
+
+### For the curious
+
+New headless test rigs — each one fails with its counter-switch, which shows
+that the measurement really sees the change:
+
+- `--spielstand-check` — saves and loads on missions 2, 17 and 21 and compares
+  buildings, doors, areas and script state. With `--laden-vorlage-alt` the
+  image kind on mission 2 drops from 250 to 0, the building area from 257 to 11
+  cells, the doors from 2 to 0.
+- `--produktionsliste-check` — the build list on missions 2, 10 and 28 (in
+  mission 2: 5 rows instead of 76).
+- `--garage-unsichtbar-check` — missions 2 and 17; in the null model the
+  invisible unit on mission 17 takes 13 damage.
+- `--tuerklick-check` — the click on the door with a unit in front of it; on
+  mission 2 it drives in.
+- `--nachschub-sicht-check` — supply helicopters lift no fog.
+- `--m2-untermission-check` — capture, drive across the western bridge, start of
+  the sub-mission (see mission 2). Two pitfalls in the rig itself: a click right
+  after teleporting still hit fog (sight only catches up afterwards), and the
+  base guard and garrison killed the capturing unit.
+- `--waffenbild-probe` — which weapon draws which image (mission 2: no line for
+  MG and light infantry; mission 14: one beam each for the laser weapons), plus
+  the Bertha and her turning on mission 25.
+- `--nachschubbefehl-check` — the refill order on DM_7. One pitfall: the first
+  chosen customer died on the battle map before the helicopter arrived.
+
+New counter-switches (each brings back the 0.6.7 behaviour):
+`--laden-pause-alt`, `--laden-vorlage-alt`, `--laden-mitnahme-alt`,
+`--bauliste-grundtafel-alt`, `--garage-balken-alt`, `--garage-ziel-alt`,
+`--tuerklick-einheit-alt`, `--basisfenster-zu-bleibt-alt`, `--doppelklick-alt`,
+`--rollen-pause-alt`, `--luftschuss-tempo-alt`, `--nachschub-sicht-alt`,
+`--flughuepfen-alt`, `--flugzeug-rahmen-alt`, `--nachschubbefehl-alt`,
+`--leuchtspur-alt`, `--bertha-waffe-alt`, `--blick16-alt`,
+`--blick16-schiffe-alt`, `--mzf-anker-alt`, `--techpfeile-alt`,
+`--brueckenvorschau-alt`.
+
+And one tool: `--briefing-knoepfe-export=<installation>` writes the briefing
+arrow images without a full re-import (see above).
+
+### Known limitations
+
+- **The original's save window is still missing** (window kind 15). For now,
+  saving only reports itself with a line in the game.
+- **The state of the campaign AI is not in the save.** The mission script is
+  saved now, the inner state of the enemy AI not yet.
+- **The muzzle flash is an interim solution** until the file SHOOT.CWT is read
+  out.
+- **The flight height of the supply helicopters** follows our call (see report
+  3) until the aircraft position is computed flat.
+- **Bridge preview and aircraft selection frame** are checked in the game only,
+  not with a test rig.
+- Open follow-up question to KayelGee: whether mission 2 (reports 8 and 14)
+  behaves as expected again with loading fixed.
+- Missions 28 to 33 have not been played through yet — that is the road to
+  0.7.0.
+
 ## 0.6.7 — 2026-10-12 · missions 25 to 27, and the fourth round of reports from KayelGee
 
 > Three more missions, each played through on its own — plus the fourth round

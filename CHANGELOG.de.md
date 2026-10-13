@@ -14,6 +14,309 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.8 — 13.10.2026 · die fünfte Runde Meldungen von KayelGee
+
+> Eine Zwischenfassung ohne neue Missionen: die fünfte Runde Meldungen von
+> **KayelGee**, vierundzwanzig auf einmal, gemacht an 0.6.7 im Vergleich mit dem
+> Original. Der grösste Brocken ist der **Spielstand** — Laden und Speichern
+> waren an mehreren Stellen kaputt. Jeder Punkt unten ist ein Befund: was
+> auffiel, was jetzt passiert, und wie das Original es macht. Wo wir etwas
+> selbst festgelegt haben, steht das dabei. Jede Änderung hat einen
+> Gegenschalter, mit dem sich der alte Stand zurückholen lässt.
+
+### Danke an KayelGee
+
+KayelGee hat 0.6.7 gleich nach dem Erscheinen gespielt und uns **vierundzwanzig
+Meldungen** geschickt — vom Mündungsfeuer über die Nachschubhelis bis zum
+Spielstand, der nach dem Laden Gebäude als Wasser zeichnete, dazu
+Bildschirmfotos vom Missionsbildschirm, vom Mündungsfeuer und vom
+Versorgungsdepot. Mehrere Meldungen zeigen, dass ein Fund aus Runde 4 nur halb
+behoben war; ohne seinen genauen Blick wäre das liegen geblieben. Jede Meldung
+wurde im Original nachgelesen, bevor etwas gebaut wurde. Bis auf eine sind alle
+behoben; bei der einen (Mission 2) fand sich im heutigen Stand kein Fehler. Sie
+stehen unten im Abschnitt **»Gemeldet von KayelGee — Runde 5«**, jede einzeln
+mit ihrer Nummer aus seiner Liste. Danke!
+
+### ⚠ Wichtig: die Pfeile im Briefing brauchen neue Bilder
+
+Die beiden Pfeile im Missionsbildschirm (Feld **»neue Technologien«**, Meldung
+2) sind **neue Bilder aus dem Originalimport**. Eine bereits eingelesene
+Installation bekommt sie **nicht von selbst**. Zwei Wege:
+
+- den Ordner
+
+  `%APPDATA%\Godot\app_userdata\AkteEuropaReborn\data`
+
+  löschen — dann liest das Spiel beim nächsten Start neu ein (Einleseschirm wie
+  beim ersten Mal; Spielstände und Einstellungen liegen nicht in diesem Ordner
+  und bleiben erhalten), **oder**
+- das Spiel einmal mit
+  `--briefing-knoepfe-export=<Ordner der Akte-Europa-Installation>` starten;
+  das schreibt nur die Pfeilbilder nach.
+
+Ohne das funktionieren die Pfeil-Knöpfe trotzdem — sie sind nur unsichtbar wie
+bisher.
+
+### Spielstände aus 0.6.7
+
+Das Spielstandformat ist jetzt **Format 2** und liest die Formate 1 und 2.
+Spielstände aus 0.6.7 lassen sich also weiter laden. Ein in 0.6.7 gespeicherter
+Stand hat die neuen Felder aber nicht (Gebäudezustand, Türen, Depot, Flugzeuge,
+Missionsskript, siehe unten) — was fehlt, nimmt das Spiel aus der Karte. Wer
+sicher gehen will, speichert nach dem Update einmal neu.
+
+### Gemeldet von KayelGee — Runde 5
+
+Die Nummern in Klammern sind die aus seiner Liste. »Runde 4« heisst: schon
+damals gemeldet und nicht oder nur halb behoben.
+
+#### Spielstand: Laden und Speichern
+
+- **Ein Spielstand lässt sich im laufenden Spiel wieder laden** (Meldung 15).
+  Bisher hing das Spiel danach. Das Spielmenü hält das Spiel an, und der
+  Szenenwechsel zum geladenen Stand nahm diese Pause mit — die neue Karte stand
+  still. Jetzt wird vor dem Wechsel aufgeräumt wie beim Verlassen ins Hauptmenü.
+  Gegenschalter `--laden-pause-alt`.
+- **Nach dem Laden sehen die Gebäude wieder aus wie Gebäude** (Meldung 16). Das
+  Nachschubdepot in Mission 2 erschien als Wasser oder Fels, und das betraf
+  jedes Gebäude; die Basis in Mission 2 war danach weder wählbar noch
+  einnehmbar. Unser Leser baute jedes Gebäude aus den rund 40 Feldern der Datei
+  neu auf: die Bildart blieb 0 (gezeichnet wird nur ab 1), der Fussabdruck war
+  eine einzige Zelle, Türen gab es keine, und Depot und Garage wurden gar nicht
+  gespeichert. Jetzt dient der Satz aus der Karte als Vorlage, und der
+  Spielstand schreibt den Zustand, die Türen, den Fussabdruck, das Depot, die
+  Bauliste, den Hangar und die Garage mit. Einheiten in der Garage kommen nicht
+  mehr ins Gitter. Gegenschalter `--laden-vorlage-alt` (der ganze alte Leser).
+- **Nach dem Laden stimmen Treibstoff, Munition, Geld und Lager** (Meldung 18).
+  Nach dem Laden lief der Missionsstart einfach weiter: die mitgebrachten
+  Einheiten kamen ein zweites Mal und vollgetankt auf die Karte, das Startgeld
+  überschrieb den Kontostand, und die Startregeln setzten die Lager zurück.
+  Jetzt überspringt ein geladener Stand den Missionsstart. Dazu fehlten
+  **Flugzeuge und Nachschubhelis** nach dem Laden ganz — sie werden jetzt mit
+  allen Feldern gespeichert, auch mit ihrem Kunden und ihrem Ziel.
+  Gegenschalter `--laden-mitnahme-alt`.
+- **Das Missionsskript läuft nach dem Laden dort weiter, wo es war** (zu
+  Meldung 18 und 14). Der Zustand des Skripts — seine Variablen, Takte,
+  Nachfristen und Frachter — stand gar nicht im Spielstand; nach dem Laden
+  begann das Skript wieder bei Takt 0, und schon ausgelöste Ereignisse konnten
+  ein zweites Mal kommen oder ganz ausbleiben. Jetzt wird er gespeichert und
+  zurückgesetzt. Der Prüfstand vergleicht den Zustand vor dem Speichern und
+  nach dem Laden Zeichen für Zeichen — gleich auf Mission 2, 17 und 21.
+- **Speichern meldet sich** (Meldung 4). »Spielstand speichern« schrieb die
+  Datei, sagte aber nichts — die Meldung ging nur in die Konsole. Jetzt steht
+  eine Meldezeile im Spiel. ⚠ Das eigentliche **Speicherfenster** des Originals
+  (Fensterart 15, `0x473750`) ist noch nicht gebaut; es wird erst nachgelesen.
+  Siehe **»Bekannte Einschränkungen«**.
+
+#### Depot und Basis
+
+- **In Mission 2 lässt sich nur noch bauen, was man hat** (Meldung 11,
+  Runde 4). Statt nur »Maschinengewehr« und der eigenen Entwürfe stand wieder
+  alles in der Produktionsliste. In 0.6.7 hatten wir nur das Erstellen-Fenster
+  gefiltert; die Produktion selbst hatte drei weitere offene Türen: die
+  Gefechtsoption **»Alle Einheiten«** galt auch in der Kampagne (das Hauptmenü
+  übernahm sie), die Bauliste nahm die Grundtafel der EXE und fiel im Zweifel auf
+  »alles« zurück, und der Zweig für Träger tat dasselbe. Jetzt gilt in der
+  Kampagne: der Fahrplan der Mission, die eigenen Entwürfe und die Träger, die
+  man besitzt oder in der Mission erforscht hat — sonst nichts. »Alle Einheiten«
+  wirkt nur noch im Gefecht. In Mission 2 sind es jetzt **5 Zeilen statt 76**.
+  Unser Prüfstand aus 0.6.7 hatte das Falsche gemessen — das Fenster statt der
+  Liste. Gegenschalter `--bauliste-grundtafel-alt`.
+- **Keine unsichtbaren Einheiten mehr im Depot, die man angreifen kann**
+  (Meldungen 10 und 13, Runde 4). Eine eingefahrene oder frisch produzierte
+  Einheit war zwar unsichtbar, zeigte aber noch ihren Lebensbalken, stand auf der
+  Minikarte und liess sich beschiessen — Geschosse im Flug trafen sie weiter, und
+  wer sie schon als Ziel hatte, behielt sie. Jetzt ist eine Einheit in der
+  Garage aus Balken, Tab-Anzeige, Minikarte, Kampf und Geschosstreffern heraus,
+  und wer einfährt, wird als Ziel gelöscht. Gegenschalter `--garage-balken-alt`
+  und `--garage-ziel-alt`.
+- **Eine Einheit vor der Basistür lässt sich wieder ins Depot schicken**
+  (Meldung 9). Stand eine eigene Einheit direkt vor der Tür, wählte ein Klick auf
+  die Tür diese Einheit an: ihr Bild reicht 35 Bildpunkte über ihre Zelle hinaus
+  und deckt die Türzelle, und unsere Klickprüfung gab der Einheit den Vorrang,
+  bevor sie nach der Einfahrt fragte. Jetzt gilt bei einer gewählten, fahrbaren
+  eigenen Einheit der Einfahrzeiger auf der Türzelle zuerst.
+  ⚠ **Unsere Setzung**: die Reihenfolge im Original (Zeigerart 5 bei
+  `0x4327F8`) ist noch nicht gelesen. Gegenschalter `--tuerklick-einheit-alt`.
+- **Die Basis öffnet ihr Menü wieder, wenn man sie erneut wählt** (Meldung 12,
+  vermutlich Runde 4 Meldung 27). Wer das Basismenü schloss und die Basis noch
+  einmal anklickte, bekam kein Menü mehr: das Schliessen setzte einen Merker,
+  der nur zurückfiel, wenn gar kein Gebäude mehr gewählt war. Jetzt öffnet jeder
+  Klick auf die Basis ihr Menü wieder. Gegenschalter
+  `--basisfenster-zu-bleibt-alt`.
+
+#### Steuerung
+
+- **Der Doppelklick öffnet das Einheitenmenü nur auf der gewählten Einheit**
+  (Meldung 20). Bei uns ging es bei jedem Doppelklick irgendwo auf der Karte
+  auf. Das Original prüft drei Dinge (`0x414239`): genau ein Objekt ist
+  markiert, es ist eine Einheit, und das Objekt unter der Maus **ist** diese
+  Einheit. Jetzt genauso; jeder andere Doppelklick ist ein gewöhnlicher Klick.
+  Gegenschalter `--doppelklick-alt`.
+- **Der Mauszeiger bleibt nicht mehr unsichtbar** (Meldung 19). Wer die Karte
+  mit der rechten Maustaste rollte, während ein Hilfefenster aufging, behielt
+  einen unsichtbaren, gefangenen Zeiger: das Hilfefenster hält das Spiel an, und
+  damit liefen weder das Loslassen der Taste noch unsere Rollwache. Jetzt endet
+  das Rollen, sobald das Spiel anhält. Gegenschalter `--rollen-pause-alt`.
+
+#### Flugzeuge und Nachschubhelis
+
+- **Bomben fallen wieder** (Meldung 21). Im Bomberdemo des Hauptmenüs blieben
+  die Bomben in der Luft stehen. Seit 0.6.5 flogen alle Geschosse von Flugzeugen
+  **fünfzigmal zu langsam**: ihr Tempo wurde nicht mit dem Massstab der übrigen
+  Geschosse umgerechnet (gemessen auf DM_5 und DM_1: jetzt 1750 statt 35
+  Bildpunkte je Sekunde). Gegenschalter `--luftschuss-tempo-alt`.
+- **Nachschubhelis decken keinen Nebel mehr auf** (Meldung 5). Bei uns gab
+  jedes Flugzeug Sicht. Das Original überspringt Flugzeuge ab Typ 13 — die
+  Versorger — sowohl beim Aufdecken als auch bei der Radarsicht (`0x420826`,
+  `0x420C04`). Gegenschalter `--nachschub-sicht-alt`.
+- **Nachschubhelis hüpfen nicht mehr über Hügel und Schluchten** (Meldung 3).
+  Ein Rückfall aus Runde 4: wir zogen von der Flughöhe das Gelände der Zelle
+  **unter** dem Heli ab, die Lage des Helis trug aber schon eine glatt
+  verlaufende Anhebung zum Flugziel hin — beides zusammen liess ihn bei jedem
+  Geländewechsel springen. Jetzt wird die Anhebung in der Lage mitgeführt.
+  ⚠ **Unsere Setzung**, bis die Flugzeuglage flach gerechnet wird.
+  Gegenschalter `--flughuepfen-alt`.
+- **Ein gewähltes Flugzeug trägt den Auswahlrahmen der Einheiten** (Meldung 6)
+  statt eines grünen Rechtecks. Den grünen Rahmen hatten wir selbst gezeichnet;
+  das Original nimmt für Flugzeuge dasselbe Auswahlbild wie für Bodeneinheiten
+  (`0x42BB7C`). Jetzt sitzt es um die Mitte des Rumpfbildes. Gegenschalter
+  `--flugzeug-rahmen-alt`. ⚠ Nur im Spiel geprüft, kein Prüfstand.
+- **Ein Nachschubheli lässt sich auf eine Einheit schicken** (Meldung 7). Im
+  Original zeigt der Mauszeiger über einer passenden Einheit das Tank- bzw.
+  Munitionsbild, und ein Klick schickt den gewählten Heli genau zu dieser
+  Einheit, um sie zu befüllen (Zeiger 8/9, Befehle 14/15, `0x427E30`/`0x427EE0`)
+  — auch in der Kampagne. Bei uns fehlten Zeiger und Befehl; der Klick wurde ein
+  gewöhnliches Flugziel und in der Kampagne verworfen. Jetzt nachgebaut: im
+  Prüfstand fliegt der Heli 58 Zellen weit und hat den Kunden nach 27 Sekunden
+  voll. ⚠ **Unsere Setzungen**: die Sprachquittung des Originals auf diesen
+  Befehl ist noch nicht gelesen und fehlt, und ein voller Kunde wird wie bisher
+  sofort wieder losgelassen. Gegenschalter `--nachschubbefehl-alt`.
+
+#### Waffen
+
+- **Maschinengewehr und leichte Infanterie schiessen keinen Laser mehr**
+  (Meldung 23). Bei uns zog jede Waffe ohne Flugbild eine gelbe Linie. Im
+  Original hat diese Leuchtspur genau einen Nutzer — Art 12, die Blitzschleuder
+  (`0x451CCD`). Nur die Laserwaffen der Infanterie (Laser und LaserXXL) feuern
+  einen **grünen Strahl**, über denselben Anleger wie der Kampfhubschrauber;
+  alle anderen Waffen ohne Flugbild treffen ohne Bild. Jetzt genauso.
+  ⚠ **Unsere Setzung**: **ein** Strahl je Schuss (der Kampfhubschrauber hat zwei
+  Mündungen, die Handwaffe eine) und der grüne Strahlpunkt. Gegenschalter
+  `--leuchtspur-alt`.
+- **Die Dicke Bertha schiesst Raketen** (Meldung 24). Ihre Waffe ist im
+  Datensatz das Turmteil, für das es keine Waffenzeile gibt — bei uns wurde
+  daraus eine gelbe Linie mit Sofort-Treffer. Das Original legt die Schussart
+  für diese Fahrzeugklasse fest (`0x40BF56`): bis vier Zellen Entfernung die
+  eine Art, darüber die **Doppelrakete**. Im Prüfstand fliegen auf Mission 25
+  jetzt zwei Raketen je Salve. ⚠ **Unsere Lesart**: dass die Entfernung
+  euklidisch gemessen wird — welche Norm das Original bildet, ist nicht
+  ausgezählt. Gegenschalter `--bertha-waffe-alt`.
+- **Die Dicke Bertha dreht ihr Fahrwerk auf die richtigen Winkel** (Meldung
+  22). In den Demos fuhr sie schräg zu ihrer Fahrtrichtung. Wir rechneten die
+  Blickrichtung in 16 Stufen, auf Diagonalen kamen dabei ungerade Stufen heraus.
+  Das Original rechnet für Bertha und Schiffe in **8** Richtungen und verdoppelt
+  (`0x404ECC`). Jetzt genauso; auf einer Diagonalfahrt gibt es keine ungerade
+  Stufe mehr (vorher 371). Gegenschalter `--blick16-alt`, für Schiffe
+  `--blick16-schiffe-alt`.
+- **Das Mündungsfeuer sitzt am Rohr** (Meldung 1, Runde 4). In 0.6.7 hatten wir
+  nur die Richtung berichtigt; das Bild lag weiter sichtbar daneben, weil der
+  sichtbare Inhalt der Feuerbilder unten rechts auf ihrer Leinwand sitzt und wir
+  die Leinwandmitte als Anker nahmen — gut 7 und 9 Bildpunkte daneben. Jetzt ist
+  der Anker die Mitte des sichtbaren Bereichs. ⚠ **Unsere Setzung, eine
+  Zwischenlösung**: das Original setzt das Feuer an einen Punkt aus der Datei
+  SHOOT.CWT, die wir noch nicht auslesen. Gegenschalter `--mzf-anker-alt`.
+
+#### Oberfläche
+
+- **Die Pfeile im Briefing sind zu sehen** (Meldung 2). Im Missionsbildschirm
+  standen im Feld »neue Technologien« zwei leere Knöpfe — sie funktionierten,
+  waren aber unsichtbar. Das Hintergrundbild trägt nur leere Platten; das
+  Original legt die Pfeile aus einer eigenen Bildbank darüber, und **nur, wenn es
+  mehr als eine neue Technologie gibt**. Diese Bilder hatten wir nie ausgelesen.
+  Jetzt werden sie beim Einlesen geschrieben (siehe **»Wichtig«** oben), und
+  das Blättern läuft wie im Original **rundherum** — nach dem letzten Eintrag
+  kommt wieder der erste; wir hatten am Ende angehalten. ⚠ **Unsere Setzung**:
+  der rote, gedrückte Pfeil bleibt stehen, **solange die Taste gedrückt ist**;
+  wie lange das Original ihn zeigt, ist nicht gelesen. Gegenschalter
+  `--techpfeile-alt`.
+- **Die Brückenvorschau des Pioniers ist ganz zu sehen** (Meldung 17). Nach
+  dem Abriss der unteren Brücke in Mission 2 war die Vorschau einer neuen Brücke
+  nur zum Teil sichtbar: die Trümmer- und Wasserkacheln des Abrisses wurden
+  deckend **nach** der Vorschau gemalt. Jetzt kommt die Vorschau zuletzt.
+  Gegenschalter `--brueckenvorschau-alt`. ⚠ Nur im Spiel geprüft.
+
+#### Mission 2
+
+- **»Nachschubdepot beschützen« startet** (Meldungen 8 und 14). KayelGee sah
+  beim Vorbeifahren am Treibstoffdepot kein »Der Feind naht«, und die
+  Untermission startete nicht — in 0.6.6 ging es noch. **Im heutigen Stand fand
+  sich kein Fehler.** Ein neuer Prüfstand spielt den Weg nach: erst eine
+  Krumlov-Basis über den echten Klickweg einnehmen, **dann** mit einer
+  Bodeneinheit über die Westbrücke (Zelle 3,60) nach Süden fahren. Die Regel
+  des Skripts greift, sieben Partisanen erscheinen, und der Text kommt. Die
+  Reihenfolge zählt: erst die Einnahme, dann die Brücke. Die wahrscheinlichste
+  Ursache beim Test war das Laden — nach dem Laden war die Basis nicht
+  einnehmbar (Meldung 16, oben behoben); möglich ist auch, dass die Brücke vor
+  der Einnahme überquert wurde. Ob es damit erledigt ist, fragen wir bei
+  KayelGee nach.
+
+### Für Neugierige
+
+Neue kopflose Prüfstände — jeder fällt mit seinem Gegenschalter durch, so ist
+belegt, dass die Messung die Änderung wirklich sieht:
+
+- `--spielstand-check` — speichert und lädt auf Mission 2, 17 und 21 und
+  vergleicht Gebäude, Türen, Flächen und Skriptzustand. Mit
+  `--laden-vorlage-alt` fallen auf Mission 2 die Bildart von 250 auf 0, die
+  Gebäudefläche von 257 auf 11 Zellen, die Türen von 2 auf 0.
+- `--produktionsliste-check` — die Bauliste auf Mission 2, 10 und 28 (in
+  Mission 2: 5 Zeilen statt 76).
+- `--garage-unsichtbar-check` — Mission 2 und 17; im Nullmodell bekommt die
+  unsichtbare Einheit auf Mission 17 13 Schaden.
+- `--tuerklick-check` — der Klick auf die Tür mit einer Einheit davor; auf
+  Mission 2 fährt sie ein.
+- `--nachschub-sicht-check` — Nachschubhelis decken keinen Nebel auf.
+- `--m2-untermission-check` — Einnahme, Fahrt über die Westbrücke, Start der
+  Untermission (siehe Mission 2). Zwei Fallstricke im Prüfstand selbst: ein
+  Klick gleich nach dem Versetzen traf noch Nebel (die Sicht zieht erst nach),
+  und Basiswache und Besatzung töteten die einnehmende Einheit.
+- `--waffenbild-probe` — welche Waffe welches Bild zieht (Mission 2: kein
+  Strich bei MG und leichter Infanterie; Mission 14: je ein Strahl bei den
+  Laserwaffen), dazu Bertha und ihre Drehung auf Mission 25.
+- `--nachschubbefehl-check` — der Befüllbefehl auf DM_7. Ein Fallstrick: der
+  erste gewählte Kunde starb auf der Kampfkarte, bevor der Heli ankam.
+
+Neue Gegenschalter (jeder holt den Stand von 0.6.7 zurück):
+`--laden-pause-alt`, `--laden-vorlage-alt`, `--laden-mitnahme-alt`,
+`--bauliste-grundtafel-alt`, `--garage-balken-alt`, `--garage-ziel-alt`,
+`--tuerklick-einheit-alt`, `--basisfenster-zu-bleibt-alt`, `--doppelklick-alt`,
+`--rollen-pause-alt`, `--luftschuss-tempo-alt`, `--nachschub-sicht-alt`,
+`--flughuepfen-alt`, `--flugzeug-rahmen-alt`, `--nachschubbefehl-alt`,
+`--leuchtspur-alt`, `--bertha-waffe-alt`, `--blick16-alt`,
+`--blick16-schiffe-alt`, `--mzf-anker-alt`, `--techpfeile-alt`,
+`--brueckenvorschau-alt`.
+
+Und ein Werkzeug: `--briefing-knoepfe-export=<Installation>` schreibt die
+Pfeilbilder des Briefings nach, ohne alles neu einzulesen (siehe oben).
+
+### Bekannte Einschränkungen
+
+- **Das Speicherfenster des Originals fehlt noch** (Fensterart 15). Speichern
+  meldet sich vorerst nur mit einer Zeile im Spiel.
+- **Der Zustand der Kampagnen-KI steht nicht im Spielstand.** Das Missionsskript
+  wird jetzt gespeichert, der innere Zustand der gegnerischen KI noch nicht.
+- **Das Mündungsfeuer ist eine Zwischenlösung**, bis die Datei SHOOT.CWT
+  ausgelesen ist.
+- **Die Flughöhe der Nachschubhelis** folgt unserer Setzung (siehe Meldung 3),
+  bis die Flugzeuglage flach gerechnet wird.
+- **Brückenvorschau und Auswahlrahmen der Flugzeuge** sind nur im Spiel geprüft,
+  nicht mit einem Prüfstand.
+- Offene Rückfrage an KayelGee: ob Mission 2 (Meldungen 8 und 14) mit dem
+  behobenen Laden wieder wie erwartet läuft.
+- Die Missionen 28 bis 33 sind noch nicht durchgespielt — das ist der Weg zu
+  0.7.0.
+
 ## 0.6.7 — 12.10.2026 · Kampagne 25 bis 27, und die vierte Runde Meldungen von KayelGee
 
 > Drei weitere Missionen, jede einzeln durchgespielt — dazu die vierte Runde
