@@ -349,6 +349,41 @@ public sealed class BriefingExporter
                     $"aus BRIEFG.DAT ab Versatz {BankOffset(EmblemFirst)}");
     }
 
+    /// <summary>bug-513 (KayelGee R5#2): die Knopfbilder des Briefingschirms,
+    /// Bank 7..12 — 7/8 Pfeil links hell/gedrueckt, 9/10 Pfeil rechts, 11/12
+    /// START. Der Zeichner 0x486480 blittet 7..10 zur Laufzeit auf die zwei
+    /// leeren Platten (0x4869EE..0x486A5C), das Hintergrundbild traegt sie
+    /// NICHT. Nach <c>UI/briefing_bank/NN.png</c>, wie das Emblem in 01.PAL.</summary>
+    public const int KnopfFirst = 7, KnopfLast = 12;
+    public int Knoepfe;
+
+    public void WriteKnoepfe(byte[] dat, PalFile pal, Action<string>? say = null)
+    {
+        if (_ui.Length == 0) return;
+        if (dat.Length < BankOffset(KnopfLast + 1))
+        {
+            say?.Invoke($"BRIEFG.DAT zu kurz fuer die Knopfbilder ({dat.Length} < {BankOffset(KnopfLast + 1)})");
+            return;
+        }
+        string dir = _ui + "/briefing_bank";
+        Directory.CreateDirectory(dir);
+        for (int i = KnopfFirst; i <= KnopfLast; i++)
+        {
+            var (w, h) = Bank[i - 1];
+            int at = BankOffset(i);
+            var img = Godot.Image.CreateEmpty(w, h, false, Godot.Image.Format.Rgba8);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    byte v = dat[at + y * w + x];
+                    img.SetPixel(x, y, Godot.Color.Color8(pal.R[v], pal.G[v], pal.B[v], 255));
+                }
+            img.SavePng($"{dir}/{i:00}.png");
+            Knoepfe++;
+        }
+        say?.Invoke($"Briefing-Knopfbilder: {Knoepfe} (Bank {KnopfFirst}..{KnopfLast}) aus BRIEFG.DAT");
+    }
+
     /// <summary>Die neun Wasserzeichenbilder aus SYMBOL.DAT nach
     /// <c>UI/emblem/mark/f0..f8.png</c>, dazu <c>emblem_index.json</c>.</summary>
     public void WriteWatermark(byte[] sym, PalFile pal, Action<string>? say = null)

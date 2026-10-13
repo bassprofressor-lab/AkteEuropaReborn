@@ -71,6 +71,10 @@ public static class GameCursors
     /// Gebaeude«.</summary>
     public const int Einnahme = 10;
 
+    /// <summary>bug-519: Zustand 8 (0x4321BE) -> Bild 12, das Fass; Zustand 9
+    /// (0x4321FE) -> Bild 13, die Patronen (einladezeiger-fable §4).</summary>
+    public const int Tanken = 12, Munition = 13;
+
     /// <summary>
     /// Der ENTLADEZEIGER ueber einer Rampe — <b>Bild 16</b>.
     ///

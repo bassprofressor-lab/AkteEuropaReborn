@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 namespace AkteEuropaReborn.Rendering;
 
@@ -157,6 +157,23 @@ public partial class MapEntityLayer : Node2D
         }
         return -1;
     }
+
+    /// <summary>bug-502 (KayelGee R5#20): der DOPPELKLICK oeffnet das Menue nur
+    /// auf der angewaehlten Einheit selbst — @0x414239 genau ein Objekt markiert,
+    /// @0x414247 es ist eine Einheit, @0x41425C das Objekt unter der Maus IST sie.
+    /// Bei uns ging das Menue bei jedem Doppelklick irgendwo auf.
+    /// <c>--doppelklick-alt</c> = die alte Fassung ohne Mausbezug.
+    /// Gibt den Griff zurueck oder -1 (dann ist es ein gewoehnlicher Klick).</summary>
+    public int MenueEinheitUnter(Vector2 mapPos)
+    {
+        int idx = MenueEinheit();
+        if (DoppelklickAlt || idx < 0) return idx;
+        if (_sel.Count != 1) return -1;
+        return Pick(mapPos) == idx ? idx : -1;
+    }
+
+    /// <summary><c>--doppelklick-alt</c> — siehe <see cref="MenueEinheitUnter"/>.</summary>
+    public static bool DoppelklickAlt;
 
     /// <summary>Eine Einheit anwaehlen — fuer die Pruefstaende, die keinen
     /// Mausklick haben.</summary>

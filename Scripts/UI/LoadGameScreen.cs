@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System;
 using Godot;
@@ -114,8 +114,19 @@ public partial class LoadGameScreen : Control
             root.TryGetValue("campaign_mission", out var cm) ? cm.AsInt32() : 0;
         SkirmishSetup.Active = root.TryGetValue("skirmish", out var sk) && sk.AsBool();
         SkirmishSetup.PendingSave = name;
+        // bug-501 (KayelGee R5#15): »Laden im laufenden Spiel => Spiel haengt«.
+        // Das Spielmenue haelt den Baum an (MapViewer, Paused = true), und der
+        // Szenenwechsel nahm die Pause mit — die neue Karte stand still. Derselbe
+        // Aufraeumer wie beim Weg ins Hauptmenue und bei StartNextMission:
+        // Pause frei, Hilfefenster vergessen, Fensterverwaltung leeren.
+        // --laden-pause-alt = der alte Weg ohne Aufraeumen.
+        if (!PauseAlt) Core.LeaveToMenu.Tidy(this);
         GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
     }
+
+    /// <summary><c>--laden-pause-alt</c> — Laden wechselt die Szene wieder ohne
+    /// Aufraeumen (die Pause des Spielmenues bleibt stehen). bug-501.</summary>
+    public static bool PauseAlt;
 
     public override void _UnhandledInput(InputEvent @event)
     {

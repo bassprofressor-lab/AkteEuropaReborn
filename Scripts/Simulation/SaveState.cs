@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 
@@ -49,9 +49,19 @@ public partial class MapEntityLayer
         // ⚠ Die Gruppen unten zeigen auf die STELLE IM SPIELSTAND, nicht auf
         // die Listenstelle im Spiel und nicht auf den Platz. Der Grund steht
         // bei "groups"; hier wird die Umrechnung nebenbei mitgeschrieben.
+        // ⚠ bug-506: VORAB, nicht im Schreiblauf — eine Garage-Einheit kann vor
+        // ihrem Gebaeude in der Liste stehen und muss es trotzdem benennen.
         var stelleImStand = new int[_entities.Count];
-        for (int q = 0; q < stelleImStand.Length; q++) stelleImStand[q] = -1;
         int geschrieben = 0;
+        for (int q = 0; q < stelleImStand.Length; q++)
+            stelleImStand[q] = _entities[q].IsProp ? -1 : geschrieben++;
+        int Stelle(Entity? x)
+        {
+            if (x == null) return -1;
+            int i = _entities.IndexOf(x);
+            return i >= 0 ? stelleImStand[i] : -1;
+        }
+        static string Liste(IEnumerable<int> l) => "[" + string.Join(",", l) + "]";
 
         // Ein Satz Felder, EINMAL — die Ladung an Bord wird mit denselben
         // geschrieben. Zwei Schreibwege waeren zwei Wahrheiten darueber, was
@@ -80,6 +90,38 @@ public partial class MapEntityLayer
             w.Num("build_time", e.BuildTime).Num("build_index", e.BuildIndex);
             w.Num("shown_owner", e.ShownOwner);
             if (e.Name.Length > 0) w.Str("name", e.Name);
+            // ---- Format 2 (bug-506/507, KayelGee R5#16/#18) -----------------
+            // Was das Spiel waehrend des Spielens AENDERT und bis heute beim
+            // Laden auf den Standardwert fiel. Was der Kartenlader aus dem Inhalt
+            // ableitet, kommt beim Laden aus der Vorlage (siehe ApplySaveState);
+            // es steht trotzdem hier, damit auch ein SELBST GEBAUTES Gebaeude,
+            // das keine Vorlage hat, vollstaendig zurueckkommt.
+            w.Num("ukol", e.Ukol).Num("in_gebaeude", Stelle(e.InGebaeude));
+            w.Num("bild_art", e.BildArt).Num("foot_w", e.FootW).Num("foot_h", e.FootH);
+            w.Bool("no_structure", e.NoStructure).Bool("is_target", e.IsTarget).Num("mark", e.Mark);
+            w.Num("entwurf3e", e.Entwurf3E).Num("reload", e.Reload).Num("range_min", e.RangeMin)
+             .Num("rating28", e.Rating28).Num("erfahrung", e.Erfahrung).Num("part", e.Part)
+             .Num("radar_charges", e.RadarCharges);
+            w.Num("armor", e.Armor).Num("bauzustand", e.Bauzustand).Num("schadensstufe", e.Schadensstufe)
+             .Num("capture_total", e.CaptureTotal).Num("capture_progress", e.CaptureProgress)
+             .Num("intruder", e.Intruder).Num("upgrade_step", e.UpgradeStep)
+             .Num("prod_speed", e.ProdSpeed).Num("capacity", e.Capacity)
+             .Num("cost_store", e.CostStore).Num("cost_prod", e.CostProd)
+             .Num("eff_num", e.EffNum).Num("eff_den", e.EffDen).Num("hangar_size", e.HangarSize)
+             .Num("research_tech", e.ResearchTech).Num("research_done", e.ResearchDone)
+             .Num("deposit_start", e.DepositStart);
+            if (e.IsBuilding)
+            {
+                var tueren = new List<int>();
+                foreach (var (c, r) in e.DoorCells) { tueren.Add(c); tueren.Add(r); }
+                w.Raw("door_cells", Liste(tueren));
+                w.Raw("depot", Liste(e.Depot));
+                w.Raw("build_queue", Liste(e.BuildQueue));
+                var gar = new List<int>();
+                foreach (var u in e.Garage) gar.Add(Stelle(u));
+                w.Raw("garage", Liste(gar));
+                if (e.Hangar != null) w.Raw("hangar", Liste(e.Hangar));
+            }
         }
 
         w.ArrayStart("entities");
@@ -87,7 +129,6 @@ public partial class MapEntityLayer
         {
             var e = _entities[ei];
             if (e.IsProp) continue;                 // scenery comes back from the map
-            stelleImStand[ei] = geschrieben++;
             w.ItemStart();
             SchreibeEinheit(e);
             w.Num("unload_rest", e.UnloadRest)
@@ -229,6 +270,23 @@ public partial class MapEntityLayer
         }
         w.ArrayEnd();
 
+        // ---- die FLUGZEUGE (bug-507, KayelGee R5#18) --------------------------
+        // ⚠ Sie standen in keiner Datei: nach dem Laden kam die Luftflotte des
+        // Kartenstarts zurueck, gekaufte Nachschubhelis waren weg. Geschrieben
+        // wird JEDES oeffentliche Feld von Special — ein Feld, das spaeter
+        // hinzukommt, geht damit von selbst mit (die Lehre aus den Gebaeuden).
+        w.ArrayStart("aircraft");
+        foreach (var a in _special)
+        {
+            w.ItemStart();
+            SchreibeLuft(w, a, stelleImStand);
+            w.ItemEnd();
+        }
+        w.ArrayEnd();
+
+        // ---- der Zustand des MISSIONSSKRIPTS (bug-508) ------------------------
+        if (_mscript != null) w.Raw("script", _mscript.ZustandJson());
+
         w.Raw("fog", FogRle());
         w.Close();
         return w.ToString();
@@ -277,6 +335,22 @@ public partial class MapEntityLayer
                     ? GetI(ma[i].AsGodotDictionary<string, Variant>(), "v") : ma[i].AsInt32();
         }
 
+        // ⭐ bug-506 (KayelGee R5#16): DIE VORLAGEN AUS DER FRISCH GELADENEN KARTE.
+        // Bis heute wurde jedes Gebaeude aus den ~40 Feldern der Datei neu
+        // gebaut — ohne BildArt (unsichtbar, darunter Wasser und Fels), ohne
+        // Fussabdruck (Klickflaeche eine Zelle), ohne Tueren, Marke, Siegziel.
+        // Jetzt beginnt ein Satz, den es in der Karte gibt, als KOPIE seines
+        // Kartensatzes, und die Datei legt nur ihren Zustand darueber. Was der
+        // Kartenlader ableitet, kann so nie mehr fehlen. Zugeordnet wird ueber
+        // den Platz — ein Gebaeude nur an DERSELBEN Zelle (ein Neubau kann den
+        // Platz eines zerstoerten erben, bug-439), eine Einheit nur bei gleichem
+        // Typ. --laden-vorlage-alt = der alte Leser.
+        var vorlagen = new Dictionary<(int, bool), Entity>();
+        if (!LadenVorlageAlt)
+            foreach (var e in _entities)
+                if (!e.IsProp && e.Slot >= 0) vorlagen.TryAdd((e.Slot, e.IsBuilding), e);
+        LadenVorlagen = 0;
+
         // The props stay; everything else is replaced wholesale. Rebuilding
         // rather than patching is what keeps a save honest: an entity that is
         // not in the file is not on the map, full stop.
@@ -297,39 +371,105 @@ public partial class MapEntityLayer
         {
             int col = GetI(d, "col"), row = GetI(d, "row");
             int el = ElevOf(col, row);
-            var e = new Entity
+            int slot = GetI(d, "slot", -1);
+            bool bau = GetB(d, "building");
+            Entity? v = null;
+            if (slot >= 0 && vorlagen.TryGetValue((slot, bau), out var t)
+                && (bau ? t.Col == col && t.Row == row
+                        : t.UnitType == GetI(d, "unit_type", -1)))
+            {
+                v = t;
+                vorlagen.Remove((slot, bau));
+            }
+            var e = v?.Klon() ?? new Entity();
+            if (v != null)
+            {
+                // die Laufzeitlisten gehoeren dem Spielstand, nicht der Karte
+                e.Garage.Clear(); e.Depot.Clear(); e.BuildQueue.Clear(); e.Orders.Clear();
+                e.TorZustand.Clear();
+                e.Path = null; e.Reserved = null; e.InGebaeude = null; e.Target = -1;
+            }
+            int I(string k, int dflt) => d.TryGetValue(k, out var x) ? x.AsInt32() : dflt;
+            e.Slot = slot; e.Col = col; e.Row = row; e.Elev = el;
+            e.Owner = GetI(d, "owner", -1); e.Team = GetI(d, "team", -1);
+            e.UnitType = GetI(d, "unit_type", -1); e.BType = GetI(d, "btype");
+            e.Hp = GetI(d, "hp"); e.HpMax = GetI(d, "hp_max");
+            e.Facing = GetI(d, "facing"); e.AimFacing = GetI(d, "aim", -1);
+            e.Weapon = GetI(d, "weapon"); e.Equipment = GetI(d, "equipment");
+            e.Ammo = GetI(d, "ammo"); e.AmmoMax = GetI(d, "ammo_max");
+            e.Fuel = GetI(d, "fuel"); e.FuelMax = GetI(d, "fuel_max");
+            e.Speed = GetI(d, "speed"); e.Range = GetI(d, "range"); e.Sight = GetI(d, "sight");
+            e.Attack = GetI(d, "attack"); e.Defence = GetI(d, "defence");
+            e.Infantry = GetI(d, "infantry", -1); e.Chassis = GetI(d, "chassis", -1);
+            e.GameUnitType = GetI(d, "subclass", -1); e.Pose = GetI(d, "pose");
+            e.Faze = GetI(d, "faze");
+            e.Condition = GetI(d, "condition", 100); e.State = GetI(d, "state");
+            e.IsBuilding = bau; e.Dead = GetB(d, "dead");
+            e.DugIn = GetB(d, "dug_in");
+            e.DeadTime = d.TryGetValue("dead_time", out var dt) ? (float)dt.AsDouble() : 0f;
+            e.Doors = GetI(d, "doors"); e.Built = GetI(d, "built");
+            e.StockW = GetI(d, "stock_w"); e.StockF = GetI(d, "stock_f");
+            e.StockS = GetI(d, "stock_s"); e.StockT = GetI(d, "stock_t");
+            e.Deposit = GetI(d, "deposit"); e.Grade = GetI(d, "grade");
+            e.BuildTime = d.TryGetValue("build_time", out var bt) ? (float)bt.AsDouble() : 0f;
+            e.BuildIndex = GetI(d, "build_index", -1);
+            e.ShownOwner = GetI(d, "shown_owner", -1);
+            e.Name = d.TryGetValue("name", out var nv) ? nv.AsString() : "";
+            e.Mobile = !bau;
+
+            // ---- Format 2: was fehlt, bleibt wie in der Vorlage ------------
+            // ⚠ Unter --laden-vorlage-alt gilt der GANZE alte Leser: ohne diese
+            // Felder. Sonst retten sie, was die Vorlage nicht mehr liefert, und
+            // das Nullmodell saehe so gut aus wie die Behebung (gemessen: beide
+            // DECKUNGSGLEICH).
+            if (LadenVorlageAlt) d = AlteFelder(d);
+            e.Ukol = I("ukol", v?.Ukol ?? 0);
+            e.BildArt = I("bild_art", v?.BildArt ?? 0);
+            e.FootW = I("foot_w", e.FootW); e.FootH = I("foot_h", e.FootH);
+            if (d.TryGetValue("no_structure", out var ns)) e.NoStructure = ns.AsBool();
+            else if (v == null && bau) e.NoStructure = e.BType is < 1 or > 16;
+            if (d.TryGetValue("is_target", out var it)) e.IsTarget = it.AsBool();
+            e.Mark = I("mark", e.Mark); e.Entwurf3E = I("entwurf3e", e.Entwurf3E);
+            e.Reload = I("reload", e.Reload); e.RangeMin = I("range_min", e.RangeMin);
+            e.Rating28 = I("rating28", e.Rating28); e.Erfahrung = I("erfahrung", e.Erfahrung);
+            e.Part = I("part", e.Part); e.RadarCharges = I("radar_charges", e.RadarCharges);
+            e.Armor = I("armor", e.Armor); e.Bauzustand = I("bauzustand", e.Bauzustand);
+            e.Schadensstufe = I("schadensstufe", e.Schadensstufe);
+            e.CaptureTotal = I("capture_total", e.CaptureTotal);
+            e.CaptureProgress = I("capture_progress", e.CaptureProgress);
+            e.Intruder = I("intruder", e.Intruder); e.UpgradeStep = I("upgrade_step", e.UpgradeStep);
+            e.ProdSpeed = I("prod_speed", e.ProdSpeed); e.Capacity = I("capacity", e.Capacity);
+            e.CostStore = I("cost_store", e.CostStore); e.CostProd = I("cost_prod", e.CostProd);
+            e.EffNum = I("eff_num", e.EffNum); e.EffDen = I("eff_den", e.EffDen);
+            e.HangarSize = I("hangar_size", e.HangarSize);
+            e.ResearchTech = I("research_tech", e.ResearchTech);
+            e.ResearchDone = I("research_done", e.ResearchDone);
+            e.DepositStart = I("deposit_start", e.DepositStart);
+            if (bau)
+            {
+                if (d.TryGetValue("door_cells", out var dc) && dc.VariantType == Variant.Type.Array)
                 {
-                    Slot = GetI(d, "slot", -1), Col = col, Row = row, Elev = el,
-                    Owner = GetI(d, "owner", -1), Team = GetI(d, "team", -1),
-                    UnitType = GetI(d, "unit_type", -1), BType = GetI(d, "btype"),
-                    Hp = GetI(d, "hp"), HpMax = GetI(d, "hp_max"),
-                    Facing = GetI(d, "facing"), AimFacing = GetI(d, "aim", -1),
-                    Weapon = GetI(d, "weapon"), Equipment = GetI(d, "equipment"),
-                    Ammo = GetI(d, "ammo"), AmmoMax = GetI(d, "ammo_max"),
-                    Fuel = GetI(d, "fuel"), FuelMax = GetI(d, "fuel_max"),
-                    Speed = GetI(d, "speed"), Range = GetI(d, "range"), Sight = GetI(d, "sight"),
-                    Attack = GetI(d, "attack"), Defence = GetI(d, "defence"),
-                    Infantry = GetI(d, "infantry", -1), Chassis = GetI(d, "chassis", -1),
-                    GameUnitType = GetI(d, "subclass", -1), Pose = GetI(d, "pose"),
-                    Faze = GetI(d, "faze"),
-                    Condition = GetI(d, "condition", 100), State = GetI(d, "state"),
-                    IsBuilding = GetB(d, "building"), Dead = GetB(d, "dead"),
-                    DugIn = GetB(d, "dug_in"),
-                    DeadTime = d.TryGetValue("dead_time", out var dt) ? (float)dt.AsDouble() : 0f,
-                    Doors = GetI(d, "doors"), Built = GetI(d, "built"),
-                    StockW = GetI(d, "stock_w"), StockF = GetI(d, "stock_f"),
-                    StockS = GetI(d, "stock_s"), StockT = GetI(d, "stock_t"),
-                    Deposit = GetI(d, "deposit"), Grade = GetI(d, "grade"),
-                    BuildTime = d.TryGetValue("build_time", out var bt) ? (float)bt.AsDouble() : 0f,
-                    BuildIndex = GetI(d, "build_index", -1),
-                    ShownOwner = GetI(d, "shown_owner", -1),
-                    Name = d.TryGetValue("name", out var nv) ? nv.AsString() : "",
-                    Mobile = !GetB(d, "building"),
-                    Footprint = CellRect(_ox, _oy, col, row, el),
-                };
+                    var a = dc.AsGodotArray();
+                    e.DoorCells.Clear();
+                    for (int k = 0; k + 1 < a.Count; k += 2) e.DoorCells.Add((a[k].AsInt32(), a[k + 1].AsInt32()));
+                }
+                if (d.TryGetValue("depot", out var dp) && dp.VariantType == Variant.Type.Array)
+                    foreach (var q in dp.AsGodotArray()) e.Depot.Add(q.AsInt32());
+                if (d.TryGetValue("build_queue", out var bq) && bq.VariantType == Variant.Type.Array)
+                    foreach (var q in bq.AsGodotArray()) e.BuildQueue.Add(q.AsInt32());
+                if (d.TryGetValue("hangar", out var hg) && hg.VariantType == Variant.Type.Array)
+                {
+                    e.Hangar = new List<int>();
+                    foreach (var q in hg.AsGodotArray()) e.Hangar.Add(q.AsInt32());
+                }
+            }
+            // Ein Gebaeude mit Vorlage behaelt deren Flaeche (gleiche Zelle); alles
+            // andere rechnet sie neu, wie der Neubau (Construction.PlaceBuilding).
+            if (v == null || !bau) e.Footprint = CellRect(_ox, _oy, col, row, el);
             e.Pos = CellCenter(e.Col, e.Row);
             e.UnloadRest = GetI(d, "unload_rest");
             e.UnloadCell = new Vector2I(GetI(d, "unload_col"), GetI(d, "unload_row"));
+            if (v != null) LadenVorlagen++;
             return e;
         }
 
@@ -350,6 +490,50 @@ public partial class MapEntityLayer
                 var d = item.AsGodotDictionary<string, Variant>();
                 FrachtAufnehmen(GetI(d, "carrier", -1), BaueEinheit(d));
             }
+
+        // ---- Garage und »in welchem Gebaeude« (bug-506) ----------------------
+        // Erst jetzt: die Stellen zeigen in beide Richtungen.
+        if (!LadenVorlageAlt && root.TryGetValue("entities", out var ev2) && ev2.VariantType == Variant.Type.Array)
+        {
+            var arr = ev2.AsGodotArray();
+            for (int stelle = 0; stelle < arr.Count && stelle < listenstelle.Count; stelle++)
+            {
+                if (arr[stelle].VariantType != Variant.Type.Dictionary) continue;
+                var d = arr[stelle].AsGodotDictionary<string, Variant>();
+                var e = _entities[listenstelle[stelle]];
+                int ig = GetI(d, "in_gebaeude", -1);
+                if (ig >= 0 && ig < listenstelle.Count) e.InGebaeude = _entities[listenstelle[ig]];
+                if (d.TryGetValue("garage", out var gv2) && gv2.VariantType == Variant.Type.Array)
+                    foreach (var q in gv2.AsGodotArray())
+                    {
+                        int st = q.AsInt32();
+                        if (st >= 0 && st < listenstelle.Count) e.Garage.Add(_entities[listenstelle[st]]);
+                    }
+            }
+        }
+
+        // ---- die Flugzeuge (bug-507) — nur ein Format-2-Stand traegt sie ------
+        if (!LadenVorlageAlt && root.TryGetValue("aircraft", out var av) && av.VariantType == Variant.Type.Array)
+        {
+            _special.Clear();
+            _selAir = -1;
+            foreach (var item in av.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                _special.Add(LeseLuft(item.AsGodotDictionary<string, Variant>(), listenstelle));
+            }
+        }
+
+        // ---- der Skriptzustand (bug-508) ------------------------------------
+        // Das Skript entsteht erst im ersten Takt (MissionScriptTick); bis dahin
+        // wartet der Zustand hier. Steht es schon (--save-check), sofort.
+        _skriptZustand = !LadenVorlageAlt && root.TryGetValue("script", out var sc) && sc.VariantType == Variant.Type.Dictionary
+            ? sc.AsGodotDictionary<string, Variant>() : null;
+        if (_skriptZustand != null && _mscript != null)
+        {
+            _mscript.ZustandSetzen(_skriptZustand);
+            _skriptZustand = null;
+        }
 
         // ---- die Gruppen und die Merkpunkte zurueck --------------------------
         //
@@ -438,6 +622,130 @@ public partial class MapEntityLayer
 
         UpdatePanel();
         QueueRedraw();
+    }
+
+    /// <summary><c>--laden-vorlage-alt</c> — der GANZE Leser vor bug-506..508:
+    /// jedes Gebaeude und jede Einheit aus den Format-1-Feldern allein, ohne
+    /// Kartenvorlage, ohne Garage, Flugzeuge und Skriptzustand.</summary>
+    public static bool LadenVorlageAlt;
+
+    /// <summary>Die Format-1-Felder eines Satzes — fuer das Nullmodell.</summary>
+    private static GDict AlteFelder(GDict d)
+    {
+        var alt = new GDict();
+        foreach (var k in AltSchluessel)
+            if (d.TryGetValue(k, out var v)) alt[k] = v;
+        return alt;
+    }
+
+    private static readonly string[] AltSchluessel =
+    {
+        "slot", "col", "row", "owner", "team", "unit_type", "btype", "hp", "hp_max",
+        "facing", "aim", "weapon", "equipment", "ammo", "ammo_max", "fuel", "fuel_max",
+        "speed", "range", "sight", "attack", "defence", "infantry", "chassis", "subclass",
+        "pose", "condition", "state", "faze", "building", "dead", "dug_in", "dead_time",
+        "doors", "built", "stock_w", "stock_f", "stock_s", "stock_t", "deposit", "grade",
+        "build_time", "build_index", "shown_owner", "name", "unload_rest", "unload_col", "unload_row",
+    };
+
+    /// <summary>Wie viele Saetze beim letzten Laden eine Kartenvorlage hatten.</summary>
+    public static int LadenVorlagen;
+
+    /// <summary>Wartet auf das Missionsskript, siehe ApplySaveState.</summary>
+    private GDict? _skriptZustand;
+
+    /// <summary>Fuer --spielstand-check: der Skriptzustand gleich nach dem
+    /// Aufsetzen, als Text.</summary>
+    public static string SkriptZustandGeladen = "";
+
+    /// <summary>Felder eines Flugzeugs, die NICHT in die Datei gehen: der
+    /// Zeichnerzustand (bug-505) wird nach dem Laden neu bestimmt.</summary>
+    private static readonly HashSet<string> LuftOhne =
+        new() { "HubPx", "HubLetztePos", "HuepfAlt", "HuepfHub", "Footprint" };
+
+    private static readonly System.Reflection.FieldInfo[] LuftFelder =
+        typeof(Special).GetFields(System.Reflection.BindingFlags.Public
+                                  | System.Reflection.BindingFlags.Instance);
+
+    private static string Zahl(float f)
+        => f.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Jedes oeffentliche Feld eines Flugzeugs — ein Feld, das spaeter
+    /// hinzukommt, geht damit von selbst mit. ⚠ Customer und Target sind
+    /// LISTENSTELLEN in _entities und gehen als Stelle im Spielstand.</summary>
+    private static void SchreibeLuft(Core.SaveGame.Writer w, Special a, int[] stelle)
+    {
+        foreach (var f in LuftFelder)
+        {
+            if (LuftOhne.Contains(f.Name)) continue;
+            object? v = f.GetValue(a);
+            string k = f.Name;
+            if (k is "Customer" or "Target" && v is int ix)
+            {
+                w.Num(k, ix >= 0 && ix < stelle.Length ? stelle[ix] : -1);
+                continue;
+            }
+            switch (v)
+            {
+                case null: break;                      // Vector2? ohne Wert: fehlt
+                case int n: w.Num(k, n); break;
+                case long n: w.Num(k, n); break;
+                case float x: w.Num(k, x); break;
+                case double x: w.Num(k, (float)x); break;
+                case bool b: w.Bool(k, b); break;
+                case string str: w.Str(k, str); break;
+                case System.Enum en: w.Num(k, System.Convert.ToInt64(en)); break;
+                case Vector2 p: w.Raw(k, $"[{Zahl(p.X)},{Zahl(p.Y)}]"); break;
+                case Vector2I p: w.Raw(k, $"[{p.X},{p.Y}]"); break;
+                case List<int> l: w.Raw(k, "[" + string.Join(",", l) + "]"); break;
+            }
+        }
+    }
+
+    private static Special LeseLuft(GDict d, List<int> listenstelle)
+    {
+        var a = new Special();
+        foreach (var f in LuftFelder)
+        {
+            if (LuftOhne.Contains(f.Name)) continue;
+            var t = f.FieldType;
+            if (!d.TryGetValue(f.Name, out var v))
+            {
+                if (t == typeof(Vector2?) || t == typeof(Vector2I?)) f.SetValue(a, null);
+                continue;
+            }
+            if (f.Name is "Customer" or "Target")
+            {
+                int st = v.AsInt32();
+                f.SetValue(a, st >= 0 && st < listenstelle.Count ? listenstelle[st] : -1);
+                continue;
+            }
+            if (t == typeof(int)) f.SetValue(a, v.AsInt32());
+            else if (t == typeof(long)) f.SetValue(a, v.AsInt64());
+            else if (t == typeof(float)) f.SetValue(a, (float)v.AsDouble());
+            else if (t == typeof(double)) f.SetValue(a, v.AsDouble());
+            else if (t == typeof(bool)) f.SetValue(a, v.AsBool());
+            else if (t == typeof(string)) f.SetValue(a, v.AsString());
+            else if (t.IsEnum) f.SetValue(a, System.Enum.ToObject(t, v.AsInt64()));
+            else if ((t == typeof(Vector2) || t == typeof(Vector2?)) && v.VariantType == Variant.Type.Array)
+            {
+                var q = v.AsGodotArray();
+                if (q.Count >= 2) f.SetValue(a, new Vector2((float)q[0].AsDouble(), (float)q[1].AsDouble()));
+            }
+            else if ((t == typeof(Vector2I) || t == typeof(Vector2I?)) && v.VariantType == Variant.Type.Array)
+            {
+                var q = v.AsGodotArray();
+                if (q.Count >= 2) f.SetValue(a, new Vector2I(q[0].AsInt32(), q[1].AsInt32()));
+            }
+            else if (t == typeof(List<int>) && v.VariantType == Variant.Type.Array)
+            {
+                var l = new List<int>();
+                foreach (var q in v.AsGodotArray()) l.Add(q.AsInt32());
+                if (f.IsInitOnly && f.GetValue(a) is List<int> fest) { fest.Clear(); fest.AddRange(l); }
+                else f.SetValue(a, l);
+            }
+        }
+        return a;
     }
 
     private void ApplyFogRle(Godot.Collections.Array runs)

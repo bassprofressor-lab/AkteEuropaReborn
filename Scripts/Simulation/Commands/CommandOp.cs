@@ -488,6 +488,11 @@ public static class CommandOp
     /// <c>Ours</c>, solange unser Befehl die Modi 7/1 nicht kennt.</para>
     public const short OursAirMove = 2003;
 
+    /// <summary>bug-519: »diese Einheit betanken« (Klickarm 0x4376D3, Bus
+    /// 0x4C2F55 -> Behandler 0x427E30) und »… mit Munition versorgen«
+    /// (0x43770A, 0x4C2F76 -> 0x427EE0). P1 = Flugzeugplatz, P2 = Einheit.</summary>
+    public const short NachschubTanken = 14, NachschubMunition = 15;
+
     /// <summary>Geht dieser Befehl in die Wiederholung? (Schranke des
     /// Originals, @0x4C20A4.) Unsere eigenen Nummern liegen darüber und werden
     /// deshalb wie örtliche behandelt — ⚠ das ist eine Folge unserer

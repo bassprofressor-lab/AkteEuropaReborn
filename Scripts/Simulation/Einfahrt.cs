@@ -191,6 +191,17 @@ public partial class MapEntityLayer : Node2D
     /// eine ein« zu unterscheiden.</summary>
     public static int AuswahlBeimEinfahrenGeraeumt;
 
+    /// <summary><c>--garage-balken-alt</c> — Stand 0.6.7: eine untergestellte
+    /// Einheit behaelt Lebensbalken und Minikartenpunkt an der Tuer. bug-511.</summary>
+    public static bool GarageBalkenAlt;
+
+    /// <summary><c>--garage-ziel-alt</c> — Stand 0.6.7: ein Angreifer schiesst
+    /// weiter auf die eingefahrene Einheit, Geschosse im Flug treffen sie. bug-511.</summary>
+    public static bool GarageZielAlt;
+
+    /// <summary>bug-511: geloeste Ziele und verhinderte Treffer, fuer die Pruefzeile.</summary>
+    public static int GarageZieleGeloest, GarageTrefferVerhindert;
+
     public static bool Untergestellt(Entity e)
         => e.Ukol == UkolUntergestellt
            || (!TuerbandAlt && e.Ukol >= 0x32 && e.Ukol < 0x64
@@ -523,6 +534,10 @@ public partial class MapEntityLayer : Node2D
         u.Ukol = UkolUntergestellt;      // @0x43D657
         u.InGebaeude = b;
         b.Garage.Add(u);
+        // bug-511: wer sie angreift, verliert sie — wie beim Tod (Kill).
+        if (!GarageZielAlt)
+            foreach (var x in _entities)
+                if (x.Target == ui) { x.Target = -1; GarageZieleGeloest++; }
         // ⚠⚠ 10.09.2026 — UND SIE GEHOERT AUS DER AUSWAHL HERAUS.
         //
         // Seine Meldung: »schicke ich eine einheit ins depot, ist sie immer noch

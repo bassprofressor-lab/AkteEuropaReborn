@@ -159,16 +159,28 @@ public partial class BriefingScreen
         };
         AddChild(_techPic);
 
-        // ⚠ Die zwei Platten sind auch dann angeschlossen, wenn es nur einen
-        // Eintrag gibt — das Original zeichnet sie ebenfalls immer; sie tun dann
-        // schlicht nichts (0x486A9E/0x486AD8 klemmen den Stand bei 0 und
-        // Anzahl−1 fest).
-        var zurueck = MonitorKnopf(at, scale, TechPrevX, TechArrowY, TechArrowW, TechArrowH,
-                                   "vorige Technologie", () => TechStep(-1));
-        var weiter = MonitorKnopf(at, scale, TechNextX, TechArrowY, TechArrowW, TechArrowH,
-                                  "naechste Technologie", () => TechStep(+1));
-        AddChild(zurueck);
-        AddChild(weiter);
+        // bug-513 (KayelGee R5#2, »die Pfeile fehlen«): das Hintergrundbild
+        // traegt nur die zwei LEEREN Platten; 0x486480 blittet die Pfeile
+        // (Bank 7/9, gedrueckt 8/10) auf (65,452) und (107,452) — und nur bei
+        // MEHR ALS EINEM Eintrag (0x4869F4 cmp al,1 / jbe). Bei einem Eintrag
+        // bleiben die Platten leer und tun nichts.
+        // --techpfeile-alt = Stand 0.6.7: unsichtbare Knoepfe, immer da.
+        bool alt = TechPfeileAlt();
+        if (alt || _tech.Count > 1)
+        {
+            var zurueck = MonitorKnopf(at, scale, TechPrevX, TechArrowY, TechArrowW, TechArrowH,
+                                       "vorige Technologie", () => TechStep(-1));
+            var weiter = MonitorKnopf(at, scale, TechNextX, TechArrowY, TechArrowW, TechArrowH,
+                                      "naechste Technologie", () => TechStep(+1));
+            if (!alt)
+            {
+                TechPfeil(zurueck, at, scale, TechPrevX, 7);
+                TechPfeil(weiter, at, scale, TechNextX, 9);
+            }
+            AddChild(zurueck);
+            AddChild(weiter);
+            _techZurueck = zurueck; _techWeiter = weiter;
+        }
 
         TechShow();
 
@@ -177,25 +189,76 @@ public partial class BriefingScreen
         // Feld dahinter anfasst, prüft den Knopf nicht.
         foreach (string a in OS.GetCmdlineUserArgs())
         {
-            Button? b = a.StartsWith("--tech-next=") ? weiter
-                      : a.StartsWith("--tech-prev=") ? zurueck : null;
+            Button? b = a.StartsWith("--tech-next=") ? _techWeiter
+                      : a.StartsWith("--tech-prev=") ? _techZurueck : null;
             if (b == null) continue;
             int n = a[(a.IndexOf('=') + 1)..].ToInt();
             for (int i = 0; i < n; i++) b.EmitSignal(BaseButton.SignalName.Pressed);
             GD.Print($"Briefing: »{a}« — Kasten steht auf Eintrag {_techAt + 1} von {_tech.Count}");
         }
+        GD.Print($"Briefing: Pfeile {(_techPfeile > 0 ? $"gezeichnet ({_techPfeile} Bilder)" : _techWeiter != null ? "NUR KLICKFLAECHEN (Knopfbilder fehlen oder --techpfeile-alt)" : "keine (ein Eintrag, Platten leer wie im Original)")}, Blaettern {(alt ? "geklemmt (--techpfeile-alt)" : "rund")}");
         GD.Print($"Briefing: Mission {_mission} kuendigt {_tech.Count} Technologie(n) an — " +
                  string.Join(", ", _tech.ConvertAll(e => $"{e.Name} (Seite {e.Page}, Bild {e.Picture})")));
     }
 
-    /// <summary>Einen Eintrag weiter oder zurück, an den Enden festgeklemmt —
-    /// so wie <c>0x486A9E</c> (zurück, nicht unter 0) und <c>0x486AD8</c>
-    /// (vor, nicht über Anzahl−1).</summary>
+    /// <summary>Einen Eintrag weiter oder zurück, RUND (bug-513): 0x486AAC
+    /// setzt zurück von 0 auf Anzahl−1, 0x486AE9 vor von Anzahl−1 auf 0. Der
+    /// alte Kommentar las 0x486A9E/0x486AD8 als Klemme — falsch gelesen.
+    /// <c>--techpfeile-alt</c> klemmt wie 0.6.7.</summary>
     private void TechStep(int by)
     {
         if (_tech == null || _tech.Count == 0) return;
-        _techAt = Mathf.Clamp(_techAt + by, 0, _tech.Count - 1);
+        _techAt = TechPfeileAlt()
+            ? Mathf.Clamp(_techAt + by, 0, _tech.Count - 1)
+            : ((_techAt + by) % _tech.Count + _tech.Count) % _tech.Count;
         TechShow();
+    }
+
+    private Button? _techZurueck, _techWeiter;
+    private int _techPfeile;
+
+    /// <summary><c>--techpfeile-alt</c> — Stand 0.6.7. bug-513.</summary>
+    private static bool TechPfeileAlt()
+    {
+        foreach (string a in OS.GetCmdlineUserArgs()) if (a == "--techpfeile-alt") return true;
+        return false;
+    }
+
+    /// <summary>Das Pfeilbild auf den Knopf legen: Bank <paramref name="hell"/>,
+    /// solange gedrueckt <paramref name="hell"/>+1. ⚠ UNSERE SETZUNG: das
+    /// Original zeigt das rote Bild ueber Druckmerker (0x8C3CE4/E8), deren
+    /// Klickzweig ungelesen ist — vermutlich nur einen Zeichendurchlauf lang;
+    /// wir zeigen es, solange die Taste unten ist.</summary>
+    private void TechPfeil(Button knopf, Vector2 at, float scale, int x, int hell)
+    {
+        var bild = KnopfBild(hell);
+        var rot = KnopfBild(hell + 1);
+        if (bild == null) return;
+        var r = new TextureRect
+        {
+            Texture = bild,
+            // die Blitstelle 0x486A25/0x486A5C ist (x, 452); der Knopf liegt bei y 451
+            Position = at + new Vector2(x * scale, 452 * scale),
+            Size = new Vector2(bild.GetWidth() * scale, bild.GetHeight() * scale),
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        AddChild(r);
+        _techPfeile++;
+        if (rot != null)
+        {
+            knopf.ButtonDown += () => r.Texture = rot;
+            knopf.ButtonUp += () => r.Texture = bild;
+        }
+    }
+
+    private static Texture2D? KnopfBild(int bank)
+    {
+        string p = Core.Content.Path($"UI/briefing_bank/{bank:00}.png");
+        if (!FileAccess.FileExists(p)) return null;
+        var img = Image.LoadFromFile(p);
+        return img == null ? null : ImageTexture.CreateFromImage(img);
     }
 
     private void TechShow()
@@ -209,6 +272,22 @@ public partial class BriefingScreen
     // ---- die zwei Schalter ---------------------------------------------------
 
     private static bool _techFlagsDone;
+
+    private static void KnoepfeNachholen(string quelle)
+    {
+        string dir = quelle.TrimEnd('/', '\\');
+        string dat = dir + "/BRIEFG.DAT", pal = dir + "/DATA/01.PAL";
+        // eine Festplatteninstallation hat keine DATA/ — der Import hat die
+        // Paletten aber schon in den Inhalt gelegt
+        if (!System.IO.File.Exists(pal)) pal = ProjectSettings.GlobalizePath(Core.Content.UserRoot) + "DATA/01.PAL";
+        if (!System.IO.File.Exists(dat) || !System.IO.File.Exists(pal))
+        {
+            GD.PrintErr($"briefing-knoepfe-export: BRIEFG.DAT oder DATA/01.PAL fehlt in »{dir}«");
+            return;
+        }
+        var br = new Import.BriefingExporter("", ProjectSettings.GlobalizePath(Core.Content.UserRoot) + "UI");
+        br.WriteKnoepfe(System.IO.File.ReadAllBytes(dat), Import.PalFile.Load(pal), s => GD.Print(s));
+    }
 
     /// <summary>
     /// <c>--tech-export=&lt;Installation oder GAME.EXE&gt;</c> schreibt die
@@ -232,6 +311,9 @@ public partial class BriefingScreen
             // wieder das U-Boot, das er gemeldet hat.
             else if (a == "--technikbild-alt") Import.MissionTechExporter.BildnummerAusText = true;
             else if (a.StartsWith("--briefing-shot=")) schuss = a;
+            // bug-513: die Knopfbilder in einen schon eingelesenen Inhalt
+            // nachholen — <Installation> mit BRIEFG.DAT und DATA/01.PAL
+            else if (a.StartsWith("--briefing-knoepfe-export=")) KnoepfeNachholen(a["--briefing-knoepfe-export=".Length..]);
         }
         if (quelle.Length > 0)
         {

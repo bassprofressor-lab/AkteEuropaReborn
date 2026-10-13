@@ -286,6 +286,8 @@ public sealed class ContentBuilder
                 // Wasserzeichen ist SYMBOL.DAT — 748.800 Byte = 9 x 320 x 260,
                 // und der Lader @0x45C110 liest genau das auf die Textplatte.
                 if (dat != null && bgPal != null) br.WriteEmblem(dat, PalFile.Load(bgPal), Say);
+                // bug-513: die Pfeil- und START-Bilder aus derselben Bank
+                if (dat != null && bgPal != null) br.WriteKnoepfe(dat, PalFile.Load(bgPal), Say);
                 string? symDat = Find("SYMBOL.DAT") ?? Find("DATA/SYMBOL.DAT");
                 byte[]? sym = symDat != null ? File.ReadAllBytes(symDat) : Asset("SYMBOL.DAT");
                 if (sym != null && bgPal != null)

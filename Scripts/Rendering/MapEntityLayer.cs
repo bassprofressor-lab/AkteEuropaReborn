@@ -31,6 +31,12 @@ public partial class MapEntityLayer : Node2D
 {
     public sealed class Entity
     {
+        /// <summary>Flache Kopie — fuer den Spielstand (bug-506): ein geladenes
+        /// Gebaeude beginnt als Kopie seines frisch geladenen Kartensatzes. ⚠ Die
+        /// Listen (readonly) teilt die Kopie mit der Vorlage; die Vorlage wird
+        /// danach verworfen, der Leser leert und fuellt sie neu.</summary>
+        public Entity Klon() => (Entity)MemberwiseClone();
+
         // ⚠ `Attack` stand hier ein zweites Mal (frueher `Category`) und war
         // tot — siehe die Fundstelle im Lader. Das echte Feld ist weiter unten,
         // zusammen mit `Defence`.
@@ -1547,6 +1553,14 @@ public partial class MapEntityLayer : Node2D
 
         public int Alt;
 
+        /// <summary>bug-505: die Anhebung in Bildpunkten, die in <c>Pos</c> steckt
+        /// (NaN = noch nicht bestimmt), und die Lage beim letzten Nachfuehren.
+        /// Siehe <see cref="AirHubNachfuehren"/>.</summary>
+        public float HubPx = float.NaN;
+        public Vector2 HubLetztePos;
+        public int HuepfAlt = int.MinValue;
+        public float HuepfHub = float.NaN;
+
         /// <summary>Die SOLLHOEHE, Satzfeld <b>+0x13</b> (absolut
         /// <c>0x6DDF83</c>). <c>air_order</c> @0x425E6B setzt sie auf
         /// <b>0x87 = 135</b>; <c>air_back_to_airport</c> auf Gelaende·15 + 100
@@ -2333,6 +2347,7 @@ public partial class MapEntityLayer : Node2D
         {
             if (sp.Stored || sp.Dead || sp.Owner is < 0 or > 7) continue;
             if (!DecktAuf(sp.Owner, ViewPlayer)) continue;
+            if (!NachschubSichtAlt && sp.Kind >= 13) continue;  // bug-500 @0x420C04
             yield return (sp.Col, sp.Row, 3);                  // push 3 @0x420C3B
         }
     }
@@ -2429,6 +2444,18 @@ public partial class MapEntityLayer : Node2D
     /// Behebung vom 20.09.2026: vorher zaehlte sie die ganze Luftflotte,
     /// jetzt nur die eigenen und verbuendeten.</summary>
     public static int NebelFlugzeuge;
+
+    /// <summary>bug-500: wie oft ein Versorger (Typ ≥ 13) im Nebelarm vorkam.</summary>
+    public static int NebelVersorger;
+
+    /// <summary>Pruefzeile zu bug-500 — sie steht in jedem Lauf.</summary>
+    public string NachschubSichtLine()
+        => NebelVersorger == 0
+           ? "nachschub-sicht: kein Versorger im Nebelarm — dieser Lauf sagt darueber NICHTS"
+           : $"nachschub-sicht: Versorger {NebelVersorger}× im Nebelarm, " +
+             (NachschubSichtAlt ? "deckten AUF (⚠ Nullmodell --nachschub-sicht-alt)"
+                                : "keiner deckte auf (Original @0x420826)") +
+             $"; Flugzeug-Aufdeckungen gesamt {NebelFlugzeuge}";
 
     /// <summary><c>--flugzeug-nebel-alt</c> — der Stand von vor dem 20.09.2026:
     /// ein fremdes Flugzeug wird auch im unbeobachteten Gebiet gezeichnet.</summary>
@@ -2583,6 +2610,11 @@ public partial class MapEntityLayer : Node2D
                 // Gegenprobe, sondern ein zweiter Fehler.
                 if (sp.Owner is < 0 or > 7) continue;
                 if (!DecktAuf(sp.Owner, betrachter)) continue;
+                // bug-500 (KayelGee R5#5): die Versorger (Typ 13/14, Nachschub-
+                // helis) decken im Original NICHT auf — `cmp al,0Dh ; jae` @0x420826.
+                // Gilt auch fuer den Nebel der KI. --nachschub-sicht-alt = alt.
+                if (sp.Kind >= 13) NebelVersorger++;
+                if (!NachschubSichtAlt && sp.Kind >= 13) continue;
                 NebelFlugzeuge++;
                 int sicht = sp.Sight - 1;
                 if (sicht < 0) continue;
@@ -5809,6 +5841,7 @@ public partial class MapEntityLayer : Node2D
         foreach (var e in _entities)
         {
             if (e.IsProp || e.Dead) continue;
+            if (!e.IsBuilding && !GarageBalkenAlt && Untergestellt(e)) continue;   // bug-511
             // ⭐ 14.09.2026 — ein Gebaeude ueber seinen FUSSABDRUCK (GebaeudeAufgedeckt,
             // bug-164), nicht die Ankerzelle; Gegenschalter --minikarte-anker-alt.
             if (FogActive && e.Owner != ViewPlayer &&
@@ -6479,6 +6512,9 @@ public partial class MapEntityLayer : Node2D
             // ⚠ »unbeweglich« geht MIT: ein Gebaeude oder ein Gegenstand faehrt
             // nie weiter, und wer davor auf »der macht gleich Platz« wartet,
             // wartet bis zum Missionsende. Siehe NavGrid.Ask.
+            // bug-506: eine untergestellte Einheit steht nicht auf der Karte —
+            // Einfahren raeumt ihre Zelle (Einfahrt.cs), also auch hier nicht.
+            else if (!e.IsBuilding && Untergestellt(e) && !LadenVorlageAlt) { }
             else _nav?.SetOccupant(e.Col, e.Row, i, e.Infantry >= 0,
                                    immobile: e.IsBuilding || e.IsProp);
         }
@@ -12365,6 +12401,14 @@ public partial class MapEntityLayer : Node2D
             if (Schussgruende) e.Schussgrund = "Ziel ist tot oder Kulisse";
             e.Target = -1; return;
         }
+        // bug-511: wer vor dem Einfahren im Visier war, ist jetzt im Gebaeude —
+        // im Original ist die Zelle 0xFFFE, es gibt nichts mehr zu treffen.
+        if (!GarageZielAlt && !t.IsBuilding && Untergestellt(t))
+        {
+            GarageZieleGeloest++;
+            if (Schussgruende) e.Schussgrund = "Ziel ist ins Gebaeude gefahren";
+            e.Target = -1; return;
+        }
         // ⭐ 11.09.2026 — DIE GEFECHTS-KI VERLIERT, WAS IHR AUS DER SICHT FAEHRT.
         // Ein Ziel wird hier nie wegen der Entfernung fallengelassen, und ein
         // Raketenwerfer traegt Reichweite 255 — einmal gesehen, verfolgte er ein
@@ -12588,6 +12632,10 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--geschosstempo-alt</c> — Geschosse fliegen wieder mit dem alten
     /// Maßstab 16 px je Tempoeinheit (rund ein Drittel des Originals).</summary>
     public static bool GeschosstempoAlt;
+
+    /// <summary><c>--nachschub-sicht-alt</c> — Nachschubhelis (Typ ≥ 13) decken den
+    /// Nebel wieder mit ihrer Sicht auf. Im Original tun sie das nicht. bug-500.</summary>
+    public static bool NachschubSichtAlt;
 
     /// <summary><c>--geschoss-nachfuehren</c> — das Geschoss zieht dem Ziel wieder
     /// nach. ⚠ Das tut das Original NICHT: die Zielzelle <c>+0x07</c> hat genau einen
@@ -12865,7 +12913,9 @@ public partial class MapEntityLayer : Node2D
         // Statssatz +0x1C -- und der Schuss @0x40BF4D liest sie an genau dieser
         // Stelle (`mov al, byte [ebx*2 + 0x5045BC]`, ebx*2 = Zeile*58, also
         // +0x1C) in den Geschosssatz.
-        int art = Simulation.DesignMath.SoundClass(WeaponRowOf(shooter.Weapon));
+        // bug-515: die Bertha (Klasse 3) bekommt ihre Art aus der Entfernung (0x40BF56)
+        int art = SchussArt(shooter, victim.Col, victim.Row);
+        if (shooter.GameUnitType == 3 && !BerthaWaffeAlt) { if (art == 20) BerthaArt20++; else BerthaArt21++; }
         string? flug = FlightKind(art);
         if (flug != null)
         {
@@ -12951,10 +13001,9 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        // Die Leuchtspur beginnt an der Muendung, nicht am Rumpf.
-        _tracers.Add((shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row, shooter.Facing, shooter)
-                      + dir * MuzzleReach,
-                      victim.Pos - new Vector2(0, 6), 0.10f));
+        // bug-514 (KayelGee R5#23): die Leuchtspur nur bei Art 12, der
+        // Fussvolk-Laser als Strahl, alles andere ohne Bild — Schussbild.cs.
+        if (SchussOhneFlugbild(si, shooter, vi, victim, art, dir, w.Damage)) return;
         // ⚠ OFFEN, ausdruecklich: ob das Original bei DIREKTEM Beschuss einen
         // EINSCHLAG zeigt, ist nicht gelesen. Der Geschossweg fuegt bei
         // Ankunft eine "explosion" hinzu, dieser Weg nicht. Gesucht wurde die
@@ -13267,7 +13316,7 @@ public partial class MapEntityLayer : Node2D
     private string TrefferGrund(Entity? s, Entity v, string quelle)
     {
         if (s == null) return quelle.Length > 0 ? quelle : "Treffer ohne Schuetzen (Quelle nicht benannt)";
-        int art = Simulation.DesignMath.SoundClass(WeaponRowOf(s.Weapon));
+        int art = SchussArt(s, v.Col, v.Row);
         string flug = art < 0 ? "Waffe ohne Geschossart"
                     : FlightKind(art) is { } fk ? $"Geschoss {fk}"
                     : "OHNE Flugbild — Sofort-Treffer, nur Leuchtspur";
@@ -13544,6 +13593,9 @@ public partial class MapEntityLayer : Node2D
         }
         _fx[kind] = list;
         _fxAnchor[kind] = list.Count > 0 ? list[0].GetSize() / 2f : Vector2.Zero;
+        // bug-517 (KayelGee R5#1): das Muendungsfeuer — Schussbild.cs, MzfAnker.
+        if (kind.StartsWith("mzf") && !MzfAnkerAlt && list.Count > 0 && MzfAnker(kind, list.Count) is { } mz)
+            _fxAnchor[kind] = mz;
         return list;
     }
 
@@ -13844,7 +13896,9 @@ public partial class MapEntityLayer : Node2D
             if (p.Target >= 0 && p.Target < _entities.Count)
             {
                 var t = _entities[p.Target];
-                if (!t.Dead) ApplyHit(p.Shooter, p.Target, t, p.Damage);
+                if (!t.Dead && (GarageZielAlt || t.IsBuilding || !Untergestellt(t)))
+                    ApplyHit(p.Shooter, p.Target, t, p.Damage);
+                else if (!t.Dead) GarageTrefferVerhindert++;   // bug-511
             }
             // ⭐⭐ 11.09.2026 — EIN GESCHOSS OHNE ZIELEINHEIT (Bodenangriff,
             // fire_at, oder das Ziel starb im Flug) trifft, was auf der
@@ -14866,6 +14920,14 @@ public partial class MapEntityLayer : Node2D
             _mscriptTried = true;
             int m = UI.SkirmishSetup.CampaignMission;
             if (m > 0) _mscript = Campaign.MissionScript.For(m);
+            // bug-508: ein geladener Spielstand legt seinen Skriptzustand ueber
+            // Uebertrag und Init — VOR dem ersten Regellauf.
+            if (_mscript != null && _skriptZustand != null)
+            {
+                _mscript.ZustandSetzen(_skriptZustand);
+                _skriptZustand = null;
+                SkriptZustandGeladen = _mscript.ZustandJson();
+            }
             if (_mscript != null)
             {
                 // the four questions a rule may ask, answered from the entities
@@ -17748,6 +17810,28 @@ public partial class MapEntityLayer : Node2D
     {
         var list = new List<int>();
         if (_designs == null) return list;
+        int wer = owner < 0 ? _menuOwner : owner;
+        // ⭐ 13.10.2026, bug-510 (KayelGee R5#11 = R4#19): »in Mission 2 hat man
+        // immer noch alle Einheiten zur Produktion statt nur das Maschinengewehr
+        // und die, die man ueber das Erstellenmenue erstellt hat«. bug-460 hatte
+        // nur das ERSTELLEN-Fenster gefiltert; diese Liste liess jeden Entwurf
+        // mit der statischen EXE-Freigabe flags[0] durch (34 je Spielerblock)
+        // und fiel bei leerer Liste auf den GANZEN Bestand zurueck.
+        // Original: 0x4B23C0 nullt den Besitz beim Missionsstart, danach gibt nur
+        // das Skript-`vehicle` (@0x4D04D0, unser Fahrplan) frei; dazu kommt, was
+        // der Spieler im Erstellen-Fenster entwirft (Slot −1).
+        // ⚠ Nur fuer den Menschen: die Kampagnen-KI baut nach ihrem Programm
+        // (SkirmishAi: »planned || stumm«), nicht aus dieser Liste.
+        // --bauliste-grundtafel-alt = Stand 0.6.7.
+        bool tor = UI.SkirmishSetup.CampaignMission > 0 && !BaulisteGrundtafelAlt
+                   && _fahrplanFrei != null && wer == _menuOwner;
+        // ⚠⚠ Und die eigentliche Tuer: »Alle Einheiten« ist eine GEFECHTSoption
+        // (Settings.SkirmishAllUnits), aber MainMenu uebernimmt sie beim Aufbau
+        // in SkirmishSetup.AllUnits — sie galt damit in JEDER Kampagnenmission,
+        // sobald jemand sie einmal im Gefecht angehakt hatte. Gemessen K2: 76 von
+        // 76 Entwuerfen in der Liste, mit Tor wie ohne.
+        bool alle = UI.SkirmishSetup.AllUnits
+                    && (UI.SkirmishSetup.CampaignMission <= 0 || BaulisteGrundtafelAlt);
         for (int i = 0; i < _designs.Count; i++)
         {
             var d = _designs[i];
@@ -17755,16 +17839,38 @@ public partial class MapEntityLayer : Node2D
             // die Freigabe-Pruefung entfaellt, die Zuordnung zur Fabrik NICHT —
             // sonst baute die Waffen-Fabrik Ausruestungstraeger und der Reiter
             // haette keine Bedeutung mehr.
-            bool unlocked = UI.SkirmishSetup.AllUnits || d.Available ||
-                            (d.Weapon >= 65 && d.Weapon <= 88 &&
-                             Researched(owner < 0 ? _menuOwner : owner).Contains(d.Weapon));
+            bool frei = tor ? d.Slot < 0 || _fahrplanFrei!.Contains(d.Slot % DesignsPerPlayer)
+                            : d.Available;
+            // Ausruestungstraeger: in der Kampagne nicht der Startstand der
+            // Grundtafel (SeedResearch liest flags[0] — dieselbe Hintertuer),
+            // sondern was das Skript besitzen laesst (ForschungBesitzt, bug-460)
+            // und was der Spieler in dieser Mission selbst erforscht hat.
+            bool traeger = d.Weapon >= 65 && d.Weapon <= 88 &&
+                           (tor ? _kampagnenTraeger.Contains(d.Weapon)
+                                  || (Researched(wer).Contains(d.Weapon) && !_forschungSaat.Contains(d.Weapon))
+                                : Researched(wer).Contains(d.Weapon));
+            bool unlocked = alle || frei || traeger;
             if (unlocked && FitsFactory(d, bType)) list.Add(i);
         }
-        if (list.Count == 0)                       // fall back to the whole roster
+        if (list.Count == 0 && !tor)               // fall back to the whole roster
             for (int i = 0; i < _designs.Count; i++)
                 if (FitsFactory(_designs[i], bType)) list.Add(i);
         return list;
     }
+
+    /// <summary><c>--bauliste-grundtafel-alt</c> — Stand 0.6.7: die Produktionsliste
+    /// der Kampagne nimmt die EXE-Grundtafel und faellt bei leerer Liste auf alles
+    /// zurueck. bug-510.</summary>
+    public static bool BaulisteGrundtafelAlt;
+
+    /// <summary>Die vom Missionsfahrplan freigegebenen Entwurfsplaetze (0..199),
+    /// oder null ausserhalb der Kampagne. Gesetzt in ApplyCampaignDesigns.</summary>
+    private static HashSet<int>? _fahrplanFrei;
+
+    /// <summary>bug-510: die Ausruestungen 65..88, die das Missionsskript dem
+    /// Betrachter besitzen laesst, und der Startstand aus der Grundtafel —
+    /// beide in SeedResearch gefuellt.</summary>
+    private static readonly HashSet<int> _kampagnenTraeger = new(), _forschungSaat = new();
 
     private static List<Design>? _designs;
 
@@ -17889,9 +17995,11 @@ public partial class MapEntityLayer : Node2D
     private static void ApplyCampaignDesigns()
     {
         int mission = UI.SkirmishSetup.CampaignMission;
+        _fahrplanFrei = null;
         if (_designs == null || mission <= 0) return;
         var u = Campaign.CampaignManager.UnlocksFor(mission);
         if (!u.Known) return;
+        _fahrplanFrei = new HashSet<int>(u.Vehicles);
         int added = 0, on = 0;
         for (int i = 0; i < _designs.Count; i++)
         {
@@ -18754,6 +18862,10 @@ public partial class MapEntityLayer : Node2D
         foreach (var d in _designs)
             if (d.Available && d.Weapon >= 65 && d.Weapon <= 88) _researched[0].Add(d.Weapon);
         for (int p = 1; p < 8; p++) _researched[p].UnionWith(_researched[0]);
+        _forschungSaat.Clear(); _forschungSaat.UnionWith(_researched[0]);
+        _kampagnenTraeger.Clear();
+        for (int w = 65; w <= 88; w++)
+            if (ForschungBesitzt(ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0, w)) _kampagnenTraeger.Add(w);
     }
 
     /// <summary>Next technology this player has not got yet, or -1.</summary>
@@ -19529,7 +19641,8 @@ public partial class MapEntityLayer : Node2D
     private static bool InfoZwilling(Entity u)
     {
         if (u.Weapon == 0 || IsEquipmentMount(u.Weapon)) return false;
-        int art = Simulation.DesignMath.SoundClass(WeaponRowOf(u.Weapon));
+        // bug-515: die Bertha fern = Art 20 (Zwilling 20)
+        int art = u.GameUnitType == 3 && !BerthaWaffeAlt ? 20 : Simulation.DesignMath.SoundClass(WeaponRowOf(u.Weapon));
         return art >= 0 && Audio.GameSounds.TwinOffset(art) is > 0 and < 30000;
     }
 
@@ -34696,6 +34809,8 @@ public partial class MapEntityLayer : Node2D
                       ? "   <<< AUF DEM ANKER" : ""));
         }
         BerthaCheckTakt();   // bug-485/486: --bertha-check
+        WaffenbildTakt();    // bug-514..516: --waffenbild-probe
+        NachschubbefehlTakt();   // bug-519: --nachschubbefehl-check
         bool werteNeu = PanelWerteGeaendert();
         if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
         {
@@ -35287,6 +35402,22 @@ public partial class MapEntityLayer : Node2D
                 // fuer den Nullvektor liefert.
                 int will = blickD.LengthSquared() < 0.0001f
                     ? e.Facing : DirToFacing(blickD, stufen);
+                // bug-516 (KayelGee R5#22, »die Bertha nutzt den falschen
+                // Drehwinkel«): 0x404E80 dreht bei Klasse 3/4/5 den Rumpf +0x02 in
+                // 16 Stufen auf RICHTUNG·2 (0x404ECC) — richtung ist die Wegrichtung
+                // in ACHTELN (Tafel 0x4F5AF0). Aus dem 40:20-Vektor in Sechzehnteln
+                // gerechnet ergab ein Diagonalschritt ein UNGERADES Ziel (13 statt
+                // 14): der Koerper stand 22,5° schief zu Fahrt und Turm.
+                // Gegenschalter --blick16-alt; die Schiffe (Klasse 4/5) laufen ueber
+                // denselben Arm und gehen mit, eigener Gegenschalter
+                // --blick16-schiffe-alt (gemeldet war nur die Bertha).
+                if (!Blick16Alt && stufen == 16 && blickD.LengthSquared() >= 0.0001f
+                    && (e.GameUnitType == 3 || (e.GameUnitType is 4 or 5 && !Blick16SchiffeAlt)))
+                {
+                    will = DirToFacing(blickD, 8) * 2;
+                    Blick16Gerade++;
+                }
+                if (stufen == 16 && e.GameUnitType == 3 && (will & 1) == 1) Blick16Ungerade++;
                 // ⭐⭐ 03.10.2026 (bug-407, KayelGee: »das Drehen des Koerpers dauert
                 // im Original laenger«) — die Bremse OTACIM gilt fuer ALLE Klassen,
                 // nicht nur fuer Schiffe: der Bodenzweig 0x404F8B…0x405079 ist
@@ -38564,13 +38695,42 @@ public partial class MapEntityLayer : Node2D
     /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
     /// nimmt als bei allem anderen Eigenen — siehe
     /// <see cref="UI.GameCursors"/>.</summary>
-    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral, Einsteigen, Reparatur, TerraSuche }
+    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral, Einsteigen, Reparatur, TerraSuche, Tanken, Munition }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
     /// one's own thing means it selects, anything else is open ground.</summary>
+    /// <summary><c>--tuerklick-einheit-alt</c> — Stand 0.6.7: eine Einheit vor
+    /// der Tuer verdeckt den Einfahrzeiger. bug-512.</summary>
+    public static bool TuerklickEinheitAlt;
+
+    /// <summary>Ist eine eigene, fahrbare Bodeneinheit gewaehlt?</summary>
+    private bool AuswahlKannEinfahren()
+    {
+        foreach (int k in _sel)
+            if (k >= 0 && k < _entities.Count && _entities[k] is { IsBuilding: false, IsProp: false, Dead: false, Mobile: true } u
+                && u.Owner == ViewPlayer)
+                return true;
+        return false;
+    }
+
+    /// <summary><c>--blick16-alt</c> / <c>--blick16-schiffe-alt</c> — Stand 0.6.7:
+    /// 16-Stufen-Rumpf zielt auf Sechzehntel aus dem Bildvektor. bug-516.</summary>
+    public static bool Blick16Alt, Blick16SchiffeAlt;
+
+    /// <summary><c>--flugzeug-rahmen-alt</c> — Stand 0.6.7: gruenes Zellrechteck
+    /// um das gewaehlte Flugzeug. bug-518.</summary>
+    public static bool FlugzeugRahmenAlt;
+    public static int Blick16Gerade, Blick16Ungerade;
+
     public Hint CursorHintAt(Vector2 mapPos)
     {
+        // bug-519: Zustand 8/9 (0x4320D1) — Nachschubheli gewaehlt, eigene Einheit darunter
+        switch (NachschubzeigerAt(mapPos).Zustand)
+        {
+            case 8: return Hint.Tanken;
+            case 9: return Hint.Munition;
+        }
         // ⭐⭐ 23.09.2026, bug-368 — DER SCHRAUBENSCHLUESSEL ueber zerschossenem
         // Gleis. Seine Meldung: »mit dem Bauer kann man normalerweise Schienen
         // reparieren, da kommt dann so ein Reparatur Icon«. Er steht im
@@ -38606,6 +38766,22 @@ public partial class MapEntityLayer : Node2D
                     foreach (var q in fracht) if (q.Infantry >= 0) { fussDabei = true; break; }
                     if (AbsetzZelle(rz.X, rz.Y, fussDabei) != null) return Hint.Entladen;
                 }
+
+        // bug-512 (KayelGee R5#9): »Wenn ich eine Einheit vor die Tuer einer
+        // Basis stelle, kann ich die Einheit nicht mehr ins Depot schicken.
+        // Normalerweise sollte der Depoteingang anklickbar sein.« Pick laesst
+        // die Einheit immer vor dem Gebaeude gewinnen (Schritt 10, @0x4327F8),
+        // und unser Fahrzeugkasten reicht 35 px ueber die eigene Zelle — die
+        // Einheit eine Zeile tiefer verdeckte die Tuerzelle. Ist etwas gewaehlt,
+        // das einfahren kann, gilt auf der Tuerzelle die Einfahrt ZUERST.
+        // ⚠ UNSERE SETZUNG nach seiner Aussage: ob Schritt 10 im Original auch
+        // die Zeigerart 5 (@0x4323E6) ueberschreibt, ist ungelesen.
+        // --tuerklick-einheit-alt = Stand 0.6.7.
+        if (!TuerklickEinheitAlt && !EinfahrzeigerAlt && AuswahlKannEinfahren())
+            foreach (var b in _entities)
+                if (b.IsBuilding && !b.Dead && b.Owner == ViewPlayer
+                    && Einfahrt_GarageTyp(b) && AufDerTuerzelle(b, mapPos))
+                    return Hint.Einfahrt;
 
         int i = Pick(mapPos);
         if (i < 0 || i >= _entities.Count) return Hint.Ground;
@@ -39316,8 +39492,87 @@ public partial class MapEntityLayer : Node2D
     /// der Bodenpunkt traegt das Gelaende schon — darum Alt − Gelaende·15.
     /// </summary>
     private float AirHoehePx(Special s)
-        => FlughoeheBildAlt ? AirShadowDrop
-           : Mathf.Max(0f, s.Alt - ElevOf(s.Col, s.Row) * 15f);
+    {
+        if (FlughoeheBildAlt) return AirShadowDrop;
+        Vector2 vorher = s.HubLetztePos;
+        float hub;
+        if (FlughuepfenAlt) { hub = ElevOf(s.Col, s.Row) * 15f; s.HubLetztePos = s.Pos; }
+        else { AirHubNachfuehren(s); hub = s.HubPx; }
+        // Pruefzeile: bei gleicher Alt und kleinem Schritt springt das Bild nicht.
+        if (s.Alt == s.HuepfAlt && s.Pos != vorher && s.Pos.DistanceTo(vorher) < TileW
+            && !float.IsNaN(s.HuepfHub))
+        {
+            FlugBildSchritte++;
+            if (Mathf.Abs(hub - s.HuepfHub) >= 5f) FlugHuepfer++;
+        }
+        s.HuepfAlt = s.Alt; s.HuepfHub = hub;
+        return Mathf.Max(0f, s.Alt - hub);
+    }
+
+    /// <summary>bug-505: Bildschritte bei gleicher Hoehe, und wie viele davon
+    /// um mindestens 5 px sprangen (Soll 0; Nullmodell --flughuepfen-alt &gt; 0).</summary>
+    public static int FlugBildSchritte, FlugHuepfer;
+
+    public string FlughuepfenLine()
+        => FlugBildSchritte == 0
+           ? "flughuepfen: kein Flugschritt bei gleicher Hoehe — dieser Lauf sagt darueber NICHTS"
+           : $"flughuepfen: {FlugHuepfer} Spruenge >= 5 px in {FlugBildSchritte} Bildschritten bei gleicher Hoehe"
+             + (FlughuepfenAlt ? "   ⚠ Nullmodell --flughuepfen-alt" : "");
+
+    /// <summary><c>--flughuepfen-alt</c> — Stand 0.6.7: das Gelaende wird an der
+    /// Zelle UNTER dem Flugzeug abgezogen, das Bild springt an jeder Zellgrenze.
+    /// bug-505.</summary>
+    public static bool FlughuepfenAlt;
+
+    /// <summary>
+    /// ⭐ 13.10.2026, bug-505 (KayelGee R5#3): »Nachschubhelis huepfen hoch und
+    /// runter, als wuerden sie ueber Huegel fliegen«. Rueckfall aus bug-464.
+    ///
+    /// <para>Unsere Flugzeuglage <c>Pos</c> ist KEINE flache Kartenlage: die
+    /// Flugziele sind angehobene Punkte (<see cref="CellCenter"/> − Hub, die Lage
+    /// des Kunden), und geflogen wird geradlinig dazwischen. Die Anhebung in
+    /// <c>Pos</c> laeuft also GLATT vom Hub des Abflugs zum Hub des Ziels.
+    /// bug-464 zog aber das Gelaende der Zelle darunter ab — das springt um 15 px
+    /// je Stufe an jeder Zellgrenze, und ueber einem Huegel sank das Bild.</para>
+    ///
+    /// <para>Hier wird die Anhebung in <c>Pos</c> mitgefuehrt: auf dem Weg zum
+    /// Ziel anteilig zum Hub des Ziels, ohne Ziel (Geradeausflug) unveraendert,
+    /// nach einem Sprung (Start, Landung, Laden) neu aus der Lage bestimmt. Ueber
+    /// dem Ziel stimmt der Wert genau. ⚠ UNSERE SETZUNG bis zum richtigen Weg
+    /// (Lage flach fuehren, wie das Original; berichte/kayelgee-runde5-heli.md
+    /// Vorschlag A, dafuer 0x42E340 lesen).</para>
+    /// </summary>
+    private void AirHubNachfuehren(Special s)
+    {
+        float weg = s.Pos.DistanceTo(s.HubLetztePos);
+        if (float.IsNaN(s.HubPx) || weg > 2f * TileW)
+            s.HubPx = HubAnLage(s.Pos) ?? ElevOf(s.Col, s.Row) * 15f;
+        else if (weg > 0.0001f && s.Goal is { } g)
+        {
+            float rest = g.DistanceTo(s.HubLetztePos);
+            float ziel = HubAnLage(g) ?? s.HubPx;
+            s.HubPx += (ziel - s.HubPx) * (rest > 0.0001f ? Mathf.Min(1f, weg / rest) : 1f);
+        }
+        s.HubLetztePos = s.Pos;
+    }
+
+    /// <summary>Welche Anhebung steckt in einem angehobenen Punkt? Gesucht wird
+    /// in der Spalte die Zelle, deren angehobene Mitte (<see cref="CellCenter"/>)
+    /// dem Punkt am naechsten liegt; null, wenn keine naeher als eine halbe
+    /// Zellhoehe ist.</summary>
+    private float? HubAnLage(Vector2 p)
+    {
+        int col = Mathf.FloorToInt((p.X - _ox) / TileW);
+        int r0 = Mathf.FloorToInt((p.Y - _oy) / TileH);
+        float best = TileH / 2f; float? hub = null;
+        for (int r = r0 - 1; r <= r0 + 12; r++)
+        {
+            int h = HubOf(col, r);
+            float d = Mathf.Abs(_oy + r * TileH + TileH / 2f - h - p.Y);
+            if (d <= best) { best = d; hub = h; }
+        }
+        return hub;
+    }
 
     /// <summary>The closest airfield still standing that this aircraft may use.</summary>
     private Entity? NearestAirfield(Special a)
@@ -41760,6 +42015,11 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (e.IsProp || e.Dead || e.HpMax <= 0) continue;
+            // bug-511 (KayelGee R5#10/#13, R4#20): eine UNTERGESTELLTE Einheit
+            // (eingefahren 50, Neubau in der Liste 51) steht nicht auf der Karte —
+            // ihr Rumpf faellt am Zeichnertor 0x4300E2 weg, der Balken blieb an
+            // der Tuer stehen: »unsichtbare Einheit mit HP-Balken«.
+            if (!e.IsBuilding && !GarageBalkenAlt && Untergestellt(e)) continue;
             // ⭐⭐ 24.08.2026 — DER NEBEL GILT AUCH FUER DEN BALKEN.
             //
             // Gemeldet mit Bild: ein roter Lebensbalken auf dem Wasser, ohne
@@ -42139,9 +42399,27 @@ public partial class MapEntityLayer : Node2D
             DrawRect(BodyRect(_entities[_hovered]), new Color(1, 1, 1, 0.9f), false, 2f);
 
         // das angewaehlte Flugzeug bekommt seinen Rahmen wie eine Einheit
+        // bug-518 (KayelGee R5#6, »gruener Rahmen statt des normalen
+        // Auswahlrahmens«): das gruene Zellrechteck war unsere Erfindung. Die
+        // Anwahl setzt im Original Flugzeug +0x0F (0x434549, Griff 20000+i ->
+        // 0x591EFF + 68·griff), und der Rumpfzeichner 0x42BB7C blittet bei
+        // +0x0F != 0 DASSELBE Auswahlbild wie bei Einheiten (0xA183E8) am
+        // Rumpf-Blitpunkt + (10,7). Hier also die Winkel der Einheiten, um die
+        // Mitte des Rumpfbildes. ⚠ UNSERE SETZUNG: Mitte des Bildes statt
+        // Blitpunkt+(10,7) — die Winkel sind ohnehin Ersatz fuer das Sprite.
+        // Gegenschalter --flugzeug-rahmen-alt.
         if (_selAir >= 0 && _selAir < _special.Count && !_special[_selAir].Stored)
-            DrawRect(AirRect(_special[_selAir]), new Color(0.3f, 1f, 0.3f, 0.9f),
-                     false, 2f);
+        {
+            var sa = _special[_selAir];
+            if (FlugzeugRahmenAlt)
+                DrawRect(AirRect(sa), new Color(0.3f, 1f, 0.3f, 0.9f), false, 2f);
+            else
+            {
+                var air = sa.Pos - new Vector2(0, AirHoehePx(sa));
+                var tex = GetAirframeTexture(sa.Kind, sa.Facing);
+                DrawSelectionBrackets(tex != null ? air - ComposedAnchor + tex.GetSize() / 2f : air, primary: true);
+            }
+        }
 
         // ⚠⚠ 18.08.2026 — DER FARBIGE KASTEN UEBER DER HAUPTAUSWAHL IST WEG.
         // Er lag als gefuelltes Rechteck in der Spielerfarbe ueber dem

@@ -33,7 +33,11 @@ public static class SaveGame
 {
     /// <summary>Bumped whenever the fields below change meaning. A save from an
     /// older build is refused with a word rather than half-loaded.</summary>
-    public const int Format = 1;
+    public const int Format = 2;
+
+    /// <summary>bug-506: ein Stand im Format 1 wird weiter gelesen — was ihm
+    /// fehlt, kommt aus der Kartenvorlage (siehe ApplySaveState).</summary>
+    public const int FormatAeltestes = 1;
 
     public static string Folder => "user://saves";
 
@@ -100,8 +104,8 @@ public static class SaveGame
         { error = $"{p}: unlesbar"; return null; }
         var root = json.Data.AsGodotDictionary<string, Variant>();
         int fmt = root.TryGetValue("format", out var fv) ? fv.AsInt32() : 0;
-        if (fmt != Format)
-        { error = $"Spielstand-Format {fmt}, erwartet {Format}"; return null; }
+        if (fmt < FormatAeltestes || fmt > Format)
+        { error = $"Spielstand-Format {fmt}, erwartet {FormatAeltestes}..{Format}"; return null; }
         return root;
     }
 

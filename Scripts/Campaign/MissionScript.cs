@@ -1263,6 +1263,92 @@ public sealed class MissionScript
             if (kv.Key >= 0 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
     }
 
+    /// <summary>
+    /// ⭐ 13.10.2026, bug-508 (KayelGee R5): <b>der Zustand des Skripts gehoert in
+    /// den Spielstand</b>. Bis heute stand er in keiner Datei — nach dem Laden
+    /// begann das Skript wieder bei Takt 0 mit den Startwerten: Einmal-Riegel
+    /// offen, laufende Zaehler auf null, die Nachfrist weg, Frachter in der Luft
+    /// vergessen. Eine Untermission, die vor dem Speichern schon lief, konnte
+    /// danach ein zweites Mal kommen oder nie enden. Das Original traegt v[] im
+    /// Spielstand (es ist der Block, den 0x4D03C8 auch beim Missionswechsel
+    /// kopiert).
+    ///
+    /// <para>Als JSON-Text, damit der Pruefstand ihn nach dem Laden Zeichen fuer
+    /// Zeichen vergleichen kann (--spielstand-check).</para>
+    /// </summary>
+    public string ZustandJson()
+    {
+        var sb = new System.Text.StringBuilder("{\"vars\":[");
+        bool erst = true;
+        for (int i = 0; i < _var.Length; i++)
+        {
+            if (_var[i] == 0) continue;
+            if (!erst) sb.Append(',');
+            erst = false;
+            sb.Append('[').Append(i).Append(',').Append(_var[i]).Append(']');
+        }
+        sb.Append("],\"ticks\":").Append(_ticks)
+          .Append(",\"rest\":").Append(_rest.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture))
+          .Append(",\"ended\":").Append(_ended ? "true" : "false")
+          .Append(",\"success\":").Append(Success ? "true" : "false")
+          .Append(",\"grace\":").Append(Grace)
+          .Append(",\"grace_minute\":").Append(_graceMinute)
+          .Append(",\"last_event\":").Append(LastEvent)
+          .Append(",\"incoming\":[");
+        for (int k = 0; k < _incoming.Count; k++)
+        {
+            var r = _incoming[k];
+            if (k > 0) sb.Append(',');
+            sb.Append("{\"x\":").Append(r.X).Append(",\"y\":").Append(r.Y)
+              .Append(",\"target\":").Append(r.Target).Append(",\"rest\":").Append(r.Rest)
+              .Append(",\"player\":").Append(r.Player)
+              .Append(",\"abflug\":").Append(r.Abflug ? "true" : "false")
+              .Append(",\"types\":[").Append(string.Join(",", r.Types)).Append("]}");
+        }
+        return sb.Append("]}").ToString();
+    }
+
+    /// <summary>Gegenstueck zu <see cref="ZustandJson"/>. Laeuft direkt nach dem
+    /// Konstruktor, also NACH Uebertrag und Init — der Spielstand gewinnt.</summary>
+    public void ZustandSetzen(Godot.Collections.Dictionary<string, Variant> d)
+    {
+        int I(string k, int dflt = 0) => d.TryGetValue(k, out var v) ? v.AsInt32() : dflt;
+        if (d.TryGetValue("vars", out var vv) && vv.VariantType == Variant.Type.Array)
+        {
+            Array.Clear(_var);
+            foreach (var p in vv.AsGodotArray())
+            {
+                var a = p.AsGodotArray();
+                if (a.Count < 2) continue;
+                int i = a[0].AsInt32();
+                if (i >= 0 && i < _var.Length) _var[i] = a[1].AsInt32();
+            }
+        }
+        _ticks = d.TryGetValue("ticks", out var tv) ? tv.AsInt64() : _ticks;
+        _rest = d.TryGetValue("rest", out var rv) ? rv.AsDouble() : _rest;
+        _ended = d.TryGetValue("ended", out var ev) && ev.AsBool();
+        Success = d.TryGetValue("success", out var sv) && sv.AsBool();
+        Grace = I("grace", -1);
+        _graceMinute = I("grace_minute", -1);
+        LastEvent = I("last_event");
+        _incoming.Clear();
+        if (d.TryGetValue("incoming", out var iv) && iv.VariantType == Variant.Type.Array)
+            foreach (var q in iv.AsGodotArray())
+            {
+                var e = q.AsGodotDictionary<string, Variant>();
+                int J(string k) => e.TryGetValue(k, out var v) ? v.AsInt32() : 0;
+                var typen = new List<int>();
+                if (e.TryGetValue("types", out var ty) && ty.VariantType == Variant.Type.Array)
+                    foreach (var t in ty.AsGodotArray()) typen.Add(t.AsInt32());
+                _incoming.Add(new Incoming
+                {
+                    X = J("x"), Y = J("y"), Target = J("target"), Rest = J("rest"),
+                    Player = J("player"), Types = typen.ToArray(),
+                    Abflug = e.TryGetValue("abflug", out var ab) && ab.AsBool(),
+                });
+            }
+    }
+
     /// <summary>Was die Mission selbst setzt — für den Prüfstand, der wissen
     /// muss, welche Werte NICHT vom Übertrag stammen dürfen.</summary>
     public Dictionary<int, int> InitValues() => new(_script.Init);

@@ -268,7 +268,7 @@ public partial class MapEntityLayer : Node2D
         Vector2 dir = (mitte - shooter.Pos).Normalized();
         SchussKlang(shooter);
 
-        int art = Simulation.DesignMath.SoundClass(WeaponRowOf(shooter.Weapon));
+        int art = SchussArt(shooter, zelle.X, zelle.Y);   // bug-515
         string? flug = FlightKind(art);
         var muendung = ShotOrigin(shooter) + dir * MuzzleReach;
 

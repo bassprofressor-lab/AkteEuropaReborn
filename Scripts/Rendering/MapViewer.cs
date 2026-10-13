@@ -310,15 +310,25 @@ public partial class MapViewer : Node2D
 
     /// <summary>Einen Spielstand wegschreiben — derselbe Weg für den Eigenbau
     /// und für den Knopf »Spielstand speichern« des Originalfensters.</summary>
-    private void SpielstandSchreiben()
+    private string SpielstandSchreiben()
     {
         string name = Core.SaveGame.NewName();
         string label = $"{MapNames[_mapIndex]} — {System.DateTime.Now:dd.MM.yyyy HH:mm}";
         string json = _entities.SaveStateJson(MapNames[_mapIndex], label);
-        GD.Print(Core.SaveGame.Write(name, json, out string err)
-            ? $"gespeichert: {label}"
-            : $"Speichern fehlgeschlagen: {err}");
+        bool ok = Core.SaveGame.Write(name, json, out string err);
+        string zeile = ok ? $"Spielstand gespeichert: {label}" : $"Speichern fehlgeschlagen: {err}";
+        GD.Print(zeile);
+        // bug-509 (KayelGee R5#4): der Spieler sah vom Speichern NICHTS — die
+        // Zeile ging nur in die Konsole. ⚠ Das Fenster des Originals (Art 15
+        // »Spiel speichern«, 0x473750) ist noch nicht gelesen; bis dahin sagt
+        // es wenigstens die Meldezeile.
+        _entities.Say(zeile);
+        return ok ? name : "";
     }
+
+    /// <summary><c>--laden-mitnahme-alt</c> — nach einem Spielstand laufen
+    /// Mitnahme und Startgeld wieder mit (Stand bis 0.6.7). bug-507.</summary>
+    public static bool LadenMitnahmeAlt;
 
     /// <summary>Zurück ins Startmenü — »Spiel beenden«.</summary>
     private void ZumHauptmenue()
@@ -604,6 +614,10 @@ public partial class MapViewer : Node2D
                 ausSpielstand = true;
             }
         }
+        // bug-507: nach einem Spielstand keine Startwerte (Mitnahme, Startgeld,
+        // Gefechtsaufbau) — siehe unten und SkirmishAi.StartSkirmish.
+        bool startwerte = !ausSpielstand || LadenMitnahmeAlt;
+        _entities.AusSpielstand = !startwerte;
         if (UI.SkirmishSetup.Active)
         {
             // A campaign mission is not a skirmish: it keeps the army the level
@@ -621,7 +635,13 @@ public partial class MapViewer : Node2D
             // VOR dem Kameraschwenk auf PlayerHome — sonst sieht der Spieler
             // sie erst, wenn er selbst hinscrollt. Siehe
             // MapEntityLayer.PlaceCarriedUnits.
-            if (UI.SkirmishSetup.CampaignMission > 0)
+            // ⚠ bug-507 (KayelGee R5#18): NICHT nach einem Spielstand. Die
+            // Mitnahme steht schon in der Datei; ein zweites Aufstellen brachte
+            // sie DOPPELT, vollgetankt und voll munitioniert (Mitnahme.cs,
+            // @0x43B288). Dieselbe Weiche wie beim Nachziehen unten — das
+            // Original springt bei 0x41EE04 hinter mission_init.
+            // --laden-mitnahme-alt = der alte Weg.
+            if (UI.SkirmishSetup.CampaignMission > 0 && startwerte)
                 _entities.PlaceCarriedUnits(UI.SkirmishSetup.CampaignMission, me);
 
             // ⭐⭐ DAS NACHZIEHEN AUF DIE ENTWURFSWERTE — und zwar GENAU HIER.
@@ -665,7 +685,9 @@ public partial class MapViewer : Node2D
                 // Siehe CampaignManager.BalanceForStartOf.
                 int mit = Campaign.CampaignManager.BalanceForStartOf(
                               UI.SkirmishSetup.CampaignMission);
-                _entities.SetStartMoney(me, mit);
+                // bug-507: der gespeicherte Kontostand bleibt.
+                if (startwerte) _entities.SetStartMoney(me, mit);
+                else GD.Print("Kampagne: Kontostand aus dem Spielstand — kein Startgeld (bug-507)");
                 GD.Print($"Kampagne: Mission {UI.SkirmishSetup.CampaignMission} " +
                          $"beginnt mit Kontostand ${mit}" +
                          (Campaign.CampaignManager.Balance != mit
@@ -688,7 +710,7 @@ public partial class MapViewer : Node2D
             // Das Original setzt es beim Gefechtsaufbau @0x41ABD6 in einer
             // Schleife an ALLE ACHT Spieler -- nicht nur an den Menschen.
             // Sonst koennte die KI nie kaufen.
-            else if (UI.SkirmishSetup.StartMoney > 0)
+            else if (UI.SkirmishSetup.StartMoney > 0 && startwerte)
             {
                 for (int p = 0; p < 8; p++)
                     _entities.SetStartMoney(p, UI.SkirmishSetup.StartMoney);
@@ -709,6 +731,7 @@ public partial class MapViewer : Node2D
             }
             BuildEndBanner();
         }
+        SpielstandCheckNachLaden();
         // ⚠ Steht der Bildprüfstand mit `--shot` zusammen, meldet er GENAU das
         // photographierte Bild. Sonst beschreiben seine Zahlen einen anderen
         // Augenblick als das Bild, das man sich ansieht — und dann ist der
@@ -1303,6 +1326,7 @@ public partial class MapViewer : Node2D
         if (MapEntityLayer.HandsteuerungBodenCheckAn) { _ = HandsteuerungBodenLauf(); return; }
         if (MapEntityLayer.M1AngriffCheckAn) { _ = M1AngriffLauf(); return; }
         if (MapEntityLayer.M2AngriffCheckAn) { _ = M2AngriffLauf(); return; }
+        if (MapEntityLayer.M2UntermissionCheckAn) { _ = M2UntermissionLauf(); return; }
         if (MapEntityLayer.WerferPoseCheckAn && _shotPath.Length > 0) { _ = WerferPoseBildLauf(); return; }
         if (MapEntityLayer.ZugEinfahrtCheckAn && _shotPath.Length > 0) { _ = ZugEinfahrtBildLauf(); return; }
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
@@ -1513,6 +1537,14 @@ public partial class MapViewer : Node2D
     /// Nachschubheli-Zaehler regelmaessig heraus, damit ein headless-Lauf sie
     /// lesen kann. Begruendung an der Auswertestelle.</summary>
     private float _supplyCheck, _supplyPeriod = 10f, _supplyPeriodLeft, _supplyElapsed;
+    /// <summary><c>--nachschub-sicht-check</c>: Kauf nach 5 s.</summary>
+    private float _nachschubSichtAfter;
+    /// <summary><c>--produktionsliste-check</c>: Messung nach 3 s.</summary>
+    private float _produktionslisteAfter;
+    /// <summary><c>--garage-unsichtbar-check</c>: Aufbau nach 3 s.</summary>
+    private float _garageCheckAfter, _garageAuswertungIn;
+    /// <summary><c>--tuerklick-check</c>: nach 3 s.</summary>
+    private float _tuerklickAfter, _tuerklickNachher;
     private bool _railRepairReady;
 
     private string _look = "";
@@ -2042,6 +2074,20 @@ public partial class MapViewer : Node2D
             if (_entities.M1AngriffMessen()) break;
         }
         GD.Print(_entities.M1AngriffBericht());
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--m2-untermission-check</c> (KayelGee R5#8/#14): siehe Simulation/M2UntermissionCheck.cs.</summary>
+    private async System.Threading.Tasks.Task M2UntermissionLauf()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print($"m2-untermission-check: {_entities.M2UntermissionStart()}");
+        for (int bild = 0; bild < 60 * 900; bild++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (_entities.M2UntermissionMessen()) break;
+        }
+        GD.Print(_entities.M2UntermissionBericht());
         GetTree().Quit(0);
     }
 
@@ -4209,6 +4255,17 @@ _mausProbePunkt = karte;
             else if (a == "--skriptangriff-alt") MapEntityLayer.SkriptangriffAlt = true;
             else if (a == "--m1-angriff-check") MapEntityLayer.M1AngriffCheckAn = true;
             else if (a == "--m2-angriff-check") MapEntityLayer.M2AngriffCheckAn = true;
+            else if (a == "--m2-untermission-check") MapEntityLayer.M2UntermissionCheckAn = true;
+            else if (a == "--leuchtspur-alt") MapEntityLayer.LeuchtspurAlt = true;
+            else if (a == "--brueckenvorschau-alt") MapEntityLayer.BrueckenvorschauAlt = true;
+            else if (a == "--nachschubbefehl-alt") MapEntityLayer.NachschubbefehlAlt = true;
+            else if (a == "--nachschubbefehl-check") MapEntityLayer.NachschubbefehlCheckAn = true;
+            else if (a == "--flugzeug-rahmen-alt") MapEntityLayer.FlugzeugRahmenAlt = true;
+            else if (a == "--mzf-anker-alt") MapEntityLayer.MzfAnkerAlt = true;
+            else if (a == "--waffenbild-probe") MapEntityLayer.WaffenbildProbeAn = true;
+            else if (a == "--blick16-alt") MapEntityLayer.Blick16Alt = true;
+            else if (a == "--blick16-schiffe-alt") MapEntityLayer.Blick16SchiffeAlt = true;
+            else if (a == "--bertha-waffe-alt") MapEntityLayer.BerthaWaffeAlt = true;
             else if (a == "--balkenbild-alt") MapEntityLayer.BalkenbildAlt = true;
             // ⭐⭐ 03.10.2026 — Maus, Tab, Handsteuerung Boden (bug-411/412/414,
             // berichte/maus-tab-handsteuerung-fable.md; MausTabLauf.cs, Simulation/
@@ -4628,6 +4685,24 @@ _mausProbePunkt = karte;
             else if (a == "--heli-strahl-aus") MapEntityLayer.HeliStrahlAus = true;
             // ⭐ 19.09.2026 — die drei Bombensorten, Simulation/Bombensorten.cs
             else if (a == "--bombe-fest-47") MapEntityLayer.BombeFest47 = true;
+            else if (a == "--luftschuss-tempo-alt") MapEntityLayer.LuftschussTempoAlt = true;
+            else if (a == "--nachschub-sicht-alt") MapEntityLayer.NachschubSichtAlt = true;
+            else if (a == "--laden-pause-alt") UI.LoadGameScreen.PauseAlt = true;
+            else if (a == "--doppelklick-alt") MapEntityLayer.DoppelklickAlt = true;
+            else if (a == "--rollen-pause-alt") RollenPauseAlt = true;
+            else if (a == "--flughuepfen-alt") MapEntityLayer.FlughuepfenAlt = true;
+            else if (a == "--laden-mitnahme-alt") LadenMitnahmeAlt = true;
+            else if (a == "--bauliste-grundtafel-alt") MapEntityLayer.BaulisteGrundtafelAlt = true;
+            else if (a == "--produktionsliste-check") _produktionslisteAfter = 3f;
+            else if (a == "--garage-balken-alt") MapEntityLayer.GarageBalkenAlt = true;
+            else if (a == "--tuerklick-einheit-alt") MapEntityLayer.TuerklickEinheitAlt = true;
+            else if (a == "--tuerklick-check") _tuerklickAfter = 3f;
+            else if (a == "--garage-ziel-alt") MapEntityLayer.GarageZielAlt = true;
+            else if (a == "--garage-unsichtbar-check") _garageCheckAfter = 3f;
+            else if (a == "--laden-vorlage-alt") MapEntityLayer.LadenVorlageAlt = true;
+            else if (a == "--spielstand-check") SpielstandCheckAn = true;
+            else if (a == "--nachschub-sicht-check") _nachschubSichtAfter = 5f;
+            else if (a == "--basisfenster-zu-bleibt-alt") BasisfensterZuBleibtAlt = true;
             else if (a == "--bombenetikett-kaputt") MapEntityLayer.BombenetikettKaputt = true;
             else if (a == "--bombe-check") _bombeCheck = true;
             else if (a == "--staffel-aus") MapEntityLayer.StaffelAus = true;
@@ -5561,6 +5636,45 @@ _mausProbePunkt = karte;
                 GD.Print($"[{Mathf.RoundToInt(_supplyElapsed)}s] supply: {_entities.NetworkLine()}");
             }
         }
+        SpielstandCheckTakt(delta);
+        if (_tuerklickAfter > 0f)
+        {
+            _tuerklickAfter -= (float)delta;
+            if (_tuerklickAfter <= 0f) { _tuerklickAfter = -1f; GD.Print(_entities.TuerklickCheck()); _tuerklickNachher = 25f; }
+        }
+        if (_tuerklickNachher > 0f)
+        {
+            _tuerklickNachher -= (float)delta;
+            if (_tuerklickNachher <= 0f) { _tuerklickNachher = -1f; GD.Print(_entities.TuerklickNachher()); }
+        }
+        if (_garageCheckAfter > 0f)
+        {
+            _garageCheckAfter -= (float)delta;
+            if (_garageCheckAfter <= 0f) { _garageCheckAfter = -1f; GD.Print(_entities.GarageProbeStart()); _garageAuswertungIn = 6f; }
+        }
+        if (_garageAuswertungIn > 0f)
+        {
+            _garageAuswertungIn -= (float)delta;
+            if (_garageAuswertungIn <= 0f) { _garageAuswertungIn = -1f; GD.Print(_entities.GarageProbeAuswerten()); }
+        }
+        if (_produktionslisteAfter > 0f)
+        {
+            _produktionslisteAfter -= (float)delta;
+            if (_produktionslisteAfter <= 0f)
+            {
+                _produktionslisteAfter = -1f;
+                GD.Print(_entities.ProduktionslisteCheck());
+            }
+        }
+        if (_nachschubSichtAfter > 0f)
+        {
+            _nachschubSichtAfter -= (float)delta;
+            if (_nachschubSichtAfter <= 0f)
+            {
+                _nachschubSichtAfter = -1f;
+                GD.Print(_entities.NachschubSichtProbe());
+            }
+        }
         if (_umbefehlAfter > 0f)
         {
             _umbefehlAfter -= (float)delta;
@@ -5837,6 +5951,9 @@ _mausProbePunkt = karte;
             WacheAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
+            GD.Print(_entities.SchussbildLine());
+            GD.Print(_entities.NachschubSichtLine());
+            GD.Print(_entities.FlughuepfenLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
             // ein Gebaeude gefallen ist: eine 0 ohne Ruine ist kein Befund.
             // ⭐⭐ 20.09.2026 — der GLEISSCHADEN auch im gespielten Lauf. Der
@@ -7933,6 +8050,10 @@ _mausProbePunkt = karte;
     /// <summary>`I` legt das Baufenster weg, für einen freien Blick.</summary>
     private bool _hidePanelList;
 
+    /// <summary><c>--basisfenster-zu-bleibt-alt</c> — ein erneuter Klick auf die
+    /// schon gewaehlte Basis oeffnet ihr geschlossenes Fenster nicht. bug-503.</summary>
+    public static bool BasisfensterZuBleibtAlt;
+
     /// <summary>
     /// Put the game's own typeface (FONT.CWD, exported as a BMFont) on the HUD.
     /// It is a 13 px bitmap font, so it is drawn at an integer multiple with
@@ -8952,7 +9073,8 @@ _mausProbePunkt = karte;
                             break;
                         }
                         if (mb.DoubleClick && _entities.RouteWahlModus == 0
-                            && _entities.PlacementMode == 0)
+                            && _entities.PlacementMode == 0
+                            && _entities.MenueEinheitUnter(KartenMaus()) >= 0)
                         {
                             OeffneEinheitenmenue(mb.Position);
                             _leftDown = false;
@@ -9008,7 +9130,17 @@ _mausProbePunkt = karte;
                                  && LinksklickBefiehlt(KartenMaus(), mb.CtrlPressed))
                             KartenBefehl(mb.ShiftPressed, mb.CtrlPressed);
                         else if (_leftDown)
+                        {
                             _entities.SelectAt(KartenMaus(), mb.ShiftPressed);
+                            // bug-503 (KayelGee R5#12, R4#27): ein KLICK auf das
+                            // Bauende oeffnet sein Fenster wieder. Das Schliessen
+                            // setzte _hidePanelList, und zurueck ging es nur, wenn
+                            // GAR NICHTS Bauendes mehr gewaehlt war — wer die Basis
+                            // erneut anklickte, blieb vor verschlossenem Fenster.
+                            // --basisfenster-zu-bleibt-alt = alter Weg.
+                            if (!BasisfensterZuBleibtAlt && _entities.BuildPanelWanted)
+                                _hidePanelList = false;
+                        }
                         _leftDown = false;
                         _boxSelect = false;
                         _entities.SetBand(null);
@@ -9612,6 +9744,9 @@ _mausProbePunkt = karte;
         // CommandBridge.ApplyAirMove) — nicht diese Stelle.
         // Eine Sperre in der Eingabe wäre auf der zweiten
         // Maschine nicht vorhanden.
+        // bug-519: ueber einer eigenen Einheit mit Fass-/Patronenzeiger ist
+        // der Klick der Befuellbefehl 14/15, nicht das Flugziel.
+        if (_entities.PostNachschubKlick(KartenMaus())) return;
         if (_entities.PostAirMove(KartenMaus(),
                                   queue) > 0)
         {
@@ -9826,6 +9961,9 @@ _mausProbePunkt = karte;
                 // ⭐ 23.09.2026, bug-368 — Zeigerart 22 (@0x431B93), Bild 17.
                 MapEntityLayer.Hint.Reparatur => UI.GameCursors.Reparatur,
                 MapEntityLayer.Hint.TerraSuche => UI.GameCursors.TerraSuche,
+                // bug-519: Zustand 8 -> Bild 12 (Fass), 9 -> Bild 13 (Patronen)
+                MapEntityLayer.Hint.Tanken => UI.GameCursors.Tanken,
+                MapEntityLayer.Hint.Munition => UI.GameCursors.Munition,
                 // ⭐ 12.09.2026 — das EINLADEN traegt kein eigenes Bild: Zeigerart 11
                 // fuehrt ueber die Tafel 0x4A9BEC auf Bild 11, dasselbe wie die
                 // Einfahrt (Art 5). Gelesen in beiden EXE, bug-233.

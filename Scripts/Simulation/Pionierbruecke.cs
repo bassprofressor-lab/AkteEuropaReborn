@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -492,6 +492,10 @@ public partial class MapEntityLayer
 
     public int StegeGezeichnet;
 
+    /// <summary><c>--brueckenvorschau-alt</c> — Stand 0.6.7: die Vorschau liegt
+    /// unter den Truemmerkacheln. bug-520.</summary>
+    public static bool BrueckenvorschauAlt;
+
     /// <summary><b>DIE GEBAUTE BRÜCKE ZEICHNEN.</b> Wie die Mole: der Importeur
     /// legt die 120 Kacheln <c>10120…10239</c> in den Streifen unten an
     /// <c>&lt;karte&gt;.objects.png</c>, hier wird daraus gemalt — gesucht wird
@@ -503,8 +507,14 @@ public partial class MapEntityLayer
     private void ZeichneStege()
     {
         if (ObjektEbene is not { } tex) return;
-        ZeichneBrueckenVorschau(tex);
+        // bug-520 (KayelGee R5#17, »nach Zerstoerung der unteren Bruecke ist
+        // die Vorschau nur teilweise sichtbar«): der Abriss legt Truemmer- und
+        // Wasserkacheln DECKEND in _bauwerkKachel — und die wurden NACH der
+        // Vorschau gemalt, also genau auf dem alten Brueckenfeld darueber.
+        // Die Vorschau kommt jetzt danach. Gegenschalter --brueckenvorschau-alt.
+        if (BrueckenvorschauAlt) ZeichneBrueckenVorschau(tex);
         ZeichneBauwerkKacheln(tex);
+        if (!BrueckenvorschauAlt) ZeichneBrueckenVorschau(tex);
         if (_stege.Count == 0) return;
         StegeGezeichnet = 0;
         foreach (var s in _stege)

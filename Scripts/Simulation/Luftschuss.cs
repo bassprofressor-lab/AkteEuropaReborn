@@ -147,7 +147,12 @@ public partial class MapEntityLayer
                 Damage = a.Attack,
                 Facing = DirToFacing(dir),
                 Kind = flug, Art = art,
-                Speed = tempo > 0 ? tempo : 10,
+                // bug-499 (KayelGee R5#21): das Tempo ist eine TEMPOEINHEIT wie
+                // bei jedem Bodengeschoss (MapEntityLayer.Fire) und braucht den
+                // Massstab px/s — ohne ihn flog die Bombe mit 3 statt 150 px/s
+                // und »stand in der Luft«. --luftschuss-tempo-alt = alte Zahl.
+                Speed = LuftTempoPx = (tempo > 0 ? tempo : 10)
+                                      * (LuftschussTempoAlt ? 1f : PxPerProjectileSpeed),
                 Weite = a.Pos.DistanceTo(aim + quer),
                 Scheitel = 0f,                   // GERADE Bahn, kein Bogen
                 HoeheStart = a.Alt,
@@ -172,6 +177,9 @@ public partial class MapEntityLayer
         public Vector2 Pos, Ziel;
         public int Zielgriff, Schaden, Owner;
         public string Name = "";
+        /// <summary>bug-514: der Bodenschuetze (Fussvolk-Laser), sonst −1.</summary>
+        public int Schuetze = -1;
+        public string Punkt = "strahlpunkt";
     }
 
     private readonly List<Strahl> _strahlen = new();
@@ -236,7 +244,7 @@ public partial class MapEntityLayer
                 if (CellAt(s.Ziel) is { } zc)
                 {
                     int c = Mathf.RoundToInt(zc.X), r = Mathf.RoundToInt(zc.Y);
-                    ZellEinschlag(-1, c, r, s.Schaden, 0);
+                    ZellEinschlag(s.Schuetze, c, r, s.Schaden, 0);
                 }
                 else if (s.Zielgriff >= 0 && s.Zielgriff < _entities.Count)
                 {
@@ -248,7 +256,7 @@ public partial class MapEntityLayer
                 continue;
             }
             s.Pos += weg.Normalized() * StrahlSchritt;
-            _effects.Add(new Effect { Pos = s.Pos, Kind = "strahlpunkt", FrameTime = 0.08f });
+            _effects.Add(new Effect { Pos = s.Pos, Kind = s.Punkt, FrameTime = 0.08f });
         }
     }
 
@@ -258,12 +266,20 @@ public partial class MapEntityLayer
     /// <para>⚠ Sie nennt zuerst, ob überhaupt geschossen wurde. Ohne das ist
     /// jede 0 darunter keine Messung, sondern ein Lauf ohne Luftkampf — die
     /// Falle, die mich heute schon dreimal erwischt hat.</para></summary>
+    /// <summary><c>--luftschuss-tempo-alt</c> — Bomben und Jaegergeschosse fliegen
+    /// wieder mit der rohen Tempozahl als px/s (50× zu langsam). bug-499.</summary>
+    public static bool LuftschussTempoAlt;
+
+    /// <summary>Das Tempo des letzten Luftgeschosses in px/s, fuer die Pruefzeile.</summary>
+    private float LuftTempoPx;
+
     public string LuftschussLine()
     {
         if (LuftSalven == 0)
             return "luftschuss: keine Salve — dieser Lauf sagt darueber NICHTS";
         return $"luftschuss: {LuftSalven} Salven, {LuftGeschosse} Geschosse, " +
-               $"{LuftStrahlen} Strahlen (offen {_strahlen.Count})" +
+               $"{LuftStrahlen} Strahlen (offen {_strahlen.Count}), Tempo {LuftTempoPx:0} px/s" +
+               (LuftschussTempoAlt ? "   ⚠ Nullmodell --luftschuss-tempo-alt" : "") +
                (LuftschussAlt ? "   ⚠ Nullmodell --luftschuss-alt: Geschosse und Strahlen 0"
                               : HeliStrahlAus ? "   ⚠ Nullmodell --heli-strahl-aus: Strahlen 0"
                                               : "");

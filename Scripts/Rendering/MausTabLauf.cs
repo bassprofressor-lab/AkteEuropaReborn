@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using Godot;
 
@@ -95,6 +95,25 @@ public partial class MapViewer
             _rightDown = false; _rightDrag = false;
         }
     }
+
+    /// <summary>bug-504 (KayelGee R5#19): »Karte mit rechter Maustaste rollen, ein
+    /// Tutorialfenster erscheint => Maus bleibt unsichtbar«. Das Hilfefenster
+    /// HAELT DEN BAUM AN; danach laufen weder das Loslassen (_UnhandledInput)
+    /// noch die <see cref="RollenWache"/> (_Process) — der Zeiger blieb gefangen,
+    /// und ausgerechnet das Fenster, das ihn freigaebe, war nicht mehr
+    /// anklickbar. Beim Anhalten wird das Rollen jetzt beendet. ⚠ Unsere Zutat
+    /// wie die Wache selbst. --rollen-pause-alt = alter Weg.</summary>
+    public override void _Notification(int what)
+    {
+        if (what == NotificationPaused && _rollen && !RollenPauseAlt)
+        {
+            RollenBeenden();
+            _rightDown = false; _rightDrag = false;
+        }
+    }
+
+    /// <summary><c>--rollen-pause-alt</c> — siehe <see cref="_Notification"/>.</summary>
+    public static bool RollenPauseAlt;
 
     // ---- --rollen-check ----------------------------------------------------
 

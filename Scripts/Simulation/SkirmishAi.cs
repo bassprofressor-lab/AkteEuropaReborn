@@ -786,9 +786,15 @@ public partial class MapEntityLayer : Node2D
         // "Rohstoffe" — the original's own option, and the original applies it
         // exactly here: its routine has one caller, in the game-start message.
         // A campaign mission must NOT come through this (Simulation/Resources.cs).
-        bool res = ApplyResources(UI.SkirmishSetup.Resources);
+        // ⚠ bug-507: nach einem SPIELSTAND steht die Welt schon — Rohstoffe,
+        // Starttruppe, leere Plaetze und Startbasen sind darin enthalten. Ein
+        // zweiter Durchlauf setzte die Lager auf die Gefechtseinstellung zurueck
+        // (--spielstand-check NET02: Lager 33225 -> 33712). Nur Diplomatie und
+        // KI laufen. --laden-mitnahme-alt = der alte Weg.
+        bool welt = !AusSpielstand;
+        bool res = welt && ApplyResources(UI.SkirmishSetup.Resources);
 
-        int cleared = buildUp ? KeepStartingTroop(StarterTroop) : 0;
+        int cleared = buildUp && welt ? KeepStartingTroop(StarterTroop) : 0;
         // B8: erst die Basen verteilen, DANN die KI einschalten — sonst plant
         // sie ihren ersten Zug auf einem Besitzstand, den es einen Takt spaeter
         // nicht mehr gibt. ⚠ Und danach ist `prize` veraltet, darum wird die
@@ -797,8 +803,8 @@ public partial class MapEntityLayer : Node2D
         // ⚠ 17.08.2026 — C24: VOR dem Verteilen der Basen. Wer nicht mitspielt,
         // soll auch keine Basis zugeteilt bekommen, und seine Einheiten sollen
         // beim Verteilen nicht mehr im Weg stehen.
-        int idle = NoClearIdleSlots ? 0 : ClearIdleSlots(mine);
-        int gaveBases = conquest ? GrantStartingBases(mine) : 0;
+        int idle = NoClearIdleSlots || !welt ? 0 : ClearIdleSlots(mine);
+        int gaveBases = conquest && welt ? GrantStartingBases(mine) : 0;
         if (gaveBases > 0) prize = NeutralPrizes();
         EnableSkirmishAi(foes, level);
         var per = BasesPerSlot();
@@ -838,6 +844,10 @@ public partial class MapEntityLayer : Node2D
     /// <summary>GEGENPROBE: nicht zuteilen, also der Stand vor dem 15.08.2026.
     /// Nur <c>--no-start-base</c> setzt das.</summary>
     public static bool NoStartBase;
+
+    /// <summary>bug-507: das Spiel kommt aus einem Spielstand — der Start darf
+    /// die Welt nicht mehr veraendern. Gesetzt vom MapViewer.</summary>
+    public bool AusSpielstand;
 
     /// <summary>Wieviele Basen zuletzt zugeteilt wurden — fuer die Meldung und
     /// den Pruefstand.</summary>

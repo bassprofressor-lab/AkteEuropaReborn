@@ -96,6 +96,7 @@ public partial class MapEntityLayer
     {
         if (art == 0) return null;                           // 0x42AAA3: AUS
         if (e.IsProp || e.Dead || e.HpMax <= 0) return null; // UKOL 100 sterbend → keiner
+        if (!e.IsBuilding && !GarageBalkenAlt && Untergestellt(e)) return null;   // bug-511
         // bug-440 (KayelGee Runde 4, Meldung 5): der Gebaeudezweig des
         // Art-10-Zeichners laesst Typ >= 0x12 ohne Balken (@0x42B237) — die
         // Kulissen (Wrack M1 Art 27..31, Bunker 57) haben im Original keinen.
