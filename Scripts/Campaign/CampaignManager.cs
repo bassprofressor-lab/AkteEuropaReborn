@@ -35,7 +35,19 @@ public static class CampaignManager
     /// <summary>Forget the cached list — used after an import.</summary>
     public static void Forget() => _missions = null;
 
-    public const string SavePath = "user://campaign.cfg";
+    /// <summary>Der echte Kampagnenstand des Spielers.</summary>
+    public const string EchterPfad = "user://campaign.cfg";
+
+    /// <summary>bug-577: im kopflosen Lauf / Pruefstand die Kopie in
+    /// <c>user://pruefstand/</c>, siehe Core/Pruefschutz.cs.</summary>
+    public static string SavePath => Core.Pruefschutz.Pfad(EchterPfad);
+
+    /// <summary>Der einzige Schreibweg (bug-577): meldet im Pruefschutz, wer schreibt.</summary>
+    private static void Speichern(ConfigFile c, [System.Runtime.CompilerServices.CallerMemberName] string wer = "")
+    {
+        Core.Pruefschutz.Gemeldet("campaign.cfg", "CampaignManager." + wer);
+        c.Save(SavePath);
+    }
 
     /// <summary>
     /// ⚠ <b>Warum hier `using` steht und NICHT ein gehaltenes Abbild wie in
@@ -78,7 +90,7 @@ public static class CampaignManager
             using var c = new ConfigFile();
             c.Load(SavePath);
             c.SetValue("campaign", "completed", value);
-            c.Save(SavePath);
+            Speichern(c);
         }
     }
 
@@ -181,7 +193,7 @@ public static class CampaignManager
             using var c = new ConfigFile();
             c.Load(SavePath);
             c.SetValue("campaign", "balance", value);
-            c.Save(SavePath);
+            Speichern(c);
         }
     }
 
@@ -243,7 +255,7 @@ public static class CampaignManager
         using var c = new ConfigFile();
         c.Load(SavePath);
         c.SetValue("mission_balance", mission.ToString(), value);
-        c.Save(SavePath);
+        Speichern(c);
     }
 
     /// <summary>Womit diese Mission zu beginnen hat: ihr gemerkter
@@ -327,7 +339,7 @@ public static class CampaignManager
             using var c = new ConfigFile();
             c.Load(SavePath);
             c.SetValue("campaign", "carried", arr);
-            c.Save(SavePath);
+            Speichern(c);
         }
     }
 
@@ -398,7 +410,7 @@ public static class CampaignManager
             using var c = new ConfigFile();
             c.Load(SavePath);
             c.SetValue("campaign", "vars", sb.ToString());
-            c.Save(SavePath);
+            Speichern(c);
         }
     }
 
@@ -510,7 +522,7 @@ public static class CampaignManager
         // frischer Durchlauf begann also mit den Endwerten des vorigen.
         // Gemeldet als »ich bekomme keine 50 $« und »ich kann nicht gewinnen«.
         c.SetValue("campaign", "vars", "");
-        c.Save(SavePath);
+        Speichern(c);
     }
 
     // ---- die Missionsbezahlung ---------------------------------------------
