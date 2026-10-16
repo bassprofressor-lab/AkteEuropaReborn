@@ -95,6 +95,23 @@ public sealed partial class CommandCheckRunner : Node
             else if (a.StartsWith("--befehl-out=")) outPath = a["--befehl-out=".Length..];
         }
         if (!on) return false;
+        // ⚠⚠ 16.10.2026, bug-531 — DER PRÜFSTAND WAR SEIT DEM 04.10. ROT, und
+        // nicht wegen des Rings. Seit bug-418/425 schickt PostMove die
+        // Formations- bzw. die rohe Klickzelle (wie das Original 0x435100 /
+        // 0x4352E0); der Direktweg IssueMove (B) kennt nur die alte Ringsuche
+        // PickGoalCell. Damit verglich der Lauf zwei verschiedene ZIELWAHLEN statt
+        // zweier TRANSPORTWEGE: »AUSEINANDER bei Takt 30, Einheit #1 PathLen
+        // A=12 B=11« — auf d0e17db (vor diesem Umbau) genauso. Mit
+        // --zielwahl-alt --formation-alt war er auf demselben Stand grün (600
+        // Takte, Zahl für Zahl). Gegenstand dieses Prüfstands ist der Ring,
+        // also wählen beide Wege für die Dauer des Laufs dasselbe Ziel (die alte
+        // Zielwahl, die IssueMove hat). Gegenschalter --befehl-check-zielwahl-neu:
+        // der rote Vergleich von vorher.
+        if (!System.Array.Exists(Core.CommandLine.Args, a => a == "--befehl-check-zielwahl-neu"))
+        {
+            MapEntityLayer.ZielwahlAlt = true;
+            MapEntityLayer.FormationAlt = true;
+        }
         // ⚠ mindestens 2: abgesetzt wird einen Takt VOR der Fälligkeit, und
         // Takt 1 ist der erste, den der Prüfstand fährt.
         if (r._at < 2) r._at = 2;
