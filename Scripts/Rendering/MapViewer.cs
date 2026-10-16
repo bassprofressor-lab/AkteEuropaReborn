@@ -4745,6 +4745,7 @@ _mausProbePunkt = karte;
             else if (a == "--gummiband-ukol-alt") MapEntityLayer.GummibandUkolAlt = true;
             else if (a == "--gummiband-gebaeude-alt") MapEntityLayer.GummibandGebaeudeAlt = true;
             else if (a == "--minikarte-zug-alt") Minimap.ZugAlt = true;
+            else if (a == "--einfahrzone-alt") MapEntityLayer.EinfahrzoneAlt = true;
             else if (a == "--garage-ziel-alt") MapEntityLayer.GarageZielAlt = true;
             else if (a == "--garage-unsichtbar-check") _garageCheckAfter = 3f;
             else if (a == "--laden-vorlage-alt") MapEntityLayer.LadenVorlageAlt = true;
@@ -10003,7 +10004,8 @@ _mausProbePunkt = karte;
               && !(_entities.FadenkreuzHier(KartenMaus())
                    && _entities.PostAttack(KartenMaus(),
                                            queue)))
-            _entities.PostMove(KartenMaus(), queue, shift);
+            // bug-564: Klickarm 5 (C 0x4375B5) — ueber der Tuer heisst »auf die Tuer«.
+            _entities.PostMove(_entities.EinfahrtZiel(KartenMaus()), queue, shift);
     }
 
     /// <summary>Gibt der Linksklick hier einen Befehl statt einer Anwahl? Das

@@ -38910,7 +38910,7 @@ public partial class MapEntityLayer : Node2D
         if (!TuerklickEinheitAlt && !EinfahrzeigerAlt && AuswahlKannEinfahren())
             foreach (var b in _entities)
                 if (b.IsBuilding && !b.Dead && b.Owner == ViewPlayer
-                    && Einfahrt_GarageTyp(b) && AufDerTuerzelle(b, mapPos))
+                    && Einfahrt_GarageTyp(b) && AufDerEinfahrzone(b, mapPos))
                     return Hint.Einfahrt;
 
         int i = Pick(mapPos);
@@ -38950,7 +38950,7 @@ public partial class MapEntityLayer : Node2D
             // @0x4323E6 fuehrt, ist NICHT nachgeschlagen, und die engere
             // Aussage ist die, die ich belegen kann.
             if (e.IsBuilding && !EinfahrzeigerAlt && Einfahrt_GarageTyp(e)
-                && AufDerTuerzelle(e, mapPos))
+                && AufDerEinfahrzone(e, mapPos))
                 return Hint.Einfahrt;
 
             // ⭐⭐ 12.09.2026 — DER EINLADEZEIGER (bug-233). Seine Meldung: »es
@@ -39291,6 +39291,50 @@ public partial class MapEntityLayer : Node2D
     /// fuehrt.</summary>
     private static bool Einfahrt_GarageTyp(Entity b)
         => b.Built != 0 && b.DoorCells.Count > 0 && GarageTyp(b.BType);
+
+    /// <summary>
+    /// ⭐ bug-564 (KayelGee R6#9): »man kann nicht den oberen Teil der Depottuer
+    /// anklicken«. Die Zeigerwahl des Originals gibt den Einfahrzeiger 5, wenn die
+    /// MAUSZELLE oder die Zelle DARUNTER die Tuermarke 0x63 traegt (C 0x432367
+    /// <c>cmp byte[0x689710+zelle],0x63</c> / 0x432372 <c>[...+zelle+1]</c>, Tafel
+    /// <c>Spalte·256+Zeile</c>, +1 = eine Zeile tiefer) — also Tuer UND die Zelle
+    /// ueber der Tuer. Der Klickarm 5 (C 0x4375B5…0x4375C6) rueckt dann eine Zeile
+    /// nach unten (<c>[zelle+1] == 0x63 → Zeile+1</c>) und faehrt auf die Tuer
+    /// (Befehl 3 @0x4375DB). Bei uns galt nur die Tuerzelle (»UNSERE EINGRENZUNG«).
+    /// Gegenschalter --einfahrzone-alt.
+    /// </summary>
+    private bool AufDerEinfahrzone(Entity b, Vector2 mapPos)
+    {
+        if (CellAt(mapPos) is not { } z) return false;
+        int tc = b.Col + b.DoorCol, tr = b.Row + b.DoorRow;
+        if (z.X != tc) return false;
+        return z.Y == tr || (!EinfahrzoneAlt && z.Y == tr - 1);
+    }
+
+    /// <summary><c>--einfahrzone-alt</c> — Stand bis 0.6.9: der Einfahrzeiger nur
+    /// auf der Tuerzelle. Nullmodell zu bug-564.</summary>
+    public static bool EinfahrzoneAlt;
+
+    /// <summary>
+    /// Der Klickarm 5 des Originals (C 0x4375B5): steht der Einfahrzeiger auf der
+    /// Zelle UEBER einer eigenen Tuer, geht der Fahrbefehl an die Tuerzelle. Sonst
+    /// bleibt der Punkt, wie er ist.
+    /// </summary>
+    public Vector2 EinfahrtZiel(Vector2 mapPos)
+    {
+        if (EinfahrzoneAlt || CellAt(mapPos) is not { } z) return mapPos;
+        if (CursorHintAt(mapPos) != Hint.Einfahrt) return mapPos;
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.Dead || b.Owner != ViewPlayer || !Einfahrt_GarageTyp(b)) continue;
+            int tc = b.Col + b.DoorCol, tr = b.Row + b.DoorRow;
+            if (z.X == tc && z.Y == tr - 1) { EinfahrtZielGerueckt++; return CellCenter(tc, tr); }
+        }
+        return mapPos;
+    }
+
+    /// <summary>Wie oft der Klickarm 5 eine Zeile nach unten gerueckt hat.</summary>
+    public static int EinfahrtZielGerueckt;
 
     /// <summary>Steht die Maus auf der Tuerzelle dieses Gebaeudes?</summary>
     private bool AufDerTuerzelle(Entity b, Vector2 mapPos)

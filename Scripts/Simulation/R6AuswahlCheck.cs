@@ -18,6 +18,7 @@ public partial class MapEntityLayer
     {
         "tuermarken" => R6TuermarkenStart(),
         "gummiband" => R6GummibandStart(),
+        "einfahrzone" => R6EinfahrzoneStart(),
         _ => $"r6-check: unbekannter Teil »{name}«",
     };
 
@@ -25,6 +26,7 @@ public partial class MapEntityLayer
     {
         "tuermarken" => R6TuermarkenAuswerten(),
         "gummiband" => R6GummibandAuswerten(),
+        "einfahrzone" => R6EinfahrzoneAuswerten(),
         _ => "",
     };
 
@@ -174,5 +176,68 @@ public partial class MapEntityLayer
                $"\n   nach 3 s: noch in der Liste {drin}, davon unsichtbar unterwegs (Weg oder fort von der Tuer) {unsichtbarUnterwegs}; "
              + $"Auslass {DepotAusgelassen}, gewartet {DepotWartetAnTuer}"
              + $"\n   {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}";
+    }
+
+    // ======================================================================
+    //  einfahrzone — bug-564 (R6#9): oberer Teil der Depottuer
+    // ======================================================================
+    //
+    // Aufbau: eigene Basis (gesagt), ein eigenes Fahrzeug A drei Zeilen unter der
+    // Tuer, gewaehlt. Die Maus steht auf der Zelle UEBER der Tuer. Soll: Zeiger
+    // Einfahrt, der Klick (KartenBefehl-Weg: EinfahrtZiel -> PostMove) zielt auf
+    // die Tuerzelle; nach 3 s ist A eingefahren oder steht auf der Tuer.
+    // NULLMODELL --einfahrzone-alt: Zeiger »eigenes Gebaeude«, kein Fahrbefehl.
+    private int _r6eA = -1;
+    private string R6EinfahrzoneStart()
+    {
+        int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        _r6Basis = -1;
+        for (int k = 0; k < _entities.Count; k++)
+        {
+            var b = _entities[k];
+            if (b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 1 && b.DoorCells.Count > 0) { _r6Basis = k; break; }
+        }
+        if (_r6Basis < 0) return "r6-check einfahrzone: keine Basis mit Tuer — sagt NICHTS";
+        var basis = _entities[_r6Basis];
+        basis.Owner = basis.Team = basis.ShownOwner = me;
+        int tc = basis.Col + basis.DoorCol, tr = basis.Row + basis.DoorRow;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile || e.Owner != me || e.Infantry >= 0 || Untergestellt(e)) continue;
+            _r6eA = i; break;
+        }
+        if (_r6eA < 0) return "r6-check einfahrzone: kein eigenes Fahrzeug — sagt NICHTS";
+        var a = _entities[_r6eA];
+        var frei = _nav!.NearestFree(new Vector2I(tc, tr + 3), a.Move, _r6eA) ?? new Vector2I(tc, tr + 3);
+        ProbeVersetzen(_r6eA, frei.X, frei.Y);
+        a.Path = null; a.Orders.Clear(); a.Target = -1; a.Ukol = UkolFrei;
+        _sel.Clear(); _sel.Add(_r6eA); _selected = _r6eA;
+        var oben = CellCenter(tc, tr - 1);
+        var hint = CursorHintAt(oben);
+        bool befiehlt = hint is not (Hint.Own or Hint.OwnFoot or Hint.Neutral);
+        var ziel = EinfahrtZiel(oben);
+        var zz = CellAt(ziel);
+        if (befiehlt) PostMove(ziel, false, false);
+        _r6eHint = hint; _r6eZiel = zz ?? new Vector2I(-1, -1);
+        return "r6-check einfahrzone" + (EinfahrzoneAlt ? "  ⚠ Nullmodell --einfahrzone-alt" : "") +
+               $"\n   Basis {basis.Slot}, Tuer ({tc},{tr}); Einheit {a.Slot} auf ({a.Col},{a.Row}) gewaehlt; Maus auf ({tc},{tr - 1}) ueber der Tuer" +
+               $"\n   Zeiger {hint} -> Linksklick {(befiehlt ? $"BEFIEHLT, Ziel ({_r6eZiel.X},{_r6eZiel.Y})" : "WAEHLT AN (die Basis)")}";
+    }
+    private Hint _r6eHint;
+    private Vector2I _r6eZiel;
+
+    private string R6EinfahrzoneAuswerten()
+    {
+        if (_r6Basis < 0 || _r6eA < 0) return "r6-check einfahrzone: kein Aufbau";
+        var basis = _entities[_r6Basis];
+        var a = _entities[_r6eA];
+        int tc = basis.Col + basis.DoorCol, tr = basis.Row + basis.DoorRow;
+        bool drin = basis.Garage.Contains(a);
+        bool aufTuer = a.Col == tc && a.Row == tr;
+        bool ok = _r6eHint == Hint.Einfahrt && _r6eZiel == new Vector2I(tc, tr) && (drin || aufTuer || a.Path is { Count: > 0 });
+        return "r6-check einfahrzone:" +
+               $"\n   nach 3 s: Einheit eingefahren {drin}, auf der Tuer {aufTuer}, steht auf ({a.Col},{a.Row}), Weg {(a.Path?.Count ?? 0)}" +
+               $"\n   {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}";
     }
 }
