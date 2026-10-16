@@ -170,7 +170,9 @@ public partial class MapEntityLayer
         if (FlughafenEinnahmeAlt || b.BType != 9) return;
         foreach (var a in _special)
         {
-            if (a.Kind is < 1 or > 12 || a.HomeSlot != b.Slot) continue;
+            // 16.10.: Tote ueberspringen — das Original sieht nur belegte Saetze
+            // (typ == 0 -> weiter); ein toter Satz verfaelschte bei uns nur den Zaehler.
+            if (a.Dead || a.Kind is < 1 or > 12 || a.HomeSlot != b.Slot) continue;
             a.Owner = who;
             FlugzeugeUmgeschrieben++;
         }
