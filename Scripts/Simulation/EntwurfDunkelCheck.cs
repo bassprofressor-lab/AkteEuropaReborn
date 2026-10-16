@@ -30,9 +30,19 @@ using Godot;
 /// gegen aus der EXE-Tafel abgelesene Sollmengen, Kopie auf Spieler 7, und die drei
 /// Listen des Fensters = alle Teile ∩ Besitz (Nullmodell <c>--gefecht-besitz-alt</c>).
 /// Siehe Simulation/GefechtBesitz.cs.</para>
+///
+/// <para>⭐ 17.10.2026, bug-544: T9 setzt <c>SkirmishSetup.AllUnits</c> fuer die
+/// Messung auf AUS (die gespeicherte Spielereinstellung hob seit bug-489 jede
+/// Stufe auf 8), <b>T9b</b> misst die Option eigens: an + Stufe 1 = 59 Zeilen.
+/// Gegenschalter <c>--entwurf-t9-einstellung-alt</c>.</para>
 /// </summary>
 public partial class MapEntityLayer
 {
+    /// <summary><c>--entwurf-t9-einstellung-alt</c> (bug-544) — der Pruefstand bis
+    /// 17.10.2026: T9 laeuft mit der gespeicherten Einstellung »Alle Einheiten« und
+    /// faellt durch, sobald der Spieler den Haken gesetzt hat.</summary>
+    public static bool EntwurfT9EinstellungAlt;
+
     public string EntwurfDunkelCheck()
     {
         var sb = new System.Text.StringBuilder("entwurf-dunkel-check\n");
@@ -207,6 +217,16 @@ public partial class MapEntityLayer
         // Nullmodell --gefecht-besitz-alt: kein Verteilen (EXE-Tafel: 2 S.Kanone
         // besessen, 68/69 nicht), keine Filterung -> Stufe 1 MUSS durchfallen.
         bool gefecht = true;
+        // ⭐ 17.10.2026 (bug-544): T9 misst 0x419CB0 und darf NICHT von der
+        // Spielereinstellung »Alle Einheiten« (settings.cfg skirmish_all_units,
+        // MainMenu uebernimmt sie in SkirmishSetup.AllUnits) abhaengen. Seit
+        // bug-489 (0e33e3e, 12.10.) hebt diese Option jede Stufe < 8 auf 8 —
+        // mit gesetztem Haken lieferte Stufe 1 und 4 je 59 Zeilen statt 12/35.
+        // Darum: T9 mit AllUnits=false, und T9b misst die Option eigens
+        // (Stufe 1 MUSS dann 59 = Stufe 8 geben). Gegenschalter
+        // --entwurf-t9-einstellung-alt: der alte Pruefstand (Einstellung gilt).
+        bool alleEinheitenVor = UI.SkirmishSetup.AllUnits;
+        if (!EntwurfT9EinstellungAlt) UI.SkirmishSetup.AllUnits = false;
         if (UI.SkirmishSetup.CampaignMission <= 0)
         {
             var soll = new (int Stufe, int[] Zeilen)[]
@@ -260,20 +280,43 @@ public partial class MapEntityLayer
                               $"Fahrwerk {pr.Count}/{alleP.Count(s.Contains)}{(lp ? "" : "⚠")}" +
                               (n < 0 ? "   [--gefecht-besitz-alt: nicht verteilt]" : ""));
             }
-            // zurueck auf den Stand des Gefechtsstarts
+            // ---- T9b (bug-489/544): »Alle Einheiten« an -> Stufe 1 rechnet als Stufe 8
+            if (!EntwurfT9EinstellungAlt)
+            {
+                UI.SkirmishSetup.AllUnits = true;
+                int n1 = GefechtBesitzStart(1);
+                var ist = Besitz(0);
+                var s8 = soll[2].Zeilen.ToHashSet();
+                // Nullmodell --alle-einheiten-bauteile-alt: Stufe 1 bleibt 12 -> T9b MUSS fallen
+                var erwartet = s8;
+                bool okB = ist.SetEquals(erwartet) && Besitz(7).SetEquals(ist);
+                gefecht &= okB;
+                sb.AppendLine($"   {(okB ? "ok  " : "⚠ FALSCH")} T9b »Alle Einheiten« an, Techstandard 1: " +
+                              $"Block 0 {ist.Count} Zeilen (Soll {erwartet.Count}" +
+                              " = Stufe 8, bug-489)" +
+                              (n1 < 0 ? "   [--gefecht-besitz-alt: nicht verteilt]" : ""));
+                UI.SkirmishSetup.AllUnits = false;
+            }
+            else
+                sb.AppendLine($"   [--entwurf-t9-einstellung-alt: T9 mit der Spielereinstellung »Alle Einheiten« = {alleEinheitenVor}]");
+            // zurueck auf den Stand des Gefechtsstarts (mit der Einstellung des Spielers)
+            UI.SkirmishSetup.AllUnits = alleEinheitenVor;
             GefechtBesitzStart(AirProbeTechstandard);
             LoadDesignParts();
         }
         else
             sb.AppendLine("   T9 Gefechtsbesitz (0x419CB0): nur auf einer Gefechtskarte messbar (--skirmish=map_DM_4) — hier nicht gestellt");
+        UI.SkirmishSetup.AllUnits = alleEinheitenVor;
         alles &= gefecht;
 
         sb.Append(alles
             ? "   ✅ BESTANDEN — Dunkelstufe nach Tragklasse +0x23 wie gelesen (T1..T8, Farben, Tastenpfad Enter" +
-              (UI.SkirmishSetup.CampaignMission <= 0 ? ", T9 Gefechtsbesitz 0x419CB0)" : ")")
+              (UI.SkirmishSetup.CampaignMission <= 0 ? ", T9/T9b Gefechtsbesitz 0x419CB0)" : ")")
             : "   ❌ DURCHGEFALLEN — mindestens ein Fall weicht ab");
         if (GefechtBesitzAlt)
             sb.Append("   [Nullmodell --gefecht-besitz-alt: T9 MUSS durchfallen (Stufe 1 und 4)]");
+        if (AlleEinheitenBauteileAlt)
+            sb.Append("   [Nullmodell --alle-einheiten-bauteile-alt: T9b MUSS durchfallen (12 statt 59)]");
         if (UI.DesignWindow.DunkelAus)
             sb.Append("   [Nullmodell --entwurf-dunkel-aus: T1/T2/T4/T5/T6 MUESSEN durchfallen]");
         if (EntwurfEnterSperre)

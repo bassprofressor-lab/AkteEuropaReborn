@@ -4267,6 +4267,7 @@ _mausProbePunkt = karte;
             // UI/DesignWindow.cs, Simulation/EntwurfDunkelCheck.cs)
             else if (a == "--entwurf-dunkel-aus") UI.DesignWindow.DunkelAus = true;
             else if (a == "--entwurf-dunkel-check") _entwurfDunkelCheck = true;
+            else if (a == "--entwurf-t9-einstellung-alt") MapEntityLayer.EntwurfT9EinstellungAlt = true;
             // bug-477: Enter erstellt wie im Original (Klickcode 1 @0x413F96); die
             // Sperre von bug-474 nur noch als Gegenschalter
             else if (a == "--entwurf-enter-sperre") MapEntityLayer.EntwurfEnterSperre = true;
