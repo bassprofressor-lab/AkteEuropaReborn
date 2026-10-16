@@ -93,7 +93,8 @@ public partial class MapEntityLayer
     }
 
     // ======================================================================
-    //  gummiband — bug-561 (R6#5/#5.1), bug-562 (R6#10)
+    //  gummiband — bug-561 (R6#5/#5.1), bug-562 (R6#10, Nullmodell
+    //  --gummiband-gebaeude-alt: die Basis wird mitgewaehlt)
     // ======================================================================
     //
     // Aufbau: eine Basis wird dem Spieler zugeschrieben (gesagt), SECHS eigene
@@ -103,7 +104,7 @@ public partial class MapEntityLayer
     // (BoxSelect, derselbe Weg wie MapViewer beim Loslassen) und gibt der
     // Auswahl einen Fahrbefehl. Soll: 0 Depoteinheiten gewaehlt, 0 bekommen
     // einen Weg. NULLMODELL --gummiband-ukol-alt: 6 gewaehlt, Wege > 0.
-    private int _r6gWege;
+    private int _r6gWege, _r6gGebaeude;
     private string R6GummibandStart()
     {
         int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
@@ -143,6 +144,7 @@ public partial class MapEntityLayer
         }
         int gewaehlt = _sel.Count;
         IssueMove(CellCenter(tc, System.Math.Min(tr + 8, (_nav?.Height ?? tr + 9) - 1)));
+        _r6gGebaeude = gebaeude;
         _r6gWege = 0;
         foreach (int k in _r6Insassen) if (_entities[k].Path is { Count: > 0 }) _r6gWege++;
         return $"r6-check gummiband: Basis {basis.Slot}, Tuer ({tc},{tr}), {_r6Insassen.Count} Einheiten drin (1x 50, {_r6Insassen.Count - 1}x 51)"
@@ -166,7 +168,8 @@ public partial class MapEntityLayer
             if (u.Col != tc || u.Row != tr || u.Path is { Count: > 0 }
                 || u.Pos.DistanceTo(CellCenter(tc, tr)) > 1f) unsichtbarUnterwegs++;
         }
-        bool ok = _r6gWege == 0 && unsichtbarUnterwegs == 0;
+        // bug-562: kein Gebaeude im Rechteck gewaehlt (0x434700 kennt nur Einheitensaetze).
+        bool ok = _r6gWege == 0 && unsichtbarUnterwegs == 0 && _r6gGebaeude == 0;
         return "r6-check gummiband:" +
                $"\n   nach 3 s: noch in der Liste {drin}, davon unsichtbar unterwegs (Weg oder fort von der Tuer) {unsichtbarUnterwegs}; "
              + $"Auslass {DepotAusgelassen}, gewartet {DepotWartetAnTuer}"

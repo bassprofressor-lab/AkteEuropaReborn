@@ -4743,6 +4743,7 @@ _mausProbePunkt = karte;
             else if (a.StartsWith("--r6-check=")) { _r6Check = a["--r6-check=".Length..]; _r6After = 3f; }
             else if (a == "--tuermarken-alt") MapEntityLayer.TuermarkenAlt = true;
             else if (a == "--gummiband-ukol-alt") MapEntityLayer.GummibandUkolAlt = true;
+            else if (a == "--gummiband-gebaeude-alt") MapEntityLayer.GummibandGebaeudeAlt = true;
             else if (a == "--garage-ziel-alt") MapEntityLayer.GarageZielAlt = true;
             else if (a == "--garage-unsichtbar-check") _garageCheckAfter = 3f;
             else if (a == "--laden-vorlage-alt") MapEntityLayer.LadenVorlageAlt = true;

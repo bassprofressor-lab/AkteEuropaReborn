@@ -10034,6 +10034,11 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             if (!Commandable(i)) continue;
+            // bug-562 (KayelGee R6#10): »eine Basis sollte nicht ueber ein
+            // Auswahlrechteck anwaehlbar sein«. 0x434700 zaehlt nur die Saetze
+            // P·1000 … P·1000+999 (C 0x4347E7: edi = P·1000, Ende +0x3E7 @0x4347FE)
+            // — Gebaeude (60000+Platz) kommen darin nicht vor. --gummiband-gebaeude-alt.
+            if (!GummibandGebaeudeAlt && _entities[i].IsBuilding) continue;
             if (!GummibandUkolAlt && GummibandUkolRiegel(_entities[i])) { GummibandUebersprungen++; continue; }
             if (norm.Intersects(BodyRect(_entities[i]))) _sel.Add(i);
         }
@@ -10047,6 +10052,10 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--gummiband-ukol-alt</c> — Stand bis 0.6.9: das Auswahlrechteck
     /// nimmt auch eingefahrene und wartende Depoteinheiten. Nullmodell zu bug-561.</summary>
     public static bool GummibandUkolAlt;
+
+    /// <summary><c>--gummiband-gebaeude-alt</c> — Stand bis 0.6.9: das
+    /// Auswahlrechteck nimmt auch eigene Gebaeude. Nullmodell zu bug-562.</summary>
+    public static bool GummibandGebaeudeAlt;
 
     /// <summary>Wie oft das Gummiband eine Einheit am UKOL-Riegel uebersprang.</summary>
     public static int GummibandUebersprungen;
