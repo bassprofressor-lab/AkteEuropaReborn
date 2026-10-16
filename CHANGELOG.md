@@ -12,6 +12,110 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.9 — 2026-10-16 · the whole campaign has been played through
+
+> **All 33 missions have now been played through.** Missions 31 to 33 ran
+> without a single finding — the only report was that the closing film was
+> missing after winning mission 33. On top of that comes the **original's save
+> window**, still listed as a limitation in 0.6.8, and a set of questions we
+> looked up in the original before changing anything — most of them with the
+> answer: that is how the original does it. Every change has a switch that
+> brings the old behaviour back.
+
+### Thanks to KayelGee
+
+KayelGee answered our question from 0.6.8: **the sub-mission »protect the
+supply depot« in mission 2 now starts correctly** (reports 8 and 14 of round
+5). That closes the last open report of his fifth round. The save window below
+also goes back to his report 4. Thank you!
+
+### ⚠ Important: old saves
+
+Saves now live in the **original's eight slots** (files `GAME.000.aesave` …
+`GAME.007.aesave`). The new load window does **not** list saves from 0.6.8 and
+earlier (`save_<number>.aesave`). They are not lost: start the game with
+`--speicherfenster-alt` and the old load screen comes back, from which they can
+still be loaded.
+
+### New
+
+- **The »Save game« window (window type 15) as in the original** (KayelGee's
+  report 4, round 5). Until now the button in the pause menu saved at once and
+  only answered with a line of text. Now the original's window opens: 300 × 360
+  pixels, **seven slots**, each showing the player name, »Mission : n« and the
+  save's name; an empty slot reads »Leere Position...«. Click a slot, type a
+  name (up to 20 characters) and press **Enter** or »Sichern«. As in the
+  original, typing appends to the slot's existing name, and overwriting does not
+  ask. While the window is open the game is paused; closing it resumes only if
+  the window itself paused it. Read at `0x473750` (drawer), `0x458CB0` (setup)
+  and `0x41D210` (writer), identical in both versions of `GAME.EXE`. Switch
+  `--speicherfenster-alt`.
+- **The »Load game« window (window type 14) as in the original.** 300 × 400
+  pixels, **eight slots** — the eighth is the end-of-mission save (below). Only
+  used slots can be picked; a **double click** loads, as does picking a slot and
+  »Laden«. It also replaces the load screen that »Spiel laden« in the start menu
+  used to open. Read at `0x4733B0` and `0x4589B0`.
+- **F2 saves, F3 loads** — the original's keys. In the in-game main menu the
+  buttons »Spielstand speichern« and »Altes Spiel laden« open the same windows,
+  at the mouse pointer as in the original.
+- **End-of-mission save.** After a won mission the game, like the original,
+  puts an »Ende von Mission #n« save into the eighth slot (`0x4CFC10`). Turn it
+  off with `--missionsende-stand-aus`. ⚠ Built, not yet checked in play.
+- **After winning mission 33 the closing film and the credits roll.** Until now
+  the last mission went straight back to the menu. In the original the mission
+  change `0x4CFD80` first plays **33.RPL** (60 seconds), then, hard-wired behind
+  the check for mission 33 (`0x4D0012`), **34.RPL**, the **credits** (203
+  seconds) — shown small in the middle of the screen (320 × 240, not scaled).
+  Then the main menu. No film after a defeat. We only ever played films
+  *before* a mission, and after mission 33 there is no next one — so neither
+  ever came. Switch `--abschlussfilm-alt`; `--abspann-vollbild` stretches the
+  credits to the full screen. ⚠ *Our choice*: how big »small in the middle« is
+  on a window that is not 4:3.
+
+### Fixed
+
+- **Captured airfield: aircraft already shot down no longer count.** A second,
+  independent reading confirmed the fix from 0.6.7: when an airfield is
+  captured, the original hands every aircraft of types 1 to 12 whose home it is
+  to the new owner — on the ground and in the air; the supply helicopters stay
+  with the old owner (`0x43D214`). One small difference remained: we also
+  »handed over« aircraft already shot down, where the original skips empty
+  records. No effect in play, but it skewed the counter.
+
+### Checked: the original does the same
+
+- **A transporter can get stuck in a captured mine** (mission 27, from our own
+  play). In the original a material transporter only leaves a building when the
+  cell below the exit is entirely free (`0x409D57`) — no time limit, no second
+  exit, no retry. If a unit stands there, it stays inside, invisible, and still
+  counts for the victory condition »all units destroyed«. Once the unit moves
+  away it is out within seconds. Our rebuild does exactly the same; nothing
+  changed.
+- **The power-plant ruin on ice maps** looks like a blue-olive speckled
+  rectangle. A third, thorough pass confirmed it: none of the 35 graphics sets,
+  neither CD and no archive holds a snow version of the destroyed power plant.
+  For desert and jungle the artists painted the ruin anew, for snow they copied
+  the grass ruin — a fault in the original data. It stays **true to the
+  original**.
+- **Ships turn in eighths** like the Dicke Bertha (`0x404E80`), as the original
+  does.
+- **The briefing of mission 32 has no arrows** — it has only one entry, and the
+  original shows none there either.
+
+### Known limitations
+
+- **No autosave.** The original can save every 5, 10 or 20 minutes into the
+  eighth slot (off by default); not built yet.
+- **The player name** in the save slots is always »SPIELER« — there are no
+  player profiles yet (*our choice*).
+- **ESC** closes only the save or load window; the original closes almost every
+  open window with it.
+- **The »Credits« button** plays the 34.RPL credits in the original; ours still
+  shows the text list. After the credits the original starts a demo in the main
+  menu; ours does not.
+- **The state of the campaign AI is not in the save**, and **the muzzle flash is
+  a stand-in** until SHOOT.CWT is read (both as in 0.6.8).
+
 ## 0.6.8 — 2026-10-13 · the fifth round of reports from KayelGee
 
 > An interim release with no new missions: the fifth round of reports from

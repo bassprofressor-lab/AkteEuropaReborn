@@ -109,8 +109,8 @@ braucht, in **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)** — samt der Fälle, in den
 sich eine frühere Erklärung von uns als falsch herausgestellt hat. Beides wird
 mitgeführt, nicht nachträglich geschrieben.
 
-⭐ **Stand heute (12.10.2026, Release 0.6.7):** die Missionen 1 bis 27 sind
-durchgespielt. Unterwegs wurde Mission 2 zum ersten Mal abschliessbar, die
+⭐ **Stand heute (16.10.2026, Release 0.6.9):** **alle 33 Missionen sind
+durchgespielt** — die ganze Kampagne, bis zum Abspann. Unterwegs wurde Mission 2 zum ersten Mal abschliessbar, die
 Kraftwerke in Mission 4 und die Bunker in Mission 7 zerstörbar, und der Gegner
 spielt jetzt mit der KI des Originals. **0.6.2 kam aus dem GEFECHT** (der
 Computergegner schummelt nicht mehr bei der Sicht, leicht/normal/schwer
@@ -129,7 +129,10 @@ unseres Beta-Testers **KayelGee**; **0.6.7 umfasst die Missionen 25 bis 27**
 — die Dicke Bertha und der Schlachtschiff-Turm wie im Original, Nebel auf
 Eiskarten ohne Flimmern, eine Mission 26, die endlich endet, die Werft mit
 ihrem Lager, eingenommene Flughäfen samt ihrer Flugzeuge, dazu die vierte
-Runde Meldungen von **KayelGee**. **Jede davon ist ein Halt auf diesem Weg, nicht sein Ende.** Was sich geändert hat, in einfachen Worten:
+Runde Meldungen von **KayelGee**; **0.6.8** bringt die fünfte Runde Meldungen
+von **KayelGee** mit einem Spielstand, der endlich wieder richtig lädt;
+**0.6.9** die Missionen 28 bis 33, das Speicherfenster des Originals und den
+Abschlussfilm nach Mission 33. **Jede davon ist ein Halt auf diesem Weg, nicht sein Ende.** Was sich geändert hat, in einfachen Worten:
 [CHANGELOG.de.md](CHANGELOG.de.md).
 
 **Mitmachen ist ausdrücklich erwünscht.** Wer eine Mission spielt und etwas

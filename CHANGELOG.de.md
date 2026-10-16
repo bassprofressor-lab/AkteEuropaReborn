@@ -14,6 +14,117 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.9 — 16.10.2026 · die ganze Kampagne ist durchgespielt
+
+> **Alle 33 Missionen sind jetzt durchgespielt.** Die Missionen 31 bis 33 liefen
+> ohne einen einzigen Befund durch — gemeldet wurde nur, dass nach dem Sieg in
+> Mission 33 der Abschlussfilm fehlte. Dazu kommt das **Speicherfenster des
+> Originals**, das in 0.6.8 noch als Einschränkung genannt war, und eine Reihe
+> von Fragen, die wir im Original nachgelesen haben, bevor wir etwas geändert
+> haben — bei den meisten mit dem Ergebnis: das ist so original. Jede Änderung
+> hat einen Gegenschalter, mit dem sich der alte Stand zurückholen lässt.
+
+### Danke an KayelGee
+
+KayelGee hat unsere Rückfrage aus 0.6.8 beantwortet: **die Untermission
+»Nachschubdepot beschützen« in Mission 2 startet jetzt korrekt** (Meldungen 8
+und 14 aus Runde 5). Damit ist die letzte offene Meldung seiner fünften Runde
+erledigt. Auch das Speicherfenster unten geht auf seine Meldung 4 zurück.
+Danke!
+
+### ⚠ Wichtig: alte Spielstände
+
+Spielstände liegen jetzt auf den **acht Plätzen des Originals** (Dateien
+`GAME.000.aesave` … `GAME.007.aesave`). Die Spielstände aus 0.6.8 und früher
+(`save_<Zahl>.aesave`) zeigt das neue Ladefenster **nicht** an. Sie sind nicht
+verloren: mit dem Startschalter `--speicherfenster-alt` kommt der alte
+Ladeschirm zurück, und darüber lassen sie sich weiter laden.
+
+### Neu
+
+- **Das Fenster »Spiel speichern« (Fensterart 15) wie im Original** (Meldung 4
+  von KayelGee, Runde 5). Bisher speicherte der Knopf im Pausenmenü sofort und
+  meldete sich nur mit einer Zeile. Jetzt öffnet sich das Fenster des Originals:
+  300 × 360 Bildpunkte, **sieben Plätze**, je Platz der Spielername, »Mission :
+  n« und der Name des Spielstands, ein freier Platz zeigt »Leere Position...«.
+  Man klickt einen Platz an, tippt einen Namen (bis 20 Zeichen) und drückt
+  **Enter** oder »Sichern«. Wie im Original wird an den vorhandenen Namen des
+  Platzes angehängt, und es gibt keine Rückfrage beim Überschreiben. Solange das
+  Fenster offen ist, steht das Spiel; beim Schliessen läuft es nur weiter, wenn
+  das Fenster selbst angehalten hatte. Gelesen in `0x473750` (Zeichner),
+  `0x458CB0` (Anleger) und `0x41D210` (Schreiber), in beiden Fassungen der
+  `GAME.EXE` gleich. Gegenschalter `--speicherfenster-alt`.
+- **Das Fenster »Spielstand laden« (Fensterart 14) wie im Original.** 300 × 400
+  Bildpunkte, **acht Plätze** — der achte ist der Stand vom Missionsende (siehe
+  unten). Nur belegte Plätze lassen sich anwählen; ein **Doppelklick** lädt,
+  ebenso Platz wählen und »Laden«. Es ersetzt auch den Ladeschirm, den »Spiel
+  laden« im Startmenü bisher öffnete. Gelesen in `0x4733B0` und `0x4589B0`.
+- **F2 speichert, F3 lädt** — die Tasten des Originals. Im Haupt-Menü des
+  Spiels öffnen die Knöpfe »Spielstand speichern« und »Altes Spiel laden«
+  dieselben Fenster, an der Stelle des Mauszeigers wie im Original.
+- **Stand vom Missionsende.** Nach einer gewonnenen Mission legt das Spiel wie
+  das Original einen Stand »Ende von Mission #n« auf den achten Platz
+  (`0x4CFC10`). Abschaltbar mit `--missionsende-stand-aus`. ⚠ Nur gebaut, noch
+  nicht im Spiel geprüft.
+- **Nach dem Sieg in Mission 33 laufen der Abschlussfilm und der Abspann.**
+  Bisher ging es nach der letzten Mission ohne Film zurück ins Menü. Im
+  Original spielt der Missionswechsel `0x4CFD80` erst den Film **33.RPL** (60
+  Sekunden), und hinter dem Vergleich auf Mission 33 (`0x4D0012`) fest
+  verdrahtet **34.RPL**, den **Abspann** (203 Sekunden) — dieser läuft klein in
+  der Mitte des Schirms (320 × 240, nicht vergrössert). Danach kommt das
+  Hauptmenü. Bei einer Niederlage läuft kein Film. Bei uns liefen Filme bisher
+  nur *vor* einer Mission, und nach Mission 33 gibt es keine nächste — darum
+  kamen die beiden nie. Gegenschalter `--abschlussfilm-alt`; mit
+  `--abspann-vollbild` läuft der Abspann auf dem ganzen Schirm. ⚠ *Unsere
+  Setzung*: wie gross »klein in der Mitte« auf einem Fenster ist, das nicht 4:3
+  ist.
+
+### Behoben
+
+- **Eingenommener Flughafen: abgeschossene Flugzeuge zählen nicht mehr mit.**
+  Eine zweite, unabhängige Lesung hat die Behebung aus 0.6.7 bestätigt: wird
+  ein Flughafen eingenommen, wechseln im Original alle Flugzeuge der Arten 1 bis
+  12 mit diesem Flughafen als Heimat den Besitzer — am Boden wie in der Luft;
+  die Versorgungshelis bleiben beim alten Besitzer (`0x43D214`). Eine kleine
+  Abweichung gab es: bei uns wurden auch schon abgeschossene Flugzeuge
+  »umgeschrieben«, das Original überspringt leere Sätze. Das hatte im Spiel keine
+  Folgen, verfälschte aber den Zähler.
+
+### Nachgeprüft: so ist es auch im Original
+
+- **Ein Transporter kann in einer eingenommenen Mine stecken bleiben**
+  (Mission 27, aus dem eigenen Spiel). Im Original kommt ein Materialtransporter
+  nur aus dem Gebäude, wenn die Zelle unter dem Ausgang ganz frei ist
+  (`0x409D57`) — ohne Frist, ohne zweiten Ausgang, ohne neuen Versuch. Steht dort
+  eine Einheit, bleibt er unsichtbar drin und zählt weiter für die Siegbedingung
+  »alle Einheiten vernichtet«. Fährt die Einheit weg, ist er nach wenigen
+  Sekunden draussen. Unser Nachbau tut genau dasselbe; nichts geändert.
+- **Die Kraftwerksruine auf Eiskarten** sieht wie ein blau-oliv geflecktes
+  Rechteck aus. Ein dritter, gründlicher Durchgang hat das bestätigt: in keinem
+  der 35 Grafiksätze, auf keiner der beiden CDs und in keinem Archiv gibt es
+  eine Schneefassung des zerstörten Kraftwerks. Für Wüste und Dschungel haben
+  die Grafiker die Ruine eigens neu gemalt, für Schnee die Grasruine kopiert —
+  ein Fehler in den Originaldaten. Er bleibt **originalgetreu** so.
+- **Schiffe drehen in Achtelschritten** wie die Dicke Bertha (`0x404E80`), so
+  steht es im Original.
+- **Im Briefing von Mission 32 fehlen die Pfeile** — das Briefing hat nur einen
+  Eintrag, das Original zeigt dort ebenfalls keine.
+
+### Bekannte Einschränkungen
+
+- **Kein automatisches Speichern.** Das Original kann alle 5, 10 oder 20 Minuten
+  auf den achten Platz speichern (ab Werk aus); das ist noch nicht gebaut.
+- **Der Spielername** in den Speicherplätzen ist fest »SPIELER« — wir haben noch
+  keine Spielerprofile (*unsere Setzung*).
+- **ESC** schliesst nur das Speicher- bzw. Ladefenster; das Original schliesst
+  damit fast alle offenen Fenster.
+- **Der Knopf »Credits«** spielt im Original den Abspann 34.RPL; bei uns zeigt
+  er weiter die Textliste. Nach dem Abspann startet das Original im Hauptmenü
+  gleich eine Demo; bei uns nicht.
+- **Der Zustand der Kampagnen-KI steht nicht im Spielstand**, und **das
+  Mündungsfeuer ist eine Zwischenlösung**, bis SHOOT.CWT ausgelesen ist (beides
+  wie in 0.6.8).
+
 ## 0.6.8 — 13.10.2026 · die fünfte Runde Meldungen von KayelGee
 
 > Eine Zwischenfassung ohne neue Missionen: die fünfte Runde Meldungen von
