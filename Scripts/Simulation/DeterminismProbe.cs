@@ -65,6 +65,8 @@ public partial class MapEntityLayer
             h.Add(e.Deposit);
             h.Add(e.Target);
             h.Add(e.Facing);
+            if (Determinism.PruefsummeGleitkomma)
+            { h.Add(Determinism.Gerundet(e.Pos.X)); h.Add(Determinism.Gerundet(e.Pos.Y)); }
         }
 
         // Die Flugzeuge stehen in einer EIGENEN Liste und tragen denselben
@@ -87,6 +89,11 @@ public partial class MapEntityLayer
             h.Add(a.Dead);
             h.Add(a.Target);
             h.Add(a.Customer);
+            if (Determinism.PruefsummeGleitkomma)
+            {
+                h.Add(Determinism.Gerundet(a.Pos.X)); h.Add(Determinism.Gerundet(a.Pos.Y));
+                h.Add(Determinism.Gerundet(a.Alt));
+            }
         }
 
         for (int p = 0; p < _money.Length; p++) h.Add(_money[p]);

@@ -195,6 +195,27 @@ public static class Determinism
     public static bool SystemzufallAlt;
 
     /// <summary>
+    /// <c>--pruefsumme-gleitkomma</c> (16.10.2026, Bewertung P5 in
+    /// berichte/desync-opus.md): die Prüfsumme nimmt ZUSÄTZLICH die
+    /// Gleitkommapositionen auf — Einheiten <c>Pos</c>, Flugzeuge <c>Pos</c>
+    /// und <c>Alt</c> —, gerundet auf 1/256 Bildpunkt.
+    ///
+    /// <para>⚠ Ohne den Schalter bleibt die Summe, wie sie ist (»nichts
+    /// Fliesskommiges«, siehe Kopf): ein Gleitkomma-Auseinanderlaufen zwischen
+    /// zwei Rechnern zeigte sich dann erst, wenn es eine Zelle, eine Richtung
+    /// oder einen Treffer kippt — Takte bis Minuten später, und an einer
+    /// Stelle, die nichts mit der Ursache zu tun hat. Mit dem Schalter sieht
+    /// man es im ersten Prüftakt. Der Zahlenauszug (<c>DeterminismSnapshot</c>)
+    /// nimmt die Positionen NICHT auf; meldet der Netzprüfstand »Prüfsummen
+    /// verschieden, Auszüge gleich«, ist das unter diesem Schalter genau der
+    /// Befund »Gleitkomma«.</para>
+    /// </summary>
+    public static bool PruefsummeGleitkomma;
+
+    /// <summary>Eine Gleitkommazahl für die Prüfsumme: auf 1/256 gerundet.</summary>
+    public static int Gerundet(float v) => (int)System.MathF.Round(v * 256f);
+
+    /// <summary>
     /// Die Schalter, die den Keim betreffen, EINMAL lesen — und zwar früh
     /// genug: <see cref="NewMap"/> läuft beim Kartenladen, also bevor der
     /// Prüfstand selbst zum ersten Mal drankommt.
@@ -225,6 +246,7 @@ public static class Determinism
         {
             if (a == "--determinism-poison") Poisoned = true;
             else if (a == "--systemzufall-alt") SystemzufallAlt = true;     // bug-529
+            else if (a == "--pruefsumme-gleitkomma") PruefsummeGleitkomma = true;
             else if (a.StartsWith("--determinism-seed="))
             {
                 string v = a["--determinism-seed=".Length..];
