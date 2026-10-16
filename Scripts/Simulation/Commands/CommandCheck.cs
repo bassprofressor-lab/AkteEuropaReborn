@@ -94,7 +94,11 @@ public sealed partial class CommandCheckRunner : Node
             else if (a.StartsWith("--befehl-poison=")) int.TryParse(a["--befehl-poison=".Length..], out r._poison);
             else if (a.StartsWith("--befehl-out=")) outPath = a["--befehl-out=".Length..];
         }
-        if (!on) return false;
+        // ⚠ bug-546 (16.10.2026, Demo-Dauerlauf): der Laeufer wurde VOR der Frage »ist der
+        // Pruefstand ueberhaupt an?« angelegt und danach liegen gelassen — ein Waisenknoten
+        // je geladener Karte (--demo-runden-check: 39 Waisen nach 39 Demos, Godot meldete
+        // »39 ObjectDB instances were leaked at exit«). Gegenschalter --waisenknoten-alt.
+        if (!on) { if (System.Array.IndexOf(Core.CommandLine.Args, "--waisenknoten-alt") < 0) r.Free(); return false; }
         // ⚠⚠ 16.10.2026, bug-531 — DER PRÜFSTAND WAR SEIT DEM 04.10. ROT, und
         // nicht wegen des Rings. Seit bug-418/425 schickt PostMove die
         // Formations- bzw. die rohe Klickzelle (wie das Original 0x435100 /

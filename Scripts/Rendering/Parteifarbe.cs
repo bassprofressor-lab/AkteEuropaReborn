@@ -151,7 +151,50 @@ public partial class MapEntityLayer
     public const int NeutralFarbe = 10;
     private static readonly uint[] Neutralband = { 0x6f6363, 0x5b5353, 0x4b3f3f, 0x372f2f };
 
-    private static readonly Dictionary<(ulong, int), Texture2D?> _parteiTex = new();
+    /// <summary>
+    /// ⭐⭐ 16.10.2026, bug-545 — <b>DER ZWISCHENSPEICHER GEHÖRT DER EBENE, NICHT DEM
+    /// PROGRAMM</b> (KayelGee: »wenn man das Game eine lange Zeit laufen lässt, buggen
+    /// irgendwann die Demos«, Bild <c>Bug Bilder/kayelgeedemocrash.png</c>: Kulisse WEISS).
+    /// <para>Bis 0.6.9 war er <c>static</c> und hing am Schlüssel (RID des Quellbilds,
+    /// Besitzer). Jede neue <see cref="MapEntityLayer"/> — jedes Demo, jede Mission — lädt
+    /// ihre Bilder NEU, also mit neuen RIDs: der Speicher traf nie wieder, wuchs je Demo um
+    /// ~200 umgefärbte Texturen (gemessen <c>--demo-runden-check</c>: 0 → 2236 nach einem
+    /// Umlauf, 4573 nach zweien; Godot-Objekte 2162 → 12469) und hielt sie samt dem
+    /// umgefärbten GEBÄUDEATLAS je Besitzer für immer fest. Läuft der Grafikspeicher voll,
+    /// liefert <c>ImageTexture.CreateFromImage</c> eine Textur mit toter RID, und die wird
+    /// WEISS gezeichnet (siehe die Warnung in <c>PatternTexture</c>, 11.08.) — zuerst die
+    /// 10160×2145 große Demokarte.</para>
+    /// <para>Das Original färbt im Blitter um (<c>0x4AC450</c>, Palettenversatz
+    /// <c>4·Besitzer</c>) und legt dafür nichts an; es kann gar nicht wachsen.</para>
+    /// <para>Jetzt: je Ebene ein eigener Speicher, und die selbst angelegten Texturen
+    /// werden beim Verlassen des Baums AUSDRÜCKLICH freigegeben (<see cref="ParteifarbeFreigeben"/>)
+    /// — nicht erst, wenn der .NET-Sammler irgendwann läuft. Gegenschalter
+    /// <c>--demo-runden-alt</c>: der alte statische Speicher ohne Freigabe.</para>
+    /// </summary>
+    private readonly Dictionary<(ulong, int), Texture2D?> _parteiTex = new();
+    private readonly List<Texture2D> _parteiTexEigene = new();
+    private static readonly Dictionary<(ulong, int), Texture2D?> _parteiTexAlt = new();
+
+    /// <summary><c>--demo-runden-alt</c>: Nullmodell zu bug-545 (statischer Speicher, keine Freigabe).</summary>
+    public static bool ParteiTexAlt;
+
+    /// <summary>Wie viele umgefärbte Texturen gerade festgehalten werden (eigene + alter Speicher).</summary>
+    public int ParteiTexZahl => ParteiTexAlt ? _parteiTexAlt.Count : _parteiTex.Count;
+    public static int ParteiTexAltZahl => _parteiTexAlt.Count;
+    /// <summary>Wie viele umgefärbte Texturen die Ebenen bisher freigegeben haben.</summary>
+    public static int ParteiTexFreigegeben;
+
+    public override void _ExitTree() => ParteifarbeFreigeben();
+
+    /// <summary>bug-545: die eigenen umgefärbten Texturen sofort freigeben.</summary>
+    private void ParteifarbeFreigeben()
+    {
+        if (ParteiTexAlt) return;
+        foreach (var t in _parteiTexEigene)
+            if (GodotObject.IsInstanceValid(t)) { t.Dispose(); ParteiTexFreigegeben++; }
+        _parteiTexEigene.Clear();
+        _parteiTex.Clear();
+    }
 
     /// <summary>Wie viele Bilder umgefärbt wurden, wie viele Bildpunkte dabei
     /// im Band lagen, und wie viele Bilder GAR KEINEN Bandpunkt hatten.
@@ -182,7 +225,7 @@ public partial class MapEntityLayer
     /// unverändert zurück — seine Vierergruppe IST die Quellgruppe, die
     /// Umrechnung wäre die Kennabbildung.
     /// </summary>
-    private static Texture2D? Parteifarbe(Texture2D? tex, int besitzer)
+    private Texture2D? Parteifarbe(Texture2D? tex, int besitzer)
     {
         if (tex == null || KeineParteifarbe) return tex;
         // ⚠⚠ 25.08.2026, von ihm gemeldet: »im original haben die Einheiten die
@@ -196,10 +239,11 @@ public partial class MapEntityLayer
         if ((besitzer < 0 || besitzer >= Parteien) && besitzer != NeutralFarbe) return tex;    // 255 = herrenlos
 
         var key = (tex.GetRid().Id, besitzer);
-        if (_parteiTex.TryGetValue(key, out var fertig)) return fertig;
+        var speicher = ParteiTexAlt ? _parteiTexAlt : _parteiTex;     // bug-545
+        if (speicher.TryGetValue(key, out var fertig)) return fertig;
 
         var img = tex.GetImage();
-        if (img == null) { _parteiTex[key] = tex; return tex; }
+        if (img == null) { speicher[key] = tex; return tex; }
         if (img.GetFormat() != Image.Format.Rgba8)
         {
             img = Image.CreateFromData(img.GetWidth(), img.GetHeight(), false,
@@ -234,8 +278,9 @@ public partial class MapEntityLayer
             aus = ImageTexture.CreateFromImage(
                       Image.CreateFromData(img.GetWidth(), img.GetHeight(), false,
                                            Image.Format.Rgba8, d));
+            if (!ParteiTexAlt) _parteiTexEigene.Add(aus);       // bug-545: gehoert dieser Ebene
         }
-        _parteiTex[key] = aus;
+        speicher[key] = aus;
         return aus;
     }
 

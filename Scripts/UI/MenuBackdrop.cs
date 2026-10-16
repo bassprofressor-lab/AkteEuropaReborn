@@ -134,6 +134,13 @@ public partial class MenuBackdrop : CanvasLayer
     /// <c>max(20 s, Tafel/50)</c>, also immer 20 s. Nullmodell.</summary>
     public static bool DemoDauerAlt;
 
+    /// <summary><c>--demo-runden-alt</c> — Nullmodell zum Fix fuer die Langlauf-Demos
+    /// (siehe DemoRundenCheck.cs).</summary>
+    public static bool DemoRundenAlt;
+
+    /// <summary>bug-545: wie viele Demokarten-Texturen ausdruecklich freigegeben wurden.</summary>
+    public static int KartenFreigegeben;
+
     /// <summary>bug-483: wie lange jedes beendete Demo auf dem Schirm war —
     /// ab dem ersten Bild (<see cref="Show"/>) bis zum Wechsel. Für
     /// <c>--demodauer-check</c>.</summary>
@@ -501,7 +508,17 @@ public partial class MenuBackdrop : CanvasLayer
 
     private void Show(Image img, string map)
     {
+        // ⭐ bug-545: die vorige Demokarte (bis 10160x2145 = 87 MB) und das gelesene Bild
+        // AUSDRUECKLICH freigeben. Bis 0.6.9 hielt sie die .NET-Huelle fest, bis der Sammler
+        // zufaellig lief — und der laeuft nach dem verwalteten Speicher, nicht nach dem
+        // Grafikspeicher. Gegenschalter --demo-runden-alt.
+        var vorige = _sprite.Texture;
         _sprite.Texture = ImageTexture.CreateFromImage(img);
+        if (!DemoRundenAlt)
+        {
+            if (vorige != null && IsInstanceValid(vorige)) { vorige.Dispose(); KartenFreigegeben++; }
+            img.Dispose();
+        }
 
         // Für jedes Demo eine FRISCHE Entitätenschicht.
         //
@@ -558,6 +575,7 @@ public partial class MenuBackdrop : CanvasLayer
         Place();
         _left = _leftSoll; _laeuftSeit = 0f;             // bug-483: ab jetzt zählt es
         GD.Print($"Menü: Demo {map} läuft {_leftSoll:0.0} s ({Ticks[Mathf.Clamp(demoNr, 0, DemoCount)]} Bilder / {DemoBildrate:0} Bilder/s{(DemoDauerAlt ? ", --demo-dauer-alt" : "")}; {_anchors.Count} Basen, Blick von Platz {seen}, Kamera {_anchors[0]}, Karte {_sprite.Texture.GetSize()}{(DemokameraAlt ? "" : " — gespeicherte Sicht, bug-470")})");
+        if (RundenCheckUmlaeufe > 0) RundenCheckDemo(demoNr);      // --demo-runden-check
     }
 
     // ⭐ 31.08.2026 — System.Text.Json statt Godot-Json, wie in

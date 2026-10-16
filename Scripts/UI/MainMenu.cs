@@ -654,6 +654,11 @@ public partial class MainMenu : Control
             // bug-525: Credits-Knopf = Abspann 34.RPL (MainMenuCredits.cs)
             else if (a == "--credits-text") CreditsText = true;
             else if (a == "--credits-check") _creditsCheck = true;
+            // --demo-runden-check: viele Demo-Umlaeufe, Runde n = Runde 1? (DemoRundenCheck.cs)
+            else if (a == "--demo-runden-check") MenuBackdrop.RundenCheckUmlaeufe = 3;
+            else if (a.StartsWith("--demo-runden-check=")) MenuBackdrop.RundenCheckUmlaeufe = Mathf.Max(1, a["--demo-runden-check=".Length..].ToInt());
+            else if (a.StartsWith("--demo-runden-takte=")) MenuBackdrop.RundenCheckTakte = Mathf.Max(1, a["--demo-runden-takte=".Length..].ToInt());
+            else if (a == "--demo-runden-alt") { MenuBackdrop.DemoRundenAlt = true; Rendering.MapEntityLayer.ParteiTexAlt = true; }   // bug-545 Nullmodell
             else if (a == "--demodauer-check") _demodauerCheck = 5;
             else if (a.StartsWith("--demodauer-check=")) _demodauerCheck = Mathf.Max(1, a["--demodauer-check=".Length..].ToInt());
         }
