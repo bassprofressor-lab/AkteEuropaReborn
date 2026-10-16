@@ -1571,6 +1571,10 @@ public partial class MapViewer : Node2D
     private float _garageCheckAfter, _garageAuswertungIn;
     /// <summary><c>--tuerklick-check</c>: nach 3 s.</summary>
     private float _tuerklickAfter, _tuerklickNachher;
+    /// <summary><c>--r6-check=NAME</c> (KayelGee R6, Auswahl/Depot/Einnahme):
+    /// Aufbau nach 3 s, Auswertung 3 s spaeter, dann Ende. Simulation/R6AuswahlCheck.cs.</summary>
+    private string _r6Check = "";
+    private float _r6After, _r6AuswertungIn;
     private bool _railRepairReady;
 
     private string _look = "";
@@ -4736,6 +4740,8 @@ _mausProbePunkt = karte;
             else if (a == "--garage-balken-alt") MapEntityLayer.GarageBalkenAlt = true;
             else if (a == "--tuerklick-einheit-alt") MapEntityLayer.TuerklickEinheitAlt = true;
             else if (a == "--tuerklick-check") _tuerklickAfter = 3f;
+            else if (a.StartsWith("--r6-check=")) { _r6Check = a["--r6-check=".Length..]; _r6After = 3f; }
+            else if (a == "--tuermarken-alt") MapEntityLayer.TuermarkenAlt = true;
             else if (a == "--garage-ziel-alt") MapEntityLayer.GarageZielAlt = true;
             else if (a == "--garage-unsichtbar-check") _garageCheckAfter = 3f;
             else if (a == "--laden-vorlage-alt") MapEntityLayer.LadenVorlageAlt = true;
@@ -5696,6 +5702,16 @@ _mausProbePunkt = karte;
         {
             _tuerklickNachher -= (float)delta;
             if (_tuerklickNachher <= 0f) { _tuerklickNachher = -1f; GD.Print(_entities.TuerklickNachher()); }
+        }
+        if (_r6After > 0f)
+        {
+            _r6After -= (float)delta;
+            if (_r6After <= 0f) { _r6After = -1f; GD.Print(_entities.R6Start(_r6Check)); _r6AuswertungIn = 3f; }
+        }
+        if (_r6AuswertungIn > 0f)
+        {
+            _r6AuswertungIn -= (float)delta;
+            if (_r6AuswertungIn <= 0f) { _r6AuswertungIn = -1f; GD.Print(_entities.R6Auswerten(_r6Check)); GetTree().Quit(); }
         }
         if (_garageCheckAfter > 0f)
         {

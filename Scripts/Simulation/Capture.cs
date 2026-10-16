@@ -494,9 +494,19 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private void DrawCaptureBars()
     {
+        // bug-560 (KayelGee R6#4, Bild kayelgeeneuerbug.png): »nach dem Einnehmen
+        // einer Basis bleiben zwei kleine graue Balken vor dem Depot«. Das sind
+        // DIESE beiden Tuermarken (6x4 auf Tuer und Zelle davor), unsere Zutat aus
+        // 0.4.0. Seit bug-466 bleibt +0x3E nach dem Abschluss stehen und zaehlt im
+        // Abbau herunter, der Eindringling ist dabei 0xFF -> OwnerColor(255) =
+        // PropColor hellgrau: zwei graue Kaestchen fuer bis zu TP Takte.
+        // Das Original zeichnet am Gebaeude bei +0x3E > 0 nur den Einnahmebalken
+        // (Art-10-Zeichner C 0x42B20D cmp word[+0x3E],0 -> 0x42B227 call 0x4012F8,
+        // sonst Tab-Balken 0x42B251) und KEINE Tuermarke. --tuermarken-alt = alt.
+        if (!TuermarkenAlt) return;
         foreach (var b in _entities)
         {
-            if (!Capturable(b) || b.CaptureProgress <= 0 || b.CaptureTotal <= 0) continue;
+            if (!TuermarkeSichtbar(b)) continue;
             var c = OwnerColor(b.Intruder);
             var (door, front) = CaptureCells(b);
             DrawRect(new Rect2(CellCenter(door.X, door.Y) - new Vector2(3, 2),
@@ -504,6 +514,25 @@ public partial class MapEntityLayer : Node2D
             DrawRect(new Rect2(CellCenter(front.X, front.Y) - new Vector2(3, 2),
                                new Vector2(6, 4)), new Color(c.R, c.G, c.B, 0.35f));
         }
+    }
+
+    /// <summary><c>--tuermarken-alt</c> — Stand bis 0.6.9: die zwei Tuermarken
+    /// der Einnahme werden gezeichnet, auch im Abbau nach dem Abschluss (grau).
+    /// Nullmodell zu bug-560.</summary>
+    public static bool TuermarkenAlt;
+
+    /// <summary>Bekaeme dieses Gebaeude unter --tuermarken-alt die zwei Marken?</summary>
+    private bool TuermarkeSichtbar(Entity b)
+        => Capturable(b) && b.CaptureProgress > 0 && b.CaptureTotal > 0;
+
+    /// <summary>Wieviele Tuermarken der Zeichner JETZT malen wuerde (2 je
+    /// Gebaeude) — fuer --tuermarken-check, derselbe Weg wie DrawCaptureBars.</summary>
+    public int TuermarkenGezeichnet()
+    {
+        if (!TuermarkenAlt) return 0;
+        int n = 0;
+        foreach (var b in _entities) if (TuermarkeSichtbar(b)) n += 2;
+        return n;
     }
 
     /// <summary>Where the doors are, for the harness and the overlay.</summary>
