@@ -1326,6 +1326,7 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_abschlussfilmCheck) { AbschlussfilmLauf(); return; }
         if (_siegCheck)
         {
             GD.Print(_entities.SiegCheck());
@@ -3938,6 +3939,11 @@ _mausProbePunkt = karte;
             else if (a == "--demo-queue") { _demo = true; _demoQueue = true; }
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
             else if (a == "--sieg-check") _siegCheck = true;
+            // 16.10.2026 — 33.RPL + 34.RPL nach Mission 33, siehe Abschlussfilm.cs.
+            else if (a == "--abschlussfilm-check") _abschlussfilmCheck = true;
+            else if (a == "--abschlussfilm-zeigen") { _abschlussfilmCheck = true; _abschlussfilmZeigen = true; }
+            else if (a == "--abschlussfilm-alt") AbschlussfilmAlt = true;
+            else if (a == "--abspann-vollbild") UI.MoviePlayer.AbspannVollbild = true;
             else if (a == "--turmblick-check") _turmCheck = true;
             else if (a == "--rumpfblick-check") _rumpfCheck = true;
             else if (a == "--schiffdreh-check") _drehCheck = true;
@@ -8242,7 +8248,7 @@ _mausProbePunkt = karte;
     private void ContinueAfterMission()
     {
         if (_nextMission > 0 && ZeigeMitnahme()) return;
-        if (_nextMission > 0) StartNextMission(); else ToMenu();
+        if (_nextMission > 0) StartNextMission(); else KampagnenEnde();
     }
 
     private bool ZeigeMitnahme()
@@ -8328,6 +8334,8 @@ _mausProbePunkt = karte;
         UI.HelpWindow.CloseAll();
         UI.HelpWindow.CommitClose();
         int mission = UI.SkirmishSetup.CampaignMission;
+        // 0x4D0012: cmp word[0x539934],0x21 — siehe Abschlussfilm.cs.
+        _letzteMissionGewonnen = won && mission == 33;
 
         // Der Missionsname in Rot ist im Original schlicht »Mission N«: der
         // Kartenlader indiziert die Namenstabelle mit dem Kampagnenzaehler

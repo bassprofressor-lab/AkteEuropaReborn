@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.UI;
+namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
@@ -177,9 +177,11 @@ public partial class MoviePlayer : CanvasLayer
     /// <see cref="Disabled"/>) — der Aufrufer macht dann sofort weiter und
     /// braucht keinen zweiten Weg.</para>
     /// </summary>
-    public static bool Play(Node eltern, int nummer, Action weiter)
+    public static bool Play(Node eltern, int nummer, Action weiter, bool fenster = false)
     {
-        if (Disabled) return false;
+        // ⚠ Der Pruefstand laeuft mit --no-movie (= Disabled) — das Protokoll
+        // muss davor stehen, sonst misst er nur den Schalter.
+        if (Disabled && !NurProtokoll) return false;
         string? pfad = Find(nummer);
         if (pfad == null)
         {
@@ -187,9 +189,21 @@ public partial class MoviePlayer : CanvasLayer
                      string.Join(", ", Places));
             return false;
         }
+        // 16.10.2026, Abschlussfilm: der Pruefstand will nur die REIHENFOLGE
+        // wissen und keine 263 Sekunden Film abwarten.
+        if (NurProtokoll)
+        {
+            Protokoll.Add(nummer);
+            GD.Print($"film-protokoll: {nummer} -> {pfad}{(fenster ? " (Fenster 320x240)" : "")}");
+            weiter();
+            return true;
+        }
         try
         {
-            var mp = new MoviePlayer(pfad, weiter);
+            var mp = new MoviePlayer(pfad, weiter, fenster);
+            // ⚠ Am Missionsende steht der Baum in der Pause — ohne Always
+            // liefe der Abschlussfilm nie los.
+            mp.ProcessMode = ProcessModeEnum.Always;
             eltern.AddChild(mp);
             return true;
         }
@@ -201,7 +215,15 @@ public partial class MoviePlayer : CanvasLayer
         }
     }
 
-    private MoviePlayer(string pfad, Action weiter)
+    /// <summary><c>--abschlussfilm-check</c>: Filme nicht zeigen, nur ihre
+    /// Nummern merken und sofort weitermachen.</summary>
+    public static bool NurProtokoll;
+    /// <summary><c>--abspann-vollbild</c>: den Abspann wie einen Missionsfilm
+    /// aufs ganze Fenster ziehen.</summary>
+    public static bool AbspannVollbild;
+    public static readonly System.Collections.Generic.List<int> Protokoll = new();
+
+    private MoviePlayer(string pfad, Action weiter, bool fenster = false)
     {
         _film = new RplFile(pfad);
         _weiter = weiter;
@@ -222,6 +244,17 @@ public partial class MoviePlayer : CanvasLayer
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
         };
         _bild.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        // ⭐ 16.10.2026: der ABSPANN 34.RPL laeuft im Original mit Fahne 0
+        // (0x4D49F0(Name, 0), Fahne gelesen @0x4D4B50) — 320x240 UNSKALIERT in
+        // der Mitte des 640x480-Schirms; die Missionsfilme mit Fahne 1 fuellen
+        // ihn. Siehe berichte/abschlussfilm-fable.md. Bei uns heisst das: die
+        // mittlere Haelfte des Fensters in beiden Richtungen. ⚠ SETZUNG fuer
+        // Fenster, die nicht 4:3 sind. Nullmodell --abspann-vollbild.
+        if (fenster && !AbspannVollbild)
+        {
+            _bild.AnchorLeft = _bild.AnchorTop = 0.25f;
+            _bild.AnchorRight = _bild.AnchorBottom = 0.75f;
+        }
         AddChild(_bild);
 
         _musikLief = MusikAnhalten();
