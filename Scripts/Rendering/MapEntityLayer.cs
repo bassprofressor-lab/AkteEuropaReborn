@@ -11874,6 +11874,11 @@ public partial class MapEntityLayer : Node2D
         // (VerbuendeterHier, StrgAngriffVerweigert — Simulation/VerbuendetenAngriff.cs).
         // Gegenschalter --kein-angriff-auf-verbuendete.
         if (!KeinAngriffAufVerbuendete && a.Owner != b.Owner) return true;
+        // ⭐ bug-552 (KayelGee 14.10. »Friendly Fire ist im Original moeglich«): auch die
+        // EIGENE Einheit ist ein Ziel — der Klickarm 2 (C 0x437477, F 0x4365D7) setzt Busbefehl
+        // 11 ohne Eignerfrage, nur ein Fusssoldat als ZIEL eines Einzelnen wird abgewiesen
+        // (StrgAngriffVerweigert). Simulation/Eigenbeschuss.cs, --eigenangriff-alt.
+        if (!EigenangriffAlt && !KeinAngriffAufVerbuendete && a.Owner == b.Owner && !ReferenceEquals(a, b)) return true;
         return _haveAllies ? !_allied[a.Owner, b.Owner] : b.Owner != a.Owner;
     }
 
@@ -12495,7 +12500,8 @@ public partial class MapEntityLayer : Node2D
         // F 0x40F03A), auch nicht befohlen; nur die Schiessuhr der Fahrzeuge traegt die
         // Ausnahme. ⚠ UNSERE Setzung: das Ziel wird verworfen statt gehalten.
         // Simulation/VerbuendetenAngriff.cs.
-        if (!KeinAngriffAufVerbuendete && e.Infantry >= 0 && VerbuendetesZiel(e, t))
+        if (!KeinAngriffAufVerbuendete && e.Infantry >= 0
+            && (VerbuendetesZiel(e, t) || (!EigenangriffAlt && t.Owner == e.Owner)))   // bug-552: T[p,p] = 1
         {
             FussVerbuendetFallengelassen++;
             if (Schussgruende) e.Schussgrund = "Fusssoldat schiesst nicht auf Verbuendete";
@@ -13311,6 +13317,7 @@ public partial class MapEntityLayer : Node2D
         if (victim.Dead) return;
         if (_fireAtCheckAn) _fireAtTreffer.Add((si, vi));                   // --fireat-check
         var shooter = si >= 0 && si < _entities.Count ? _entities[si] : null;
+        if (shooter != null && shooter.Owner == victim.Owner) EigenTreffer++;   // --eigenbeschuss-check
         // ⭐ 11.09.2026 — der Selbstverteidiger-Eintrag (@0x40CA58, VOR den
         // Sonderfaellen und vor dem Schaden). Simulation/Selbstverteidiger.cs.
         if (!GegenschussSofort) SelbstverteidigerEintrag(shooter, si, victim, vi);
@@ -13770,7 +13777,16 @@ public partial class MapEntityLayer : Node2D
                                  // Angriff genau auf diese Einheit (UKOL 4 + UTOK_NA, C 0x45294F).
                                  // Gegenschalter --kein-angriff-auf-verbuendete.
                                  && !(!KeinAngriffAufVerbuendete && _entities[p.Shooter].Ordered
-                                      && _entities[p.Shooter].Target == occ);
+                                      && _entities[p.Shooter].Target == occ
+                                      // bug-552: die Ausnahme steht nur im EINHEITENzweig
+                                      // (imap < 8000); die Infanteriezelle fragt pratelska_infa
+                                      // ohne sie (0x452B9C).
+                                      && (EigenangriffAlt || _entities[occ].Infantry < 0))
+                                 // ⭐ bug-553: ein GEBAEUDE fragt kein Buendnis (Zweig 60000..60299,
+                                 // 0x452D1E..0x452DED; 1 Tafelzugriff in 0x452190..0x453057, und der
+                                 // liegt im Einheitenzweig @0x452947) — Geschosse schlagen auch in
+                                 // eigene und verbuendete Gebaeude ein. --gebaeude-durchflug-alt.
+                                 && (GebaeudeDurchflugAlt || !_entities[occ].IsBuilding);
                     if (!eigen && !freund && !KeineEinschlagHoehen)
                     {
                         int schwelle = SchwelleAn(zc, zr);
@@ -13817,6 +13833,9 @@ public partial class MapEntityLayer : Node2D
                                        && !_entities[occ].IsProp ? occ : -1;
                             GeschossGestoppt++;
                             GeschossHaltZelle = new Vector2I(zc, zr);   // --stumpf-geschoss-probe
+                            if (p.Target >= 0 && p.Shooter >= 0 && p.Shooter < _entities.Count
+                                && !IsHostile(_entities[p.Shooter], _entities[p.Target]))
+                                EigenbeschussHalt++;                     // bug-552/553, --eigenbeschuss-check
                             gestoppt = true;
                         }
                     }

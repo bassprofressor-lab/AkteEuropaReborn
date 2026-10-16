@@ -1452,6 +1452,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (MapEntityLayer.EigenbeschussCheck)
+        {
+            GD.Print(_entities.EigenbeschussPruefung());
+            GetTree().Quit(0);
+            return;
+        }
         if (_stapellaufCheck)
         {
             GD.Print(_entities.StapellaufCheck());
@@ -4333,6 +4339,9 @@ _mausProbePunkt = karte;
             else if (a == "--bombenabwurf-alt") MapEntityLayer.BombenabwurfAlt = true;
             else if (a == "--bomber-abwurf-check") MapEntityLayer.BomberAbwurfCheck = true;
             else if (a == "--bombe-geschosstempo") MapEntityLayer.BombeGeschosstempo = true;
+            else if (a == "--gebaeude-durchflug-alt") MapEntityLayer.GebaeudeDurchflugAlt = true;
+            else if (a == "--eigenangriff-alt") MapEntityLayer.EigenangriffAlt = true;
+            else if (a == "--eigenbeschuss-check") MapEntityLayer.EigenbeschussCheck = true;
             else if (a == "--balkenbild-alt") MapEntityLayer.BalkenbildAlt = true;
             // ⭐⭐ 03.10.2026 — Maus, Tab, Handsteuerung Boden (bug-411/412/414,
             // berichte/maus-tab-handsteuerung-fable.md; MausTabLauf.cs, Simulation/

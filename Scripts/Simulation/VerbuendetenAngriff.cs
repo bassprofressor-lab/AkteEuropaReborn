@@ -75,6 +75,21 @@ public partial class MapEntityLayer
         foreach (int i in _sel) si = i;
         if (si < 0 || si >= _entities.Count) return false;
         var s = _entities[si];
+        // ⭐⭐ bug-552 — BERICHTIGUNG der Lesung vom 15.09. (verbuendete-fable §1.6): das
+        // Klassenbyte @0x4374B4 (F 0x436614) ist das des ZIELS, nicht des Gewaehlten —
+        // `eax = bx = word[0x502AD8]` (Zeigerziel), `cl = byte[78·bx + 0x6E26D2]`. Also:
+        // EINE Einheit gewaehlt, unter dem Zeiger ein FUSSSOLDAT, T[Betrachter, Eigner] != 0
+        // (verbuendet ODER eigen — die Diagonale steht auf 1) -> nichts. Wer gewaehlt ist,
+        // spielt keine Rolle. --eigenangriff-alt = die alte Lesart.
+        if (!EigenangriffAlt)
+        {
+            if (s.IsBuilding) return false;
+            int h0 = Pick(mapPos);
+            if (h0 < 0) return false;
+            var z = _entities[h0];
+            return !z.IsBuilding && !z.IsProp && !z.Dead && z.Infantry >= 0
+                   && z.Owner is >= 0 and <= 7 && Allied(ViewPlayer, z.Owner);
+        }
         if (s.IsBuilding || s.Infantry < 0) return false;
         int hit = Pick(mapPos);
         if (hit < 0) return false;
@@ -89,7 +104,8 @@ public partial class MapEntityLayer
         if (StrgAngriffVerweigert(mapPos))
         {
             StrgFusssoldatVerweigert++;
-            _order = "Ein einzelner Fusssoldat greift keinen Verbuendeten an.";
+            _order = EigenangriffAlt ? "Ein einzelner Fusssoldat greift keinen Verbuendeten an."
+                                     : "Eigene und verbuendete Fusssoldaten sind kein Angriffsziel.";   // bug-552
             UpdatePanel();
             return;
         }
@@ -189,12 +205,21 @@ public partial class MapEntityLayer
 
         // ---- 2. einzelner Fusssoldat: nichts --------------------------------------
         _sel.Clear(); _sel.Add(fi); _selected = fi;
-        int verw0 = StrgFusssoldatVerweigert;
+        int verw0 = StrgFusssoldatVerweigert, fallA = FussVerbuendetFallengelassen, hpA = a.Hp;
         sb.AppendLine($"  (vor dem Klick: Auswahl {_sel.Count}, Fuss {f.Infantry}, CanFight {CanFight(f)}, IstAngriffsziel {IstAngriffsziel(f, a)}, "
                     + $"{Treffer(a.Pos)}, verweigert {StrgAngriffVerweigert(a.Pos)})");
         StrgRechtsklick(a.Pos, false);
         Takte(20);
         bool nichts = f.Target < 0 && f.AngriffsZelle == null && f.Path == null;
+        // bug-552: der Klickarm weist nach dem ZIEL ab (Fusssoldat), nicht nach dem Gewaehlten —
+        // ein Fusssoldat gegen ein verbuendetes FAHRZEUG bekommt den Befehl, und die
+        // Infanterieuhr (C 0x40F208) laesst ihn fallen, ohne zu schiessen.
+        if (!EigenangriffAlt)
+            Soll(KeinAngriffAufVerbuendete || (StrgFusssoldatVerweigert == verw0 && f.Target < 0
+                                               && FussVerbuendetFallengelassen > fallA && a.Hp >= hpA),
+                 $"einzelner Fusssoldat, Strg auf das verbuendete FAHRZEUG: nicht verweigert ({StrgFusssoldatVerweigert - verw0}), "
+                 + $"Ziel fallengelassen {FussVerbuendetFallengelassen - fallA}x, TP {hpA} -> {a.Hp} (bug-552)");
+        else
         Soll(KeinAngriffAufVerbuendete || (StrgFusssoldatVerweigert == verw0 + 1 && nichts),
              $"einzelner Fusssoldat, Strg auf die verbuendete Einheit ({Treffer(a.Pos)}, soll {ai}): verweigert {StrgFusssoldatVerweigert - verw0}, "
              + $"Ziel {f.Target}, Bodenziel {(f.AngriffsZelle?.ToString() ?? "-")}, Weg {(f.Path != null ? "ja" : "nein")}");
