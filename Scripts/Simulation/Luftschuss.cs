@@ -99,7 +99,9 @@ public partial class MapEntityLayer
     /// Handsteuerung schiesst geradeaus, und dann gibt es keines: das Geschoss
     /// fliegt auf den Punkt. Nur die zwei Zweige, die einen Griff brauchen
     /// (das Nullmodell und der Helistrahl), verlangen eines.</param>
-    private bool LuftSalve(Special a, Entity? ziel, Vector2 aim)
+    private bool LuftSalve(Special a, Entity? ziel, Vector2 aim) => LuftSalve(a, ziel, aim, false);
+
+    private bool LuftSalve(Special a, Entity? ziel, Vector2 aim, bool abwurf)
     {
         LuftSalven++;
         if (LuftschussAlt && ziel != null)
@@ -132,6 +134,12 @@ public partial class MapEntityLayer
         var dir = (aim - a.Pos).Normalized();
         if (dir.LengthSquared() < 0.0001f) dir = Vector2.Down;
 
+        if (abwurf)
+        {
+            BombeAnlegen(a, art, flug, tempo, aim);
+            Audio.GameSounds.PlayAt(114, a.Col, a.Row);                 // 0x42740C, fest 0x72
+            return true;
+        }
         for (int k = 0; k < n; k++)
         {
             // ⚠ Die zwei Geschosse des Jaegers kommen aus zwei Muendungen; die
@@ -157,6 +165,7 @@ public partial class MapEntityLayer
                 Scheitel = 0f,                   // GERADE Bahn, kein Bogen
                 HoeheStart = a.Alt,
                 HoeheZiel = 0,                   // sinkt zu Boden
+                AbwurfNr = AlterWurfSatz(a, aim),   // nur --bomber-abwurf-check (Nullmodell)
             });
             LuftGeschosse++;
         }

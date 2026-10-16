@@ -4326,9 +4326,13 @@ _mausProbePunkt = karte;
             else if (a == "--blick16-alt") MapEntityLayer.Blick16Alt = true;
             else if (a == "--blick16-schiffe-alt") MapEntityLayer.Blick16SchiffeAlt = true;
             else if (a == "--bertha-waffe-alt") MapEntityLayer.BerthaWaffeAlt = true;
+            // KayelGee 14.10. (bug-550..553): Bertha-Nachladen, Bombenabwurf, Eigenbeschuss.
             // Simulation/Schussbild.cs + BerthaNachladenProbe.cs, Bombenabwurf.cs, Eigenbeschuss.cs.
             else if (a == "--bertha-nachladen-alt") MapEntityLayer.BerthaNachladenAlt = true;
             else if (a == "--bertha-nachladen-check") MapEntityLayer.BerthaNachladenCheck = true;
+            else if (a == "--bombenabwurf-alt") MapEntityLayer.BombenabwurfAlt = true;
+            else if (a == "--bomber-abwurf-check") MapEntityLayer.BomberAbwurfCheck = true;
+            else if (a == "--bombe-geschosstempo") MapEntityLayer.BombeGeschosstempo = true;
             else if (a == "--balkenbild-alt") MapEntityLayer.BalkenbildAlt = true;
             // ⭐⭐ 03.10.2026 — Maus, Tab, Handsteuerung Boden (bug-411/412/414,
             // berichte/maus-tab-handsteuerung-fable.md; MausTabLauf.cs, Simulation/

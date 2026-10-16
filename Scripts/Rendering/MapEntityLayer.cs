@@ -1121,6 +1121,16 @@ public partial class MapEntityLayer : Node2D
         /// einer Gelaendestufe. Siehe <see cref="GeschossHoehe"/>.</summary>
         public float HoeheStart, HoeheZiel;
 
+        /// <summary>bug-551: eine abgeworfene BOMBE — sie wird ueber ihrer Bodenspur in
+        /// ihrer Flughoehe gezeichnet (der Zeichner des Originals zieht die Hoehe vom
+        /// Bild ab wie beim Flugzeug, 0x42B8A6), damit sie sichtbar vom Bomber faellt.
+        /// Siehe Luftschuss.BombeZeichenHoehe.</summary>
+        public bool Fallend;
+        /// <summary>bug-551: Boden unter dem Bomberbild beim Wurf und Boden am Ziel (Hoehenpunkte).</summary>
+        public float FallBoden0, FallBoden1;
+        /// <summary>bug-551, nur fuer <c>--bomber-abwurf-check</c>: Nummer des Abwurfs (1..), 0 = keiner.</summary>
+        public int AbwurfNr;
+
         /// <summary>⭐ 11.09.2026 — nur Art 7 (0x452638): die absolute Flughoehe
         /// und der Zustand 1 Steigen, 0 Reisen, 2 Stuerzen. Siehe
         /// Simulation/Druckwelle.cs, Art7Flughoehe.</summary>
@@ -13888,6 +13898,7 @@ public partial class MapEntityLayer : Node2D
 
             // impact
             _shots.RemoveAt(i);
+            if (p.AbwurfNr > 0) BombeAufschlag(p);                          // --bomber-abwurf-check
             if (_fireAtCheckAn) _fireAtEinschlag[p.Shooter] = _taktNr;     // --fireat-check
             // ⭐⭐ 11.09.2026 — ART 7 TRIFFT NICHT, SIE ZUENDET: jeder Trefferzweig
             // des Geschosstakts und die Ankunft rufen 0x454510 statt Zasah — die
@@ -14306,7 +14317,7 @@ public partial class MapEntityLayer : Node2D
                 // Gegenschalter --geschoss-bruchpixel, damit sein Auge entscheidet.
                 if (tex != null)
                 {
-                    var lage = p.Pos - tex.GetSize() / 2f - new Vector2(0, BogenHoehe(p));
+                    var lage = p.Pos - tex.GetSize() / 2f - new Vector2(0, BogenHoehe(p) + BombeZeichenHoehe(p));
                     if (!GeschossBruchpixel) lage = lage.Round();
                     DrawTexture(tex, lage);
                 }
@@ -34917,6 +34928,7 @@ public partial class MapEntityLayer : Node2D
         }
         BerthaCheckTakt();   // bug-485/486: --bertha-check
         WaffenbildTakt();    // bug-514..516: --waffenbild-probe
+        BomberAbwurfTakt();  // bug-551: --bomber-abwurf-check
         NachschubbefehlTakt();   // bug-519: --nachschubbefehl-check
         bool werteNeu = PanelWerteGeaendert();
         if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
@@ -40522,6 +40534,10 @@ public partial class MapEntityLayer : Node2D
                     a.Goal = aim;
                     a.Cooldown -= dt;
                     if (t.Dead) { a.Target = -1; }
+                    // bug-551: der Bomber wirft, wenn die vorausberechnete Bombe die
+                    // Zielzelle trifft (test_all_bomber 0x426A00), und dreht erst UEBER
+                    // dem Ziel ab (0x424540). Simulation/Luftschuss.cs.
+                    else if (BomberNachOriginal(a)) BomberAnflug(a, t, aim);
                     else if (a.Pos.DistanceTo(aim) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
                     {
                         // ⭐⭐⭐ 20.09.2026 — DIE SALVE, nach ART getrennt.
