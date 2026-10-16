@@ -17,12 +17,14 @@ public partial class MapEntityLayer
     public string R6Start(string name) => name switch
     {
         "tuermarken" => R6TuermarkenStart(),
+        "gummiband" => R6GummibandStart(),
         _ => $"r6-check: unbekannter Teil »{name}«",
     };
 
     public string R6Auswerten(string name) => name switch
     {
         "tuermarken" => R6TuermarkenAuswerten(),
+        "gummiband" => R6GummibandAuswerten(),
         _ => "",
     };
 
@@ -88,5 +90,86 @@ public partial class MapEntityLayer
                $"\n   Tuermarken, die der Zeichner malt: {marken} (Farbe {(basis.Intruder < 0 || basis.Intruder > 7 ? "PropColor hellgrau" : "Spieler")})" +
                $"\n   Insassen geloescht {insassenTot}/{_r6Insassen.Count}, Lebensbalken lebender Einheiten an der Tuer: {balken}, tote Saetze dort: {tote}" +
                $"\n   {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}";
+    }
+
+    // ======================================================================
+    //  gummiband — bug-561 (R6#5/#5.1), bug-562 (R6#10)
+    // ======================================================================
+    //
+    // Aufbau: eine Basis wird dem Spieler zugeschrieben (gesagt), SECHS eigene
+    // Fahrzeuge fahren ueber Einfahren hinein, fuenf davon werden ausgesandt
+    // (UKOL 51, wartend), eines bleibt eingefahren (50). Dann zieht der
+    // Pruefstand ein Auswahlrechteck ueber Tuer, Vorplatz und Basiskoerper
+    // (BoxSelect, derselbe Weg wie MapViewer beim Loslassen) und gibt der
+    // Auswahl einen Fahrbefehl. Soll: 0 Depoteinheiten gewaehlt, 0 bekommen
+    // einen Weg. NULLMODELL --gummiband-ukol-alt: 6 gewaehlt, Wege > 0.
+    private int _r6gWege;
+    private string R6GummibandStart()
+    {
+        int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        _r6Basis = -1;
+        for (int k = 0; k < _entities.Count; k++)
+        {
+            var b = _entities[k];
+            if (b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 1 && b.DoorCells.Count > 0) { _r6Basis = k; break; }
+        }
+        if (_r6Basis < 0) return "r6-check gummiband: keine Basis mit Tuer — sagt NICHTS";
+        var basis = _entities[_r6Basis];
+        basis.Owner = basis.Team = basis.ShownOwner = me;
+        _r6Insassen.Clear();
+        int tc = basis.Col + basis.DoorCol, tr = basis.Row + basis.DoorRow;
+        for (int k = 0; k < _entities.Count && _r6Insassen.Count < DepotSlots; k++)
+        {
+            var x = _entities[k];
+            if (x.Dead || x.IsProp || x.IsBuilding || !x.Mobile || x.Infantry >= 0 || x.GameUnitType != 0
+                || x.Ukol >= 50 || Untergestellt(x)) continue;
+            x.Owner = x.Team = me;
+            // ⚠ Eingriff, gesagt: wie im Spiel steht sie beim Einfahren auf der Tuerzelle.
+            ProbeVersetzen(k, tc, tr);
+            Einfahren(basis, k, x);
+            _r6Insassen.Add(k);
+        }
+        for (int n = 1; n < _r6Insassen.Count; n++) _entities[_r6Insassen[n]].Ukol = UkolVerlaesst;
+        var a = CellCenter(tc - 3, basis.Row) - new Vector2(0, 30);
+        var z = CellCenter(tc + 3, tr + 3);
+        _sel.Clear();
+        int uebVor = GummibandUebersprungen;
+        BoxSelect(new Rect2(a, z - a), false);
+        int depotGewaehlt = 0, gebaeude = 0;
+        foreach (int i in _sel)
+        {
+            if (_r6Insassen.Contains(i)) depotGewaehlt++;
+            if (_entities[i].IsBuilding) gebaeude++;
+        }
+        int gewaehlt = _sel.Count;
+        IssueMove(CellCenter(tc, System.Math.Min(tr + 8, (_nav?.Height ?? tr + 9) - 1)));
+        _r6gWege = 0;
+        foreach (int k in _r6Insassen) if (_entities[k].Path is { Count: > 0 }) _r6gWege++;
+        return $"r6-check gummiband: Basis {basis.Slot}, Tuer ({tc},{tr}), {_r6Insassen.Count} Einheiten drin (1x 50, {_r6Insassen.Count - 1}x 51)"
+             + (GummibandUkolAlt ? "  ⚠ Nullmodell --gummiband-ukol-alt" : "")
+             + $"\n   Rechteck ueber Basis, Tuer und Vorplatz: {gewaehlt} gewaehlt, davon Depoteinheiten {depotGewaehlt}, Gebaeude {gebaeude}; "
+             + $"am UKOL-Riegel uebersprungen {GummibandUebersprungen - uebVor}"
+             + $"\n   Fahrbefehl an die Auswahl: Depoteinheiten mit Weg {_r6gWege}";
+    }
+
+    private string R6GummibandAuswerten()
+    {
+        if (_r6Basis < 0) return "r6-check gummiband: kein Aufbau";
+        var basis = _entities[_r6Basis];
+        int tc = basis.Col + basis.DoorCol, tr = basis.Row + basis.DoorRow;
+        int drin = 0, unsichtbarUnterwegs = 0;
+        foreach (int k in _r6Insassen)
+        {
+            var u = _entities[k];
+            if (!basis.Garage.Contains(u)) continue;
+            drin++;
+            if (u.Col != tc || u.Row != tr || u.Path is { Count: > 0 }
+                || u.Pos.DistanceTo(CellCenter(tc, tr)) > 1f) unsichtbarUnterwegs++;
+        }
+        bool ok = _r6gWege == 0 && unsichtbarUnterwegs == 0;
+        return "r6-check gummiband:" +
+               $"\n   nach 3 s: noch in der Liste {drin}, davon unsichtbar unterwegs (Weg oder fort von der Tuer) {unsichtbarUnterwegs}; "
+             + $"Auslass {DepotAusgelassen}, gewartet {DepotWartetAnTuer}"
+             + $"\n   {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}";
     }
 }

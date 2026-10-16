@@ -10015,6 +10015,18 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Rubber-band select: every owned, non-prop entity inside the box.</summary>
+    /// <remarks>⭐ bug-561 (KayelGee R6#5/#5.1): »ausgesandte Einheiten erscheinen
+    /// unsichtbar im Ausgang, lassen sich mit dem Auswahlrechteck markieren und
+    /// befehlen, und blockieren dann andere«. Das Gummiband des Originals
+    /// <c>0x434700</c> laeuft nur ueber die Einheitensaetze des Betrachters
+    /// (P·1000 … P·1000+999, C 0x4347E7…0x434805) und UEBERSPRINGT UKOL ≥ 0x2D
+    /// (C 0x434833 <c>mov cl,[ebx+0x14] / cmp cl,0x2d / jae</c>) — derselbe Riegel
+    /// wie im Klick-Treffertest (C 0x431CEE). Eingefahrene (50) und ausgesandte,
+    /// noch wartende (51 in der Liste) Einheiten sind damit nicht waehlbar und
+    /// bekommen keinen Fahrbefehl. ⚠ UNSERE Ausnahme: eine 51, die die Liste
+    /// schon verlassen hat und auf der Tuerzelle steht, traegt im Original UKOL 2
+    /// (0x40AFE0) und ist dort waehlbar — sie bleibt es hier.
+    /// Gegenschalter --gummiband-ukol-alt.</remarks>
     public void BoxSelect(Rect2 mapRect, bool additive)
     {
         if (!additive) _sel.Clear();
@@ -10022,6 +10034,7 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             if (!Commandable(i)) continue;
+            if (!GummibandUkolAlt && GummibandUkolRiegel(_entities[i])) { GummibandUebersprungen++; continue; }
             if (norm.Intersects(BodyRect(_entities[i]))) _sel.Add(i);
         }
         SetPrimary();
@@ -10030,6 +10043,20 @@ public partial class MapEntityLayer : Node2D
     }
 
     public void SetBand(Rect2? mapRect) { _band = mapRect; QueueRedraw(); }
+
+    /// <summary><c>--gummiband-ukol-alt</c> — Stand bis 0.6.9: das Auswahlrechteck
+    /// nimmt auch eingefahrene und wartende Depoteinheiten. Nullmodell zu bug-561.</summary>
+    public static bool GummibandUkolAlt;
+
+    /// <summary>Wie oft das Gummiband eine Einheit am UKOL-Riegel uebersprang.</summary>
+    public static int GummibandUebersprungen;
+
+    /// <summary>Der Riegel <c>UKOL ≥ 0x2D</c> des Gummibands (C 0x434836) — mit der
+    /// Ausnahme der 51 ausserhalb der Liste (siehe <see cref="BoxSelect"/>).</summary>
+    private static bool GummibandUkolRiegel(Entity e)
+        => !e.IsBuilding && (Untergestellt(e)
+           || (e.Ukol >= 0x2D && !(e.Ukol == UkolVerlaesst
+               && (e.InGebaeude == null || !e.InGebaeude.Garage.Contains(e)))));
 
     public void ClearSelection() { _sel.Clear(); _selAir = -1; SetPrimary(); QueueRedraw(); }
 
