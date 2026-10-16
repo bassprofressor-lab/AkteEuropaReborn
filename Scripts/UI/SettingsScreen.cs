@@ -189,6 +189,22 @@ public partial class SettingsScreen : Control
             formation.Text = Settings.GruppeFormation == 0 ? "Gruppe Standard" : "Formation Standard";
         };
         box.AddChild(Row("Gruppenbewegung", formation));
+        // ⭐ 16.10.2026, bug-524 — »AUTOSICHERN« des Originals: ein Knopf, der reihum
+        // AUS → 5 → 10 → 20 Min. → AUS schaltet (0x44C7B0, Tafel 0x44E000), beschriftet
+        // wie 0x47FCDB. Hilfezeile woertlich »Automatische Sicherung einstellen«.
+        // Siehe Settings.AutosaveMinuten und Rendering/Autosave.cs.
+        var autosave = new Button
+        {
+            Text = Settings.AutosaveText(Settings.AutosaveMinuten),
+            TooltipText = "Automatische Sicherung einstellen\n"
+                        + "(Spielstand »Autosave« auf dem letzten Platz des Ladefensters)",
+        };
+        autosave.Pressed += () =>
+        {
+            Settings.AutosaveMinuten = Settings.AutosaveNaechste(Settings.AutosaveMinuten);
+            autosave.Text = Settings.AutosaveText(Settings.AutosaveMinuten);
+        };
+        box.AddChild(Row("Automatische Sicherung", autosave));
         // ⚠ Hier stand ein Schalter »Farbiger Ring unter jeder Einheit«.
         // Entfernt am 21.08.2026 — siehe MapEntityLayer.DrawUnitBody.
 
@@ -359,7 +375,13 @@ public partial class SettingsScreen : Control
     /// <summary>Weg mit dem Schirm. Aus dem Pausenmenü heraus kommt darunter das
     /// Pausenmenü wieder zum Vorschein — es stand die ganze Zeit da, nur
     /// verdeckt —, das Spiel bleibt angehalten.</summary>
-    private void Close() => QueueFree();
+    private void Close()
+    {
+        // bug-524: 0x447382 — beim Schliessen des Einstellungsfensters (Art 0x22 = 34)
+        // wird die Autosave-Faelligkeit hoechstens VORGEZOGEN, nie verschoben.
+        Rendering.MapViewer.AutosaveEinstellungZu();
+        QueueFree();
+    }
 
     private static Label Head(string t)
     {

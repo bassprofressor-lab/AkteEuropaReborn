@@ -747,6 +747,7 @@ public partial class MapViewer : Node2D
         }
         SpielstandCheckNachLaden();
         SpeicherfensterCheckNachLaden();
+        AutosaveAnlegen();          // bug-524, Autosave.cs
         // ⚠ Steht der Bildprüfstand mit `--shot` zusammen, meldet er GENAU das
         // photographierte Bild. Sonst beschreiben seine Zahlen einen anderen
         // Augenblick als das Bild, das man sich ansieht — und dann ist der
@@ -4726,6 +4727,11 @@ _mausProbePunkt = karte;
             else if (a == "--speicherfenster-check") SpeicherfensterCheckAn = true;
             else if (a == "--speicherfenster-alt") UI.SpeicherfensterChrome.Alt = true;
             else if (a == "--missionsende-stand-aus") MissionsendeStandAus = true;
+            // bug-524: Autosichern des Originals (Autosave.cs, AutosaveCheck.cs)
+            else if (a == "--autosave-alt") AutosaveAlt = true;
+            else if (a == "--autosave-check") AutosaveCheckAn = true;
+            else if (a.StartsWith("--autosave-minuten-test="))
+                AutosaveMinuteSek = System.Math.Max(0.05, a["--autosave-minuten-test=".Length..].ToFloat());
             else if (a == "--nachschub-sicht-check") _nachschubSichtAfter = 5f;
             else if (a == "--basisfenster-zu-bleibt-alt") BasisfensterZuBleibtAlt = true;
             else if (a == "--bombenetikett-kaputt") MapEntityLayer.BombenetikettKaputt = true;
@@ -5663,6 +5669,7 @@ _mausProbePunkt = karte;
         }
         SpielstandCheckTakt(delta);
         SpeicherfensterCheckTakt(delta);
+        AutosaveCheckTakt(delta);
         if (_tuerklickAfter > 0f)
         {
             _tuerklickAfter -= (float)delta;

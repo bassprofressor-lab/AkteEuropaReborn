@@ -83,6 +83,38 @@ public static class Settings
     /// <para>Bei uns in <c>settings.cfg</c> statt <c>options.cfg</c> (UNSERE Ablage).</para>
     /// </summary>
     public static int GruppeFormation { get => I("gruppe_formation", 0); set => Set("gruppe_formation", value); }
+    /// <summary>
+    /// ⭐ 16.10.2026, bug-524 — <b>»AUTOSICHERN« DES ORIGINALS</b> (<c>byte[0x9927C0]</c>,
+    /// F <c>0x991820</c>), in MINUTEN: 0 = aus, sonst alle n Minuten ein Spielstand
+    /// »Autosave« auf Platz 7 (Takt <see cref="Rendering.MapViewer.AutosaveTakt"/>).
+    /// <para>Belege (C und F gleich, <c>berichte/autosave-credits-demo-opus.md</c>):
+    /// Umschalter <c>0x44C7B0</c> (F <c>0x44B7C8</c>) über die Bytetafel <c>0x44E000</c>:
+    /// 0→5, 5→10, 10→20, 20→0, jeder andere Wert bleibt (Sprung nach <c>0x44DC79</c>);
+    /// Beschriftung <c>0x47FCDB</c>: »Autosichern « + itoa(n) + » Min.« bzw.
+    /// »Autosichern AUS« (<c>0x5023DC</c>/<c>0x5023D4</c>/<c>0x5023EC</c>), Knopf bei
+    /// (20, 200), 8 Kacheln; Hilfezeile »Automatische Sicherung einstellen«. In
+    /// OPTIONS.CFG Feld 5 = <b>Versatz 13</b> (Schreiber <c>0x446F00</c>: 4+4+4+1 Byte
+    /// davor); die F-Installation trägt dort 0. ⭐ Vorgabe <b>0</b>: 0x9927C0 liegt im
+    /// BSS.</para>
+    /// <para>Bei uns in <c>settings.cfg</c> (Schlüssel <c>autosave</c>) statt OPTIONS.CFG —
+    /// UNSERE Ablage.</para></summary>
+    public static int AutosaveMinuten
+    {
+        get => AutosaveTest ?? System.Math.Clamp(I("autosave", 0), 0, 255);
+        set => Set("autosave", System.Math.Clamp(value, 0, 255));
+    }
+
+    /// <summary>Nur für <c>--autosave-check</c>: sticht <see cref="AutosaveMinuten"/>,
+    /// schreibt aber nichts nach <c>settings.cfg</c>. null = die Datei gilt.</summary>
+    public static int? AutosaveTest;
+
+    /// <summary>Der Umschalter <c>0x44C7FF</c> (Tafel <c>0x44E000</c>): 0→5→10→20→0;
+    /// ein anderer Wert (verbogene Datei) bleibt stehen wie im Original.</summary>
+    public static int AutosaveNaechste(int v) => v switch { 0 => 5, 5 => 10, 10 => 20, 20 => 0, _ => v };
+
+    /// <summary>Die Beschriftung <c>0x47FCDB</c> wörtlich.</summary>
+    public static string AutosaveText(int v) => v == 0 ? "Autosichern AUS" : $"Autosichern {v} Min.";
+
     /// <summary>Holding the right button drags the map.</summary>
     public static bool RightDragPan { get => B("right_drag_pan", true); set => Set("right_drag_pan", value); }
     /// <summary>Keyboard panning speed in map pixels per second at zoom 1.</summary>
