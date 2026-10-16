@@ -1017,7 +1017,7 @@ public sealed partial class BaseWindow : PanelContainer
 
     /// <summary>Die Werteliste rechts. Beschriftungen und Reihenfolge sind die
     /// des Originals, siehe <see cref="UnitStatBook"/>.</summary>
-    private static string StatsFor(string design)
+    internal static string StatsFor(string design)
     {
         if (design.Length == 0) return "";
         if (!UnitStatBook.TryGet(design, out var e))

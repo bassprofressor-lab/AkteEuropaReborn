@@ -18328,6 +18328,8 @@ public partial class MapEntityLayer : Node2D
         var made = new Design(name, p.Id, equip, w.Id, true, -1);
         _designs.Add(made);
         if (!_entwurfProbe) SaveOwnDesigns();
+        // bug-586: auch ins Wertebuch des Basisfensters (UnitStatBook.Eintragen).
+        UI.UnitStatBook.Eintragen(name, w.Id, p.Id, equip);
         Designer.Say($"uebernommen — {made.CostW}/{made.CostF}/{made.CostS} Teile, " +
                      $"{made.Hp} HP, Angriff {made.Attack}");
         GD.Print($"designer: '{name}' angelegt — Fahrwerk {p.Id}, Waffe {w.Id}, Ausruestung {equip}; " +

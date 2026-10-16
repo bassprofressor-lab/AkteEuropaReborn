@@ -139,6 +139,35 @@ public static class UnitStatBook
     /// <summary>Nach einem Missionswechsel neu einlesen.</summary>
     public static void Forget() { _byName = null; _comp = null; }
 
+    /// <summary><c>--werteliste-nachtrag-alt</c>: Stand vor bug-586 — ein im
+    /// laufenden Spiel erstellter Entwurf kommt nicht ins Buch, das Basisfenster
+    /// zeigt zu ihm keine Werte, bis das Programm neu startet.</summary>
+    public static bool NachtragAlt;
+
+    /// <summary>
+    /// ⭐ bug-586 (KayelGee R6, 14.10.2026: »Erstellte Einheiten zeigen im
+    /// Produktionsfenster nicht ihre Werte an«). Das Buch wird EINMAL je Programmlauf
+    /// gelesen (<see cref="Load"/>, <see cref="Forget"/> hatte keinen Rufer) — ein
+    /// Entwurf, den der Spieler danach im Erstellungsfenster anlegt, stand in
+    /// <c>designs.cfg</c>, aber nie hier, und <c>BaseWindow.StatsFor</c> gab für ihn
+    /// »« zurück.
+    /// <para>Im Original gibt es diesen Unterschied nicht: der Zeichner der
+    /// Produktionsliste liest die Werte aus der Entwurfstafel des Spielers
+    /// 0x51CE20 (Satz 0x2E, 200 je Spieler; »Energie : « = +0x1E @0x46925D,
+    /// Belegung +0x00 @0x469181), und in genau diese Tafel schreibt das Erstellen
+    /// den neuen Satz — eigene und vorgegebene Entwürfe sind dort Zeilen derselben
+    /// Art.</para>
+    /// </summary>
+    public static void Eintragen(string name, int weapon, int prop, int equip)
+    {
+        if (NachtragAlt || name.Length == 0 || _byName == null) return;   // ungelesen: Load holt ihn aus designs.cfg
+        _byName[name] = new Entry(name, weapon, prop, equip,
+                                  Simulation.DesignMath.Compute(weapon, prop, equip));
+    }
+
+    /// <summary>Für Prüfstände: einen Probeeintrag wieder herausnehmen.</summary>
+    public static void Austragen(string name) => _byName?.Remove(name);
+
     public static bool TryGet(string name, out Entry e)
     {
         Load();
