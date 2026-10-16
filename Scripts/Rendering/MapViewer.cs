@@ -1349,6 +1349,7 @@ public partial class MapViewer : Node2D
         if (MapEntityLayer.M1AngriffCheckAn) { _ = M1AngriffLauf(); return; }
         if (MapEntityLayer.M2AngriffCheckAn) { _ = M2AngriffLauf(); return; }
         if (MapEntityLayer.M2UntermissionCheckAn) { _ = M2UntermissionLauf(); return; }
+        if (MapEntityLayer.FeindNahtCheckSzenario.Length > 0) { _ = FeindNahtLauf(); return; }
         if (MapEntityLayer.WerferPoseCheckAn && _shotPath.Length > 0) { _ = WerferPoseBildLauf(); return; }
         if (MapEntityLayer.ZugEinfahrtCheckAn && _shotPath.Length > 0) { _ = ZugEinfahrtBildLauf(); return; }
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
@@ -2104,6 +2105,20 @@ public partial class MapViewer : Node2D
             if (_entities.M1AngriffMessen()) break;
         }
         GD.Print(_entities.M1AngriffBericht());
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--feind-naht-check=SZENARIO</c> (bug-575/576): siehe Simulation/FeindNahtCheck.cs.</summary>
+    private async System.Threading.Tasks.Task FeindNahtLauf()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print($"feind-naht-check: {_entities.FeindNahtCheckStart()}");
+        for (int bild = 0; bild < 60 * 1800; bild++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (_entities.FeindNahtCheckMessen()) break;
+        }
+        GD.Print(_entities.FeindNahtCheckBericht());
         GetTree().Quit(0);
     }
 
@@ -5059,8 +5074,11 @@ _mausProbePunkt = karte;
             else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;
             // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
-            // bug-576 (KayelGee R6 #14): das Wegtor des Sektorangriffs, siehe Simulation/KiWegtor.cs.
+            // bug-575/576 (KayelGee R6 #7/#14): Klang 122 »Der Feind naht« und das
+            // Wegtor des Sektorangriffs, siehe Simulation/FeindNaht.cs und KiWegtor.cs.
+            else if (a == "--feind-naht-alt") MapEntityLayer.FeindNahtAlt = true;
             else if (a == "--ki-wegtor-alt") MapEntityLayer.KiWegtorAlt = true;
+            else if (a.StartsWith("--feind-naht-check=")) MapEntityLayer.FeindNahtCheckSzenario = a[19..];
             // Die drei Gegenproben zur Sektormaschine vom 01.09.2026, siehe
             // Simulation/SkirmishAiSectors.cs.
             else if (a == "--sektormaschine-alt") MapEntityLayer.SektormaschineAlt = true;

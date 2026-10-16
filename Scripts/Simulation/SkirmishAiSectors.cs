@@ -900,6 +900,16 @@ public partial class MapEntityLayer : Node2D
             }
             if (gruppe.Einheiten.Count == 0) { AiGruppeAufloesen(p, g); continue; }
 
+            // ⭐⭐ 16.10.2026 (bug-575) — Klang 122 @0x4BD1C5: nach der
+            // Gueltigkeit, wenn die Gruppe keine Wegpunkte mehr hat
+            // (byte[sec108 + 62*(4p+g) + 1] == 0). Unsere Gruppen haben KEINE
+            // Wegpunktphase (sec108 ungebaut, siehe AiMissionAttack) — sie
+            // stehen also immer im Angriff. Siehe FeindNaht.cs.
+            // ⚠ Ein erledigter Tuergriff loest sich unten erst auf; im Original
+            // faellt er schon an der Gueltigkeit (@0x4BD095) heraus -> vorher pruefen.
+            if (!(IstTuergriff(gruppe.Auftrag) && _entities[zi].Owner == p))
+                FeindNahtMelden(p, 2);
+
             // ⭐⭐ 02.10.2026 (bug-384) — DER TUERGRIFF IM GRUPPENLAUF 0x4BCF30.
             // Gueltigkeit Art 1 `c == 0` @0x4BD095: ERLEDIGT, sobald das Gebaeude
             // dem Spieler gehoert -> Gruppe aufloesen. Vollzug @0x4BD2ED: wer
@@ -1299,9 +1309,10 @@ public partial class MapEntityLayer : Node2D
     /// Einheit (Merker <c>byte[esp+0x13]</c>, gesetzt @<c>0x4BC638</c>, gelöscht
     /// @<c>0x4BC7BE</c>) — die ganze Gruppe greift also DASSELBE Ziel an.</para>
     ///
-    /// <para>⭐ <b>Seit 16.10.2026 gebaut</b> (bug-576): das Wegtor
-    /// <c>word[0xBCA0E0] &lt; 50</c> (KiWegtor.cs).
-    /// ⚠ <b>Weiter NICHT gebaut:</b> der Alarmklang 0x7A (<c>0x4BC753…0x4BC7B7</c>) und das <c>+0x0F != 0xAB</c>-Tor, dessen
+    /// <para>⭐ <b>Seit 16.10.2026 gebaut</b> (bug-575/576): das Wegtor
+    /// <c>word[0xBCA0E0] &lt; 50</c> (KiWegtor.cs) und der Alarmklang 0x7A
+    /// »Der Feind naht« (<c>0x4BC753…0x4BC7B7</c>, FeindNaht.cs).
+    /// ⚠ <b>Weiter NICHT gebaut:</b> das <c>+0x0F != 0xAB</c>-Tor, dessen
     /// Bedeutung ungelesen ist.</para>
     /// </summary>
     private void AiGruppenangriff(AiPlayer a)
@@ -1334,7 +1345,7 @@ public partial class MapEntityLayer : Node2D
                         var (ex, ey) = AiSektorVon(e.Col, e.Row);
                         if (ex != sx || ey != sy) continue;
 
-                        // ⭐⭐ 16.10.2026 (bug-576) — bei der ERSTEN abrufbereiten
+                        // ⭐⭐ 16.10.2026 (bug-576/575) — bei der ERSTEN abrufbereiten
                         // Einheit (Merker byte[esp+0x13], geloescht @0x4BC7BE): das
                         // Wegtor 0x4BC74E..0x4BC76B, dann Klang 122 @0x4BC79D. Ist
                         // der Weg >= 50, faehrt aus diesem Sektor NIEMAND auf diesen
@@ -1342,6 +1353,7 @@ public partial class MapEntityLayer : Node2D
                         if (los == 0)
                         {
                             if (!AiWegtorOffen(p, i, ziel)) { a.SektorWegZuWeit++; break; }
+                            FeindNahtMelden(p, 1);
                         }
 
                         // ⭐ Die WEITE mitschreiben, bevor die Einheit losfaehrt
@@ -1357,6 +1369,9 @@ public partial class MapEntityLayer : Node2D
                             a.SektorWeitenZahl++;
                         }
                         AiSend(i, ziel);
+                        SektorLosJeSpieler[p]++;
+                        if (ziel >= 0 && ziel < _entities.Count && _entities[ziel].Owner == ViewPlayer) SektorLosAufMich[p]++;
+                        FeindNahtCheckLos(p, i, ziel);
                         e.AiCpu0 = 3;
                         a.Wave.Add(i);
                         los++;
