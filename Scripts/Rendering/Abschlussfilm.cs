@@ -22,8 +22,11 @@ using Godot;
 /// keine Mission 34. Gegenschalter <c>--abschlussfilm-alt</c>, Prüfstand
 /// <c>--abschlussfilm-check</c> (auf <c>--campaign=33</c>).</para>
 ///
-/// <para>⚠ SETZUNG: das Original setzt danach die Demo-Fahne <c>0x4F6F9C := 1</c>
-/// (Hauptmenü mit laufender Demo); wir gehen ins gewöhnliche Menü.</para>
+/// <para>⭐ bug-526 (16.10.2026): danach setzt das Original die Demo-Fahne
+/// <c>0x4F6F9C := 1</c> und die Menü-Fahne <c>0x4F6FC8 := 1</c> → Menüaufbau wie beim
+/// Programmstart, Demo 1 sofort. Bei uns <see cref="UI.MenuBackdrop.DemoFahne"/>; Gegenschalter
+/// <c>--abspann-demo-alt</c>. (Hier stand: »SETZUNG: wir gehen ins gewöhnliche Menü« — das
+/// gewöhnliche Menü IST dieser Aufbau, siehe MenuBackdrop.DemoFahne.)</para>
 /// </summary>
 public partial class MapViewer
 {
@@ -52,18 +55,32 @@ public partial class MapViewer
         if (!UI.MoviePlayer.Play(this, 34, NachAbschlussfilm, fenster: true)) NachAbschlussfilm();
     }
 
+    /// <summary><c>--abspann-demo-alt</c> (bug-526): nach dem Abspann die Demo-Fahne nicht
+    /// setzen (Stand 0.6.9).</summary>
+    private static bool AbspannDemoAlt => System.Array.IndexOf(Core.CommandLine.Args, "--abspann-demo-alt") >= 0;
+
     private void NachAbschlussfilm()
     {
+        // ⭐ bug-526: 0x4D009B byte[0x4F6F9C] := 1, 0x4D00A2 byte[0x4F6FC8] := 1 — nur auf dem
+        // Weg ueber 34.RPL (Sieg in M33), nicht bei --abschlussfilm-alt. Siehe MenuBackdrop.DemoFahne.
+        if (_letzteMissionGewonnen && !AbschlussfilmAlt && !AbspannDemoAlt)
+            UI.MenuBackdrop.DemoFahne = true;
         if (_abschlussfilmCheck && !_abschlussfilmZeigen)
         {
             var p = UI.MoviePlayer.Protokoll;
             // Mission 33 -> 33.RPL, 34.RPL; jede andere Mission -> keiner
             // (ihr Film laeuft VOR der naechsten Mission, MainMenu.StartMission).
             string soll = UI.SkirmishSetup.CampaignMission == 33 ? "33, 34" : "";
-            bool ok = string.Join(", ", p) == soll;
-            GD.Print($"abschlussfilm-check: Filme [{string.Join(", ", p)}], erwartet [{soll}] -> " +
+            bool filmeOk = string.Join(", ", p) == soll;
+            // bug-526: Demo-Fahne genau nach dem Abspann (M33), sonst nicht.
+            bool fahneSoll = UI.SkirmishSetup.CampaignMission == 33;
+            bool fahneOk = UI.MenuBackdrop.DemoFahne == fahneSoll;
+            bool ok = filmeOk && fahneOk;
+            GD.Print($"abschlussfilm-check: Filme [{string.Join(", ", p)}], erwartet [{soll}]; " +
+                     $"Demo-Fahne 0x4F6F9C {(UI.MenuBackdrop.DemoFahne ? 1 : 0)}, erwartet {(fahneSoll ? 1 : 0)} -> " +
                      (ok ? "BESTANDEN" : "DURCHGEFALLEN") +
-                     (AbschlussfilmAlt ? "  (Nullmodell --abschlussfilm-alt)" : ""));
+                     (AbschlussfilmAlt ? "  (Nullmodell --abschlussfilm-alt)" : "") +
+                     (AbspannDemoAlt ? "  (Nullmodell --abspann-demo-alt)" : ""));
             GetTree().Quit(0);
             return;
         }

@@ -98,6 +98,22 @@ public partial class MenuBackdrop : CanvasLayer
     /// (@0x415db9). Gespielt wird davon, was importiert ist.</summary>
     public const int DemoCount = 13;
 
+    /// <summary>
+    /// ⭐ 16.10.2026, bug-526 — <b>DIE DEMO-FAHNE NACH DEM ABSPANN</b>. Nach 34.RPL setzt das
+    /// Original <c>byte[0x4F6F9C] := 1</c> (Demo) und <c>byte[0x4F6FC8] := 1</c> (Menü)
+    /// @0x4D009B/0x4D00A2; die Meldeschleife springt bei gesetzter Menü-Fahne (@0x4151A2) nach
+    /// <c>0x415083</c> = DERSELBE Menüaufbau wie beim Programmstart: Menü-Fahne := 0,
+    /// <c>"1.dm"</c> laden (0x4150E9), Demo-Nummer 1, Zähler := <c>word[0x4F70B2]</c> = 400
+    /// Bilder, Demo-Fahne := 1 (0x41512C), Startmenü auf. Also: Demo 1 läuft SOFORT, ohne
+    /// Wartezeit, und von vorn — nicht die fertige Karte von M33.
+    /// <para>Bei uns tat <c>ToMenu()</c> das sichtbar schon (jede neue <see cref="MainMenu"/>
+    /// legt eine neue Kulisse an, <c>_at = -1</c> → Demo 1); die Fahne macht den Weg
+    /// ausdrücklich und messbar (<c>--abschlussfilm-check</c>). Gegenschalter
+    /// <c>--abspann-demo-alt</c>: Fahne nicht setzen (Stand 0.6.9).</para>
+    /// <para>Der Credits-Knopf (0x44CE88) setzt sie NICHT — dort läuft die Demo weiter.</para>
+    /// </summary>
+    public static bool DemoFahne;
+
     /// <summary>Die Laufzeiten aus <c>word[0x4f70b0 + 2·nr]</c>, Index 0
     /// unbenutzt — so wie das Programm die Tabelle anspricht.</summary>
     private static readonly int[] Ticks =

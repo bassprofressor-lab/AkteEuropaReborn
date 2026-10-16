@@ -146,7 +146,9 @@ public partial class MainMenu : Control
                 // belegt ist, statt Namen zu erfinden. Siehe CreditsScreen.
                 encyclopedia: () => AddChild(new EncyclopediaScreen()),
                 intro: null,
-                credits: () => AddChild(new CreditsScreen()),
+                // ⭐ 16.10.2026 bug-525: Knopf 7 spielt den Abspann 34.RPL wie im
+                // Original (0x44CE88), Rueckfall Textliste — MainMenuCredits.cs.
+                credits: Credits,
                 demo: demos ? NextDemo : null,
                 quit: () => GetTree().Quit()));
 
@@ -294,6 +296,14 @@ public partial class MainMenu : Control
     /// hier gar nicht an und lädt deshalb auch nichts.</summary>
     private void StartBackdrop()
     {
+        // bug-526: die Demo-Fahne nach dem Abspann (MenuBackdrop.DemoFahne) — das Menue
+        // beginnt wie beim Programmstart mit Demo 1 (0x415083 → 0x4150E9 »1.dm«).
+        if (MenuBackdrop.DemoFahne)
+        {
+            MenuBackdrop.DemoFahne = false;
+            GD.Print("Hauptmenue: Demo-Fahne 0x4F6F9C / Menue-Fahne 0x4F6FC8 nach dem Abspann — "
+                     + "Menue neu wie beim Programmstart, Demo 1 (1.dm, 400 Bilder) sofort");
+        }
         if (_noBackdrop || _backdrop != null) return;
         if (MenuBackdrop.Available().Count == 0) return;
         _backdrop = new MenuBackdrop { UnterschirmOffen = UnterschirmOffen };   // bug-448
@@ -641,6 +651,9 @@ public partial class MainMenu : Control
             // bug-483: Demo-Dauer = Tafel (Bilder) / Bildrate (berichte/demo-dauer-fable.md)
             else if (a.StartsWith("--demo-bildrate=")) MenuBackdrop.DemoBildrate = Mathf.Max(1f, a["--demo-bildrate=".Length..].ToFloat());
             else if (a == "--demo-dauer-alt") MenuBackdrop.DemoDauerAlt = true;
+            // bug-525: Credits-Knopf = Abspann 34.RPL (MainMenuCredits.cs)
+            else if (a == "--credits-text") CreditsText = true;
+            else if (a == "--credits-check") _creditsCheck = true;
             else if (a == "--demodauer-check") _demodauerCheck = 5;
             else if (a.StartsWith("--demodauer-check=")) _demodauerCheck = Mathf.Max(1, a["--demodauer-check=".Length..].ToInt());
         }
@@ -1349,6 +1362,7 @@ public partial class MainMenu : Control
         if (_kulissenCheck > 0) KulissenCheckGo();
         if (_demowechselCheck > 0) DemowechselCheckGo();
         if (_demodauerCheck > 0) DemodauerCheckGo();
+        if (_creditsCheck) CreditsCheckGo();
     }
 
     // ---- first start: where the content comes from --------------------------
