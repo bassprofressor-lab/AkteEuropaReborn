@@ -48,7 +48,8 @@ using System.Collections.Generic;
 /// der Verzögerungsausgleich; heute steht es auf dem nächsten Takt.</para>
 ///
 /// <para>⚠ <b>UNSERE SETZUNG:</b> die Fälligkeit zählt bei uns in
-/// <b>Simulationstakten</b> (SimHz = 60), nicht in Millisekunden. Das
+/// <b>Simulationstakten</b> (SimHz = 50 seit 5e35db6, 21.08.2026; hier
+/// stand bis zum 16.10. noch »60«, bug-527), nicht in Millisekunden. Das
 /// Original zählt in seiner eigenen Uhr, deren Einheit nicht gelesen ist. Takte
 /// sind die einzige Einheit, die auf zwei Maschinen dieselbe ist — auf ihnen
 /// beruht die Stufe 1 dieses Umbaus, und alles andere wäre ein Rückschritt.</para>

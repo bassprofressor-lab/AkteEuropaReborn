@@ -34593,6 +34593,22 @@ public partial class MapEntityLayer : Node2D
     private const int SimHz = 50;
     private const float SimDt = 1f / SimHz;
 
+    /// <summary>bug-527 (16.10.2026): die Taktlänge für den Netztaktgeber
+    /// (<c>Network/NetGame.cs</c>) — dieselbe Zahl, nicht eine zweite. Dort
+    /// stand bis heute die feste 1/60 und brach jedes Netzspiel ab.</summary>
+    internal const float SimTaktSekunden = SimDt;
+
+    /// <summary>bug-527: der Netztaktgeber übernimmt den Takt. Der Sammler
+    /// verliert seinen Bildrest, die Geschwindigkeit steht auf 1 (im Original
+    /// im Netz hart auf 1, OFFENE_FRAGEN AV.4), und ab jetzt gilt der
+    /// Grundtakt-Regler nicht mehr (siehe <see cref="SimZeit"/>) — die Uhr des
+    /// Netzspiels führt der Taktgeber selbst.</summary>
+    internal void NetzTaktUebernehmen()
+    {
+        _simAcc = 0f;
+        GameSpeed = 1;
+    }
+
     /// <summary>
     /// <b>DIE SPIELGESCHWINDIGKEIT</b> — <c>byte[0x4FA23C]</c> des Originals,
     /// gelesen am 20.08.2026.
@@ -34639,8 +34655,16 @@ public partial class MapEntityLayer : Node2D
     public static int GrundtaktHz = UI.Settings.Grundtakt;
 
     /// <summary>Echte Bildzeit → Simulationszeit unter dem <see cref="GrundtaktHz"/>.</summary>
+    /// <para>⚠ bug-527: NICHT im Netzspiel. Dort taktet
+    /// <c>NetGameRunner</c> mit genau einer Taktlänge je Aufruf und rechnet die
+    /// Wanduhr selbst; ein Regler, der hier dazwischen dehnte, liesse einen
+    /// Aufruf 0 Takte fahren (bei Grundtakt 20: 0,4 Takt). UNSERE SETZUNG: im
+    /// Netz gilt die Taktrate des Originals, 50/s — der Regler ist eine Zutat
+    /// für den Einzelspieler. Gegenschalter <c>--nettakt-alt</c>.</para>
     private static float SimZeit(float dt)
-        => dt * Mathf.Clamp(GrundtaktHz, 1, SimHz) / SimHz;
+        => NetGameRunner.Active && !NetGameRunner.NettaktAlt
+            ? dt
+            : dt * Mathf.Clamp(GrundtaktHz, 1, SimHz) / SimHz;
 
     /// <summary>
     /// <c>--takt-check</c> — <b>läuft der Takt mit 50 Hz, und macht die

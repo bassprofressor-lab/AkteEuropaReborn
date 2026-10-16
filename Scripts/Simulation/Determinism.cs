@@ -226,6 +226,7 @@ public static class Determinism
     {
         if (n <= 1) return 0;
         Draws++;
+        if (Spur != null) SpurEintragen();
         if (Poisoned) return System.Random.Shared.Next(n);   // Gegenprobe
         return (int)(Rng.NextUInt() % (uint)n);
     }
@@ -246,7 +247,35 @@ public static class Determinism
     }
 
     /// <summary>Die rohe Zahl, wenn ein Aufrufer selbst rechnen will.</summary>
-    public static uint NextUInt() { Draws++; return Poisoned ? (uint)System.Random.Shared.Next() : Rng.NextUInt(); }
+    public static uint NextUInt() { Draws++; if (Spur != null) SpurEintragen(); return Poisoned ? (uint)System.Random.Shared.Next() : Rng.NextUInt(); }
+
+    // ---- die Wurfspur (16.10.2026, Netzprüfstand) ----------------------------
+
+    /// <summary>
+    /// ⚠ NUR FÜR DEN PRÜFSTAND (<c>--wurf-spur=von-bis</c> in
+    /// <c>Network/NetGame.cs</c>): ist die Liste gesetzt, trägt jeder Wurf den
+    /// Namen seines Rufers ein. Gemessen hat sie den ersten Fund des
+    /// 16.10.2026: zwei Maschinen mit gleicher Prüfsumme, aber zwischen Takt
+    /// 2010 und 2020 schon 32907 gegen 32906 Würfe — ein Wurf, der an etwas
+    /// Örtlichem hing. Eine Summe sagt nie, WER würfelt; die Spur sagt es.
+    /// Ohne den Schalter kostet sie einen Vergleich auf null.
+    /// </summary>
+    public static System.Collections.Generic.List<string>? Spur;
+
+    private static void SpurEintragen()
+    {
+        var st = new System.Diagnostics.StackTrace(1, false);
+        for (int i = 0; i < st.FrameCount; i++)
+        {
+            var m = st.GetFrame(i)?.GetMethod();
+            if (m == null || m.DeclaringType == typeof(Determinism)) continue;
+            // zwei Rufer tief, damit ein gemeinsamer Helfer nicht alles verdeckt
+            var m2 = i + 1 < st.FrameCount ? st.GetFrame(i + 1)?.GetMethod() : null;
+            Spur!.Add($"{m.Name} <- {m2?.Name}");
+            return;
+        }
+        Spur!.Add("?");
+    }
 
     // ---- die Prüfsumme ------------------------------------------------------
 

@@ -62,6 +62,8 @@ public sealed partial class CommandCheckRunner : Node
 {
     private MapEntityLayer _a = null!, _b = null!, _c = null!;
     private int _ticks, _limit = 600, _at = 30, _units = 4, _reach = 8, _poison = -1;
+    /// <summary>Bildzeit je Aufruf (60 Bilder/s), NICHT die Taktlänge —
+    /// SimHz ist 50 (bug-527, siehe DeterminismTwinRunner._dtA).</summary>
     private double _dt = 1.0 / 60.0;
     private bool _done, _split;
     private Godot.FileAccess? _log;

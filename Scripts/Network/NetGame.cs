@@ -126,6 +126,9 @@ public sealed partial class NetGameRunner : Node
 
     private int _tick, _start, _limit, _every = 60, _order = 60, _swallow = -1;
     private int _fristMs = 15000;
+    /// <summary><c>--wurf-spur=von-bis</c>: in diesen Takten jeden Wurf mit
+    /// seinem Rufer melden (siehe <see cref="Determinism.Spur"/>).</summary>
+    private int _spurVon = -1, _spurBis = -2;
     private bool _swallowed;
     private double _acc;
     private ulong _stallSince, _stallSaid;
@@ -173,6 +176,13 @@ public sealed partial class NetGameRunner : Node
             else if (a.StartsWith("--net-schluck=")) int.TryParse(a["--net-schluck=".Length..], out r._swallow);
             else if (a.StartsWith("--net-frist=")) int.TryParse(a["--net-frist=".Length..], out r._fristMs);
             else if (a.StartsWith("--net-out=")) outPath = a["--net-out=".Length..];
+            else if (a == "--nettakt-alt") NettaktAlt = true;              // bug-527
+            else if (a.StartsWith("--wurf-spur="))
+            {
+                var t = a["--wurf-spur=".Length..].Split('-');
+                if (t.Length == 2 && int.TryParse(t[0], out int v) && int.TryParse(t[1], out int b))
+                { r._spurVon = v; r._spurBis = b; }
+            }
         }
         if (r._every < 1) r._every = 60;
         if (r._fristMs < 1000) r._fristMs = 1000;
@@ -208,6 +218,13 @@ public sealed partial class NetGameRunner : Node
         // ⚠ AB HIER GEHÖRT DER TAKT UNS.
         _sim.SetProcess(false);
         _sim.SetPhysicsProcess(false);
+        // bug-527: den Bildrest des Sammlers verwerfen, damit der erste Aufruf
+        // mit genau einer Taktlänge genau einen Takt fährt und nicht einen
+        // Rest aus der Bildzeit mitschleppt. Die Geschwindigkeit steht im Netz
+        // auf 1 — das Original zwingt sie dort hart auf 1 (OFFENE_FRAGEN AV.4,
+        // Netzschalter dword[0x539234]); ein Prozess, der mit Stufe 2 ins Netz
+        // ginge, führe je Aufruf zwei Takte.
+        if (!NettaktAlt) _sim.NetzTaktUebernehmen();
 
         // Der Ausgangskorb: ein Klick wird ab jetzt NICHT mehr sofort in den
         // Ring gelegt, sondern erst über die Leitung geschickt. Das ist der
@@ -215,7 +232,7 @@ public sealed partial class NetGameRunner : Node
         _sim.CommandSink = c => { _out.Add(c); return true; };
 
         Say($"# Netzspiel: {(_link.IsHost ? "VERMITTLER" : "MITSPIELER")}, {_s}");
-        Say($"#   Vorlauf {_s.Lead} Takte = {_s.Lead * 1000.0 / 60.0:0.0} ms bei 60 Takten/s " +
+        Say($"#   Vorlauf {_s.Lead} Takte = {_s.Lead * 1000.0 * SimSeconds:0.0} ms bei {1.0 / SimSeconds:0} Takten/s " +
             $"(UNSERE SETZUNG, Begründung im Quelltext von {nameof(NetGameRunner)})");
         Say($"#   Abdruck alle {_every} Takte, eigener Befehl alle " +
             $"{(_order > 0 ? _order + " Takte" : "— (KEIN Befehl: der Lauf belegt dann nur, " +
@@ -363,7 +380,15 @@ public sealed partial class NetGameRunner : Node
             Ingest(_tick);
 
             // 3) Ein Takt, und genau einer.
+            bool spur = _tick >= _spurVon && _tick <= _spurBis;
+            if (spur) Determinism.Spur = new List<string>();
+            int spurTakt = _tick;
             if (!OneTick(nothing: false)) return;
+            if (spur)
+            {
+                foreach (string w in Determinism.Spur!) Say($"WURF t={spurTakt} {w}");
+                Determinism.Spur = null;
+            }
 
             // 4) Der Abdruck.
             if (_tick % _every == 0) Digest();
@@ -379,12 +404,28 @@ public sealed partial class NetGameRunner : Node
         }
     }
 
-    /// <summary>⚠ Die Taktlänge. Sie steht in <c>MapEntityLayer</c> als
-    /// <c>private const SimDt = 1f/60</c> und ist von hier nicht lesbar —
-    /// deshalb wird sie nicht angenommen, sondern <b>nachgeprüft</b>: schlägt
-    /// ein Aufruf mit diesem Wert nicht genau einen Takt an, bricht
-    /// <see cref="OneTick"/> mit der Zahl ab.</summary>
-    private const double SimSeconds = 1.0 / 60.0;
+    /// <summary>⚠ Die Taktlänge — aus der EINEN Quelle,
+    /// <see cref="MapEntityLayer.SimTaktSekunden"/> (= <c>SimDt = 1/SimHz</c>).
+    ///
+    /// <para>⚠⚠ <b>16.10.2026, bug-527.</b> Hier stand die ZAHL
+    /// <c>1.0 / 60.0</c>, mit dem Kommentar, <c>SimDt</c> sei »von hier nicht
+    /// lesbar«. Seit 5e35db6 (21.08.2026) läuft die Simulation mit
+    /// <b>SimHz = 50</b> (SetTimer 20 ms, C 0x415BC5). Ein Aufruf mit
+    /// 16,7 ms fuhr damit <b>0 Takte</b> statt einem, und
+    /// <see cref="OneTick"/> brach jedes Netzspiel nach dem Vorlauf mit Quit(4)
+    /// ab. Gemessen am 16.10. im Zwei-Prozess-Lauf map_NET07: Mitspieler
+    /// »dt=0,016667 s hat 0 Takte ausgelöst«, Vermittler wartete 15 013 ms auf
+    /// Takt 5 — ROT/ROT. Die Nachprüfung in <see cref="OneTick"/> hat genau das
+    /// getan, wofür sie gebaut war; nur hat zwei Monate lang niemand den Lauf
+    /// gefahren.</para>
+    ///
+    /// <para>Gegenschalter <c>--nettakt-alt</c>: wieder die feste 1/60 und der
+    /// Grundtakt-Regler wirkt auch im Netz — das Nullmodell, das den Abbruch
+    /// wieder zeigt.</para></summary>
+    private static double SimSeconds => NettaktAlt ? 1.0 / 60.0 : MapEntityLayer.SimTaktSekunden;
+
+    /// <summary><c>--nettakt-alt</c> — siehe <see cref="SimSeconds"/>.</summary>
+    internal static bool NettaktAlt;
 
     private bool OneTick(bool nothing)
     {
@@ -451,7 +492,11 @@ public sealed partial class NetGameRunner : Node
         }
         _link.SendAll(NetLink.DigestPacket(_s.Me, _tick, h));
         var rep = _sim.CommandReport();
-        Say($"NETZ t={_tick,6} abdruck={h:X16} zahlen={snap.Count} " +
+        // 16.10.2026: die Würfe des gekeimten Stroms mit ausgeben — gehen sie
+        // auseinander, BEVOR die Prüfsumme es tut, hat eine Maschine öfter
+        // gewürfelt (ein Wurf an Ansicht oder Sichtspieler gebunden), und das
+        // ist ein anderer Fehler als »gleich oft, andere Zahl«.
+        Say($"NETZ t={_tick,6} abdruck={h:X16} zahlen={snap.Count} würfe={Determinism.Draws} " +
             $"befehle={rep.Applied} befehlsumme={rep.Digest:X16} | {_link.Numbers()}");
         SayAi();
     }

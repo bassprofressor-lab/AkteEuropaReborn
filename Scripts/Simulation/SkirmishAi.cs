@@ -800,6 +800,23 @@ public partial class MapEntityLayer : Node2D
         // nicht mehr gibt. ⚠ Und danach ist `prize` veraltet, darum wird die
         // Zahl unten neu geholt.
         var mine = new List<int>(foes) { human };
+        // ⚠⚠ 16.10.2026, bug-528 — IM NETZ SPIELEN ALLE MENSCHEN MIT, nicht nur
+        // »ich«. Hier stand nur `foes + human`; seit C24 (17.08.2026) räumt
+        // ClearIdleSlots aber jeden Platz ab, der nicht in dieser Liste steht.
+        // Im Netzspiel strich damit JEDE Maschine den ANDEREN Menschen von der
+        // Karte: auf dem Vermittler (Platz 0) starben die Einheiten von Platz
+        // 1, auf dem Mitspieler die von Platz 0. Gemessen im Zwei-Prozess-Lauf
+        // map_NET07: schon die Prüfsumme des Anfangs verschieden
+        // (8E95C8DE177CFECD gegen DC9AFDA89D414B0E), bei Takt 60 172 von 8429
+        // Zahlen verschieden, Einheit #0..#5 »Hp A=50 B=0, Dead A=0 B=1«.
+        // Dieselbe Fehlerklasse wie oben bei der KI: eine verschiedene
+        // Aufstellung, die wie ein Rechenfehler aussieht. Die Menschenplätze
+        // kommen vom Vermittler, die Liste ist damit auf allen Maschinen
+        // dieselbe — und im Einzelspieler leer, dort ändert sich nichts.
+        // Gegenschalter --netplaetze-alt.
+        if (!NetzplaetzeAlt)
+            foreach (int p in humans)
+                if (!mine.Contains(p)) mine.Add(p);
         // ⚠ 17.08.2026 — C24: VOR dem Verteilen der Basen. Wer nicht mitspielt,
         // soll auch keine Basis zugeteilt bekommen, und seine Einheiten sollen
         // beim Verteilen nicht mehr im Weg stehen.
@@ -1042,6 +1059,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--no-clear-idle</c> — die Gegenprobe zu C24: die Truppen der
     /// nicht mitspielenden Plaetze bleiben stehen, wie vor dem 17.08.2026.</summary>
     public static bool NoClearIdleSlots;
+
+    /// <summary><c>--netplaetze-alt</c> (bug-528): im Netzspiel wieder nur
+    /// »ich + KI« als mitspielend — das Nullmodell, in dem jede Maschine den
+    /// anderen Menschen abräumt.</summary>
+    public static bool NetzplaetzeAlt;
 
     private int ClearIdleSlots(List<int> playing)
     {

@@ -4549,6 +4549,7 @@ _mausProbePunkt = karte;
             else if (a == "--no-step-out") MapEntityLayer.NoStepOutOfDoor = true;
             // --no-clear-idle (C24): Truppen unbeteiligter Plaetze stehen lassen.
             else if (a == "--no-clear-idle") MapEntityLayer.NoClearIdleSlots = true;
+            else if (a == "--netplaetze-alt") MapEntityLayer.NetzplaetzeAlt = true;   // bug-528
             else if (a == "--no-building-body") MapEntityLayer.NoBuildingBody = true;
             // --demo-behind (C23): eine Einheit MITTEN in einen Gebaeudegrundriss
             // setzen und die Kamera daraufsetzen, damit der Bildvergleich den Fall

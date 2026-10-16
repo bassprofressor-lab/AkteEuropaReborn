@@ -59,6 +59,12 @@ public sealed partial class DeterminismTwinRunner : Node
 
     private MapEntityLayer _a = null!, _b = null!;
     private int _ticks, _limit, _poisonAt = -1;
+    /// <summary>⚠ Die BILDZEIT je Aufruf, nicht die Taktlänge (bug-527,
+    /// 16.10.2026 berichtigt): 1/60 ist ein Bild bei 60 Bildern/s. Seit
+    /// 5e35db6 läuft der Takt mit SimHz 50, ein Aufruf fährt also 0 oder 1
+    /// Takt (fünf von sechs Bildern einen) — genau so wie im Spiel. Gezählt
+    /// wird in diesem Prüfstand je BILD; »Takt« in seinen Meldungen heisst
+    /// Aufruf.</summary>
     private double _dtA = 1.0 / 60.0, _dtB = 1.0 / 60.0;
     private bool _syncGd = true, _done;
     private Godot.FileAccess? _log;
