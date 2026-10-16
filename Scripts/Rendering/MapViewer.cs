@@ -4550,6 +4550,7 @@ _mausProbePunkt = karte;
             // --no-clear-idle (C24): Truppen unbeteiligter Plaetze stehen lassen.
             else if (a == "--no-clear-idle") MapEntityLayer.NoClearIdleSlots = true;
             else if (a == "--netplaetze-alt") MapEntityLayer.NetzplaetzeAlt = true;   // bug-528
+            else if (a == "--direktbefehle-alt") MapEntityLayer.DirektbefehleAlt = true;   // bug-530
             else if (a == "--no-building-body") MapEntityLayer.NoBuildingBody = true;
             // --demo-behind (C23): eine Einheit MITTEN in einen Gebaeudegrundriss
             // setzen und die Kamera daraufsetzen, damit der Bildvergleich den Fall
@@ -7576,7 +7577,7 @@ _mausProbePunkt = karte;
         _gebaeudeFenster.OnRepair = _entities.BuildingWindowRepair;
         // ⭐ 12.09.2026, bug-211: derselbe Ruf, den unser Baufenster und die
         // Taste Y benutzen — das Fenster bekommt keinen eigenen Weg.
-        _gebaeudeFenster.OnFlugzeugStart = () => _entities.LaunchAircraft(_entities.ViewPlayer);
+        _gebaeudeFenster.OnFlugzeugStart = () => _entities.PostAlleStarten(_entities.ViewPlayer);   // bug-530
         // ⭐⭐ 19.09.2026 — die Knoepfe der Fensterart 5, siehe UI/FlughafenView.cs.
         // ⚠ »Angriff« nimmt hier denselben Weg wie »Starten«, weil die Zielwahl
         // ueber den Kartenschirm gelesen, aber noch nicht gebaut ist. Das ist
@@ -7592,7 +7593,7 @@ _mausProbePunkt = karte;
         {
             if (!_entities.ZielwahlBeginnen(_entities.Fenstergebaeudeplatz(),
                                             _gebaeudeFenster.StaffelMarke))
-                _entities.LaunchAircraft(_entities.ViewPlayer);
+                _entities.PostAlleStarten(_entities.ViewPlayer);   // bug-530
         };
         _gebaeudeFenster.OnPatrouille =
             () => _entities.PatrouilleKippen(_entities.Fenstergebaeudeplatz());
@@ -7708,7 +7709,7 @@ _mausProbePunkt = karte;
         // MECHANIK falsch war und nur fuer den REITER stimmte.
         _baseWindow.ResearchNote = _entities.ForschungNote;
         _baseWindow.ResearchRows = _entities.ForschungZeilen;
-        _baseWindow.OnResearch = zeile => _entities.ForschungAusPanel(zeile);
+        _baseWindow.OnResearch = zeile => _entities.PostForschung(zeile);   // bug-530
         _baseWindow.RepairNote = _entities.RepairNote;
         _baseWindow.OnRepair = () => _entities.PostRepairFromPanel();
         _baseWindow.OnRepairStop = () => _entities.PostStopRepairFromPanel();
@@ -7723,9 +7724,9 @@ _mausProbePunkt = karte;
         // »Starten« nur auf Y — und die Bestandszeile des Flughafens sagte dem
         // Spieler sogar »(Y startet)«, was das Eingestaendnis dafuer ist.
         _baseWindow.CancelChoice = () => _entities.CancelChoiceOfSelection();
-        _baseWindow.OnCancelBuild = () => _entities.CancelBuild();
+        _baseWindow.OnCancelBuild = () => _entities.PostBauAbbrechen();   // bug-530
         _baseWindow.HangarCount = () => _entities.HangarOfSelection();
-        _baseWindow.OnLaunch = () => _entities.LaunchAircraft(_entities.ViewPlayer);
+        _baseWindow.OnLaunch = () => _entities.PostAlleStarten(_entities.ViewPlayer);   // bug-530
         // ⚠ 16.08.2026 — der DRITTE tote Reiter ist angeschlossen (Fehler D1).
         // Anders als bei Forschung und Reparatur lag hier keine fertige Mechanik
         // auf einer Taste: das Depot gab es gar nicht, fertige Einheiten
@@ -7806,8 +7807,8 @@ _mausProbePunkt = karte;
             return outp;
         };
         _orderBar.OnBuildOrder = order => _entities.BeginPlacementFromPanel(order);
-        _orderBar.OnDigIn = () => _entities.ToggleDigIn();
-        _orderBar.OnStop = () => _entities.StopSelected();
+        _orderBar.OnDigIn = () => _entities.PostEingraben();   // bug-530: ueber den Ring
+        _orderBar.OnStop = () => _entities.PostAnhalten();
         // ⭐ 08.09.2026 — DER TRANSPORTZYKLUS. Im Original fuehrt der Weg ueber
         // das Sechs-Symbole-Menue (Fensterart 1, Doppelklick oder Leertaste),
         // dessen Eintrag 0x10 »Transportzyklus einstellen« heisst. Das Menue
@@ -9398,9 +9399,9 @@ _mausProbePunkt = karte;
                 case Key.T: _entities.ToggleBuildings(); break;
                 case Key.U: _entities.ToggleSprites(); break;
                 case Key.P: _entities.ToggleNav(); break;
-                case Key.X: _entities.StopSelected(); break;
+                case Key.X: _entities.PostAnhalten(); break;      // bug-530: Befehl 12
                 case Key.R: _entities.ToggleRanges(); break;
-                case Key.E: _entities.ToggleDigIn(); break;
+                case Key.E: _entities.PostEingraben(); break;     // bug-530: Befehl 26
                 case Key.M: _entities.ToggleDesigner(); break;
                 // ⚠ 17.08.2026 — Umschalt+B nimmt die LETZTE Bestellung zurück
                 // und erstattet sie. Die Zeile muss VOR dem schlichten `Key.B`
@@ -9409,7 +9410,7 @@ _mausProbePunkt = karte;
                 // Warum es die Taste überhaupt gibt: seit der Bauwarteschlange
                 // wird beim EINREIHEN bezahlt, also muss sich eine Bestellung
                 // auch wieder auflösen lassen (siehe Entity.BuildQueue).
-                case Key.B when key.ShiftPressed: _entities.CancelBuild(); break;
+                case Key.B when key.ShiftPressed: _entities.PostBauAbbrechen(); break;   // bug-530
                 case Key.B: _entities.ProduceFromSelection(); break;
                 case Key.N: _entities.CycleBuildMenu(); break;
                 // the production list shares the display box with the info
@@ -9420,7 +9421,7 @@ _mausProbePunkt = karte;
                 // ⭐ Taste O — jetzt die erste Zeile des Angebots. Das
                 // Original kennt die Taste nicht; sie bleibt als Abkuerzung,
                 // damit der Weg ohne Fenster nicht verschwindet.
-                case Key.O: _entities.ForschungAusPanel(0); break;
+                case Key.O: _entities.PostForschung(0); break;    // bug-530
                 case Key.K: _entities.StartRepair(); break;
                 case Key.L: _entities.ToggleRail(); break;
                 // ⚠ DIE SPIELGESCHWINDIGKEIT, 1…3 wie im Original — die
@@ -9428,19 +9429,13 @@ _mausProbePunkt = karte;
             // ueber »−« nicht unter 1 (@0x413A8F). Siehe
             // MapEntityLayer.GameSpeed; der Turbo auf 20 ist NICHT auf einer
             // Taste, weil er im Original ein eigener Umschalter ist.
-            case Key.Plus or Key.KpAdd or Key.Equal:
-                MapEntityLayer.GameSpeed = Mathf.Min(3, MapEntityLayer.GameSpeed + 1);
-                GD.Print($"Geschwindigkeit {MapEntityLayer.GameSpeed} " +
-                         $"({50 * MapEntityLayer.GameSpeed} Takte/s)");
-                break;
-            case Key.Minus or Key.KpSubtract:
-                MapEntityLayer.GameSpeed = Mathf.Max(1, MapEntityLayer.GameSpeed - 1);
-                GD.Print($"Geschwindigkeit {MapEntityLayer.GameSpeed} " +
-                         $"({50 * MapEntityLayer.GameSpeed} Takte/s)");
-                break;
-            case Key.Y: _entities.LaunchAircraft(_entities.ViewPlayer); break;
-                case Key.V: _entities.StartUpgrade(true); break;   // Lagerausbau
-                case Key.C: _entities.StartUpgrade(false); break;  // Produktionserw.
+            // ⭐ 16.10.2026 (bug-530): ueber den Bus, Befehl 989 mit dem NEUEN
+            // Wert — wie die Fensterprozedur des Originals (@0x413A3E/0x413A81).
+            case Key.Plus or Key.KpAdd or Key.Equal: _entities.PostGeschwindigkeit(+1); break;
+            case Key.Minus or Key.KpSubtract: _entities.PostGeschwindigkeit(-1); break;
+            case Key.Y: _entities.PostAlleStarten(_entities.ViewPlayer); break;   // bug-530
+                case Key.V: _entities.PostAusbauTaste(true); break;   // Lagerausbau, bug-530
+                case Key.C: _entities.PostAusbauTaste(false); break;  // Produktionserw., bug-530
                 case Key.Escape:
                     // ⚠ Erst der Setzmodus, dann die Pause. Wer im Setzmodus
                     // Esc drueckt, will den Bauauftrag los und nicht das Spiel

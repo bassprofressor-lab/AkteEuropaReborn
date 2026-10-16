@@ -177,6 +177,7 @@ public sealed partial class NetGameRunner : Node
             else if (a.StartsWith("--net-frist=")) int.TryParse(a["--net-frist=".Length..], out r._fristMs);
             else if (a.StartsWith("--net-out=")) outPath = a["--net-out=".Length..];
             else if (a == "--nettakt-alt") NettaktAlt = true;              // bug-527
+            else if (a == "--net-direktbefehle") r._direkt = true;         // bug-530
             else if (a.StartsWith("--wurf-spur="))
             {
                 var t = a["--wurf-spur=".Length..].Split('-');
@@ -356,7 +357,10 @@ public sealed partial class NetGameRunner : Node
         {
             _acc += delta;
             budget = 0;
-            while (_acc >= SimSeconds && budget < 240) { budget++; _acc -= SimSeconds; }
+            // bug-530: die Geschwindigkeit (Befehl 989) ist im Netz gemeinsam
+            // und wirkt hier, in der Wanduhr — ein Aufruf bleibt ein Takt.
+            double takt = SimSeconds / Math.Max(1, MapEntityLayer.GameSpeed);
+            while (_acc >= takt && budget < 240) { budget++; _acc -= takt; }
             if (budget == 0) return;
         }
 
@@ -652,6 +656,9 @@ public sealed partial class NetGameRunner : Node
     /// </summary>
     private void OrderSomething()
     {
+        // bug-530: --net-direktbefehle — jeden zweiten Befehlstakt einen der
+        // sieben neu verlegten Befehle, auf dem Weg, den Taste/Knopf nehmen.
+        if (_direkt && (++_orderNr & 1) == 0) { OrderDirekt(); return; }
         var units = _sim.CommandCheckMobileUnits(6);
         if (units.Count == 0)
         {
@@ -669,6 +676,37 @@ public sealed partial class NetGameRunner : Node
             $"({units.Count} Einheit(en) -> Zelle {cell.X},{cell.Y}), " +
             $"fällig in Takt {_tick + _s.Lead}");
     }
+
+    /// <summary><c>--net-direktbefehle</c> (bug-530): reihum Anhalten,
+    /// Eingraben, Ausgraben, Forschung, Ausbau, Bau abbrechen, Flugzeugstart,
+    /// Geschwindigkeit hoch/runter — jeweils über die Post-Methode, die auch die
+    /// Taste ruft. Mit <c>--direktbefehle-alt</c> wirken sie unmittelbar und
+    /// NUR hier: der Abdruckvergleich muss dann anschlagen.</summary>
+    private void OrderDirekt()
+    {
+        int art = _direktNr++ % 9;
+        int me = _s.MySlot;
+        int n = 0;
+        string was;
+        var units = _sim.CommandCheckMobileUnits(6);
+        switch (art)
+        {
+            case 0: _sim.CommandCheckSelect(units); n = _sim.PostAnhalten(); was = "Anhalten (12)"; break;
+            case 1: _sim.CommandCheckSelect(units); n = _sim.PostEingraben(); was = "Eingraben (26)"; break;
+            case 2: _sim.CommandCheckSelect(units); n = _sim.PostEingraben(); was = "Ausgraben (26)"; break;
+            case 3: n = _sim.NetzProbeWaehleGebaeude(me, 1) ? _sim.PostForschung(0) : -1; was = "Forschung (2005)"; break;
+            case 4: n = _sim.NetzProbeWaehleGebaeude(me, 2) ? _sim.PostAusbauTaste((_direktNr & 2) == 0) : -1; was = "Ausbau Taste V/C (509/510)"; break;
+            case 5: n = _sim.NetzProbeWaehleGebaeude(me, 1) ? _sim.PostBauAbbrechen() : -1; was = "Bau abbrechen (2004)"; break;
+            case 6: n = _sim.PostAlleStarten(me); was = "Alle starten (2006)"; break;
+            case 7: n = _sim.PostGeschwindigkeit(+1); was = "Geschwindigkeit + (989)"; break;
+            default: n = _sim.PostGeschwindigkeit(-1); was = "Geschwindigkeit − (989)"; break;
+        }
+        Say($"   Takt {_tick}: {was} für Platz {me}: {(n < 0 ? "kein Gebäude dafür" : $"{n} Satz/Sätze")}" +
+            (MapEntityLayer.DirektbefehleAlt ? " ⚠ DIREKT (--direktbefehle-alt)" : ""));
+    }
+
+    private bool _direkt;
+    private int _orderNr, _direktNr;
 
     // ================= Warten und Urteil ====================================
 
@@ -702,6 +740,7 @@ public sealed partial class NetGameRunner : Node
         var rep = _sim.CommandReport();
         Say($"NETZ-ENDE takte={ran} (Takt {_start}..{_tick}) abdruck={_sim.DeterminismChecksum():X16}");
         Say($"   {rep}");
+        Say($"   angenommen je Befehl: {string.Join(", ", System.Linq.Enumerable.Select(_sim.AngenommenJeBefehl, kv => $"{kv.Key}={kv.Value}"))}");
         Say($"   {_link.Numbers()}");
         SayAi();
 

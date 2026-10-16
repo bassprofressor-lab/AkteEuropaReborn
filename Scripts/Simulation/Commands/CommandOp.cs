@@ -462,6 +462,53 @@ public static class CommandOp
     /// stride 30) — welcher Opcode ihn ausführt, ist NICHT gelesen.</summary>
     public const short OursStop = 2002;
 
+    /// <summary>⭐ <b>12 = ANHALTEN</b> (gelesen 16.10.2026, bug-530). Absender
+    /// 0x433768 (eine Einheit, F 0x4328A8) bzw. 0x4353B1 (Gruppe, je Eintrag
+    /// der Liste 0x833098; Registerform <c>mov word[Kladde], bx</c>, darum
+    /// fehlt er in COMMAND_SENDERS.txt). Die Menüzeile 26 »Anhalten« setzt nur
+    /// die Taste S (byte[0xA1833B]), eingelöst je Takt in 0x433750. Behandler
+    /// 0x4C2E87 (F 0x4C29FB): ab bei +0x09 == 1 oder UKOL 0x16/0x17, sonst
+    /// 0x4103B0 (UKOL := 0, +0x1A := 0xFF). P1 = Einheit. Löst
+    /// <see cref="OursStop"/> ab.</summary>
+    public const short Stop = 12;
+
+    /// <summary>⭐ <b>26 = EINGRABEN/AUSGRABEN</b> (gelesen 16.10.2026, bug-530).
+    /// Menüzeile 7 @0x448887 schickt P2 = 1, Zeile 8 @0x4488BF P2 = 0 (F
+    /// 0x44787B / 0x4478B3). P1 = Einheit. Behandler 0x4C35E1 (F 0x4C315B):
+    /// P2 ≠ 0 → UKOL 0, Warteschlange 0x834B70 (später UKOL 22 aufbauen);
+    /// P2 = 0 → UKOL 0x17 (abbauen), AKCE 7, Klang 60.</summary>
+    public const short Eingraben = 26;
+
+    /// <summary>⭐ <b>989 = GESCHWINDIGKEIT SETZEN</b> (gelesen 16.10.2026,
+    /// bug-530). P1 = der neue Wert. Absender Ziffernblock + @0x413A3E
+    /// (min(+1, 3)), − @0x413A81 (max(−1, 1)), Optionsregler @0x44C942;
+    /// Behandler 0x4C4448 (F 0x4C3FBA): <c>byte[0x4FA23C] := P1</c>. Unter
+    /// 1000, also über die Leitung — die Geschwindigkeit ist im Netz GEMEINSAM.
+    /// Beim Netzstart setzt das Original sie einmal auf 1 (@0x4193C8); eine
+    /// dauernde Klemme gibt es NICHT. (988 = Turbo, nur mit Entwicklerschalter,
+    /// nicht gebaut.)</summary>
+    public const short Geschwindigkeit = 989;
+
+    /// <summary>⚠ UNSERE SETZUNG (bug-530): Bau abbrechen, P1 = Fabrik. Das
+    /// Original hat keinen — Einheiten haben dort keine Bauzeit (503/501/508
+    /// setzen sie im selben Takt), und die Gebäude-Umschalter 511/517 sind
+    /// 1⇄0 ohne Rückzahlung. Unsere Warteschlange mit Bezahlung beim
+    /// Einreihen braucht ihn.</summary>
+    public const short OursCancelBuild = 2004;
+
+    /// <summary>⚠ UNSERE SETZUNG (bug-530): Forschung kaufen, P1 = Basis,
+    /// P2 = Zeile, P3 = Preis beim Klick (Wächter). Das Original kauft
+    /// ÖRTLICH (0x44A87D → 0x4AABD0/0x4AB830, Lauftafel 0xA3A9D0) und schickt
+    /// nur den Preis über 528; erst der Abschluss geht über den Bus
+    /// (531/532). Bei uns wirkt der ganze Kauf über den Ring.</summary>
+    public const short OursResearch = 2005;
+
+    /// <summary>⚠ UNSERE SETZUNG (bug-530): alle Flugzeuge des Spielers P1
+    /// starten (unser Knopf). Das Original startet je Flugzeug mit 502 (P1
+    /// Platz, P2 Modus 6/7/1, P3/P4 Zelle, P5 Ziel; Behandler 0x4C374B →
+    /// launch_aircraft 0x426020).</summary>
+    public const short OursLaunchAll = 2006;
+
     /// <summary>
     /// ⚠⚠ <b>UNSERE SETZUNG, und eine BEWUSSTE ABWEICHUNG</b>: ein Flugbefehl
     /// des Spielers. P1 = Steckplatz des Flugzeugs (nicht Einheitennummer!),
@@ -521,7 +568,13 @@ public static class CommandOp
         Seed => "Zufallskeim",
         Attack => "Angreifen",
         OursAttack => "Angreifen (ausgediente eigene Nummer)",
-        OursStop => "Anhalten (unsere Setzung)",
+        OursStop => "Anhalten (ausgediente eigene Nummer)",
+        Stop => "Anhalten",
+        Eingraben => "Eingraben/Ausgraben",
+        Geschwindigkeit => "Geschwindigkeit setzen",
+        OursCancelBuild => "Bau abbrechen (unsere Setzung)",
+        OursResearch => "Forschung kaufen (unsere Setzung)",
+        OursLaunchAll => "Alle Flugzeuge starten (unsere Setzung)",
         Board => "Einsteigen",
         Unload => "Absetzen",
         RailRepairOrder => "Gleis reparieren",

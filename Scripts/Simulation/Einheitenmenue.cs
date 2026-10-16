@@ -277,14 +277,14 @@ public partial class MapEntityLayer : Node2D
                 return RouteFensterOeffnen() ? ""
                      : RouteNote.Length > 0 ? RouteNote : "kein Transporter gewaehlt";
             case CodeAnhalten:
-                StopSelected();
+                PostAnhalten();          // bug-530: Befehl 12 ueber den Ring
                 return "";
             case CodeVerkaufen:
                 SellFromPanel();
                 return SellNote;
             case CodeEingraben:
             case CodeAusgraben:
-                ToggleDigIn();
+                PostEingraben();         // bug-530: Befehl 26 ueber den Ring
                 return "";
             case CodeDepot:
                 BeginPlacementFromPanel(OrderDepot);

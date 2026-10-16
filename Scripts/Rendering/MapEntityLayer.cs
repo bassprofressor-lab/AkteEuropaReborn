@@ -14394,18 +14394,24 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (!e.Mobile || e.Dead) continue;
-            e.DugIn = !e.DugIn;
-            if (e.DugIn)
-            {
-                if (e.Reserved is { } r) _nav?.ClearOccupant(r.X, r.Y, i);
-                e.Path = null;
-                e.Reserved = null;
-            }
+            DigInSetzen(i, !e.DugIn);
             n++;
         }
         _order = n > 0 ? $"{OrderName(OrdDigIn)} / {OrderName(OrdDigOut)}: {n}" : "";
         UpdatePanel();
         QueueRedraw();
+    }
+
+    /// <summary>Eingraben setzen — der Rumpf des Umschalters, geteilt mit dem
+    /// Behandler von Befehl 26 (bug-530, Simulation/Commands/Direktbefehle.cs).</summary>
+    private void DigInSetzen(int i, bool ein)
+    {
+        var e = _entities[i];
+        e.DugIn = ein;
+        if (!ein) return;
+        if (e.Reserved is { } r) _nav?.ClearOccupant(r.X, r.Y, i);
+        e.Path = null;
+        e.Reserved = null;
     }
 
     private const float DugInDamageFactor = 0.5f;
@@ -18709,31 +18715,37 @@ public partial class MapEntityLayer : Node2D
         if (_designs == null) return;
         int n = 0;
         foreach (int i in _sel)
-        {
-            var e = _entities[i];
-            if (!IsUnitPlant(e) || e.Dead) continue;
-            if (e.BuildQueue.Count > 0)
-            {
-                int pick = e.BuildQueue[^1];
-                e.BuildQueue.RemoveAt(e.BuildQueue.Count - 1);
-                Refund(e, _designs[pick % _designs.Count]);
-                _order = $"{_designs[pick % _designs.Count].Name} aus der Warteschlange " +
-                         $"genommen — Preis erstattet";
-                n++;
-                continue;
-            }
-            if (e.BuildTime > 0f)
-            {
-                var d = _designs[e.BuildIndex % _designs.Count];
-                e.BuildTime = 0f;
-                Refund(e, d);
-                _order = $"{d.Name} abgebrochen — Preis erstattet";
-                n++;
-            }
-        }
+            if (CancelBuildAt(i)) n++;
         if (n == 0) _order = "nichts abzubrechen";
         UpdatePanel();
         QueueRedraw();
+    }
+
+    /// <summary>Eine Fabrik: die letzte Bestellung zurück, sonst den laufenden
+    /// Bau. Geteilt mit dem Behandler von 2004 (bug-530).</summary>
+    private bool CancelBuildAt(int i)
+    {
+        if (_designs == null || i < 0 || i >= _entities.Count) return false;
+        var e = _entities[i];
+        if (!IsUnitPlant(e) || e.Dead) return false;
+        if (e.BuildQueue.Count > 0)
+        {
+            int pick = e.BuildQueue[^1];
+            e.BuildQueue.RemoveAt(e.BuildQueue.Count - 1);
+            Refund(e, _designs[pick % _designs.Count]);
+            _order = $"{_designs[pick % _designs.Count].Name} aus der Warteschlange " +
+                     $"genommen — Preis erstattet";
+            return true;
+        }
+        if (e.BuildTime > 0f)
+        {
+            var d = _designs[e.BuildIndex % _designs.Count];
+            e.BuildTime = 0f;
+            Refund(e, d);
+            _order = $"{d.Name} abgebrochen — Preis erstattet";
+            return true;
+        }
+        return false;
     }
 
     /// <summary>Gegenstück zu <see cref="PayFor"/>. ⚠ Ohne Deckel: die Lager
@@ -34801,6 +34813,10 @@ public partial class MapEntityLayer : Node2D
         // (@0x416068 bis @0x4168AE), und der Taktzaehler steigt INNEN. Siehe
         // SimHz und GameSpeed. 0 heisst Pause — dann laeuft gar nichts.
         int mal = Mathf.Clamp(GameSpeed, 0, SpeedTurbo);
+        // bug-530: im Netz fährt ein Aufruf des Taktgebers GENAU einen Takt;
+        // die Geschwindigkeit (Befehl 989, auf allen Maschinen im selben Takt
+        // gesetzt) rechnet der Taktgeber selbst in seine Wanduhr ein.
+        if (NetGameRunner.Active && !NetGameRunner.NettaktAlt) mal = 1;
         while (_simAcc >= SimDt && steps < SimMaxCatchUp)
         {
             for (int k = 0; k < mal; k++)

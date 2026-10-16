@@ -694,9 +694,12 @@ public partial class MapEntityLayer
     /// welcher Opcode ihn ausführt, ist nicht gelesen.</summary>
     public int PostStop()
     {
+        // ⭐ 16.10.2026 (bug-530): Befehl 12 des Originals (Absender 0x433768,
+        // Gruppe 0x4353B1, Behandler 0x4C2E87), nicht mehr unsere 2002; die
+        // Auswahl nach Platz, nicht in HashSet-Folge.
         int n = 0;
-        foreach (int i in _sel)
-            if (Emit(CommandRecord.Make(CommandOp.OursStop, (byte)ViewPlayer, (short)i))) n++;
+        foreach (int i in AuswahlNachPlatz())
+            if (Emit(CommandRecord.Make(CommandOp.Stop, (byte)ViewPlayer, (short)i))) n++;
         return n;
     }
 
@@ -869,7 +872,15 @@ public partial class MapEntityLayer
     /// </summary>
     public bool ApplyCommand(in CommandRecord c)
     {
+        // bug-530: die Behandler der neu verlegten Befehle schreiben ihre
+        // Rückmeldung in _order (die Auftragszeile). Kommt der Satz von einem
+        // ANDEREN Spieler, gehört die Zeile nicht ihm — sie wird zurückgestellt.
+        string merkOrder = _order;
         bool ok = ApplyCommandInner(c);
+        if (c.Player != ViewPlayer && c.Op is CommandOp.Eingraben or CommandOp.OursCancelBuild
+                or CommandOp.OursResearch or CommandOp.OursLaunchAll)
+            _order = merkOrder;
+        if (ok) { AngenommenJeBefehl.TryGetValue(c.Op, out int k); AngenommenJeBefehl[c.Op] = k + 1; }
         // ⭐ 03.09.2026 — je Art zaehlen, was WIRKLICH angenommen wurde.
         // `--befehlsklang-probe` stellt diese Zahl neben die Klangzaehler:
         // »n Saetze angewendet, 1 Klang« ist das Nullmodell, »0 angewendet«
@@ -896,11 +907,18 @@ public partial class MapEntityLayer
         CommandOp.NachschubTanken or CommandOp.NachschubMunition => ApplyNachschubBefehl(c),
         // ⚠ Ebenso VOR der Schranke: P1 ist ein REGALPLATZ (Befehl 530).
         CommandOp.MarktKauf => ApplyMarktKauf(c),
+        // bug-530: P1 ist der Wert bzw. der Spieler, keine Einheit.
+        CommandOp.Geschwindigkeit => ApplyGeschwindigkeit(c),
+        CommandOp.OursLaunchAll => ApplyAlleStarten(c),
         _ when !Owns(c) => false,
         CommandOp.Move => ApplyMove(c),
         CommandOp.Attack => ApplyAttack(c),
         CommandOp.OursAttack => ApplyAttack(c),   // ⚠ nur noch fuer alte Staende
-        CommandOp.OursStop => ApplyStop(c),
+        CommandOp.Stop => ApplyStop(c),           // bug-530: Befehl 12 des Originals
+        CommandOp.OursStop => ApplyStop(c),       // ⚠ nur noch fuer alte Staende
+        CommandOp.Eingraben => ApplyEingraben(c),
+        CommandOp.OursCancelBuild => ApplyBauAbbrechen(c),
+        CommandOp.OursResearch => ApplyForschung(c),
         CommandOp.Sell => ApplySell(c),
         CommandOp.PlaceRadar => ApplyPlaceRadar(c),
         CommandOp.PlaceBuilding => ApplyPlaceBuilding(c),
@@ -1542,7 +1560,7 @@ public partial class MapEntityLayer
     public int PostBuildingJob(BuildingJob job)
     {
         int n = 0;
-        foreach (int i in new List<int>(Selection))
+        foreach (int i in AuswahlNachPlatz())     // bug-530: nach Platz, nicht HashSet-Folge
         {
             if (i < 0 || i >= _entities.Count) continue;
             var e = _entities[i];
@@ -2110,7 +2128,10 @@ public partial class MapEntityLayer
     /// Grund.</summary>
     public string AngriffAbgewiesen = "";
 
-    /// <summary>2002, Anhalten (UNSERE SETZUNG). P1 = Einheit.</summary>
+    /// <summary>12, Anhalten (Behandler 0x4C2E87; bis zum 16.10. unsere 2002,
+    /// die weiter angenommen wird). P1 = Einheit. ⚠ Das Original weist den
+    /// Satz ab, wenn die Einheit gerade ein- oder ausgräbt (UKOL 0x16/0x17);
+    /// unser Eingraben hat diese Phase nicht.</summary>
     private bool ApplyStop(in CommandRecord c)
     {
         int i = c.P1;
