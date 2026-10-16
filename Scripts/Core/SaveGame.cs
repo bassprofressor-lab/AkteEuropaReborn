@@ -39,7 +39,7 @@ public static class SaveGame
     /// fehlt, kommt aus der Kartenvorlage (siehe ApplySaveState).</summary>
     public const int FormatAeltestes = 1;
 
-    public static string Folder => OrdnerPruefstand ?? "user://saves";
+    public static string Folder => OrdnerPruefstand ?? (Pruefschutz.Aktiv ? Pruefschutz.SaveOrdner : "user://saves");   // bug-578
 
     /// <summary>⚠ Nur fuer Pruefstaende (<c>--speicherfenster-check</c>): ein
     /// eigener Unterordner, damit die echten Spielstaende des Spielers im

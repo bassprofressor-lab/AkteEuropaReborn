@@ -18289,7 +18289,7 @@ public partial class MapEntityLayer : Node2D
     /// belong in <c>user://data</c> with the imported tables. Same shape as
     /// <see cref="Campaign.CampaignManager.SavePath"/> — a Godot ConfigFile.
     /// </summary>
-    public const string OwnDesignsPath = "user://designs.cfg";
+    public static string OwnDesignsPath => Core.Pruefschutz.Pfad("user://designs.cfg");   // bug-578, Core/Pruefschutz.cs
 
     /// <summary>Writes out every design the player drew up. They are the ones
     /// with no slot: a record read from sec47 has its place in the file, one
@@ -18313,6 +18313,7 @@ public partial class MapEntityLayer : Node2D
             n++;
         }
         c.SetValue("designs", "count", n);
+        Core.Pruefschutz.Gemeldet("designs.cfg", "SaveOwnDesigns");
         c.Save(OwnDesignsPath);
     }
 

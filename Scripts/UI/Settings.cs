@@ -26,7 +26,9 @@ using Godot;
 /// </summary>
 public static class Settings
 {
-    public const string SavePath = "user://settings.cfg";
+    public const string EchterPfad = "user://settings.cfg";
+    /// <summary>bug-578: im kopflosen Lauf / Pruefstand die Kopie, siehe Core/Pruefschutz.cs.</summary>
+    public static string SavePath => Core.Pruefschutz.Pfad(EchterPfad);
 
     public static bool Fullscreen { get => B("fullscreen", false); set => Set("fullscreen", value); }
 
@@ -601,6 +603,7 @@ public static class Settings
     private static void Set(string k, Variant v)
     {
         Cfg.SetValue("options", k, v);
+        Core.Pruefschutz.Gemeldet("settings.cfg", "Settings." + k);
         Cfg.Save(SavePath);
     }
 }
