@@ -12,6 +12,162 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.10 — 2026-10-16 · KayelGee's sixth round, multiplayer in lockstep again
+
+> **KayelGee's sixth round of reports — fifteen points — is worked through
+> completely**: thirteen are fixed, two turned out to be exactly how the
+> original behaves and stay. On top of that the **LAN multiplayer** works again
+> (it had been broken since August without anyone noticing), every player input
+> now travels through the shared command ring, the original's **autosave**, the
+> **credits button** that plays the credits film, a memory leak that turned the
+> menu demos **white** after a long time, and a check that tells you when the
+> **game data has to be read in again** after an update. As always, every
+> change has a switch that brings the old behaviour back.
+
+### Thanks to KayelGee
+
+All of this round goes back to **KayelGee** — his list of 14 October, plus the
+report that the menu demos break after the game has been running for a long
+time, with a screenshot. Thank you! One note on his point 7: »Der Feind naht«
+(»the enemy approaches«) was **never built in any earlier version** — what he
+heard in 0.6.5/0.6.6 was most likely »Ein Gebäude wird angegriffen« (»a
+building is under attack«). It is built now, exactly where the original plays
+it.
+
+### KayelGee's round 6 — fixed
+
+- **The Dicke Bertha reloads its rockets with their own time** (point 1). In
+  the original the shot routine (`0x40BB00`, branch `0x40C45E` → `0x40C4F1`)
+  gives weapon type 20 (rocket) a reload of `rand%20+40` ticks and type 21
+  (close-range weapon) `rand%3+5` ticks; the record's reload field is not read
+  there at all. We reloaded with that field (10), i.e. every 11 ticks — the
+  rockets came **five times too fast**. Now 44..59 ticks, about 1.1 s. Switch
+  `--bertha-nachladen-alt`, test `--bertha-nachladen-check` (mission 25).
+- **Bombers drop their bombs while flying over the target** (point 2). The
+  original (`test_all_bomber`, `0x426A00`) computes an impact point ahead in
+  the direction of flight, runs a trial trajectory and only releases when it
+  lands on the target cell; the bomber turns away only once it is over the
+  target. We released 1.5 cells short, drew the bomb at ground level and turned
+  away at once. Now the bomb visibly falls from the bomber. A bomber that has
+  used up its bombs flies home at once, as in the original (`0x4236AE`).
+  Switches `--bombenabwurf-alt`, `--bombe-geschosstempo`; test
+  `--bomber-abwurf-check`.
+- **A unit that ran dry on the way drives on after refuelling** (point 3). In
+  the original running out of fuel only stops the unit; order, destination and
+  path stay (`0x407AF2`), and once the supply helicopter has filled it up it
+  carries on by itself. We threw the path away. Switch `--sprit-weiter-alt`,
+  test `--sprit-weiter-check`.
+- **No more grey bars in front of a captured depot** (point 4, with his
+  screenshot). The two small boxes on the door and in front of it were our own
+  addition from 0.4.0; after a capture they kept showing in an empty grey for
+  about 24 seconds. The original only draws the capture bar
+  (`0x42B20D`). Switch `--tuermarken-alt`.
+- **Units waiting in a depot can no longer be selected with the selection
+  rectangle** (points 5 and 5.1). They stand on the door cell while they wait
+  for their turn; the rectangle caught them, and with an order they drove off
+  invisibly, blocked others and kept the depot from letting the next ones out.
+  The original's rubber band (`0x434700`) skips them, like the click test does.
+  Switch `--gummiband-ukol-alt`.
+- **Dragging the selection rectangle over the minimap no longer scrolls the
+  map** (point 6). It only scrolls if the press started on the minimap. (The
+  original has no minimap, so this rule is ours.) Switch `--minikarte-zug-alt`.
+- **»Der Feind naht« in mission 2** (point 7). Sound 122, played only by the
+  computer opponent, never by a mission script: when a sector attack on you
+  starts (`0x4BC79D`) and when an attack group has walked all its waypoints
+  (`0x4BD1C5`), then silent for 80–140 seconds. Switch `--feind-naht-alt`, test
+  `--feind-naht-check=m2|m3-mitte|m3-bruecke`.
+- **Own designs show their values in the production window** (point 8). The
+  original reads them from the player's design table, into which »create«
+  writes the new design. Our table was read once per program start, so a design
+  made during the game stayed empty until a restart. Switch
+  `--werteliste-nachtrag-alt`, test `--werteliste-eigen-check`.
+- **The upper half of the depot door takes units in** (point 9). In the
+  original the »drive in« pointer applies on the door cell and on the cell
+  above it (`0x432367`/`0x432372`). Switch `--einfahrzone-alt`.
+- **A base can no longer be picked with the selection rectangle** (point 10) —
+  the original's rubber band knows no buildings. Switch
+  `--gummiband-gebaeude-alt`.
+- **Friendly fire as in the original** (point 11). With Ctrl you can now attack
+  your own vehicles; the original only refuses own and allied foot soldiers
+  (`0x4374B4`). A shot also hits buildings in its path, including your own,
+  while it still flies over your own vehicles. Bombs and blast waves already
+  hit friend and foe alike. Switches `--eigenangriff-alt`,
+  `--gebaeude-durchflug-alt`; test `--eigenbeschuss-check`.
+- **Mission 3: White only attacks once you have crossed the last bridge**
+  (point 14). The original only sends a unit when its path to the target is
+  shorter than 50 steps (`0x4BC74E`); from White's base to the middle base it is
+  62–65 steps, beyond the bridge 19–28. That limit had been missing since
+  0.6.1, so White came as soon as you took the middle base. Now it comes after
+  the bridge, with »Der Feind naht«. This applies to every computer opponent.
+  Switch `--ki-wegtor-alt`.
+- **In the menu demos, units no longer run away from the Dicke Bertha**
+  (point 15). In the original the human's side in a demo plays without the
+  computer opponent (`0x41F448`), except for the very first demo after start;
+  ours had the AI on and it sent six units away. Switch `--demo-ki-alle`.
+
+### KayelGee's round 6 — as in the original, unchanged
+
+- **Selecting a unit with the mouse well above it** (point 12): the original
+  selects by the picture's rectangle with a height offset
+  (`0x431CBC`..`0x431CE6`); ours matches it to within a pixel (measured on 23
+  vehicles: 21.3 px above the visible picture, original 20.3 px).
+- **The empty last pixel of a full health bar** (point 13): as KayelGee
+  suspected, a bug in the original — the fill loop (`0x4B6F60`) fills one
+  column too few. We reproduce it on purpose.
+
+### Fixed
+
+- **The menu demos turned white after a long time** (KayelGee). The cache for
+  the team-coloured pictures was never emptied: each demo and each mission loads
+  its pictures anew, so the cache never hit again but kept everything —
+  **about 400 MB of video memory more per round of the 13 demos** (one round
+  takes about 4 minutes). Once the card was full, new textures came back dead
+  and were drawn white, the large demo map first. Long campaign sessions were
+  affected the same way. Now each map frees its pictures when it is left; the
+  video memory stays the same from round to round. Switch `--demo-runden-alt`,
+  test `--demo-runden-check`.
+- **LAN multiplayer runs again.** Since August the network game had used a tick
+  of 1/60 s while the simulation runs at 50 per second, and the start set-up
+  removed the units of the other human player. Both fixed (switches
+  `--nettakt-alt`, `--netplaetze-alt`).
+- **Every player input goes through the shared command ring.** Until now some
+  orders acted directly on the local game — stop, dig in, speed, production,
+  buying, repair, depot/hangar/garage, hand control, routes, designer, rail,
+  market, engineer, selling, and saving, loading and pausing in a network game.
+  In a network game that drifts the two machines apart. Now each goes through
+  the ring under the original's own command numbers; the other player's orders
+  stay silent on your machine. Two processes now compute 6000 ticks identically
+  on four maps; without the change they part after 60 ticks. In single player
+  an order takes effect one tick (20 ms) later, which you cannot notice.
+  Switches `--direktbefehle-alt`, `--direktbefehle2-alt`.
+- **A die roll for sounds came from the shared random stream** — only on the
+  machine that watched the unit, so the two machines diverged. Sound and
+  picture rolls now have their own die. Switch `--systemzufall-alt`.
+- Three more network faults found on the way: a neutral unit changed sides on
+  each machine to a different player, the network game wrote an end-of-mission
+  save, and a market purchase in skirmish was booked to the wrong player.
+- In a network game the cheats are locked, as in the original.
+
+### New
+
+- **Autosave as in the original**: off / 5 / 10 / 20 minutes, into slot 7
+  »Autosave«; the clock keeps running during pause, the first save comes at
+  once. Switch `--autosave-alt`.
+- **The »Credits« button plays the credits film** (`34.RPL`), as in the
+  original; without the film the old text list comes back. After the credits
+  that follow mission 33, the menu starts with the first demo, as in the
+  original. Switches `--credits-text`, `--abspann-demo-alt`.
+- **The game notices when its data has to be read in again.** After an update
+  that reads some part of the 1997 data differently (maps, units, buildings,
+  tables, campaign, briefings …), the game says so at start and reads in **only
+  that part** again — from the CDs, the last source used or an installation it
+  finds; »Later« plays on with the old data. Nobody has to run a command for it
+  any more. From 0.6.9 nothing needs to be read in again; if your data is older
+  than 13 October, the game asks once for the briefings. Switch
+  `--inhaltsstand-aus`.
+- **The installer** says, when it updates an older version, that the game will
+  check its data at start and you may want your CDs at hand.
+
 ## 0.6.9 — 2026-10-16 · the whole campaign has been played through
 
 > **All 33 missions have now been played through.** Missions 31 to 33 ran

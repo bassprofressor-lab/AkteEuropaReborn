@@ -14,6 +14,174 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.10 — 16.10.2026 · KayelGees sechste Runde, Mehrspieler wieder im Gleichschritt
+
+> **KayelGees sechste Meldungsrunde mit fünfzehn Punkten ist vollständig
+> abgearbeitet**: dreizehn sind behoben, zwei verhalten sich genau wie im
+> Original und bleiben so. Dazu kommt, dass der **LAN-Mehrspieler** wieder läuft
+> (er war seit August kaputt, ohne dass es jemand gemerkt hat) und jede
+> Spielereingabe jetzt über den gemeinsamen Befehlsring geht. Neu sind außerdem
+> das **Autosichern** des Originals und der **Credits-Knopf**, der den
+> Abspannfilm zeigt. Behoben ist ein Speicherleck, durch das die Menü-Demos nach
+> langer Laufzeit **weiß** wurden. Und ein Prüfer meldet jetzt, wenn nach einem
+> Update **Spieldaten neu eingelesen** werden müssen. Wie immer hat jede
+> Änderung einen Gegenschalter, mit dem sich der alte Stand zurückholen lässt.
+
+### Danke an KayelGee
+
+Alles in dieser Runde geht auf **KayelGee** zurück: seine Liste vom 14.10.,
+dazu die Meldung mit Bildschirmfoto, dass die Menü-Demos nach langer Laufzeit
+kaputtgehen. Danke! Eine Anmerkung zu seinem Punkt 7: »Der Feind naht« war **in
+keiner früheren Version gebaut**. Was er in 0.6.5/0.6.6 gehört hat, war sehr
+wahrscheinlich »Ein Gebäude wird angegriffen«. Jetzt ist die Ansage gebaut,
+genau dort, wo das Original sie spielt.
+
+### KayelGees Runde 6 — behoben
+
+- **Die Dicke Bertha lädt ihre Raketen mit eigener Zeit nach** (Punkt 1). Im
+  Original gibt die Schussroutine (`0x40BB00`, Zweig `0x40C45E` → `0x40C4F1`)
+  der Waffenart 20 (Rakete) `rand%20+40` Takte Nachladezeit und der Art 21
+  (Nahwaffe) `rand%3+5` Takte. Das Nachladefeld des Satzes wird dort gar nicht
+  gelesen. Wir haben mit diesem Feld (10) nachgeladen, also alle 11 Takte. Die
+  Raketen kamen damit **fünfmal zu schnell**. Jetzt sind es 44..59 Takte, etwa
+  1,1 s. Gegenschalter `--bertha-nachladen-alt`, Prüfstand
+  `--bertha-nachladen-check` (Mission 25).
+- **Bomber werfen ihre Bomben im Überflug** (Punkt 2). Das Original
+  (`test_all_bomber`, `0x426A00`) rechnet einen Aufschlagpunkt voraus in
+  Flugrichtung und lässt eine Probebahn laufen. Abgeworfen wird nur, wenn sie
+  auf der Zielzelle aufschlägt, und abgedreht wird erst über dem Ziel. Bei uns
+  fiel die Bombe 1,5 Zellen zu früh, wurde in Bodenhöhe gezeichnet, und der
+  Bomber drehte sofort ab. Jetzt fällt die Bombe sichtbar vom Bomber. Ein
+  Bomber ohne Bomben fliegt wie im Original sofort heim (`0x4236AE`).
+  Gegenschalter `--bombenabwurf-alt`, `--bombe-geschosstempo`, Prüfstand
+  `--bomber-abwurf-check`.
+- **Eine unterwegs leergefahrene Einheit fährt nach dem Tanken weiter**
+  (Punkt 3). Im Original hält der leere Tank die Einheit nur an. Auftrag, Ziel
+  und Weg bleiben stehen (`0x407AF2`), und nach dem Auftanken durch den
+  Nachschubhubschrauber fährt sie von selbst weiter. Bei uns wurde der Weg
+  verworfen. Gegenschalter `--sprit-weiter-alt`, Prüfstand
+  `--sprit-weiter-check`.
+- **Keine grauen Balken mehr vor einem eingenommenen Depot** (Punkt 4, mit
+  seinem Bildschirmfoto). Die zwei kleinen Kästchen auf der Tür und davor waren
+  unsere eigene Zutat aus 0.4.0. Nach einer Einnahme standen sie noch etwa
+  24 Sekunden leer und grau da. Das Original zeichnet nur den Einnahmebalken
+  (`0x42B20D`). Gegenschalter `--tuermarken-alt`.
+- **Wartende Depoteinheiten lassen sich nicht mehr mit dem Auswahlrechteck
+  greifen** (Punkt 5 und 5.1). Während sie auf ihre Reihe warten, stehen sie
+  auf der Türzelle. Das Rechteck erfasste sie. Bekamen sie einen Befehl, fuhren
+  sie unsichtbar los, blockierten andere und hielten das Depot davon ab, die
+  nächsten herauszulassen. Das Gummiband des Originals (`0x434700`) überspringt
+  sie, genau wie der Klicktest. Gegenschalter `--gummiband-ukol-alt`.
+- **Das Auswahlrechteck über der Minikarte rollt die Karte nicht mehr**
+  (Punkt 6). Gerollt wird nur noch, wenn der Druck auf der Minikarte begann.
+  Das Original hat keine Minikarte, die Regel ist also unsere. Gegenschalter
+  `--minikarte-zug-alt`.
+- **»Der Feind naht« in Mission 2** (Punkt 7). Es ist Klang 122. Ihn spielt
+  nur der Computergegner, nie ein Missionsskript, und zwar in zwei Fällen: wenn
+  ein Sektorangriff auf dich beginnt (`0x4BC79D`) und wenn eine Angriffsgruppe
+  ihre Wegpunkte abgelaufen hat (`0x4BD1C5`). Danach schweigt die Ansage 80 bis
+  140 Sekunden. Gegenschalter `--feind-naht-alt`, Prüfstand
+  `--feind-naht-check=m2|m3-mitte|m3-bruecke`.
+- **Eigene Entwürfe zeigen im Produktionsfenster ihre Werte** (Punkt 8). Das
+  Original liest sie aus der Entwurfstafel des Spielers, in die »Erstellen« den
+  neuen Satz schreibt. Unsere Tafel wurde nur einmal je Programmstart gelesen.
+  Ein im Spiel erstellter Entwurf blieb deshalb bis zum Neustart leer.
+  Gegenschalter `--werteliste-nachtrag-alt`, Prüfstand
+  `--werteliste-eigen-check`.
+- **Auch der obere Teil der Depottür nimmt Einheiten an** (Punkt 9). Im
+  Original gilt der Einfahrzeiger auf der Türzelle und auf der Zelle darüber
+  (`0x432367`/`0x432372`). Gegenschalter `--einfahrzone-alt`.
+- **Eine Basis lässt sich nicht mehr mit dem Auswahlrechteck wählen**
+  (Punkt 10). Das Gummiband des Originals kennt keine Gebäude. Gegenschalter
+  `--gummiband-gebaeude-alt`.
+- **Eigenbeschuss wie im Original** (Punkt 11). Mit Strg lassen sich jetzt
+  eigene Fahrzeuge angreifen. Das Original verweigert nur eigene und verbündete
+  Fußsoldaten (`0x4374B4`). Ein Geschoss trifft außerdem Gebäude in seinem Weg,
+  auch eigene, fliegt aber über eigene Fahrzeuge hinweg. Bomben und Druckwellen
+  haben schon vorher keinen Unterschied zwischen Freund und Feind gemacht.
+  Gegenschalter `--eigenangriff-alt`, `--gebaeude-durchflug-alt`, Prüfstand
+  `--eigenbeschuss-check`.
+- **Mission 3: Weiß greift erst an, wenn du die letzte Brücke überquert
+  hast** (Punkt 14). Das Original schickt eine Einheit nur los, wenn ihr Weg zum
+  Ziel kürzer als 50 Schritte ist (`0x4BC74E`). Von Weiß bis zur Mittelbasis
+  sind es 62 bis 65 Schritte, jenseits der Brücke 19 bis 28. Diese Grenze fehlte
+  seit 0.6.1, deshalb kam Weiß schon, sobald die Mittelbasis eingenommen war.
+  Jetzt kommt der Angriff erst nach der Brücke, mit »Der Feind naht«. Das gilt
+  für jeden Computergegner. Gegenschalter `--ki-wegtor-alt`.
+- **In den Menü-Demos laufen keine Einheiten mehr von der Dicken Bertha weg**
+  (Punkt 15). Im Original spielt die Seite des Menschen in einer Demo ohne
+  Computergegner (`0x41F448`), außer in der allerersten Demo nach dem Start.
+  Bei uns war die KI an und schickte sechs Einheiten weg. Gegenschalter
+  `--demo-ki-alle`.
+
+### KayelGees Runde 6 — wie im Original, nicht geändert
+
+- **Anwählen, wenn die Maus weit über der Einheit steht** (Punkt 12): Das
+  Original wählt über das Bildrechteck mit Höhenversatz
+  (`0x431CBC`..`0x431CE6`). Unseres trifft es bis auf einen Pixel. Gemessen an
+  23 Fahrzeugen reicht es 21,3 px über das sichtbare Bild, im Original
+  20,3 px.
+- **Der leere letzte Pixel am vollen Lebensbalken** (Punkt 13): Wie KayelGee
+  vermutet hat, ist das ein Fehler im Original. Die Füllschleife (`0x4B6F60`)
+  füllt eine Spalte zu wenig. Wir bilden das mit Absicht nach.
+
+### Behoben
+
+- **Die Menü-Demos wurden nach langer Laufzeit weiß** (KayelGee). Der
+  Zwischenspeicher für die Bilder in Parteifarbe wurde nie geleert. Jede Demo
+  und jede Mission lädt ihre Bilder neu, der Speicher traf deshalb nie wieder,
+  behielt aber alles. Das waren **rund 400 MB Grafikspeicher mehr je Durchgang
+  der 13 Demos**, und ein Durchgang dauert etwa 4 Minuten. War die Karte voll,
+  kamen neue Texturen tot zurück und wurden weiß gezeichnet, zuerst die große
+  Demokarte. Lange Kampagnensitzungen waren genauso betroffen. Jetzt gibt jede
+  Karte ihre Bilder beim Verlassen frei, und der Grafikspeicher bleibt von
+  Runde zu Runde gleich. Gegenschalter `--demo-runden-alt`, Prüfstand
+  `--demo-runden-check`.
+- **Der LAN-Mehrspieler läuft wieder.** Seit August rechnete das Netzspiel mit
+  einem Takt von 1/60 s, die Simulation läuft aber mit 50 Takten je Sekunde.
+  Außerdem räumte die Startaufstellung die Einheiten des anderen Menschen ab.
+  Beides ist behoben (Gegenschalter `--nettakt-alt`, `--netplaetze-alt`).
+- **Jede Spielereingabe geht über den gemeinsamen Befehlsring.** Bisher wirkten
+  manche Befehle direkt auf das eigene Spiel: Anhalten, Eingraben,
+  Geschwindigkeit, Produktion, Kaufen, Reparatur, Depot/Hangar/Garage,
+  Handsteuerung, Routen, Designer, Bahn, Markt, Pionier, Verkaufen, dazu im
+  Netzspiel Speichern, Laden und Pause. Im Netzspiel laufen die beiden Rechner
+  dadurch auseinander. Jetzt geht jeder dieser Befehle mit der Nummer des
+  Originals über den Ring. Die Befehle des Mitspielers bleiben auf dem eigenen
+  Rechner stumm. Zwei Prozesse rechnen jetzt auf vier Karten 6000 Takte lang
+  gleich, ohne die Änderung trennen sie sich nach 60 Takten. Im Einzelspieler
+  wirkt ein Befehl einen Takt (20 ms) später, das merkt man nicht.
+  Gegenschalter `--direktbefehle-alt`, `--direktbefehle2-alt`.
+- **Ein Würfelwurf für Klänge kam aus dem gemeinsamen Zufallsstrom.** Gewürfelt
+  wurde aber nur auf dem Rechner, der die Einheit sah, und so liefen die Rechner
+  auseinander. Klang- und Bildwürfe haben jetzt einen eigenen Würfel.
+  Gegenschalter `--systemzufall-alt`.
+- Drei weitere Netzfehler sind unterwegs aufgefallen: Eine neutrale Einheit lief
+  auf jedem Rechner zu einem anderen Spieler über, das Netzspiel schrieb einen
+  Missionsende-Spielstand, und ein Marktkauf im Gefecht wurde dem falschen
+  Spieler gebucht.
+- Im Netzspiel sind die Cheats gesperrt, wie im Original.
+
+### Neu
+
+- **Autosichern wie im Original**: aus, 5, 10 oder 20 Minuten, auf Platz 7
+  »Autosave«. Die Uhr läuft auch in der Pause weiter, der erste Stand kommt
+  sofort. Gegenschalter `--autosave-alt`.
+- **Der Knopf »Credits« spielt den Abspannfilm** (`34.RPL`), wie im Original.
+  Fehlt der Film, kommt die alte Textliste. Nach dem Abspann, der auf Mission 33
+  folgt, beginnt das Menü wie im Original mit der ersten Demo. Gegenschalter
+  `--credits-text`, `--abspann-demo-alt`.
+- **Das Spiel merkt, wenn seine Daten neu eingelesen werden müssen.** Liest ein
+  Update einen Teil der Daten von 1997 anders ein (Karten, Einheiten, Gebäude,
+  Tabellen, Kampagne, Briefings …), sagt das Spiel es beim Start. Es liest dann
+  **nur diesen Teil** neu ein, von den CDs, der zuletzt benutzten Quelle oder
+  einer Installation, die es findet. Mit »Später« spielt man mit den alten
+  Daten weiter. Niemand muss dafür mehr einen Befehl eingeben. Wer von 0.6.9
+  kommt, muss nichts neu einlesen. Sind die Daten älter als vom 13.10., fragt
+  das Spiel einmal nach den Briefings. Gegenschalter `--inhaltsstand-aus`.
+- **Der Installer** sagt beim Update über eine ältere Version, dass das Spiel
+  beim Start seine Daten prüft und man die CDs bereithalten sollte.
+
 ## 0.6.9 — 16.10.2026 · die ganze Kampagne ist durchgespielt
 
 > **Alle 33 Missionen sind jetzt durchgespielt.** Die Missionen 31 bis 33 liefen

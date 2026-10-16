@@ -103,7 +103,7 @@ stays open or needs input goes into **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)**
 (German) — including the cases where an earlier explanation of ours turned out
 to be wrong. Both are kept as we go, not written afterwards.
 
-⭐ **Where we stand (2026-10-16, release 0.6.9):** **all 33 missions have
+⭐ **Where we stand (2026-10-16, release 0.6.10):** **all 33 missions have
 been played through** — the whole campaign, up to the credits. Along the way mission 2 became completable for the first time,
 the power plants in mission 4 and the bunkers in mission 7 became destructible,
 and the enemy now plays with the original's own AI. **0.6.2 came out of
@@ -125,7 +125,7 @@ mission 26 that finally ends, the shipyard with its own stock, captured
 airfields that come with their aircraft, and the fourth round of reports from
 **KayelGee**; **0.6.8** brings KayelGee's fifth round with saves that finally
 load properly again; **0.6.9** missions 28 to 33, the original's save window
-and the closing film after mission 33. **Each is a stop along
+and the closing film after mission 33; **0.6.10** KayelGee's sixth round and LAN multiplayer in lockstep again. **Each is a stop along
 this road, not its end.** What changed, in
 plain words: [CHANGELOG.md](CHANGELOG.md).
 
