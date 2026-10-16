@@ -338,17 +338,57 @@ public partial class Minimap : Control
         }
     }
 
+    /// <summary><c>--minikarte-zug-alt</c> — Stand bis 0.6.9: jede Mausbewegung
+    /// mit gehaltener linker Taste ueber der Minikarte rollt die Karte, auch wenn
+    /// der Druck auf der Karte begann (Auswahlrechteck). Nullmodell zu bug-563.</summary>
+    public static bool ZugAlt;
+
+    /// <summary>Begann der gehaltene Linksdruck AUF der Minikarte?</summary>
+    private bool _zugHier;
+
+    /// <summary>Wie oft die Minikarte die Karte versetzt hat (fuer --r6-check=minikarte).</summary>
+    public int Spruenge { get; private set; }
+
     public override void _GuiInput(InputEvent @event)
     {
-        if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb)
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left } mb)
         {
+            if (!mb.Pressed)
+            {
+                // bug-563: ein Auswahlrechteck, das ueber der Minikarte endet,
+                // gehoert der Karte — sonst bliebe ihr Linksdruck haengen.
+                if (!ZugAlt && !_zugHier && _bandLos != null) { _bandLos(mb.ShiftPressed); AcceptEvent(); }
+                _zugHier = false;
+                return;
+            }
+            _zugHier = true;
+            Spruenge++;
             _jump?.Invoke(ToWorld(mb.Position));
             AcceptEvent();
         }
         else if (@event is InputEventMouseMotion { ButtonMask: MouseButtonMask.Left } mm)
         {
+            // ⭐ bug-563 (KayelGee R6#6): »geht das Auswahlrechteck ueber die
+            // Minimap, wird auf der Karte gescrollt«. Die Minikarte ist UNSERE
+            // Zutat (das Original hat den aufrufbaren Kartenschirm, Art 3), also
+            // ist auch diese Regel UNSERE SETZUNG: gerollt wird nur, wenn der
+            // Druck auf der Minikarte begann. Ein Zug von der Karte her geht
+            // weiter an das Auswahlrechteck. --minikarte-zug-alt = alter Stand.
+            if (!ZugAlt && !_zugHier)
+            {
+                if (_bandZug != null) { _bandZug(GetGlobalMousePosition()); AcceptEvent(); }
+                return;
+            }
+            Spruenge++;
             _jump?.Invoke(ToWorld(mm.Position));     // dragging scrubs the view
             AcceptEvent();
         }
     }
+
+    /// <summary>Wohin ein fremder Zug (Auswahlrechteck von der Karte her) weitergereicht
+    /// wird — der MapViewer zieht damit sein Band weiter, obwohl die Minikarte die
+    /// Bewegung bekommt (Bildschirmpunkt).</summary>
+    private Action<Vector2>? _bandZug;
+    private Action<bool>? _bandLos;
+    public void BandZugAn(Action<Vector2> zug, Action<bool> los) { _bandZug = zug; _bandLos = los; }
 }

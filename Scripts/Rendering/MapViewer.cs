@@ -4744,6 +4744,7 @@ _mausProbePunkt = karte;
             else if (a == "--tuermarken-alt") MapEntityLayer.TuermarkenAlt = true;
             else if (a == "--gummiband-ukol-alt") MapEntityLayer.GummibandUkolAlt = true;
             else if (a == "--gummiband-gebaeude-alt") MapEntityLayer.GummibandGebaeudeAlt = true;
+            else if (a == "--minikarte-zug-alt") Minimap.ZugAlt = true;
             else if (a == "--garage-ziel-alt") MapEntityLayer.GarageZielAlt = true;
             else if (a == "--garage-unsichtbar-check") _garageCheckAfter = 3f;
             else if (a == "--laden-vorlage-alt") MapEntityLayer.LadenVorlageAlt = true;
@@ -5708,12 +5709,17 @@ _mausProbePunkt = karte;
         if (_r6After > 0f)
         {
             _r6After -= (float)delta;
-            if (_r6After <= 0f) { _r6After = -1f; GD.Print(_entities.R6Start(_r6Check)); _r6AuswertungIn = 3f; }
+            if (_r6After <= 0f)
+            {
+                _r6After = -1f;
+                GD.Print(_r6Check == "minikarte" ? R6MinikarteCheck() : _entities.R6Start(_r6Check));
+                _r6AuswertungIn = 3f;
+            }
         }
         if (_r6AuswertungIn > 0f)
         {
             _r6AuswertungIn -= (float)delta;
-            if (_r6AuswertungIn <= 0f) { _r6AuswertungIn = -1f; GD.Print(_entities.R6Auswerten(_r6Check)); GetTree().Quit(); }
+            if (_r6AuswertungIn <= 0f) { _r6AuswertungIn = -1f; if (_r6Check != "minikarte") GD.Print(_entities.R6Auswerten(_r6Check)); GetTree().Quit(); }
         }
         if (_garageCheckAfter > 0f)
         {
@@ -7301,11 +7307,70 @@ _mausProbePunkt = karte;
     private Minimap? _minimap;
     private bool _showMinimap = true;
 
+    /// <summary>bug-563: das Band zieht weiter, waehrend die Maus ueber der Minikarte steht.</summary>
+    private void BandUeberMinikarte()
+    {
+        if (!_leftDown || _rollen || _entities.PlacementMode != 0) return;
+        _boxSelect = true;
+        _entities.SetBand(RectFrom(_bandStart, KartenMaus()));
+    }
+
+    /// <summary>bug-563: das Band endet ueber der Minikarte — derselbe Abschluss
+    /// wie beim Loslassen auf der Karte (BoxSelect).</summary>
+    private void BandLosUeberMinikarte(bool shift)
+    {
+        if (!_leftDown) return;
+        if (_boxSelect) _entities.BoxSelect(RectFrom(_bandStart, KartenMaus()), shift);
+        _leftDown = false;
+        _boxSelect = false;
+        _entities.SetBand(null);
+        UpdateUnitOrderBar();
+    }
+
+    /// <summary>
+    /// <c>--r6-check=minikarte</c> (bug-563, R6#6): ein Auswahlrechteck beginnt auf der
+    /// Karte (Linksdruck, Bandanfang), die Maus zieht ueber die Minikarte (Bewegung mit
+    /// gehaltener Taste an <see cref="Minimap._GuiInput"/>) und laesst dort los.
+    /// Soll: 0 Spruenge, Kamera unbewegt, Band beendet. Nullmodell --minikarte-zug-alt:
+    /// 1 Sprung, Kamera versetzt.
+    /// </summary>
+    private string R6MinikarteCheck()
+    {
+        if (_minimap == null) return "r6-check minikarte: keine Minikarte — sagt NICHTS";
+        var kamVor = _camera.Position;
+        int sprVor = _minimap.Spruenge;
+        _leftDown = true; _boxSelect = false;
+        _leftStart = Vector2.Zero; _bandStart = _camera.Position;
+        var mitte = _minimap.Size / 2f + new Vector2(7, 3);
+        _minimap._GuiInput(new InputEventMouseMotion { Position = mitte, ButtonMask = MouseButtonMask.Left });
+        bool bandLief = _boxSelect;
+        _minimap._GuiInput(new InputEventMouseButton { Position = mitte, ButtonIndex = MouseButton.Left, Pressed = false });
+        int spr = _minimap.Spruenge - sprVor;
+        float weg = _camera.Position.DistanceTo(kamVor);
+        // Gegenprobe: ein Zug, der AUF der Minikarte beginnt, rollt weiter.
+        _leftDown = false;
+        _minimap._GuiInput(new InputEventMouseButton { Position = mitte, ButtonIndex = MouseButton.Left, Pressed = true });
+        _minimap._GuiInput(new InputEventMouseMotion { Position = mitte + new Vector2(5, 5), ButtonMask = MouseButtonMask.Left });
+        _minimap._GuiInput(new InputEventMouseButton { Position = mitte, ButtonIndex = MouseButton.Left, Pressed = false });
+        int eigen = _minimap.Spruenge - sprVor - spr;
+        bool ok = spr == 0 && weg < 0.5f && !_leftDown && eigen == 2;
+        return "r6-check minikarte" + (Minimap.ZugAlt ? "  ⚠ Nullmodell --minikarte-zug-alt" : "") +
+               $"\n   Band von der Karte ueber die Minikarte: Spruenge {spr}, Kamera {weg:0.0} px versetzt, Band zog weiter {bandLief}" +
+               $"\n   Gegenprobe Zug auf der Minikarte: Spruenge {eigen} (Soll 2: Druck + Zug)" +
+               $"\n   {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}";
+    }
+
+    /// <summary>Fuer --r6-check=minikarte: die Minikarte, oder null.</summary>
+    public Minimap? MinikarteFuerProbe => _minimap;
+
     private void BuildMinimap()
     {
         if (_panelLayer == null || _sprite.Texture == null) return;
         _minimap = new Minimap { MouseFilter = Control.MouseFilterEnum.Stop };
         _panelLayer.AddChild(_minimap);
+        // bug-563: ein Auswahlrechteck von der Karte her zieht ueber der Minikarte
+        // weiter, statt die Karte zu rollen (Rendering/Minimap.cs).
+        _minimap.BandZugAn(_ => BandUeberMinikarte(), BandLosUeberMinikarte);
         _minimap.Setup(
             _sprite.Texture,
             _entities.MapPixelSize(),
