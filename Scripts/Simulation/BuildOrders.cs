@@ -249,6 +249,9 @@ public partial class MapEntityLayer
         // ⭐ 12.09.2026 — die zwei Pionierbefehle gehen einen eigenen Weg: sie
         // setzen kein Gebaeude, sie schicken den Pionier los und bauen bei der
         // ANKUNFT (Simulation/Landungsbruecke.cs, bug-219).
+        // ⭐ 17.10.2026 (Direktbefehle2, Paket »pionier«): Befehl 16 über den Ring.
+        if (order is OrderMole or OrderAusbessern or OrderBruecke && !Alt2("pionier"))
+            return PostPionier(idx, col, row, order);
         if (order is OrderMole or OrderAusbessern)
             return MoleKlick(idx, col, row, order);
         if (order == OrderBruecke)

@@ -178,6 +178,7 @@ public sealed partial class NetGameRunner : Node
             else if (a.StartsWith("--net-out=")) outPath = a["--net-out=".Length..];
             else if (a == "--nettakt-alt") NettaktAlt = true;              // bug-527
             else if (a == "--net-direktbefehle") r._direkt = true;         // bug-530
+            else if (a == "--net-direktbefehle2") { r._direkt2 = true; MapEntityLayer.NetzProbe2An = true; }   // Direktbefehle2
             else if (a.StartsWith("--wurf-spur="))
             {
                 var t = a["--wurf-spur=".Length..].Split('-');
@@ -240,6 +241,7 @@ public sealed partial class NetGameRunner : Node
              "dass zwei gleiche Simulationen gleich bleiben)")}" +
             (_swallow >= 0 ? $", ⚠ GEGENPROBE: Satz verschlucken in Takt {_swallow}" : "") +
             (_limit > 0 ? $", Grenze {_limit} Takte" : ", gespielt (ohne Grenze)"));
+        if (_direkt2) Say($"#   Direktbefehle2-Reihe: {_sim.NetzProbe2Bestand(_s.MySlot)}");
         Say($"#   Prüfsumme des Anfangs {_sim.DeterminismChecksum():X16}, " +
             $"Keim {Determinism.Seed}, Einheiten in der Zahlenreihe {SnapOf().Count}");
 
@@ -659,6 +661,18 @@ public sealed partial class NetGameRunner : Node
         // bug-530: --net-direktbefehle — jeden zweiten Befehlstakt einen der
         // sieben neu verlegten Befehle, auf dem Weg, den Taste/Knopf nehmen.
         if (_direkt && (++_orderNr & 1) == 0) { OrderDirekt(); return; }
+        // Direktbefehle2: --net-direktbefehle2 — jeden zweiten Befehlstakt einen
+        // Schritt der Reihe aus Direktbefehle2Probe.cs (Absender wie Taste/Knopf).
+        if (_direkt2 && (++_orderNr2 & 1) == 0)
+        {
+            int art = _direkt2Nr % MapEntityLayer.NetzProbe2Arten;
+            string was = _sim.NetzProbe2(art, _s.MySlot, _direkt2Nr / MapEntityLayer.NetzProbe2Arten);
+            _direkt2Nr++;
+            Say($"   Takt {_tick}: [{art}] {was} für Platz {_s.MySlot}" +
+                (MapEntityLayer.Direktbefehle2Alt.Length > 0 || MapEntityLayer.DirektbefehleAlt
+                    ? $" ⚠ DIREKT (--direktbefehle2-alt={MapEntityLayer.Direktbefehle2Alt})" : ""));
+            return;
+        }
         var units = _sim.CommandCheckMobileUnits(6);
         if (units.Count == 0)
         {
@@ -705,8 +719,8 @@ public sealed partial class NetGameRunner : Node
             (MapEntityLayer.DirektbefehleAlt ? " ⚠ DIREKT (--direktbefehle-alt)" : ""));
     }
 
-    private bool _direkt;
-    private int _orderNr, _direktNr;
+    private bool _direkt, _direkt2;
+    private int _orderNr, _direktNr, _orderNr2, _direkt2Nr;
 
     // ================= Warten und Urteil ====================================
 

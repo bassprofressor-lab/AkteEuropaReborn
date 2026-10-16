@@ -899,6 +899,9 @@ public partial class MapEntityLayer
 
     private bool ApplyCommandInner(in CommandRecord c) => c.Op switch
     {
+        // ⭐ 17.10.2026 — die übrigen Spielereingaben (Direktbefehle2*.cs), VOR
+        // der Schranke: ihre P1 sind oft keine Einheit; sie prüfen selbst.
+        _ when IstDirekt2(c.Op) => ApplyDirekt2(c),
         // ⚠ VOR der Owns-Schranke: bei diesem Befehl ist P1 ein
         // FLUGZEUG-Steckplatz, keine Einheitennummer. Owns() würde
         // _entities[P1] befragen — eine ganz andere Einheit.

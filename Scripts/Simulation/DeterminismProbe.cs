@@ -98,6 +98,12 @@ public partial class MapEntityLayer
 
         for (int p = 0; p < _money.Length; p++) h.Add(_money[p]);
 
+        // ⭐ 17.10.2026 (Direktbefehle2) — --pruefsumme-voll: was die Befehle des
+        // zweiten Pakets schreiben und die Grundsumme nicht sieht (Garage, Depot,
+        // Schlange, Patrouille, Rohrwunsch, Bauart, Staffel, Bombe, Hand,
+        // Richtung/Stufe/Höhe, Heimkehr, Bahnschalter, Routen, Entwürfe, Pause).
+        if (Determinism.PruefsummeVoll) DeterminismVollAnhaengen(ref h);
+
         return h.Value;
     }
 

@@ -540,6 +540,126 @@ public static class CommandOp
     /// (0x43770A, 0x4C2F76 -> 0x427EE0). P1 = Flugzeugplatz, P2 = Einheit.</summary>
     public const short NachschubTanken = 14, NachschubMunition = 15;
 
+    // ---- 17.10.2026, Direktbefehle2: die übrigen Spielereingaben ----------
+    // (Lesung je Nummer in Simulation/Commands/Direktbefehle2*.cs und
+    // berichte/desync2-opus.md; C-Adressen, F gepaart wo gelesen)
+
+    /// <summary><b>1 = Handsteuerung Boden, ein Schritt.</b> P1 = Einheit,
+    /// P2 = Index in der Richtungstafel 0x4F5AF0 (AKCE). Absender 0x4335B7
+    /// (Sender 0x433460 je Takt), Behandler 0x4C273F → Auftragsband UKOL 1
+    /// 0x408A28.</summary>
+    public const short HandSchritt = 1;
+
+    /// <summary><b>2 = Rohr der handgesteuerten Einheit.</b> P1 = Einheit,
+    /// P2 = Richtung (+0x17 OTOC_HLAVEN). Absender 0x433502, Behandler
+    /// 0x4C277D.</summary>
+    public const short HandRohr = 2;
+
+    /// <summary><b>4 = Handsteuerung übernehmen</b> (UKOL 1 bzw. bei einem
+    /// Flugzeug uk 3, 0x4C28BA: typ &lt; 13). P1 = Einheit, oder 20000 +
+    /// Flugzeugplatz. Absender 0x433805/0x43387A.</summary>
+    public const short HandUebernehmen = 4;
+
+    /// <summary><b>5 = Handsteuerung abgeben</b> (UKOL := 0; Flugzeug:
+    /// air_back_to_airport 0x426180). P1 wie bei 4. Absender 0x41449E
+    /// (Rechtsklick), 0x433863 (H), 0x4337E4, 0x43305F.</summary>
+    public const short HandAbgeben = 5;
+
+    /// <summary><b>8 = Handsteuerung Luft</b> »Hand control« 0x4C2B58 (F
+    /// 0x4C282E). P1 = 20000 + Flugzeugplatz (⚠ SETZUNG: das Original trägt
+    /// den sec19-Platz), P2 d_dir, P3 d_sp, P4 d_alt, P5 Schuss.</summary>
+    public const short HandLuft = 8;
+
+    /// <summary><b>9 = fire_at</b> (0x40C8C0). P1 = Einheit, P2/P3 = Zelle.
+    /// Absender 0x40BA86 (Linksklick unter Handsteuerung 0x40B9A0), 0x449570.</summary>
+    public const short FireAt = 9;
+
+    /// <summary><b>13 = Selbstzerstörung.</b> P1 = Einheit. Absender
+    /// 0x4487D9 (Menüzeile), Behandler 0x4C2F40 → 0x402130.</summary>
+    public const short Selbstzerstoerung = 13;
+
+    /// <summary><b>30 = Abwahl eines handgesteuerten Flugzeugs</b> (0x4330D4,
+    /// Rechtsklick/ESC → 0x433010) → air_back_to_airport. P1 = 20000 + Platz.</summary>
+    public const short Abwahl = 30;
+
+    /// <summary><b>500 = Bahnschalter</b> spoj_set_flag 0x4B0220. P1 = Linie,
+    /// P2 = Ware 0..3, P3 = Wert 0/1/2. Absender Fensterart 4 (0x449947).</summary>
+    public const short Bahnschalter = 500;
+
+    /// <summary><b>502 = Flugzeug starten</b> → launch_aircraft 0x426020.
+    /// P1 = Flugzeugplatz, P2 = Modus (6 Handsteuerung, 7 Ziel, 1 Zelle),
+    /// P3/P4 = Zelle, P5 = Ziel. Absender 0x449C40 (Taste 9 Handsteuerung),
+    /// 0x450468/0x4504B8 (Zielwahl der Staffel 0x450310).</summary>
+    public const short Flugzeugstart = 502;
+
+    /// <summary><b>16 = Pionierauftrag</b> (0x4C2F97 → fahre 0x40B070, F
+    /// 0x4C2B0A). P1 Pionier, P2/P3 Zelle, P4 1 Brücke / 2 Mole / 4 Reparatur.
+    /// Absender 0x438081 (Kartenklick, Zeigerart 0x14/0x0E).</summary>
+    public const short Pionierauftrag = 16;
+
+    /// <summary><b>501 = Flugzeug kaufen</b> (Art 5 »Produzieren« 0x449E33 →
+    /// spawn_aircraft 0x4B1380). ⚠ Felder UNSERE: P1 Zeile, P2 Spieler, P3
+    /// Flughafen, P4 Art (Wächter).</summary>
+    public const short FlugzeugKauf = 501;
+
+    /// <summary><b>503 = Einheit bauen</b> (0x4C3780 → 0x4B1840, F 0x4C32F7).
+    /// P1 Entwurf, P2 Spieler, P3 Gebäude. Absender Art 6 »Bauen« 0x44A726;
+    /// Platz- und Teileprobe beim Absender örtlich.</summary>
+    public const short EinheitBauen = 503;
+
+    /// <summary><b>504 = Aussenden</b> (→ 0x410420, UKOL 0x33). P1 Einheit,
+    /// P2 Gebäude. Absender Basis 0x44A228, Depot 0x44C083.</summary>
+    public const short Aussenden = 504;
+
+    /// <summary><b>505 = Entwurf anlegen</b> (0x4C37C2 → 0x4B2510, F 0x4C3339).
+    /// Absender Art 7 »Erstellen« 0x44AA0F. Felder siehe Direktbefehle2Sonst.cs.</summary>
+    public const short EntwurfAnlegen = 505;
+
+    /// <summary><b>506 = Verwerten</b> (0x4C37F6 → 0x4B28E0). P1 Einheit.
+    /// Absender Art 6 Knopf 7 0x44A3C3.</summary>
+    public const short Verwerten = 506;
+
+    /// <summary><b>512 = Routenfach</b> (0x4C38A4 → 0x4362E0). P1 Fach 0..4,
+    /// P2 Route (bei uns: der Wagen), P3 Gebäude oder 0xFF.</summary>
+    public const short RouteFach = 512;
+
+    /// <summary><b>513 = Route starten</b> (0x4C38C9 → 0x410870). P1 Transporter.</summary>
+    public const short RouteStarten = 513;
+
+    /// <summary><b>514 = Route anhalten</b> (0x4C38DE → 0x4108D0). P1 Transporter.</summary>
+    public const short RouteAnhalten = 514;
+
+    /// <summary><b>518 = Bahnverlegung</b> (0x4C394A → CreateConvoy 0x4CEA90).
+    /// P1 Einheit, P2 Quelle, P3 Ziel.</summary>
+    public const short Bahnverlegung = 518;
+
+    /// <summary><b>527 = Heli kaufen</b> am Nachschubposten (0x4C3A57 →
+    /// 0x4B2FB0). P1 Posten, P2 0 Sprit / 1 Munition (bei uns die Zeile),
+    /// P3 Spieler, P4 Art (unser Wächter).</summary>
+    public const short HeliKauf = 527;
+
+    /// <summary><b>534 = Bombe wechseln</b> (0x4C3D32 → 0x4513F0). P1
+    /// Flughafen, P2 Flugzeug.</summary>
+    public const short BombeWechseln = 534;
+
+    /// <summary><b>535 = Flugzeug verwerten</b> (0x4C3D4F → 0x4B27D0). P1
+    /// Flugzeug, P2 Flughafen.</summary>
+    public const short FlugzeugVerwerten = 535;
+
+    /// <summary><b>537 = Patrouille kippen</b> (@0x4C3D89: +0x43 := 1 − +0x43).
+    /// P1 Gebäude.</summary>
+    public const short Patrouille = 537;
+
+    /// <summary><b>990 = Laden</b> »game.00«+P1 (0x4C44E8, F 0x4C405A).</summary>
+    public const short Laden = 990;
+
+    /// <summary><b>991 = Speichern</b> (0x4C4571 → 0x41D210). P1 Platz, Name.</summary>
+    public const short Speichern = 991;
+
+    /// <summary><b>993 = Pause</b> (0x4C4635): Umschalter word[0x4FA280]
+    /// 0 ↔ 1000, keine Felder.</summary>
+    public const short Pause = 993;
+
     /// <summary>Geht dieser Befehl in die Wiederholung? (Schranke des
     /// Originals, @0x4C20A4.) Unsere eigenen Nummern liegen darüber und werden
     /// deshalb wie örtliche behandelt — ⚠ das ist eine Folge unserer

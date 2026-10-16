@@ -1638,6 +1638,14 @@ public partial class MapEntityLayer : Node2D
         /// Heimkehr, nicht mit einer Warteschleife.</b></para></summary>
         public bool Angriffsauftrag;
 
+        /// <summary>⭐ 17.10.2026 (Direktbefehle2, Paket »hand«) — <c>uk == 3</c>,
+        /// die Maschine fliegt VON HAND. Bis heute stand das nur im örtlichen
+        /// <c>HandLuftIdx</c> der klickenden Maschine; der Flugtakt fragte
+        /// <c>IstHandgesteuert</c> also auf jeder Maschine etwas anderes.
+        /// Gesetzt von Befehl 4 / 502 Modus 6, gelöscht von 5 / 30 und vom
+        /// Absturz.</summary>
+        public bool Hand;
+
         /// <summary>⭐ Diese Maschine ist auf dem WEG NACH HAUSE. Ein Zustand
         /// und kein einmaliger Ruf: <c>AirHeadHome</c> gibt <c>false</c>
         /// zurück, solange sie noch fliegt, und ohne diese Fahne würde die
@@ -2240,7 +2248,7 @@ public partial class MapEntityLayer : Node2D
     /// obeys it, and the setting on this machine has it off.</summary>
     public static bool ForceFog;
 
-    public bool FogActive => _fog != null && !NebelAus && (ForceFog || UI.Settings.FogOfWar);
+    public bool FogActive => _fog != null && !NebelAus && (ForceFog || NebelImNetzFest || UI.Settings.FogOfWar);
 
     /// <summary><c>--nebel-aus</c> — Messschalter (15.09.2026): kein Nebel, gleich was die
     /// Einstellung sagt. Fuer Bildschirmfotos von Stellen, die keine Einheit sieht.</summary>
@@ -18311,6 +18319,8 @@ public partial class MapEntityLayer : Node2D
         foreach (var d in _designs)
             if (d.Name == name) { Designer.Say("gibt es schon"); return; }
         int equip = Designer.CurrentEquipment?.Id ?? 0;
+        // ⭐ 17.10.2026 (Direktbefehle2, Paket »entwurf«): Befehl 505 über den Ring.
+        if (!Alt2("entwurf") && !_entwurfProbe) { PostEntwurf(p.Id, equip, w.Id, name); return; }
         var made = new Design(name, p.Id, equip, w.Id, true, -1);
         _designs.Add(made);
         if (!_entwurfProbe) SaveOwnDesigns();
@@ -20019,7 +20029,7 @@ public partial class MapEntityLayer : Node2D
                 PreisQuelle = hangarVoll
                     ? "Leider kein Platz im Hangar vorhanden!"
                     : "Entwurf +0x1F/+0x20/+0x21 gegen Lager +0x2C/+0x2E/+0x30 (@0x4BB3D0)",
-                Kaufen = () => BuildPanelPick(k),
+                Kaufen = () => PostBuildPanelPick(k),   // Direktbefehle2
             });
         }
     }
@@ -20356,7 +20366,7 @@ public partial class MapEntityLayer : Node2D
                             : d.Kind == 14 ? "word[0x52FAC4] = 150"
                             : $"UNGEKLAERT — Kind {d.Kind} ist keiner der zwei "
                               + "Nachschubhelis, der Preis ist geraten",
-                Kaufen = () => BuildPanelPick(k),
+                Kaufen = () => PostBuildPanelPick(k),   // Direktbefehle2
             });
         }
     }
@@ -22763,6 +22773,8 @@ public partial class MapEntityLayer : Node2D
     {
         int platz = _transportWartet, einheit = _transportEinheit;
         _transportWartet = _transportEinheit = -1;
+        // ⭐ 17.10.2026 (Direktbefehle2, Paket »depot«): 518 bzw. 2007 über den Ring.
+        if (!Alt2("depot")) { PostTransportZiel(platz, einheit, hit); QueueRedraw(); return; }
         if (hit < 0) _order = "Transport abgebrochen — kein Gebaeude getroffen";
         else if (einheit >= 0)
         {
@@ -34631,6 +34643,7 @@ public partial class MapEntityLayer : Node2D
     {
         _simAcc = 0f;
         GameSpeed = 1;
+        NetzStartDirektbefehle2();   // Cheats aus, eigene Entwürfe heraus (Direktbefehle2.cs)
     }
 
     /// <summary>
@@ -34914,6 +34927,11 @@ public partial class MapEntityLayer : Node2D
         // bloss netzuntauglich, er war nie das Original.
         CommandTick();
 
+        // ⭐ 17.10.2026 (Direktbefehle2, Paket »pause«): die gemeinsame Pause
+        // des Netzspiels, word[0x4FA280] = 1000 (Befehl 993). Der Taktanfang
+        // läuft weiter — sonst käme der Satz, der sie aufhebt, nie an.
+        if (NetzPause != 0) return false;
+
         // ⚠ DER TAKTZÄHLER, einmal je Takt und nicht je Einheit. Das Original
         // führt ihn in `dword[0x4FA240]` und mehrere Regeln hängen daran
         // (Strom `% 50 == 13`, Markt `% 100 == 77`, die Drehbremse der grossen
@@ -35007,7 +35025,11 @@ public partial class MapEntityLayer : Node2D
         // Wer ihn je Bild schickt, bekommt bei 60 Bildern eine andere Steuerung
         // als bei 30. Die Tasten selbst liest die Oberflaeche und legt sie in
         // HandTasten ab. Siehe Simulation/HandsteuerungLuft.cs.
-        if (HandLuftIdx >= 0)
+        // ⭐ 17.10.2026 (Direktbefehle2, Paket »hand«): hier steht jetzt der
+        // SENDER — die Arme laufen im Behandler (Befehle 1/2/8). Der alte
+        // unmittelbare Weg nur noch unter --direktbefehle2-alt=hand.
+        if (!Alt2("hand")) HandSenderTakt();
+        else if (HandLuftIdx >= 0)
             HandsteuerungLuftTakt(HandTasteLinks, HandTasteRechts,
                                   HandTasteHoch, HandTasteRunter,
                                   HandTasteSteigen, HandTasteSinken,

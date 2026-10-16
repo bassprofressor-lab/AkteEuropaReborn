@@ -138,6 +138,11 @@ public partial class MapViewer : Node2D
 
     private void TogglePause()
     {
+        // ⭐ 17.10.2026 (Direktbefehle2, Paket »pause«): im NETZ ist die Pause
+        // gemeinsam — Befehl 993 über den Ring (Umschalter word[0x4FA280]); ein
+        // angehaltener Baum hielte nur diese Maschine an, der Taktgeber der
+        // anderen wartete. Menüs gibt es im Netz darum nicht über ESC.
+        if (MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("pause")) { _entities.PostPause(); return; }
         if (_pause != null || _hauptmenue != null) { ClosePause(); return; }
         if (UI.MainMenuWindow.Usable && !UI.MainMenuWindow.Alt) { OeffneHauptmenue(); return; }
 
@@ -4551,6 +4556,9 @@ _mausProbePunkt = karte;
             else if (a == "--no-clear-idle") MapEntityLayer.NoClearIdleSlots = true;
             else if (a == "--netplaetze-alt") MapEntityLayer.NetzplaetzeAlt = true;   // bug-528
             else if (a == "--direktbefehle-alt") MapEntityLayer.DirektbefehleAlt = true;   // bug-530
+            // Direktbefehle2 (17.10.2026): alle Pakete bzw. »=paket,paket« wieder unmittelbar
+            else if (a == "--direktbefehle2-alt") MapEntityLayer.Direktbefehle2Alt = "*";
+            else if (a.StartsWith("--direktbefehle2-alt=")) MapEntityLayer.Direktbefehle2Alt = a["--direktbefehle2-alt=".Length..];
             else if (a == "--no-building-body") MapEntityLayer.NoBuildingBody = true;
             // --demo-behind (C23): eine Einheit MITTEN in einen Gebaeudegrundriss
             // setzen und die Kamera daraufsetzen, damit der Bildvergleich den Fall
@@ -7573,8 +7581,8 @@ _mausProbePunkt = karte;
             KartenschirmAuf(wo, z, fh, ba);
         };
         _gebaeudeFenster.Daten = _entities.BuildingWindowData;
-        _gebaeudeFenster.OnStart = _entities.BuildingWindowStart;
-        _gebaeudeFenster.OnRepair = _entities.BuildingWindowRepair;
+        _gebaeudeFenster.OnStart = _entities.PostBuildingWindowStart;  // Direktbefehle2
+        _gebaeudeFenster.OnRepair = _entities.PostBuildingWindowRepair;  // Direktbefehle2
         // ⭐ 12.09.2026, bug-211: derselbe Ruf, den unser Baufenster und die
         // Taste Y benutzen — das Fenster bekommt keinen eigenen Weg.
         _gebaeudeFenster.OnFlugzeugStart = () => _entities.PostAlleStarten(_entities.ViewPlayer);   // bug-530
@@ -7596,14 +7604,14 @@ _mausProbePunkt = karte;
                 _entities.PostAlleStarten(_entities.ViewPlayer);   // bug-530
         };
         _gebaeudeFenster.OnPatrouille =
-            () => _entities.PatrouilleKippen(_entities.Fenstergebaeudeplatz());
+            () => _entities.PostPatrouilleKippen(_entities.Fenstergebaeudeplatz());  // Direktbefehle2
         // ⭐⭐ 20.09.2026 — die HANDSTEUERUNG LUFT (Taste 9, Befehl 502 Modus 6).
         // Simulation/HandsteuerungLuft.cs.
         _gebaeudeFenster.OnHandsteuerung = platz =>
-            _entities.HandsteuerungLuftBeginnen(platz);
+            _entities.PostHandLuftBeginnen(platz);  // Direktbefehle2
         // ⭐⭐ 20.09.2026 — Recycle (Befehl 535, Arm 0x4B27D0).
         _gebaeudeFenster.OnRecycleFlugzeug = platz =>
-            _entities.RecycleAmFlughafen(_entities.Fenstergebaeudeplatz(), platz);
+            _entities.PostRecycleAmFlughafen(_entities.Fenstergebaeudeplatz(), platz);  // Direktbefehle2
         // Das Original nimmt beim Eintritt die Fenster weg (0x44FE10(0)) und
         // schaltet den Zeiger aus (byte[0xA182D0] := 0xFF @0x4315D3). Beim
         // Austritt kommt der Zeiger zurueck; das Fenster nicht — es ist zu.
@@ -7632,12 +7640,12 @@ _mausProbePunkt = karte;
             KartenschirmAuf(maus, 0, _entities.Fenstergebaeudeplatz());
         };
         _gebaeudeFenster.OnBombeWechseln =
-            platz => _entities.BombeWechseln(platz, _entities.Fenstergebaeudeplatz());
+            platz => _entities.PostBombeWechseln(platz, _entities.Fenstergebaeudeplatz());  // Direktbefehle2
         _gebaeudeFenster.OnStaffelWeiter =
             marke => _entities.StaffelWeiter(_entities.Fenstergebaeudeplatz(), marke);
-        _gebaeudeFenster.OnStaffelUmschalten = _entities.StaffelUmschalten;
+        _gebaeudeFenster.OnStaffelUmschalten = _entities.PostStaffelUmschalten;  // Direktbefehle2
         // ⭐ 13.09.2026: »Aussenden« im Depotfenster (Befehl 504, @0x44C083).
-        _gebaeudeFenster.OnDepotAussenden = _entities.DepotAussenden;
+        _gebaeudeFenster.OnDepotAussenden = _entities.PostDepotAussenden;  // Direktbefehle2
         // ⭐ 22.09.2026 — Bahnhofsfenster, Transportsystem, Einheiten-Transport.
         BahnhofFensterVerdrahten(layer);
         // ⭐ 13.09.2026: die vier Knöpfe des Fabrikfensters (Klickarm 0x44ACF1),
@@ -7659,7 +7667,7 @@ _mausProbePunkt = karte;
                 && _gebaeudeFenster.Kennung == platz) _gebaeudeFenster.SchliessenVonAussen();
             else UI.WindowManager.Schliessen((int)UI.BuildingWindow.Art.Geschaeftszentrum, platz);
         };
-        _gebaeudeFenster.OnStop = _entities.BuildingWindowStart;
+        _gebaeudeFenster.OnStop = _entities.PostBuildingWindowStart;  // Direktbefehle2
         // ⚠ "Anhalten" ist NICHT angeschlossen, und das ist gelesen, nicht
         // vergessen: die Zustandstafeln bilden vier Auftraege ab (aktiv,
         // reparieren, Lagerausbau, Produktionserweiterung). Einen Befehl, der
@@ -7696,7 +7704,7 @@ _mausProbePunkt = karte;
         // Titelleiste »Basis 2« steht statt des ersten Wortes der Zeile
         // darunter, und Energiebalken und Statuszeile ueberhaupt etwas haben.
         _baseWindow.Head = _entities.BuildPanelHead;
-        _baseWindow.Produce = _entities.BuildPanelPick;
+        _baseWindow.Produce = _entities.PostBuildPanelPick;  // Direktbefehle2
         _baseWindow.OnClose = () => { _hidePanelList = true; UpdateProductionPanel(); };
         // »Erstellen« macht dasselbe wie die Taste M — und weil das Fenster
         // »Erstellung« nur die Entwurfsstelle anzeigt, laufen Knopf und Taste
@@ -7732,8 +7740,8 @@ _mausProbePunkt = karte;
         // auf einer Taste: das Depot gab es gar nicht, fertige Einheiten
         // sprangen direkt auf die Karte. Siehe MapEntityLayer.Entity.Depot.
         _baseWindow.DepotRows = _entities.DepotRows;
-        _baseWindow.OnSendOut = k => _entities.SendOutFromPanel(k);
-        _baseWindow.OnRecycle = k => _entities.RecycleFromPanel(k);
+        _baseWindow.OnSendOut = k => _entities.PostSendOutFromPanel(k);  // Direktbefehle2
+        _baseWindow.OnRecycle = k => _entities.PostRecycleFromPanel(k);  // Direktbefehle2
         _baseWindow.OnTransport = k => _entities.TransportArmFromPanel(k);
         _baseWindow.TransportArmed = () => _entities.TransportArmed;
         _baseWindow.IsMarket = () => _entities.PanelIsMarket();
@@ -7763,6 +7771,16 @@ _mausProbePunkt = karte;
         _fensterEbene = layer;
         _entities.OnEinheitenInfo = griff => EinheitenInfoOeffnen(griff);
         _entities.OnMeldung = (z1, z2, standzeit, mittig) => MeldungOeffnen(z1, z2, standzeit, mittig);
+        // ⭐ 17.10.2026 (Direktbefehle2): Pause, Speichern, Laden des Netzspiels
+        _entities.OnNetzPause = (an, wer) => NetzPauseZeigen(an, wer);
+        _entities.OnNetzSpeichern = (platz, name) => SpielstandSchreiben(platz, name).Length > 0;
+        _entities.OnNetzLaden = platz =>
+        {
+            var root = Core.SaveGame.Read(Core.SaveGame.PlatzName(platz), out string err);
+            if (root == null) { GD.PrintErr($"Netz-Laden Platz {platz}: {err}"); return false; }
+            GD.Print($"Netz-Laden: Platz {platz} in die laufende Partie (Befehl 990)");
+            return _entities.NetzStandEinspielen(root);
+        };
         UI.UnitMenuWindow.Wort = MapEntityLayer.OrderWord;
         _unitMenu.OnCode = code =>
         {
@@ -7783,8 +7801,8 @@ _mausProbePunkt = karte;
         _routeWindow.Modus = () => _entities.RouteWahlModus;
         _routeWindow.Note = () => _entities.RouteNote;
         _routeWindow.OnModus = m => _entities.RouteModusSetzen(m);
-        _routeWindow.OnLeeren = () => _entities.RouteLeeren();
-        _routeWindow.OnStart = () => _entities.RouteStartKnopf();
+        _routeWindow.OnLeeren = () => _entities.PostRouteLeeren();  // Direktbefehle2
+        _routeWindow.OnStart = () => _entities.PostRouteStartKnopf();  // Direktbefehle2
         _routeWindow.OnClose = () => _entities.RouteFensterSchliessen();
         _orderBar.SetWords(MapEntityLayer.OrderWord(MapEntityLayer.OrderSell),
                            MapEntityLayer.OrderWord(7) + "/" + MapEntityLayer.OrderWord(8),
@@ -8002,7 +8020,7 @@ _mausProbePunkt = karte;
     private void OeffneRoutenfenster()
     {
         if (_entities == null || _routeWindow == null) return;
-        if (!_entities.RouteFensterOeffnen()) return;
+        if (!_entities.PostRouteFensterOeffnen()) return;  // Direktbefehle2
         _routeWindow.Visible = true;
         _routeWindow.Refresh();
         _routeWindow.PlaceBottomLeft();
@@ -8219,7 +8237,7 @@ _mausProbePunkt = karte;
             AddChild(_graceLayer);
             _graceWindow = new UI.GraceWindow();
             _graceLayer.AddChild(_graceWindow);
-            _graceWindow.OnFinish = () => _entities.FinishGrace();
+            _graceWindow.OnFinish = () => _entities.PostFinishGrace();  // Direktbefehle2
             if (_legacyFont != null)
                 _graceWindow.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale);
             // Oben rechts, wo im Bildschirmfoto die freischwebenden Fenster des
@@ -9149,7 +9167,7 @@ _mausProbePunkt = karte;
                         // Siehe Simulation/Zeigermerker.cs.
                         // bug-453: unter der Handsteuerung (Zeigerart 1000) schiesst
                         // der Linksklick, und nur das (Klickverteiler @0x4370C4).
-                        if (_leftDown && !_boxSelect && _entities.HandsteuerungKlick(KartenMaus()))
+                        if (_leftDown && !_boxSelect && _entities.PostHandKlick(KartenMaus()))
                         { }
                         else if (_leftDown && !_boxSelect && _entities.Zeigermerker >= 0
                             && _entities.MerkerKlick(KartenMaus()))
@@ -9158,7 +9176,7 @@ _mausProbePunkt = karte;
                                 _entities.Say(_entities.ZeigerNote);
                         }
                         else if (_leftDown && !_boxSelect && _entities.RouteWahlModus != 0)
-                            _entities.RouteKlickAufGebaeude(KartenMaus());
+                            _entities.PostRouteKlickAufGebaeude(KartenMaus());  // Direktbefehle2
                         else if (_leftDown && !_boxSelect && _entities.PlacementMode != 0 &&
                             _entities.CellAt(KartenMaus()) is { } bc)
                             _entities.PlacementClick(bc.X, bc.Y);
@@ -9205,7 +9223,7 @@ _mausProbePunkt = karte;
                     // air_back_to_airport: die Maschine landet.
                     if (mb.Pressed && _entities.HandLuftIdx >= 0)
                     {
-                        _entities.HandsteuerungLuftBeenden("Rechtsklick");
+                        _entities.PostHandLuftBeenden("Rechtsklick");  // Direktbefehle2
                         break;
                     }
                     if (mb.Pressed)
@@ -9238,7 +9256,7 @@ _mausProbePunkt = karte;
                             && !MapEntityLayer.HandsteuerungBodenAlt
                             && _entities.Zeigermerker < 0 && _entities.PlacementMode == 0)
                         {
-                            _entities.Say(_entities.HandsteuerungBodenAbgeben());
+                            _entities.Say(_entities.PostHandBodenAbgeben());  // Direktbefehle2
                             UpdateUnitOrderBar();
                             _rightDown = false; _rightDrag = false;
                             break;
@@ -9370,6 +9388,14 @@ _mausProbePunkt = karte;
                 // Cheat-Mode: Strg+Umschalt+G / M / S (Gott, Munition, Sprit).
                 // Absichtlich sperrig, damit ihn niemand versehentlich trifft,
                 // und jeder Wechsel meldet sich in der Statuszeile.
+                // ⭐ 17.10.2026 (Direktbefehle2, Paket »cheat«): im NETZ gesperrt wie
+                // im Original (0x43AE54 fragt dword[0x539234]). Die Cheats hängen am
+                // Sichtspieler (Cheated) und sind statisch — auf der anderen Maschine
+                // gäbe es sie nicht. --direktbefehle2-alt=cheat: wieder offen.
+                case Key.G or Key.M or Key.S when key.CtrlPressed && key.ShiftPressed
+                                                 && MapEntityLayer.CheatImNetzGesperrt():
+                    _entities.Say("Im Netzspiel sind die Cheats gesperrt.");
+                    break;
                 case Key.G when key.CtrlPressed && key.ShiftPressed:
                     MapEntityLayer.CheatGodMode = !MapEntityLayer.CheatGodMode;
                     SayCheat(); break;
@@ -9395,9 +9421,12 @@ _mausProbePunkt = karte;
                 case Key.F: FitToWindow(); break;
                 case Key.G: _entities.ToggleDots(); break;
                 case Key.Z: _entities.ToggleZones(); break;
+                case Key.J when MapEntityLayer.NebelImNetzFest: _entities.Say("Im Netzspiel steht der Nebel fest."); break;   // Direktbefehle2
                 case Key.J: _entities.ToggleFog(); break;
                 case Key.T: _entities.ToggleBuildings(); break;
                 case Key.U: _entities.ToggleSprites(); break;
+                // Taste P ist im Original die Pause (0x4136F5 → 993); im Netz gilt sie.
+                case Key.P when MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("pause"): _entities.PostPause(); break;
                 case Key.P: _entities.ToggleNav(); break;
                 case Key.X: _entities.PostAnhalten(); break;      // bug-530: Befehl 12
                 case Key.R: _entities.ToggleRanges(); break;
@@ -9411,7 +9440,7 @@ _mausProbePunkt = karte;
                 // wird beim EINREIHEN bezahlt, also muss sich eine Bestellung
                 // auch wieder auflösen lassen (siehe Entity.BuildQueue).
                 case Key.B when key.ShiftPressed: _entities.PostBauAbbrechen(); break;   // bug-530
-                case Key.B: _entities.ProduceFromSelection(); break;
+                case Key.B: _entities.PostProduzieren(); break;  // Direktbefehle2 (503/501/508/527)
                 case Key.N: _entities.CycleBuildMenu(); break;
                 // the production list shares the display box with the info
                 // text; I hides it for a look at what is underneath
@@ -9422,7 +9451,7 @@ _mausProbePunkt = karte;
                 // Original kennt die Taste nicht; sie bleibt als Abkuerzung,
                 // damit der Weg ohne Fenster nicht verschwindet.
                 case Key.O: _entities.PostForschung(0); break;    // bug-530
-                case Key.K: _entities.StartRepair(); break;
+                case Key.K: _entities.PostReparaturTaste(); break;  // Direktbefehle2 (519/522/520/521)
                 case Key.L: _entities.ToggleRail(); break;
                 // ⚠ DIE SPIELGESCHWINDIGKEIT, 1…3 wie im Original — die
             // Fensterprozedur laesst ueber »+« nicht ueber 3 (@0x413A4C) und
@@ -9456,7 +9485,7 @@ _mausProbePunkt = karte;
                     // hier dasselbe Ende.
                     if (_entities.HandLuftIdx >= 0)
                     {
-                        _entities.HandsteuerungLuftBeenden("ESC");
+                        _entities.PostHandLuftBeenden("ESC");  // Direktbefehle2
                         UpdateUnitOrderBar();
                         return;
                     }
@@ -9491,7 +9520,7 @@ _mausProbePunkt = karte;
                 // (und beendet die laufende Handsteuerung wieder). Nur wenn es
                 // nichts zu steuern gibt, bleibt es beim alten Schalter.
                 case Key.H:
-                    if (_entities != null && _entities.HandsteuerungLuftTasteH()) break;
+                    if (_entities != null && _entities.PostHandLuftTasteH()) break;  // Direktbefehle2
                     _showMinimap = !_showMinimap;
                     if (_minimap != null) _minimap.Visible = _showMinimap;
                     break;

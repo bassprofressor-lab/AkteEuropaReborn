@@ -134,6 +134,9 @@ public partial class MapEntityLayer : Node2D
     /// Handmarke <c>+0x0F</c>.</summary>
     public int HandLuftIdx { get; private set; } = -1;
 
+    /// <summary>Der Satzplatz zu <see cref="HandLuftIdx"/> (Direktbefehle2).</summary>
+    private int _handLuftSlot = -1;
+
     /// <summary>Der Drehschritt je Takt, @0x433626: <b>6°</b>. Die Daten
     /// stützen ihn unabhängig — alle 190 Flugrichtungen der Leveldateien sind
     /// Vielfache von 6 (siehe <see cref="Special.Dir"/>).</summary>
@@ -177,8 +180,12 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Fliegt diese Maschine gerade von Hand?</summary>
     public bool IstHandgesteuert(Special a)
-        => HandLuftIdx >= 0 && HandLuftIdx < _special.Count
-           && ReferenceEquals(_special[HandLuftIdx], a);
+        => Alt2("hand")
+           ? HandLuftIdx >= 0 && HandLuftIdx < _special.Count && ReferenceEquals(_special[HandLuftIdx], a)
+           // ⭐ 17.10.2026 (Direktbefehle2): der ZUSTAND der Maschine (uk 3), nicht
+           // die örtliche Wahl — sonst fliegt sie auf der anderen Maschine weiter
+           // nach Auftrag, hier geradeaus.
+           : a.Hand;
 
     // ======================= EINTRITT =======================================
 
@@ -199,7 +206,7 @@ public partial class MapEntityLayer : Node2D
     /// <param name="slot">der Satzplatz der gewählten Hangarzeile.</param>
     /// <returns>false, wenn nichts geschehen ist — dann bleibt alles, wie es
     /// war, und der Aufrufer darf melden.</returns>
-    public bool HandsteuerungLuftBeginnen(int slot)
+    public bool HandsteuerungLuftBeginnen(int slot, bool oertlich = true)
     {
         if (HandsteuerungLuftAus) return false;
         int idx = _special.FindIndex(x => x.Slot == slot && !x.Dead);
@@ -221,7 +228,7 @@ public partial class MapEntityLayer : Node2D
         }
         // @0x4234DA — der EINMALWERT bei der Uebergabe.
         a.Alt = Mathf.Min(HandHoeheDeckel, a.Alt + HandUebergabeHub);
-        return HandLuftUebernehmen(idx, "Handsteuerung: Pfeile fliegen, A/Z Hoehe, Strg schiesst");
+        return HandLuftUebernehmen(idx, "Handsteuerung: Pfeile fliegen, A/Z Hoehe, Strg schiesst", oertlich);
     }
 
     /// <summary>
@@ -244,18 +251,23 @@ public partial class MapEntityLayer : Node2D
         return HandLuftUebernehmen(idx, "Handsteuerung uebernommen (H beendet sie)");
     }
 
-    private bool HandLuftUebernehmen(int idx, string meldung)
+    private bool HandLuftUebernehmen(int idx, string meldung, bool oertlich = true)
     {
-        HandLuftIdx = idx;
         var a = _special[idx];
+        // uk 3 kennt keinen Auftrag: was vorher anlag, ist weg.
+        a.Target = -1; a.Goal = null; a.PlayerGoal = null;
+        a.Angriffsauftrag = false; a.Heimkehr = false; a.TurnPoint = null;
+        a.Hand = true;                              // uk := 3 (Direktbefehle2)
+        HandLuftBegonnen++;
+        // ⚠ Ab hier ÖRTLICH: wer steuert, wählt sie an. Ein Satz eines anderen
+        // Spielers setzt nur den Zustand oben (Direktbefehle2Hand.cs).
+        if (!oertlich) return true;
+        HandLuftIdx = idx;
+        _handLuftSlot = a.Slot;
         // word[0x4FA0C8] := 20000 + idx — die Maschine ist damit GEWAEHLT.
         _sel.Clear();
         _selAir = idx;
         SetPrimary();
-        // uk 3 kennt keinen Auftrag: was vorher anlag, ist weg.
-        a.Target = -1; a.Goal = null; a.PlayerGoal = null;
-        a.Angriffsauftrag = false; a.Heimkehr = false; a.TurnPoint = null;
-        HandLuftBegonnen++;
         _order = meldung;
         OnHandsteuerungLuft?.Invoke(true);          // Zeiger aus, Fenster zu
         UpdatePanel();
@@ -286,6 +298,7 @@ public partial class MapEntityLayer : Node2D
         if (idx < _special.Count)
         {
             var a = _special[idx];
+            a.Hand = false;                         // Direktbefehle2: uk 3 aus
             if (!a.Dead && !a.Stored && !a.Absturz)
             {
                 a.Heimkehr = true;                  // air_back_to_airport
@@ -315,10 +328,31 @@ public partial class MapEntityLayer : Node2D
         var a = _special[HandLuftIdx];
         // Der Absturz hebt den Zustand auf (@0x425F62), Tod und Landung auch.
         if (a.Dead || a.Stored || a.Absturz) { HandsteuerungLuftBeenden("Absturz"); return; }
+        var (dDir, dSp, dAlt) = HandLuftDeltas(links, rechts, hoch, runter, steigen, sinken);
+        HandLuftArm(a, dDir, dSp, dAlt, schuss);
+    }
+
+    /// <summary>Der SENDER @0x433460: aus dem Tastenzustand die drei Schritte
+    /// des Satzes 8 (+0x0A d_dir, +0x0C d_sp nur in ungeraden Takten, +0x0E
+    /// d_alt). Getrennt vom Arm seit dem 17.10.2026 (Direktbefehle2), weil im
+    /// Netz nur der Sender auf der Maschine des Steuernden läuft.</summary>
+    private (int dDir, int dSp, int dAlt) HandLuftDeltas(bool links, bool rechts, bool hoch,
+                                                          bool runter, bool steigen, bool sinken)
+    {
+        int dDir = ((rechts ? 1 : 0) - (links ? 1 : 0)) * HandDrehSchritt;
+        // @0x43361D: dword[0x4FA240] & 1 — der Takt selbst ist die Bremse,
+        // nicht ein eigener Zaehler.
+        int dSp = (DebugTicks & 1) != 0 ? (hoch ? 1 : 0) - (runter ? 1 : 0) : 0;
+        int dAlt = ((steigen ? 1 : 0) - (sinken ? 1 : 0)) * HandHoehenSchritt;
+        return (dDir, dSp, dAlt);
+    }
+
+    /// <summary>Der ARM von Befehl 8 @0x4C2B58 — siehe Klassenkopf.</summary>
+    private void HandLuftArm(Special a, int dDir, int dSp, int dAlt, bool schuss)
+    {
         HandLuftTakte++;
 
         // --- +0x0A: dir += (rechts − links) · 6, Umlauf gegen 360 -----------
-        int dDir = ((rechts ? 1 : 0) - (links ? 1 : 0)) * HandDrehSchritt;
         if (dDir != 0)
         {
             int d = a.Dir + dDir;
@@ -328,12 +362,8 @@ public partial class MapEntityLayer : Node2D
             HandLuftGedreht++;
         }
 
-        // --- +0x0C: sp ±1, aber nur in JEDEM ZWEITEN Takt -------------------
-        // @0x43361D: dword[0x4FA240] & 1 — der Takt selbst ist die Bremse,
-        // nicht ein eigener Zaehler.
-        if ((DebugTicks & 1) != 0)
+        // --- +0x0C: sp ±1 (der Sender schickt ihn nur in jedem zweiten Takt)
         {
-            int dSp = (hoch ? 1 : 0) - (runter ? 1 : 0);
             // @0x4C2C62..0x4C2C7E: bremsen geht nur oberhalb von sp_unten.
             if (dSp != 0 && (a.StufeUnten < a.Stufe || dSp >= 0))
             {
@@ -350,7 +380,6 @@ public partial class MapEntityLayer : Node2D
 
         // --- +0x0E: alt += (A − Z)·2, Deckel 135; der Boden sitzt NICHT hier,
         // sondern im Bewegungsblock @0x425144 (HandLuftBoden, bug-473) --------
-        int dAlt = ((steigen ? 1 : 0) - (sinken ? 1 : 0)) * HandHoehenSchritt;
         if (dAlt != 0)
         {
             int roh = a.Alt + dAlt;

@@ -124,29 +124,51 @@ public partial class MapEntityLayer
         {
             int r = DirToFacing(m - e.Pos);
             HandRohrRichtung = r;
-            if (TurmEigen(e))
-            {
-                if (r != e.AimFacing && e.TurmWunsch != r) HandBodenRohr++;   // Befehl 2
-                if (e.TurmWunsch != r) e.TurmWunsch = r;
-            }
+            HandBodenRohrSetzen(e, r);
         }
 
-        // 0x433535 — POHYB != 0xFF: der laufende Schritt (oder Weg) geht vor.
-        bool steht = (e.Path == null || e.PathIdx >= e.Path.Count) && e.SchrittAnteil < 0f;
-        if (!steht) return;
+        int k = HandBodenTastenRichtung(e);
+        if (k >= 0) HandBodenSchrittSetzen(idx, k);
+    }
 
+    /// <summary>Steht die Einheit (0x433535: POHYB == 0xFF)?</summary>
+    private static bool HandBodenSteht(Entity e)
+        => (e.Path == null || e.PathIdx >= e.Path.Count) && e.SchrittAnteil < 0f;
+
+    /// <summary>0x43354C/0x433576: aus dem Tastenzustand der Index in der
+    /// Tafel 0x4F5AF0 — oder −1 (keine Taste, oder die Einheit fährt noch).</summary>
+    private int HandBodenTastenRichtung(Entity e)
+    {
+        // 0x433535 — POHYB != 0xFF: der laufende Schritt (oder Weg) geht vor.
+        if (!HandBodenSteht(e)) return -1;
         // 0x43354C — dx := R−L, dy := D−U (Tastenzustand, nicht Tastendruck).
         int dx = (HandTasteRechts ? 1 : 0) - (HandTasteLinks ? 1 : 0);
         int dy = (HandTasteRunter ? 1 : 0) - (HandTasteHoch ? 1 : 0);
-        if (dx == 0 && dy == 0) return;
-        // 0x433576 — die Tafel 0x4F5AF0; ihr Index wäre AKCE. Die Zelle folgt
-        // aus demselben Eintrag.
-        int k = System.Array.IndexOf(Simulation.NavGrid.UrDirs, new Vector2I(dx, dy));
-        if (k < 0 || _nav == null) return;
+        if (dx == 0 && dy == 0) return -1;
+        // 0x433576 — die Tafel 0x4F5AF0; ihr Index ist AKCE.
+        return System.Array.IndexOf(Simulation.NavGrid.UrDirs, new Vector2I(dx, dy));
+    }
+
+    /// <summary>Arm von Befehl 2 (0x4C277D): der Rohrwunsch +0x17.</summary>
+    private void HandBodenRohrSetzen(Entity e, int r)
+    {
+        if (!TurmEigen(e)) return;
+        if (r != e.AimFacing && e.TurmWunsch != r) HandBodenRohr++;   // Befehl 2
+        if (e.TurmWunsch != r) e.TurmWunsch = r;
+    }
+
+    /// <summary>Arm von Befehl 1 (0x4C273F → UKOL 1 0x408A28): Zelle frei →
+    /// EIN Schritt. Prüft das Stehen selbst — im Netz kann derselbe Schritt
+    /// mehrmals unterwegs sein, bis der erste wirkt.</summary>
+    private bool HandBodenSchrittSetzen(int idx, int k)
+    {
+        var e = _entities[idx];
+        if (k < 0 || k >= Simulation.NavGrid.UrDirs.Length || _nav == null) return false;
+        if (!HandBodenSteht(e)) return false;
         var d = Simulation.NavGrid.UrDirs[k];
         int c = e.Col + d.X, w = e.Row + d.Y;
         // 0x408A28 — Zelle nicht frei → in diesem Takt nichts.
-        if (!_nav.InBounds(c, w) || !_nav.IsFree(c, w, e.Move, idx)) { HandBodenBlockiert++; return; }
+        if (!_nav.InBounds(c, w) || !_nav.IsFree(c, w, e.Move, idx)) { HandBodenBlockiert++; return false; }
 
         // Wie der Ausweichschritt: EIN Schritt als Weg, gefahren vom Fahrer.
         if (e.Reserved is { } rc) _nav.ClearOccupant(rc.X, rc.Y, idx);
@@ -156,6 +178,7 @@ public partial class MapEntityLayer
         e.Goal = new Vector2I(c, w);
         e.StepCost = 0;
         HandBodenSchritte++;
+        return true;
     }
 
     /// <summary>Befehl 5 (<c>0x4C29C3</c>): UKOL := 0 — gesendet vom

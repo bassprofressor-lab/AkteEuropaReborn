@@ -99,6 +99,9 @@ public partial class MapEntityLayer
             else
             {
                 ang.Kaufen();          // ⚠ der ECHTE Knopf, nicht nachgebaut
+                // ⭐ 17.10.2026 (Direktbefehle2): der Knopf setzt Befehl 501 ab — er
+                // wirkt am nächsten Taktanfang. Den Ring leerlaufen lassen.
+                for (int t = 0; t < 8 && Commands.Pending > 0; t++) CommandTick();
                 int hangarNach = e.Hangar?.Count ?? 0;
                 int teileNach = e.StockW + e.StockF + e.StockS;
                 gekauft = hangarNach > hangarVor && teileNach < teileVor;

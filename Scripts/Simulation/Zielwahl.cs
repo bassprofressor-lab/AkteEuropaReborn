@@ -171,7 +171,10 @@ public partial class MapEntityLayer : Node2D
         // Gebaeude, dann Fussvolk — sonst die Zelle selbst.
         int ziel = ZielAufZelle(col, row);
         int modus = ziel >= 0 ? ZielModusZiel : ZielModusZelle;
-        int n = StaffelStarten(flughafen, marke, ziel, col, row);
+        // ⭐ 17.10.2026 (Direktbefehle2, Paket »flughafen«): Befehl 502 je
+        // Maschine über den Ring, wie 0x450310 ihn absetzt.
+        int n = Alt2("flughafen") ? StaffelStarten(flughafen, marke, ziel, col, row)
+                                  : PostStaffelStarten(flughafen, marke, ziel, col, row);
 
         if (modus == ZielModusZiel) ZielwahlAufZiel++;
         else ZielwahlAufZelle++;
@@ -226,11 +229,38 @@ public partial class MapEntityLayer : Node2D
         foreach (var a in maschinen)
         {
             if (n >= ZielEintraege) break;              // 40 Eintraege @0x44F1ED
+            if (FlugzeugAngreifen(a, ziel, mitte)) n++;
+        }
+        return n;
+    }
+
+    /// <summary>Der Absender 0x450310: je Maschine der Staffel Befehl 502,
+    /// Modus 7 (Ziel) bzw. 1 (Zelle). Gibt die Zahl der Sätze zurück.</summary>
+    private int PostStaffelStarten(int flughafen, int marke, int ziel, int col, int row)
+    {
+        int n = 0;
+        foreach (var a in StaffelMaschinen(flughafen, marke))
+        {
+            if (n >= ZielEintraege) break;
             if (a.Absturz) continue;
+            if (Emit(Simulation.Commands.CommandRecord.Make(Simulation.Commands.CommandOp.Flugzeugstart,
+                    (byte)ViewPlayer, (short)a.Slot,
+                    (short)(ziel >= 0 ? ZielModusZiel : ZielModusZelle),
+                    (short)col, (short)row, (short)ziel))) n++;
+        }
+        return n;
+    }
+
+    /// <summary>launch_aircraft 0x426020 für EINE Maschine — der Rumpf von
+    /// <see cref="StaffelStarten"/>, auch der Arm von Befehl 502 Modus 7/1.</summary>
+    private bool FlugzeugAngreifen(Special a, int ziel, Vector2 mitte)
+    {
+        {
+            if (a.Absturz) return false;
             if (a.Stored)
             {
                 var home = GebaeudeMitSlot(a.HomeSlot);
-                if (home == null) continue;
+                if (home == null) return false;
                 a.Stored = false;
                 a.Pos = home.Pos;
                 a.Col = home.Col; a.Row = home.Row;
@@ -247,9 +277,8 @@ public partial class MapEntityLayer : Node2D
             // Maschine kreist nach dem Flug ueber dem Flughafen, statt zu
             // landen. Siehe Special.Angriffsauftrag.
             a.Angriffsauftrag = true;
-            n++;
         }
-        return n;
+        return true;
     }
 
     /// <summary>Die Messzeile — <c>--zielwahl-check</c>.

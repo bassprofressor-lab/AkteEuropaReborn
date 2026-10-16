@@ -114,6 +114,9 @@ public partial class MapEntityLayer
                + $"»{_order}«");
         if (_transportEinheit >= 0) TransportZielGewaehlt(zielB);
         else _transportWartet = -1;
+        // ⭐ 17.10.2026 (Direktbefehle2): der Zielklick setzt Befehl 518 ab — er
+        // wirkt am nächsten Taktanfang. Den Ring leerlaufen lassen.
+        for (int t = 0; t < 8 && Commands.Pending > 0; t++) CommandTick();
         int sollB = BasisVerlegungAlt || AusdockTempoAlt ? BvGelaehmt : entwurf;
         // --basis-verlegung-alt: sie faehrt gar nicht los; Abfahrt = Tempo in der Garage.
         _bvFaelle.Add(("Basis", ub, entwurf, u.Speed, sollB));

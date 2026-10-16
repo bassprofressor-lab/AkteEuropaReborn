@@ -212,6 +212,12 @@ public static class Determinism
     /// </summary>
     public static bool PruefsummeGleitkomma;
 
+    /// <summary><c>--pruefsumme-voll</c> (17.10.2026, Direktbefehle2): die
+    /// Prüfsumme nimmt zusätzlich den Zustand auf, den die Befehle des zweiten
+    /// Pakets schreiben — siehe <c>DeterminismVollAnhaengen</c>. Ohne Schalter
+    /// unverändert.</summary>
+    public static bool PruefsummeVoll;
+
     /// <summary>Eine Gleitkommazahl für die Prüfsumme: auf 1/256 gerundet.</summary>
     public static int Gerundet(float v) => (int)System.MathF.Round(v * 256f);
 
@@ -247,6 +253,7 @@ public static class Determinism
             if (a == "--determinism-poison") Poisoned = true;
             else if (a == "--systemzufall-alt") SystemzufallAlt = true;     // bug-529
             else if (a == "--pruefsumme-gleitkomma") PruefsummeGleitkomma = true;
+            else if (a == "--pruefsumme-voll") PruefsummeVoll = true;
             else if (a.StartsWith("--determinism-seed="))
             {
                 string v = a["--determinism-seed=".Length..];

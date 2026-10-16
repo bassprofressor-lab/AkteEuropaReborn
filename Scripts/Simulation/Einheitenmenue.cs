@@ -274,7 +274,7 @@ public partial class MapEntityLayer : Node2D
         switch (code)
         {
             case CodeTransportzyklus:
-                return RouteFensterOeffnen() ? ""
+                return PostRouteFensterOeffnen() ? ""
                      : RouteNote.Length > 0 ? RouteNote : "kein Transporter gewaehlt";
             case CodeAnhalten:
                 PostAnhalten();          // bug-530: Befehl 12 ueber den Ring
@@ -336,9 +336,9 @@ public partial class MapEntityLayer : Node2D
                 // berichte/pionier-bruecke-fable.md nicht mehr.
                 return BrueckenbauBeginnen();
             case CodeSelbstzerstoerung:
-                return SelbstzerstoerungAusfuehren();
+                return PostSelbstzerstoerung();          // Direktbefehle2 (13)
             case CodeHandsteuerung:
-                return HandsteuerungUmschalten();
+                return PostHandsteuerungUmschalten();    // Direktbefehle2 (4/5)
             case CodeBeschuetzen:
                 // ⚠ Merker A loest im naechsten Takt BEFEHL 12 auf der
                 // gewaehlten Einheit aus (revier3 §3.2). Was 12 TUT, ist

@@ -56,11 +56,18 @@ public partial class MapViewer
                 _speicherChrome = new UI.SpeicherfensterChrome(art) { Verwaltet = true };
                 _speicherLayer.AddChild(_speicherChrome);
                 // Bus 991 → Empfänger 0x4C4571 → Schreiber 0x41D210("game.00" + Platz)
-                _speicherChrome.OnSichern = (p, n) => SpielstandSchreiben(p, n);
+                // Direktbefehle2: im Netz über den Ring, damit JEDE Maschine im selben Takt schreibt
+                _speicherChrome.OnSichern = (p, n) =>
+                {
+                    if (MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("spielstand")) { _entities.PostSpeichern(p, n); return; }
+                    SpielstandSchreiben(p, n);
+                };
                 _speicherChrome.OnZu = () =>
                 {
                     // 0x44730B: Art 15 && byte[0x4FAEEC] → noch einmal 993 → Pause aus
-                    if (_speicherPauseEigen) GetTree().Paused = false;
+                    if (_speicherPauseEigen && MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("pause"))
+                    { if (_entities.NetzPause != 0) _entities.PostPause(); }
+                    else if (_speicherPauseEigen) GetTree().Paused = false;
                     _speicherPauseEigen = false;
                 };
             }
@@ -71,7 +78,12 @@ public partial class MapViewer
             _ladeChrome = new UI.SpeicherfensterChrome(art) { Verwaltet = true };
             _speicherLayer.AddChild(_ladeChrome);
             // Bus 990 → 0x4C44E8 → Lader 0x41E070("game.00n")
-            _ladeChrome.OnLaden = p => UI.LoadGameScreen.Starten(this, Core.SaveGame.PlatzName(p));
+            _ladeChrome.OnLaden = p =>
+            {
+                // Direktbefehle2: im Netz 990 über den Ring — geladen wird IN die laufende Partie
+                if (MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("spielstand")) { _entities.PostLaden(p); return; }
+                UI.LoadGameScreen.Starten(this, Core.SaveGame.PlatzName(p));
+            };
         }
         return _ladeChrome;
     }
@@ -89,7 +101,13 @@ public partial class MapViewer
         // ⚠⚠ Fensterwelt-Regel: die Aufblende VON HAND zu Ende drehen — gleich steht der Baum.
         for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
         // 0x443B26: schon pausiert → Merker 0; sonst 993 (Pause an), Merker 1
-        if (GetTree().Paused) _speicherPauseEigen = false;
+        if (MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("pause"))
+        {
+            // 0x443B3F: nur wenn noch nicht pausiert → 993 (im Netz über den Ring)
+            _speicherPauseEigen = _entities.NetzPause == 0;
+            if (_speicherPauseEigen) _entities.PostPause();
+        }
+        else if (GetTree().Paused) _speicherPauseEigen = false;
         else { GetTree().Paused = true; _speicherPauseEigen = true; }
         return true;
     }

@@ -41,7 +41,7 @@ public partial class MapViewer
         _transportlinie.OnClose = () => _transportlinie.Visible = false;
         _transportlinie.OnBefehl500 = (linie, ware, wert) =>
         {
-            _entities.RailSetFlag(linie, ware, wert);
+            _entities.PostRailSetFlag(linie, ware, wert);   // Direktbefehle2 (500)
             TransportlinieNeu(linie);
         };
         _entities.BahnschalterGeaendert += TransportlinieNeu;     // 0x44FD70
@@ -83,7 +83,7 @@ public partial class MapViewer
                 int ziel = _entities.GebaeudeAufZelle(c, r);
                 if (ziel < 0) return true;                          // 0xFF -> nichts
                 var griffe = _transportGriffe ?? new List<int>();
-                int n = _entities.TransportierenAusBahnhof(griffe, ziel);
+                int n = _entities.PostTransportierenAusBahnhof(griffe, ziel);   // Direktbefehle2 (518)
                 if (n > 0)
                 {
                     _transportGriffe = null;
