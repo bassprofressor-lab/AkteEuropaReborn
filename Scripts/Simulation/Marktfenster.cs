@@ -151,7 +151,14 @@ public partial class MapEntityLayer
         {
             // GEFECHT: unsere Abweichung vom 18.08.2026, derselbe Weg wie bisher.
             int zeile = MarketShelf().IndexOf(o);
-            if (zeile >= 0) MarketBuy(markt, zeile);
+            // ⚠ 17.10.2026 (Direktbefehle2): MarketBuy bucht für den SICHTSPIELER —
+            // im Netz kaufte auf der Maschine des Gegners der falsche Spieler.
+            // Jetzt im Satzkontext des Käufers (P2 muss der Absender sein).
+            if (zeile >= 0 && (Alt2("verkauf") || spieler == c.Player))
+            {
+                if (Alt2("verkauf")) MarketBuy(markt, zeile);
+                else { var mk = markt; ImSatz(c, _entities.IndexOf(mk), -1, () => MarketBuy(mk, zeile)); }
+            }
             OnMarktfensterNeu?.Invoke(platz);
             return true;
         }

@@ -92,10 +92,23 @@ public partial class MapEntityLayer
         }
     }
 
+    /// <summary>⭐ 17.10.2026 (bug-540, Direktbefehle2): »Kopf 0 = Mensch« hiess hier
+    /// <c>p == ViewPlayer</c>. Im Netz ist das auf jeder Maschine ein ANDERER
+    /// Spieler — eine neutrale Einheit (@0x41135E) lief auf Maschine A zu Spieler 0
+    /// über, auf B zu Spieler 1. Jetzt jeder MENSCHENPLATZ der Partie
+    /// (<see cref="Network.NetworkManager.HumanSlots"/>); im Einzelspieler ist das
+    /// genau der Sichtspieler. Gegenschalter <c>--direktbefehle2-alt=sonst</c>.</summary>
+    private bool MenschPlatz(int p)
+    {
+        if (p == ViewPlayer) return true;
+        if (!Network.NetworkManager.Active || Alt2("sonst")) return false;
+        return System.Array.IndexOf(Network.NetworkManager.HumanSlots(), p) >= 0;
+    }
+
     /// <summary>Hat der Kopf dieses Spielers die 1 (Rechner)? Siehe Kopfkommentar.</summary>
     private bool KopfRechner(int p)
     {
-        if (p is < 0 or > 7 || _kiAusgeschieden[p] || _kopfMensch[p] || p == ViewPlayer) return false;
+        if (p is < 0 or > 7 || _kiAusgeschieden[p] || _kopfMensch[p] || MenschPlatz(p)) return false;
         return InCampaign || _ai.Any(a => a.Player == p);
     }
 
@@ -114,7 +127,7 @@ public partial class MapEntityLayer
     /// <summary>Kopf == 0: der Mensch, oder ein Spieler, dem das Skript den Kopf 0
     /// gegeben hat. Gilt für das Einsammeln neutraler Einheiten (@0x41135E).</summary>
     private bool KopfMensch(int p)
-        => p == ViewPlayer || (p is >= 0 and <= 7 && !KopfAlt && _kopfMensch[p]);
+        => MenschPlatz(p) || (p is >= 0 and <= 7 && !KopfAlt && _kopfMensch[p]);
 
     /// <summary>Der Kopf, wie das Original ihn liest: 0 Mensch, 1 Rechner, 0xFF
     /// ausgeschieden. ⚠ Der neutrale P7 (sec106) hat im Original Kopf 1; er wird
@@ -122,7 +135,7 @@ public partial class MapEntityLayer
     private int KopfWert(int p)
     {
         if (p is < 0 or > 7) return 0xFF;
-        if (p == ViewPlayer || (!KopfAlt && _kopfMensch[p])) return 0;
+        if (MenschPlatz(p) || (!KopfAlt && _kopfMensch[p])) return 0;
         return _kiAusgeschieden[p] ? 0xFF : 1;
     }
 
@@ -138,7 +151,7 @@ public partial class MapEntityLayer
     /// </summary>
     private void SkriptKopf(int p, int wert)
     {
-        if (KopfAlt || p is < 0 or > 7 || p == ViewPlayer) return;
+        if (KopfAlt || p is < 0 or > 7 || MenschPlatz(p)) return;
         if (wert == 0)
         {
             _kopfMensch[p] = true;

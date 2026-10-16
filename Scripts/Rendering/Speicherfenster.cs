@@ -155,6 +155,9 @@ public partial class MapViewer
     private void MissionsendeStand(bool won, bool record)
     {
         if (!record || !won || MissionsendeStandAus || UI.SpeicherfensterChrome.Alt) return;
+        // ⚠ 17.10.2026 (bug-541): »nicht im Netzspiel« stand im Kopf, aber nicht im
+        // Code — der Netzprüfstand schrieb GAME.007 in den Benutzerordner.
+        if (Network.NetworkManager.Active && !MapEntityLayer.Alt2("spielstand")) return;
         SpielstandSchreiben(Core.SaveGame.PlatzAutosave,
                             $"Ende von Mission #{UI.SkirmishSetup.CampaignMission}", melden: false);
     }
