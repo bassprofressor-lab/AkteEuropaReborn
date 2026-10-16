@@ -12583,7 +12583,7 @@ public partial class MapEntityLayer : Node2D
             // die Mittelstreckenrakete verbraucht keine Munition (@0x40C57D).
             if (e.Cooldown <= 0 && HasAmmo(e) && !GaswerferSchweigt(e))
             {
-                e.Cooldown = ReloadOf(e);
+                e.Cooldown = NachladenFuer(e, t.Col, t.Row);   // bug-550: Bertha 0x40C4F1
                 if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e))
                     && (Art7Einzeltreffer || WeaponRowOf(e.Weapon) != 8))
                     e.Ammo--;                    // one round per shot (@0x40c587)

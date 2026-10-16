@@ -50,6 +50,56 @@ public partial class MapEntityLayer
         return Simulation.DesignMath.SoundClass(WeaponRowOf(s.Weapon));
     }
 
+    /// <summary><c>--bertha-nachladen-alt</c> — Stand 0.6.9 (bug-550): auch die Bertha
+    /// laedt mit ihrem Satzwert +0x3D nach wie jedes Fahrzeug.</summary>
+    public static bool BerthaNachladenAlt;
+
+    /// <summary>Fuer <c>--bertha-nachladen-check</c>: gesetzte Nachladetakte je Art.</summary>
+    public static int BerthaNachladen20, BerthaNachladen21, BerthaTakte20Min = int.MaxValue,
+                      BerthaTakte20Max, BerthaTakte21Min = int.MaxValue, BerthaTakte21Max;
+
+    /// <summary>
+    /// <b>Die Nachladezeit eines Schusses</b> (bug-550, KayelGee 14.10.: »die Raketen der
+    /// Dicken Bertha haben eine eigene Nachladegeschwindigkeit«).
+    ///
+    /// <para>Der Schuss 0x40BB00 setzt NABYTO <c>word +0x32</c> fuer jede Gattung aus
+    /// RELOAD (<c>+0x3D + rand&amp;3</c>, @0x40C46C…0x40C48F) — AUSSER fuer Gattung 3:
+    /// @0x40C45E <c>cmp byte[+0x0A],3 / je 0x40C4F1</c>, und dort haengt die Zeit an der
+    /// eben gewaehlten Art (<c>[esp+0x17]</c>, geschrieben @0x40BF60):</para>
+    /// <code>
+    /// 0x40C4F5  cmp al,0x14 / jne 0x40C536      ; Art 20 (Doppelrakete)?
+    /// 0x40C4F9  rand() % 0x14 + 0x28  -> +0x32  ; 40..59 Takte
+    /// 0x40C536  rand() % 3    + 5     -> +0x32  ; Art 21: 5..7 Takte
+    /// </code>
+    /// <para>F gleich: 0x40C3B8…0x40C41D, dieselben Konstanten 0x14/0x28/3/5. Der
+    /// Satzwert +0x3D der Bertha wird beim Schuss also NIE gelesen. Ein Takt ist
+    /// <see cref="Simulation.Zeitbasis.NachladeTakt"/> (+0x32 sinkt einmal je Takt,
+    /// 0x4074F7). Der Wurf kommt aus dem gemeinsamen Strom (Determinism.Roll) wie jede
+    /// andere Streuung — ⚠ nicht dieselbe Zahlenfolge wie rand() des Originals.</para>
+    /// </summary>
+    private float NachladenFuer(Entity e, int zc, int zr)
+    {
+        if (BerthaNachladenAlt || BerthaWaffeAlt || e.GameUnitType != 3 || e.IsBuilding)
+            return ReloadOf(e);
+        int art = SchussArt(e, zc, zr);
+        int takte;
+        if (art == 20)
+        {
+            takte = 40 + Simulation.Determinism.Roll(20);                  // 0x40C4F9..0x40C50A
+            BerthaNachladen20++;
+            BerthaTakte20Min = System.Math.Min(BerthaTakte20Min, takte);
+            BerthaTakte20Max = System.Math.Max(BerthaTakte20Max, takte);
+        }
+        else
+        {
+            takte = 5 + Simulation.Determinism.Roll(3);                    // 0x40C536..0x40C547
+            BerthaNachladen21++;
+            BerthaTakte21Min = System.Math.Min(BerthaTakte21Min, takte);
+            BerthaTakte21Max = System.Math.Max(BerthaTakte21Max, takte);
+        }
+        return takte * ReloadTick;
+    }
+
     /// <summary>Strahlwaffe des Fussvolks (0x40ED66: 191 Laser, 194 LaserXXL)?</summary>
     private static bool FussStrahl(Entity s)
         => s.Infantry >= 0 && (s.Weapon - InfCompBase) is 191 or 194;

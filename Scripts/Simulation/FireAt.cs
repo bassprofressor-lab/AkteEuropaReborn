@@ -104,7 +104,7 @@ public partial class MapEntityLayer : Node2D
         if (weit * 40 < d) return Nein($"zu weit ({d:0} px > {weit}·40, @0x40BF64)");
         if (s.RangeMin * 40 > d) return Nein($"zu nah ({d:0} px < {s.RangeMin}·40)");
 
-        s.Cooldown = ReloadOf(s);                                          // 0x40C451
+        s.Cooldown = NachladenFuer(s, col, row);                           // 0x40C451, bug-550
         if (s.AmmoMax > 0 && zbran != 8 && !(CheatAmmo && Cheated(s))) s.Ammo--;   // 0x40C57D
         DebugShots++;
         FireAtSchuesse++;

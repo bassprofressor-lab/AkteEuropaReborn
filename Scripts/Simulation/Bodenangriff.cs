@@ -215,7 +215,7 @@ public partial class MapEntityLayer : Node2D
             if (e.Weapon == 0) e.Facing = e.AimFacing;
             if (e.Cooldown <= 0 && HasAmmo(e))
             {
-                e.Cooldown = ReloadOf(e);
+                e.Cooldown = NachladenFuer(e, z.X, z.Y);       // bug-550
                 if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e))) e.Ammo--;
                 DebugShots++; BodenSchuesse++;
                 BeschussZelleZaehlen();          // `--beschuss-check`
