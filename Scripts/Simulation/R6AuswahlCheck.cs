@@ -19,6 +19,7 @@ public partial class MapEntityLayer
         "tuermarken" => R6TuermarkenStart(),
         "gummiband" => R6GummibandStart(),
         "einfahrzone" => R6EinfahrzoneStart(),
+        "klickkasten" => R6KlickkastenCheck(),
         _ => $"r6-check: unbekannter Teil »{name}«",
     };
 
@@ -239,5 +240,48 @@ public partial class MapEntityLayer
         return "r6-check einfahrzone:" +
                $"\n   nach 3 s: Einheit eingefahren {drin}, auf der Tuer {aufTuer}, steht auf ({a.Col},{a.Row}), Weg {(a.Path?.Count ?? 0)}" +
                $"\n   {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}";
+    }
+
+    // ======================================================================
+    //  klickkasten — R6#12 »Einheiten anwaehlbar, wenn die Maus weit oberhalb ist«
+    // ======================================================================
+    //
+    // Kein Bau: misst, wie weit der Klickkasten (BodyRect) ueber das sichtbare Bild
+    // reicht, und stellt den Kasten des Originals daneben. Original-Treffertest
+    // Fahrzeug C 0x431CBC..0x431CE6: mx+3 > sx, sy+10 < my, sx+40 > mx, sy+60 > my,
+    // also x [sx-2, sx+39], y [sy+11, sy+59]; Blitpunkt C 0x4301D1/0x430212
+    // sy = Zeile*20 - 35 - Hub (+ Feinversatz), sx = Spalte*40 - 20 (+ Fein) —
+    // in unseren Koordinaten sx = Pos.x - 20, sy = Pos.y - 45 (EinheitenAnker 24,45).
+    // NULLMODELL: der Originalkasten ist rein gerechnet; weicht unser Kasten um
+    // mehr als 2 px ab, ist es UNSER Fehler, sonst originaltreu.
+    private string R6KlickkastenCheck()
+    {
+        int n = 0, abw = 0;
+        float kSum = 0, kMin = float.MaxValue, kMax = float.MinValue, oSum = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Infantry >= 0 || e.GameUnitType != 0 || Untergestellt(e)) continue;
+            if (e.Move == Simulation.NavGrid.MoveClass.Ship) continue;
+            var tex = AuswahlBild(e);
+            var img = tex?.GetImage();
+            if (img == null) continue;
+            int top = -1;
+            for (int y = 0; y < img.GetHeight() && top < 0; y++)
+                for (int x = 0; x < img.GetWidth(); x++)
+                    if (img.GetPixel(x, y).A > 0.3f) { top = y; break; }
+            if (top < 0) continue;
+            float sichtOben = e.Pos.Y - EinheitenAnker(e).Y + top;
+            var box = BodyRect(e);
+            float origOben = e.Pos.Y - 45 + 11;
+            float kopf = sichtOben - box.Position.Y;
+            n++; kSum += kopf; kMin = Mathf.Min(kMin, kopf); kMax = Mathf.Max(kMax, kopf);
+            oSum += sichtOben - origOben;
+            if (Mathf.Abs(box.Position.Y - origOben) > 2f || Mathf.Abs(box.Position.X - (e.Pos.X - 22)) > 2f) abw++;
+        }
+        if (n == 0) return "r6-check klickkasten: keine Fahrzeuge mit Bild — sagt NICHTS";
+        return "r6-check klickkasten:" +
+               $"\n   {n} Fahrzeuge: Kasten reicht ueber den obersten sichtbaren Bildpunkt hinaus: Mittel {kSum / n:0.0} px (min {kMin:0}, max {kMax:0}); Original-Kasten: Mittel {oSum / n:0.0} px" +
+               $"\n   Kasten bei uns Pos+(-21,-35) 42x49, Original Pos+(-22,-34) 42x49; Abweichung > 2 px bei {abw} Einheiten" +
+               $"\n   {(abw == 0 ? "ORIGINALTREU (kein Bau)" : "ABWEICHUNG")}";
     }
 }
