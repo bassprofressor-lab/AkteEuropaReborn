@@ -396,7 +396,7 @@ public partial class MapEntityLayer
                 // die Laufzeitlisten gehoeren dem Spielstand, nicht der Karte
                 e.Garage.Clear(); e.Depot.Clear(); e.BuildQueue.Clear(); e.Orders.Clear();
                 e.TorZustand.Clear();
-                e.Path = null; e.Reserved = null; e.InGebaeude = null; e.Target = -1;
+                e.Path = null; e.SpritWeg = null; e.Reserved = null; e.InGebaeude = null; e.Target = -1;
             }
             int I(string k, int dflt) => d.TryGetValue(k, out var x) ? x.AsInt32() : dflt;
             e.Slot = slot; e.Col = col; e.Row = row; e.Elev = el;

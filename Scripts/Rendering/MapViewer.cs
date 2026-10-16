@@ -1426,6 +1426,8 @@ public partial class MapViewer : Node2D
         if (InfofensterPruefstand()) return;
         // ⭐ 04.10.2026 — Paket 3 Bewegung (bug-425), Rendering/AnfahrenLauf.cs.
         if (AnfahrenPruefstand()) return;
+        // ⭐ bug-585 — nach dem Tanken weiterfahren, Rendering/SpritWeiterLauf.cs.
+        if (SpritWeiterPruefstand()) return;
         // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
         if (GrafikPruefstand()) return;
         if (_untermissionCheck > 0)
@@ -3871,6 +3873,7 @@ _mausProbePunkt = karte;
             if (InfofensterSchalter(a)) continue;
             // ⭐ 04.10.2026 — Paket 3 Bewegung (bug-425), Rendering/AnfahrenLauf.cs.
             if (AnfahrenSchalter(a)) continue;
+            if (SpritWeiterSchalter(a)) continue;   // bug-585
             // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
             if (GrafikSchalter(a)) continue;
             if (a.StartsWith("--shot=")) _shotPath = a[7..];

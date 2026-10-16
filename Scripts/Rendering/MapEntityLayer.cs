@@ -662,6 +662,10 @@ public partial class MapEntityLayer : Node2D
         public List<Vector2I>? Path;     // remaining waypoint cells
         public int PathIdx;
         public Vector2I Goal;            // final target cell (for re-pathing)
+        /// <summary>bug-585: der Restweg einer leergefahrenen Einheit, bis sie
+        /// wieder Sprit hat (Simulation/SpritWeiter.cs). null = nichts gemerkt.</summary>
+        public List<Vector2I>? SpritWeg;
+        public int SpritIdx;
 
         /// <summary>Bis wann diese Einheit NICHT wieder aufgenommen wird —
         /// gesetzt fuer einen frisch Ausgestiegenen, der nirgends hin kann.
@@ -35256,6 +35260,10 @@ public partial class MapEntityLayer : Node2D
             TurmTakt(i, e);
             UpdateCombat(i, e, dt);
 
+            // ⭐ bug-585: nach dem Tanken faehrt sie den gemerkten Weg weiter
+            // (Original 0x407F09: Weiche auf +0x14 erst wieder bei Sprit > 0).
+            if (e.SpritWeg != null) SpritWeiterTakt(e);
+
             if (e.Path == null || e.PathIdx >= e.Path.Count) continue;
 
             if (e.Reserved == null)
@@ -35740,6 +35748,12 @@ public partial class MapEntityLayer : Node2D
                         // Das Anhalten selbst ist genau das, was der geloeschte
                         // Zwilling weiter unten tat: Weg weg, »kolik = 0«
                         // (@0x407af2), kein Ziel mehr, und die Meldezeile.
+                        // ⭐ bug-585 (KayelGee R6, 14.10.): der Rest des Weges
+                        // wird GEMERKT. Das Original haelt bei 0x407AF2/0x407AF8
+                        // nur kolik (+0x06) und Richtung (+0x04 = 0xFF) an;
+                        // Auftrag +0x14 = 2, Ziel +0x18/+0x19 und Wegzeiger +0x1A
+                        // bleiben stehen. Siehe Simulation/SpritWeiter.cs.
+                        SpritWegMerken(e);
                         e.Path = null;
                         e.StepCost = 0; e.Progress = 0;
                         e.Target = -1;

@@ -2142,6 +2142,7 @@ public partial class MapEntityLayer
         var e = _entities[i];
         if (e.Reserved is { } r) _nav?.ClearOccupant(r.X, r.Y, i);
         e.Path = null;
+        e.SpritWeg = null;             // bug-585: Halt vergisst auch den gemerkten Weg
         e.Reserved = null;
         e.Orders.Clear();
         e.Target = -1;
