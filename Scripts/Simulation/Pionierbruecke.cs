@@ -358,7 +358,11 @@ public partial class MapEntityLayer
         var s = new Steg
         {
             Col = col, Row = row, Richtung = d, Wasser = k,
-            Variante = (int)(GD.Randi() & 1), Tp = BrueckeTp, Slot = nr,
+            // bug-529: nur die Kachel (BrueckenKachel +54·Variante) — Bildwuerfel.
+            // ⚠ SETZUNG: das Original nimmt das gemeinsame rand().
+            Variante = Simulation.Determinism.SystemzufallAlt
+                ? (int)(GD.Randi() & 1) : Audio.GameSounds.KlangWuerfel(2),
+            Tp = BrueckeTp, Slot = nr,
         };
         _stege.Add(s);
         // ⭐ 04.10.2026 (bug-434) — 0x4CC280 legt gleich nach dem freien Platz

@@ -483,7 +483,12 @@ public partial class MapEntityLayer
             var r = new Rampe
             {
                 Col = col, Row = row,
-                Bild = 2 * Mathf.Max(0, d) + (int)(GD.Randi() & 1),
+                // bug-529: das untere Bit ist nur BILD (RampenAbsetzZelle
+                // nimmt g/2), also der Bildwuerfel, nicht GD.Randi (dessen
+                // Stand Klang und Anzeige je Maschine verschieden vorruecken).
+                // ⚠ SETZUNG: das Original nimmt hier das gemeinsame rand().
+                Bild = 2 * Mathf.Max(0, d) + (Simulation.Determinism.SystemzufallAlt
+                    ? (int)(GD.Randi() & 1) : Audio.GameSounds.KlangWuerfel(2)),
                 Tp = 200, Slot = platz,
             };
             _moleSaetze.Add(r);

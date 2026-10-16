@@ -208,7 +208,10 @@ public partial class MapEntityLayer
         // Darstellung, also ein eigener, ungekeimter Würfel. ⚠ Damit weicht die
         // FOLGE der Wiederholungen vom Original ab — die Rate (eine von
         // fünfzig) ist dieselbe.
-        bool wiederholen = _powerLast >= 100 || _meldeWurf.Next(50) == 1;
+        // bug-529: gekeimt (Bildwuerfel) statt ungekeimt; der Simulationsstrom
+        // bleibt unberuehrt, wie bisher. --systemzufall-alt = der alte Wurf.
+        bool wiederholen = _powerLast >= 100 || (Simulation.Determinism.SystemzufallAlt
+            ? _meldeWurf.Next(50) : Audio.GameSounds.KlangWuerfel(50)) == 1;
         if (jetzt < 100 && wiederholen) NotePowerShort(true);
         if (_powerLast < 100 && jetzt >= 100) NotePowerShort(false);
         _powerLast = jetzt;

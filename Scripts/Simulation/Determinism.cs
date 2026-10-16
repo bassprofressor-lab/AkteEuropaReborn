@@ -161,6 +161,11 @@ public static class Determinism
         // (welche Stimmprobe, welche Tonhöhe) — die dürfen dort bleiben, weil
         // ein Klang den Spielzustand nicht verändert. Nachzählen mit:
         //   grep -rn "GD.Randi()" Scripts --include=*.cs
+        // ⚠ 16.10.2026 nachgezählt (bug-529): es waren inzwischen sieben —
+        // drei neue im Takt (Landungsbruecke, Pionierbruecke, Todeslicht), alle
+        // mit reiner Bildwirkung. Sie stehen jetzt auf KlangWuerfel; übrig
+        // bleiben die vier in GameSounds (und die drei hinter
+        // --systemzufall-alt).
         //
         // Das Keimen macht auch die REPRODUZIERBAR, aber nicht netztauglich:
         // der globale Würfel wird von Klang und Anzeige angefasst, und die
@@ -169,6 +174,25 @@ public static class Determinism
     }
 
     private static bool _configured;
+
+    /// <summary>
+    /// <c>--systemzufall-alt</c> (bug-529, 16.10.2026) — der Stand vor dem
+    /// Umbau: <c>GD.Randi</c> bzw. ein ungekeimtes <c>System.Random</c> an den
+    /// fünf Bildstellen (Molenbild Landungsbruecke, Brückenvariante
+    /// Pionierbruecke, Lichtplatz Todeslicht, Fahrzittern, Meldewurf Power)
+    /// und — der eigentliche Netzfehler — <see cref="Roll"/> in
+    /// <c>SpeakHit</c>, das nur auf der Maschine würfelte, deren Sichtspieler
+    /// das getroffene Gebäude gehört.
+    ///
+    /// <para>Heute nehmen alle sechs den Bildwürfel
+    /// <c>Audio.GameSounds.KlangWuerfel</c> (fester Keim 20260920, eigener
+    /// Strom): sie wirken nur auf Bild, Klang oder Meldung, also dürfen sie den
+    /// Simulationsstrom NICHT verschieben, und sie sind gekeimt, also
+    /// wiederholbar. Determinism.cs hatte keinen eigenen Zierstrom; die Regel
+    /// des Hauses steht seit dem 20.09.2026 an <c>KlangWuerfel</c> (»wer einen
+    /// Klang oder ein Bild auswürfelt, nimmt DIESEN Würfel«).</para>
+    /// </summary>
+    public static bool SystemzufallAlt;
 
     /// <summary>
     /// Die Schalter, die den Keim betreffen, EINMAL lesen — und zwar früh
@@ -200,6 +224,7 @@ public static class Determinism
         foreach (string a in Core.CommandLine.Args)
         {
             if (a == "--determinism-poison") Poisoned = true;
+            else if (a == "--systemzufall-alt") SystemzufallAlt = true;     // bug-529
             else if (a.StartsWith("--determinism-seed="))
             {
                 string v = a["--determinism-seed=".Length..];

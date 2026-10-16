@@ -99,7 +99,10 @@ public partial class MapEntityLayer
         if (k < 0)
         {
             // @0x4222DD: rand() % 200 — hier ein LOKALER Wurf, siehe Kopf (V 2).
-            k = (int)(GD.Randi() % LichtPlaetze);
+            // bug-529: Bildwuerfel statt GD.Randi — gekeimt, und er verschiebt
+            // den Simulationsstrom nicht (die Tafel ist ohnehin je Betrachter).
+            k = Simulation.Determinism.SystemzufallAlt
+                ? (int)(GD.Randi() % LichtPlaetze) : Audio.GameSounds.KlangWuerfel(LichtPlaetze);
             LichterUeberschrieben++;
         }
         // x, y und Radius sind Bytes, die Dauer ein Wort (@0x4222F9..0x42231D).

@@ -7450,7 +7450,19 @@ public partial class MapEntityLayer : Node2D
         if (victim.IsBuilding)
         {
             if (victim.Owner != ViewPlayer) return;
-            if (Simulation.Determinism.Roll(100) == 0)
+            // ⚠⚠ bug-529 (16.10.2026) — EIN NETZFEHLER: hier stand
+            // `Determinism.Roll(100)`, also der gemeinsame Simulationsstrom,
+            // HINTER zwei örtlichen Toren (Ansagen an, Gebäude des
+            // Sichtspielers). Im Zwei-Prozess-Lauf map_NET07 würfelte der
+            // Vermittler in Takt 1985 einmal mehr (Wurfspur: »SpeakHit <-
+            // ApplyHit« nur auf A), ab Takt 2020 standen 32907 gegen 32906
+            // Würfe, ab 2040/2060 liefen die Prüfsummen auseinander (Ausweichen,
+            // Trümmer). Das Original würfelt hier mit dem gemeinsamen rand()
+            // hinter derselben örtlichen Frage (+0x01 == [0x4FA284] @0x40D352)
+            // — es hat also denselben Netzfehler (gelesen, nicht gemessen).
+            // ⚠ SETZUNG: Bildwürfel, die Rate 1/100 bleibt.
+            if ((Simulation.Determinism.SystemzufallAlt
+                    ? Simulation.Determinism.Roll(100) : Audio.GameSounds.KlangWuerfel(100)) == 0)
                 Audio.SoundBankPlayer.Play(Audio.GameSounds.BuildingUnderAttack);
             return;
         }
@@ -35579,7 +35591,11 @@ public partial class MapEntityLayer : Node2D
                     // ⚠ UNSERE Setzung: je SPIELTAKT gewürfelt (Original je Bild),
                     // damit es in der Pause steht; eigener Würfel, NICHT der der
                     // Simulation (reine Darstellung). Gegenschalter --fahrzittern-aus.
-                    e.Zittern = FahrzitternAus || e.Infantry >= 0 ? 0 : _zitterWurf.Next(2);
+                    // bug-529: nur Bildversatz (DrawUnitTail) — Bildwuerfel,
+                    // gekeimt; --systemzufall-alt = der ungekeimte von vorher.
+                    e.Zittern = FahrzitternAus || e.Infantry >= 0 ? 0
+                        : Simulation.Determinism.SystemzufallAlt ? _zitterWurf.Next(2)
+                        : Audio.GameSounds.KlangWuerfel(2);
                     // ⭐⭐ 27.08.2026 — DIE SCHRAEGE UNTERWEGS. Die lineare
                     // Zwischenlage zieht zwischen zwei ZELLMITTEN; das Original
                     // wertet die Schrägenformel laufend auf der eigenen Zelle
