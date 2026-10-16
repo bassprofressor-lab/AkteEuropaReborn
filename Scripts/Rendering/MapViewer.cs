@@ -143,7 +143,13 @@ public partial class MapViewer : Node2D
 
         _pause = new UI.PauseMenu { CanSave = true };
         _pause.Resumed += ClosePause;
-        _pause.SaveRequested += () => { SpielstandSchreiben(); ClosePause(); };
+        // bug-522: auch der Eigenbau-Knopf öffnet jetzt das Fenster Art 15 (erst zu, dann auf —
+        // siehe Speicherfenster.cs); --speicherfenster-alt = sofort save_<Unixzeit> wie bisher.
+        _pause.SaveRequested += () =>
+        {
+            if (SpeicherfensterNeu) { ClosePause(); SpeicherfensterOeffnen(); }
+            else { SpielstandSchreiben(); ClosePause(); }
+        };
         _pause.Restarted += () => { ClosePause(); GetTree().ReloadCurrentScene(); };
         _pause.Quit += () => { ClosePause(); ZumHauptmenue(); };
         (_panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0)).AddChild(_pause);
@@ -358,7 +364,13 @@ public partial class MapViewer : Node2D
         var w = new UI.MainMenuWindow();
         w.OnClose = ClosePause;
         w.OnRestart = () => { ClosePause(); GetTree().ReloadCurrentScene(); };
-        w.OnSave = () => { SpielstandSchreiben(); ClosePause(); };
+        // bug-522: Knopf 8 → 0x44BA04: Art 15 bei (MausX−3, MausY−3), Menü zu.
+        // ⚠ Reihenfolge Menü zu → Fenster auf ist SETZUNG (Pause), siehe Speicherfenster.cs.
+        w.OnSave = () =>
+        {
+            if (SpeicherfensterNeu) { ClosePause(); SpeicherfensterOeffnen(); }
+            else { SpielstandSchreiben(); ClosePause(); }
+        };
         w.OnQuit = () => { ClosePause(); ZumHauptmenue(); };
         w.OnSettings = () =>
         {
@@ -392,6 +404,8 @@ public partial class MapViewer : Node2D
         };
         w.OnLoad = () =>
         {
+            // bug-522: Knopf 9 → 0x44BA35: Art 14 bei (MausX−3, MausY−3), Menü zu.
+            if (SpeicherfensterNeu) { ClosePause(); LadefensterOeffnen(); return; }
             var host = VollschirmWirt();
             if (host.GetNodeOrNull("Laden") != null) return;
             var l = new UI.LoadGameScreen { Name = "Laden" };
@@ -732,6 +746,7 @@ public partial class MapViewer : Node2D
             BuildEndBanner();
         }
         SpielstandCheckNachLaden();
+        SpeicherfensterCheckNachLaden();
         // ⚠ Steht der Bildprüfstand mit `--shot` zusammen, meldet er GENAU das
         // photographierte Bild. Sonst beschreiben seine Zahlen einen anderen
         // Augenblick als das Bild, das man sich ansieht — und dann ist der
@@ -4701,6 +4716,10 @@ _mausProbePunkt = karte;
             else if (a == "--garage-unsichtbar-check") _garageCheckAfter = 3f;
             else if (a == "--laden-vorlage-alt") MapEntityLayer.LadenVorlageAlt = true;
             else if (a == "--spielstand-check") SpielstandCheckAn = true;
+            // bug-522: Speicherfenster Art 15 / Ladefenster Art 14 (Speicherfenster.cs)
+            else if (a == "--speicherfenster-check") SpeicherfensterCheckAn = true;
+            else if (a == "--speicherfenster-alt") UI.SpeicherfensterChrome.Alt = true;
+            else if (a == "--missionsende-stand-aus") MissionsendeStandAus = true;
             else if (a == "--nachschub-sicht-check") _nachschubSichtAfter = 5f;
             else if (a == "--basisfenster-zu-bleibt-alt") BasisfensterZuBleibtAlt = true;
             else if (a == "--bombenetikett-kaputt") MapEntityLayer.BombenetikettKaputt = true;
@@ -5637,6 +5656,7 @@ _mausProbePunkt = karte;
             }
         }
         SpielstandCheckTakt(delta);
+        SpeicherfensterCheckTakt(delta);
         if (_tuerklickAfter > 0f)
         {
             _tuerklickAfter -= (float)delta;
@@ -8300,6 +8320,8 @@ _mausProbePunkt = karte;
         // ⚠ Hier und nicht im Skript: die Mission endet auch ohne Skript
         // (Gefecht), und dies ist die eine Stelle, durch die beide gehen.
         _entities.ForschungMissionsende();
+        // bug-522: 0x4CFC10 — »Ende von Mission #n« nach Platz 7 (Speicherfenster.cs).
+        MissionsendeStand(won, record);
         // `close_message_windows()` @0x447560 — was noch offen ist, raeumt das
         // Original vor einem neuen Fenster weg, und die Abrechnung ist das
         // letzte Fenster der Mission.
@@ -9463,6 +9485,11 @@ _mausProbePunkt = karte;
                     if (_minimap != null) _minimap.Visible = _showMinimap;
                     break;
                 case >= Key.F5 and <= Key.F8: HandleMarkKey(key); break;
+                // ⭐ bug-522 — F2 / F3: Tastenweiche 0x412FD8, Bytetafel 0x414644[0x71−9] = 29
+                // → 0x413AED → 0x443AA0 (speichern), [0x72−9] = 30 → 0x413B85 → 0x443B90
+                // (laden), beide bei (MausX−3, MausY−3). Unter --speicherfenster-alt nichts.
+                case Key.F2 when !key.CtrlPressed && !key.AltPressed: SpeicherfensterOeffnen(); break;
+                case Key.F3 when !key.CtrlPressed && !key.AltPressed: LadefensterOeffnen(); break;
             default: HandleGroupKey(key); break;
             }
         }

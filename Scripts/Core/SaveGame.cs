@@ -39,7 +39,59 @@ public static class SaveGame
     /// fehlt, kommt aus der Kartenvorlage (siehe ApplySaveState).</summary>
     public const int FormatAeltestes = 1;
 
-    public static string Folder => "user://saves";
+    public static string Folder => OrdnerPruefstand ?? "user://saves";
+
+    /// <summary>⚠ Nur fuer Pruefstaende (<c>--speicherfenster-check</c>): ein
+    /// eigener Unterordner, damit die echten Spielstaende des Spielers im
+    /// geteilten Benutzerordner nie ueberschrieben werden. null = der echte Ordner.</summary>
+    public static string? OrdnerPruefstand;
+
+    // ---- die acht Plaetze des Originals (16.10.2026, KayelGee R5#4, bug-522) ----
+    //
+    // berichte/speicherfenster-fable.md §4: das Original schreibt "GAME.00" + Ziffer
+    // (0x501564 / 0x5392C8), acht Plaetze 0..7, relativ zum Spielordner. Der Kopf
+    // (Schreiber 0x41D210) traegt bei +5 den Spielstandnamen (21 B, NUL), bei +26
+    // die Missionsnummer, bei +55 den Spielernamen (20 B) — genau diese drei
+    // liest der Anleger 0x458D6E. ⚠ UNSERES bleibt das Format (siehe oben): der
+    // Dateiname ist der des Originals plus ».aesave« im bisherigen Ordner, und
+    // die drei Kopffelder stehen als platz_name / platz_mission / platz_spieler
+    // im JSON. Alte save_<Unixzeit>-Dateien bleiben lesbar — ueber den alten
+    // Ladeschirm (--speicherfenster-alt), siehe List().
+
+    /// <summary>Acht Plaetze (Art 14 zeigt 0..7, Art 15 nur 0..6).</summary>
+    public const int Plaetze = 8;
+
+    /// <summary>Platz 7 = <c>game.007</c>: Autosave (0x415480) und Missionsende (0x4CFC10).</summary>
+    public const int PlatzAutosave = 7;
+
+    /// <summary>max = 20 bei <c>0x4738C0</c> — der Puffer ist 21 Byte (+5..+25).</summary>
+    public const int NameMax = 20;
+
+    public static string PlatzName(int p) => $"GAME.00{p}";
+
+    /// <summary>Was der Anleger aus dem Kopf liest (+5, +26, +55).</summary>
+    public readonly record struct PlatzKopf(int Platz, string Name, int Mission, string Spieler);
+
+    /// <summary>Der Anleger <c>0x458D6E</c> fuer einen Platz: null = keine Datei
+    /// (fopen NULL). ⚠ Eine Datei mit LEEREM Namen ist da, zeigt sich aber als
+    /// »Leere Position...« und trifft im Ladefenster nicht (0x45ED8B) — so im
+    /// Original, siehe <see cref="UI.SpeicherfensterChrome"/>.</summary>
+    public static PlatzKopf? PlatzLesen(int p)
+    {
+        string pfad = PathOf(PlatzName(p));
+        if (!FileAccess.FileExists(pfad)) return null;
+        using var fh = FileAccess.Open(pfad, FileAccess.ModeFlags.Read);
+        if (fh == null) return null;
+        var json = new Json();
+        if (json.Parse(fh.GetAsText()) != Error.Ok || json.Data.VariantType != Variant.Type.Dictionary)
+            return new PlatzKopf(p, "", 0, "");
+        var root = json.Data.AsGodotDictionary<string, Variant>();
+        string n = root.TryGetValue("platz_name", out var nv) ? nv.AsString() : "";
+        int m = root.TryGetValue("platz_mission", out var mv) ? mv.AsInt32() : 0;
+        string sp = root.TryGetValue("platz_spieler", out var sv) ? sv.AsString() : "";
+        if (n.Length > NameMax) n = n[..NameMax];
+        return new PlatzKopf(p, n, m, sp);
+    }
 
     public static string PathOf(string name) => $"{Folder}/{name}.aesave";
 

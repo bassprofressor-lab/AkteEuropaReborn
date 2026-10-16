@@ -123,7 +123,7 @@ public partial class MainMenu : Control
         var original = new System.Collections.Generic.List<StartMenuPanel.Row>(
             StartMenuPanel.Original(
                 newGame: missions.Count > 0 ? ShowCampaign : null,
-                load: () => AddChild(new LoadGameScreen()),
+                load: StartmenueLaden,
                 // ⚠ 13.08.2026 — DIE ZEILE DES ORIGINALS FÜHRT JETZT WIRKLICH ZUM
                 // NETZSPIEL. Sie war die ganze Zeit da (Platz 65, Hilfeindex 106,
                 // gelesen @0x480454ff) und tat nichts; der Mehrspieler hing
@@ -238,6 +238,39 @@ public partial class MainMenu : Control
 
     private MenuBackdrop? _backdrop;
 
+    /// <summary>
+    /// ⭐ bug-522 — »Spiel laden« im Startmenü öffnet das Ladefenster des Originals
+    /// (Art 35/48 → <c>0x44CCA1</c>/<c>0x44DB35</c> → <c>0x443B90(200, 100)</c>), nicht mehr
+    /// den Eigenbau <see cref="LoadGameScreen"/> (der kommt mit <c>--speicherfenster-alt</c>
+    /// zurück, und als Rückfall, wenn Kacheln oder Schrift fehlen).
+    /// <para>⚠ SETZUNG zur Lage: (200, 100) gilt im 640×480-Schirm des Originals; wir legen
+    /// diesen Schirm mal 2 mittig auf unseren und zwingen dann in den Sichtbereich (100 + 400 =
+    /// 500 &gt; 480 — dass <c>0x441190</c> schiebt, ist nicht gelesen, Bericht §7.3). Ohne
+    /// Fensterverwaltung: im Startmenü dreht niemand den Fenstertakt.</para>
+    /// </summary>
+    private void StartmenueLaden()
+    {
+        if (SpeicherfensterChrome.Alt || !SpeicherfensterChrome.Usable)
+        {
+            AddChild(new LoadGameScreen());
+            return;
+        }
+        foreach (var k in GetChildren())
+            if (k is SpeicherfensterChrome { Offen: true }) return;      // Wache 0x443B90
+        var c = new SpeicherfensterChrome(SpeicherfensterChrome.ArtLaden) { Verwaltet = false };
+        c.OnLaden = p => LoadGameScreen.Starten(this, Core.SaveGame.PlatzName(p));
+        c.OnZu = c.QueueFree;
+        AddChild(c);
+        c.Oeffnen();
+        var schirm = GetViewportRect().Size;
+        int s = SpeicherfensterChrome.Scale;
+        var ursprung = ((schirm - new Vector2(640, 480) * s) / 2f).Floor();
+        var lage = ursprung + new Vector2(200, 100) * s;
+        lage.X = Mathf.Clamp(lage.X, 0, Mathf.Max(0, schirm.X - c.Size.X - 1));
+        lage.Y = Mathf.Clamp(lage.Y, 0, Mathf.Max(0, schirm.Y - c.Size.Y - 1));
+        c.Position = lage;
+    }
+
     /// <summary>bug-448: ein Unterschirm ueber dem Startmenue — Laden,
     /// Einstellungen, Enzyklopaedie, Abspann, Kampagnenwahl oder der
     /// Gefechtsaufbau. Das Original zaehlt dafuer seine Fensterplaetze
@@ -246,7 +279,7 @@ public partial class MainMenu : Control
     {
         if (_setup is { Visible: true }) return true;
         foreach (var k in GetChildren())
-            if (k is LoadGameScreen or SettingsScreen or EncyclopediaScreen or CreditsScreen or CampaignScreen
+            if (k is LoadGameScreen or SpeicherfensterChrome or SettingsScreen or EncyclopediaScreen or CreditsScreen or CampaignScreen
                 && !((Node)k).IsQueuedForDeletion() && k is CanvasItem { Visible: true })
                 return true;
         return false;

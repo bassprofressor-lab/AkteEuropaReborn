@@ -28,12 +28,21 @@ public partial class MapEntityLayer
 {
     /// <summary>The whole state as JSON. `mapName` is what a load needs to put
     /// the map back before this is applied.</summary>
-    public string SaveStateJson(string mapName, string label)
+    public string SaveStateJson(string mapName, string label, Core.SaveGame.PlatzKopf? platz = null)
     {
         var w = new Core.SaveGame.Writer();
         w.Open();
         w.Num("format", Core.SaveGame.Format);
         w.Str("label", label);
+        // bug-522: der Kopf des Originals (Schreiber 0x41D210) — +5 Name, +26
+        // Mission, +55 Spielername; bei uns als JSON-Felder (Format bleibt UNSERES).
+        if (platz is { } pk)
+        {
+            w.Num("platz", pk.Platz);
+            w.Str("platz_name", pk.Name);
+            w.Num("platz_mission", pk.Mission);
+            w.Str("platz_spieler", pk.Spieler);
+        }
         w.Num("when", (long)Time.GetUnixTimeFromSystem());
         w.Str("map", mapName);
         w.Str("mission", _mission);

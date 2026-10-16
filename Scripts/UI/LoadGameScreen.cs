@@ -104,10 +104,15 @@ public partial class LoadGameScreen : Control
         panel.AddChild(back);
     }
 
-    private void Start(string name)
+    private void Start(string name) => Starten(this, name);
+
+    /// <summary>Einen Spielstand starten — derselbe Weg fuer diesen Schirm und
+    /// fuer das Ladefenster Art 14 (<see cref="SpeicherfensterChrome"/>, bug-522).
+    /// Gibt false zurueck, wenn die Datei nicht lesbar ist.</summary>
+    public static bool Starten(Node host, string name)
     {
         var root = Core.SaveGame.Read(name, out string err);
-        if (root == null) { GD.PrintErr($"Spielstand: {err}"); return; }
+        if (root == null) { GD.PrintErr($"Spielstand: {err}"); return false; }
 
         SkirmishSetup.Map = root.TryGetValue("map", out var mv) ? mv.AsString() : "";
         SkirmishSetup.CampaignMission =
@@ -120,8 +125,9 @@ public partial class LoadGameScreen : Control
         // Aufraeumer wie beim Weg ins Hauptmenue und bei StartNextMission:
         // Pause frei, Hilfefenster vergessen, Fensterverwaltung leeren.
         // --laden-pause-alt = der alte Weg ohne Aufraeumen.
-        if (!PauseAlt) Core.LeaveToMenu.Tidy(this);
-        GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
+        if (!PauseAlt) Core.LeaveToMenu.Tidy(host);
+        host.GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
+        return true;
     }
 
     /// <summary><c>--laden-pause-alt</c> — Laden wechselt die Szene wieder ohne
