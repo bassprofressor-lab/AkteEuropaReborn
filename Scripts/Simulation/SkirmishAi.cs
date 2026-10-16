@@ -271,6 +271,15 @@ public partial class MapEntityLayer : Node2D
                  $"({level})");
     }
 
+    /// <summary>bug-554: einem Spieler die KI wieder nehmen — der Menschplatz einer
+    /// Menue-Demo (Flagge 0, siehe MenuBackdrop.DemoMenschOhneKi).</summary>
+    public bool KiSpielerAbschalten(int p)
+    {
+        int n = _ai.RemoveAll(a => a.Player == p);
+        _aiOn = _ai.Count > 0;
+        return n > 0;
+    }
+
     /// <summary>⚠ NUR FUER PRUEFSTAENDE (02.10.2026, --ki-einnahme-check K13):
     /// einen Spieler nachtraeglich in die KI-Liste nehmen. StartCampaign nimmt nur,
     /// wer beim Start Einheiten oder Bauten hat; ein Spieler, der erst per

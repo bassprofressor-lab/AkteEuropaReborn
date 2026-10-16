@@ -293,6 +293,7 @@ public partial class MenuBackdrop : CanvasLayer
             return;
         }
         GD.Print("Menü: Demos " + string.Join(", ", _demos.ConvertAll(d => $"{d.No}.DM")));
+        if (BerthaDemoNr > 0) { int k = _demos.FindIndex(d => d.No == BerthaDemoNr); if (k >= 0) _at = k - 1; }
         Next();
     }
 
@@ -547,6 +548,19 @@ public partial class MenuBackdrop : CanvasLayer
 
         _anchors.Clear();
         int demoNr = _at >= 0 && _at < _demos.Count ? _demos[_at].No : 0;
+        // ⭐⭐ bug-554 (KayelGee 14.10., Meldung 15: »in einer Bertha-Demo laufen Einheiten von
+        // der Bertha weg«) — DER MENSCHPLATZ EINER DEMO SPIELT OHNE KI. Die KI-Runde 0x4BFB80
+        // (F 0x4BF660) laeuft je Spieler nur, wenn byte[0x87B140 + 40·p] == 1 (Rechner);
+        // bei 0 (Mensch) nur, wenn byte[0x538BA8] != 0 — und das hat in C wie F 0 Schreiber
+        // (Relokationstafel, 1 Leser @0x4BFBE9 / F 0x4BF699, Anfangswert 0). Der Lader 0x41E070
+        // setzt nach JEDEM Laden außerhalb des Netzes Spieler 0 auf 0 (@0x41F448); nur WinMain
+        // setzt nach dem allerersten Demo (1.DM) Spieler 0 auf 1 (@0x41511B). Also: in 1.DM gleich
+        // nach dem Programmstart spielt die KI auch Spieler 0, in jeder weiteren Demo nicht —
+        // seine Einheiten stehen und wehren sich (Schiessuhr), statt von der KI fortgeschickt zu
+        // werden. Gegenschalter --demo-ki-alle (der alte Weg: jede Seite mit Hauptquartier).
+        if (!DemoKiAlle && !(DemosSeitStart == 0 && demoNr == 1) && _entities.KiSpielerAbschalten(0))
+            GD.Print($"Menü: Spieler 0 von Demo {demoNr} ohne KI (Flagge 0, 0x4BFBDD) — bug-554");
+        DemosSeitStart++;
         if (!DemokameraAlt && demoNr is >= 1 and <= 13)
         {
             // ⭐ 06.10.2026, bug-470 (KayelGee R4, Meldung 14): »die Demos zeigen
@@ -576,6 +590,7 @@ public partial class MenuBackdrop : CanvasLayer
         _left = _leftSoll; _laeuftSeit = 0f;             // bug-483: ab jetzt zählt es
         GD.Print($"Menü: Demo {map} läuft {_leftSoll:0.0} s ({Ticks[Mathf.Clamp(demoNr, 0, DemoCount)]} Bilder / {DemoBildrate:0} Bilder/s{(DemoDauerAlt ? ", --demo-dauer-alt" : "")}; {_anchors.Count} Basen, Blick von Platz {seen}, Kamera {_anchors[0]}, Karte {_sprite.Texture.GetSize()}{(DemokameraAlt ? "" : " — gespeicherte Sicht, bug-470")})");
         if (RundenCheckUmlaeufe > 0) RundenCheckDemo(demoNr);      // --demo-runden-check
+        if (BerthaDemoNr > 0) BerthaDemoMessen(demoNr);            // --bertha-demo-check
     }
 
     // ⭐ 31.08.2026 — System.Text.Json statt Godot-Json, wie in

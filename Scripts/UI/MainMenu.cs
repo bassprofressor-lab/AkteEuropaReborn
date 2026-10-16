@@ -658,6 +658,8 @@ public partial class MainMenu : Control
             else if (a == "--credits-text") CreditsText = true;
             else if (a == "--credits-check") _creditsCheck = true;
             // --demo-runden-check: viele Demo-Umlaeufe, Runde n = Runde 1? (DemoRundenCheck.cs)
+            else if (a.StartsWith("--bertha-demo-check=")) { var bd = a["--bertha-demo-check=".Length..].Split(','); MenuBackdrop.BerthaDemoNr = bd[0].ToInt(); if (bd.Length > 1) MenuBackdrop.BerthaDemoSekunden = bd[1].ToFloat(); }
+            else if (a == "--demo-ki-alle") MenuBackdrop.DemoKiAlle = true;   // bug-554
             else if (a == "--demo-runden-check") MenuBackdrop.RundenCheckUmlaeufe = 3;
             else if (a.StartsWith("--demo-runden-check=")) MenuBackdrop.RundenCheckUmlaeufe = Mathf.Max(1, a["--demo-runden-check=".Length..].ToInt());
             else if (a.StartsWith("--demo-runden-takte=")) MenuBackdrop.RundenCheckTakte = Mathf.Max(1, a["--demo-runden-takte=".Length..].ToInt());
