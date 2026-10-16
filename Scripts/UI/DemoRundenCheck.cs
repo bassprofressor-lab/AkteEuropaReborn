@@ -57,10 +57,13 @@ namespace AkteEuropaReborn.UI
             int abos = GetTree().GetSignalConnectionList("process_frame").Count;
 
             string urteil;
-            if (!_rundeEins.TryGetValue(demoNr, out var eins))
+            // bug-554: 1.DM gleich nach dem Start ist die EINZIGE Demo, in der die KI auch
+            // Spieler 0 spielt (WinMain 0x41511B) — ab Umlauf 2 ist Runde 2 ihr Bezug.
+            bool ersteMitKi = demoNr == 1 && runde == 2 && !DemoKiAlle;
+            if (!_rundeEins.TryGetValue(demoNr, out var eins) || ersteMitKi)
             {
                 _rundeEins[demoNr] = (summe, wuerfe, zahlen);
-                urteil = "Bezug";
+                urteil = ersteMitKi ? "Bezug ab Runde 2 (1.DM nach dem Start mit KI fuer Spieler 0, bug-554)" : "Bezug";
             }
             else if (eins.Summe == summe && eins.Wuerfe == wuerfe && eins.Zahlen == zahlen)
                 urteil = "= Runde 1";
