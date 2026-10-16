@@ -77,6 +77,16 @@ public partial class MapEntityLayer
         public float Abwurfzeit, Aufschlagzeit;
         public Vector2 ZielPx;
         public float MinAbstandVorAufschlag = float.MaxValue;
+        /// <summary>Diagnose: kleinster Abstand zur JETZIGEN Lage des Ziels (es kann fahren), Zielwechsel
+        /// des Bombers, Wendepunkt ohne Ueberflug, Heimkehr, Zielzelle beim Aufschlag.</summary>
+        public float MinAbstandZielJetzt = float.MaxValue;
+        public bool ZielGewechselt, Gewendet, Heim;
+        /// <summary>Der Bomber hatte vor dem Aufschlag dieser Bombe KEINE Munition mehr (weitere
+        /// Wuerfe im selben Anflug) — dann fliegt er heim (uk 7 @0x4236AE: Munition 0 -> Ziel
+        /// 0xFFFF @0x4236D2, air_back_to_airport @0x4236E3), ein Ueberflug ist nicht zu erwarten.</summary>
+        public bool LeerVorAufschlag;
+        public string Grund = "";
+        public Vector2I? ZielZelleJetzt;
         public bool ZielTotVorAufschlag;
         public int Zielgriff = -1;
         /// <summary>Munition NACH dem Wurf — 0 heisst: letzte Bombe, danach fliegt der Bomber
@@ -254,6 +264,23 @@ public partial class MapEntityLayer
                 s.MinAbstandVorAufschlag = Mathf.Min(s.MinAbstandVorAufschlag,
                     new Vector2((a.Pos.X - s.ZielPx.X) / TileW, (a.Pos.Y - s.ZielPx.Y) / TileH).Length());
             if (s.Zielgriff >= 0 && s.Zielgriff < _entities.Count && _entities[s.Zielgriff].Dead) s.ZielTotVorAufschlag = true;
+            if (a != null)
+            {
+                if (a.Ammo <= 0) s.LeerVorAufschlag = true;
+                if (a.Target != s.Zielgriff && !s.ZielGewechselt) { s.ZielGewechselt = true; s.Grund += $" Ziel {s.Zielgriff}->{a.Target} t+{_clock - s.Abwurfzeit:0.0}s (Sprit {a.Fuel}, Heimgrenze {AirFuelHome}, Munition {a.Ammo}"
+                    + (s.Zielgriff >= 0 && s.Zielgriff < _entities.Count ? $", Ziel tot {_entities[s.Zielgriff].Dead}, untergestellt {Untergestellt(_entities[s.Zielgriff])}, Ukol {_entities[s.Zielgriff].Ukol}" : "") + ");"; }
+                if (a.TurnPoint != null && !s.Gewendet) { s.Gewendet = true; s.Grund += $" Wendepunkt t+{_clock - s.Abwurfzeit:0.0}s bei {(s.MinAbstandVorAufschlag):0.00};"; }
+                if (a.Heimkehr && !s.Heim) { s.Heim = true; s.Grund += $" Heimkehr t+{_clock - s.Abwurfzeit:0.0}s;"; }
+                if (s.Zielgriff >= 0 && s.Zielgriff < _entities.Count && !_entities[s.Zielgriff].Dead)
+                {
+                    var z = _entities[s.Zielgriff];
+                    var zp = AirAimPoint(z);
+                    s.MinAbstandZielJetzt = Mathf.Min(s.MinAbstandZielJetzt,
+                        new Vector2((a.Pos.X - zp.X) / TileW, (a.Pos.Y - zp.Y) / TileH).Length());
+                    s.ZielZelleJetzt = CellAt(zp);
+                }
+            }
+            else if (!s.Grund.Contains("Bomber weg")) s.Grund += " Bomber weg/tot;";
         }
         if (_clock < 150f) return;
         _bacFertig = true;
@@ -267,10 +294,12 @@ public partial class MapEntityLayer
             if (s.Einschlag is not { } e) { offen++; continue; }
             int d = Mathf.Max(Mathf.Abs(e.X - s.Ziel.X), Mathf.Abs(e.Y - s.Ziel.Y));
             if (d == 0) gleich++; else if (d == 1) nachbar++;
-            if (s.RestMunition > 0 && !s.ZielTotVorAufschlag)
+            if (s.RestMunition > 0 && !s.ZielTotVorAufschlag && !s.LeerVorAufschlag)
             {
                 mitRest++;
-                if (s.MinAbstandVorAufschlag < 1f) ueber++;   // auf der Zielzelle (Zelle 40x20, Zaehlung in Zellen)
+                // das Flugziel folgt dem fahrenden Ziel je Takt (0x4238FA..0x42390E) — darum zaehlt
+                // auch der Abstand zur JETZIGEN Ziellage, nicht nur zur Lage beim Wurf
+                if (Mathf.Min(s.MinAbstandVorAufschlag, s.MinAbstandZielJetzt) < 1f) ueber++;   // auf der Zielzelle
             }
             if (s.ZielTotVorAufschlag) totVorher++;
         }
@@ -279,18 +308,20 @@ public partial class MapEntityLayer
         if (n > 0)
             sb.Append($"\n   Abstand Bomber->Zielzelle beim Abwurf: Mittel {sum / n:0.00}, {min:0.00}..{max:0.00} Zellen (Soll > 1,5, ≈ 3,4 auf Stufe 0)" +
                       $"\n   Aufschlag auf der Zielzelle {gleich}, Nachbarzelle {nachbar}, weiter weg {fertig - gleich - nachbar} (Soll weiter weg 0)" +
-                      $"\n   Bomber vor dem Aufschlag ueber dem Ziel (< 1 Zelle): {ueber}/{mitRest} der Wuerfe mit Restmunition und lebendem Ziel (Soll alle; letzte Bombe -> heim 0x4236AE, Ziel tot -> heim 0x4246A2: {fertig - mitRest})" +
+                      $"\n   Bomber vor dem Aufschlag ueber dem Ziel (< 1 Zelle): {ueber}/{mitRest} der Wuerfe, nach denen der Bomber bis zum Aufschlag Munition hat und das Ziel lebt (Soll alle; Munition leer -> heim 0x4236AE, Ziel tot -> heim 0x4246A2: {fertig - mitRest})" +
                       $"\n   Startversatz Bombe gegen Bomberbild: hoechstens {versatz:0.0} px (Soll 0)" +
                       $"\n   Tempo Bombe {BombeTempoPx:0} px/s" + (BombeGeschosstempo ? " (⚠ --bombe-geschosstempo)" : ""));
-        for (int k = 0; k < System.Math.Min(12, n); k++)
+        for (int k = 0; k < System.Math.Min(40, n); k++)
         {
             var s = _abwuerfe[k];
             sb.Append($"\n     #{k + 1} Bomber {s.Slot} sp {s.Stufe}: Abstand {s.AbstandZellen:0.00}, Ziel ({s.Ziel.X},{s.Ziel.Y}), " +
                       $"Aufschlag {(s.Einschlag is { } e ? $"({e.X},{e.Y}) nach {s.Aufschlagzeit - s.Abwurfzeit:0.00} s" : "offen")}, " +
-                      $"Bomber dem Ziel am naechsten vor dem Aufschlag {s.MinAbstandVorAufschlag:0.00} Zellen, Restmunition {s.RestMunition}{(s.ZielTotVorAufschlag ? ", Ziel vorher tot" : "")}");
+                      $"Bomber dem Ziel am naechsten vor dem Aufschlag {s.MinAbstandVorAufschlag:0.00} Zellen, Restmunition {s.RestMunition}{(s.ZielTotVorAufschlag ? ", Ziel vorher tot" : "")}{(s.LeerVorAufschlag ? ", Munition vor dem Aufschlag leer" : "")}, zur jetzigen Ziellage {s.MinAbstandZielJetzt:0.00}, Zielzelle zuletzt {(s.ZielZelleJetzt is { } zj ? $"({zj.X},{zj.Y})" : "-")};{s.Grund}");
         }
         bool ok = n > 0 && fertig > 0 && fertig - gleich - nachbar == 0 && mitRest > 0 && ueber == mitRest && versatz < 0.5f;
-        sb.Append(ok ? "\n   BESTANDEN" : "\n   DURCHGEFALLEN");
+        // Ohne Wurf (DM_7/DM_10: die Bomber stehen im Hangar) ist nichts gemessen — kein Urteil.
+        sb.Append(n == 0 ? "\n   NICHT GEMESSEN — kein Bombenwurf in diesem Lauf (Karte/Zeit ohne Bombereinsatz)"
+                         : ok ? "\n   BESTANDEN" : "\n   DURCHGEFALLEN");
         GD.Print(sb.ToString());
         GetTree().Quit();
     }
