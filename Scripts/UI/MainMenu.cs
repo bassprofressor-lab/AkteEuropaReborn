@@ -622,6 +622,9 @@ public partial class MainMenu : Control
         foreach (string a in OS.GetCmdlineUserArgs())
         {
             if (a == "--no-backdrop") _noBackdrop = true;
+            // der Inhaltsstand (Import/InhaltsStand.cs): Gegenschalter und strenge Fassung
+            else if (a == "--inhaltsstand-aus") Import.InhaltsStand.Aus = true;
+            else if (a == "--inhaltsstand-streng") Import.InhaltsStand.Streng = true;
             else if (a.StartsWith("--kulissen-check="))
                 _kulissenCheck = Mathf.Max(1, a["--kulissen-check=".Length..].ToInt());
             else if (a == "--filme-nicht-kopieren") Core.DiscCoverage.FilmeNichtKopieren = true;
@@ -1218,6 +1221,13 @@ public partial class MainMenu : Control
                 GetTree().Quit(new Import.ContentBuilder(src).ReexportEntities() ? 0 : 1);
                 return;
             }
+            // ⭐ 16.10.2026 — der Pruefer des Inhaltsstands, nur in einem
+            // Temp-Ordner (Import/InhaltsStandCheck.cs); Nullmodell --inhaltsstand-aus
+            else if (a == "--inhaltsstand-check")
+            {
+                GetTree().Quit(Import.InhaltsStandCheck.Run());
+                return;
+            }
             else if (a == "--import-cd2-check" || a == "--import-cd2-check=voll")
             {
                 // bug-379: rechnet die CD-2-Erkennung nach; »=voll« laesst den
@@ -1359,6 +1369,9 @@ public partial class MainMenu : Control
         if (!Core.Content.Ready) { ShowImportScreen(); return; }
         ZwischenlagerAufraeumen();
         if (AutoStart()) return;      // ein Lauf, der gleich losspielt, braucht keine Kulisse
+        // ⭐ 16.10.2026 — sind Teile der Inhalte von einem aelteren Importeur?
+        // (MainMenuInhaltsstand.cs; fragt nur mit Fenster und ohne Schalter)
+        if (InhaltsstandPruefen()) return;
         StartBackdrop();
         // ⚠ NACH StartBackdrop(), im Gegensatz zu jedem anderen kopflosen
         // Schalter: dieser Prueflauf misst genau die Kulisse. Wer vorher

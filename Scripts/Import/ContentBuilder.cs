@@ -50,6 +50,7 @@ public sealed class ContentBuilder
     {
         _src = source;
         _dst = ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\');
+        if (InhaltsStand.Version == "?") InhaltsStand.VersionMerken();
     }
 
     /// <summary>Dasselbe, aber in einen ANDEREN Zielordner als user://data —
@@ -60,6 +61,7 @@ public sealed class ContentBuilder
     {
         _src = source;
         _dst = zielOrdner.TrimEnd('/', '\\');
+        if (InhaltsStand.Version == "?") InhaltsStand.VersionMerken();
     }
 
     /// <summary>Wo der Import steht: Schritt <see cref="Schritt"/> von
@@ -217,6 +219,7 @@ public sealed class ContentBuilder
             Schritt++;
             BakeOne(p, "map_" + name, Say);
         }
+        if (MapsBaked > 0) { _erreicht.Add("karten"); _erreicht.Add("spielstaende"); _erreicht.Add("gebaeude"); }
 
         Schritt++;
         // ---- the unit sprites ------------------------------------------------
@@ -236,6 +239,7 @@ public sealed class ContentBuilder
                                            _dst + "/Units");
                 ex.Run(_combos, Say);
                 SpriteFrames = ex.Frames;
+                if (ex.Frames > 0) _erreicht.Add("einheiten");
                 Say($"Einheitengrafiken: {ex.Frames} Bilder geschrieben");
             }
         }
@@ -252,6 +256,8 @@ public sealed class ContentBuilder
             cat.Run(_tally, _designSources, Say);
             cat.WriteCampaign(_missions, Say);
             TablesWritten += 8;
+            _erreicht.Add("tabellen");
+            _erreicht.Add("kampagne");
         }
         catch (Exception e) { Say("Katalogtabellen: " + e.Message); }
 
@@ -259,57 +265,7 @@ public sealed class ContentBuilder
         // ---- the mission briefings -------------------------------------------
         // Out of the same cabinet, and the last thing the campaign was missing:
         // until now it opened a mission without a word of what it was about.
-        try
-        {
-            var txt = Asset("BRIEFG.TXT");
-            if (txt == null) Say("BRIEFG.TXT fehlt — keine Missionstexte");
-            else
-            {
-                var br = new BriefingExporter(_dst + "/Maps", _dst + "/UI");
-                br.Write(txt, Say);
-                TablesWritten++;
-                var dat = Asset("BRIEFG.DAT");
-                string? bgPal = Find("DATA/01.PAL");
-                if (dat != null && bgPal != null) br.WriteBackdrop(dat, PalFile.Load(bgPal), Say);
-                // the radar monitor on that same screen — MAP.DAT is 13 MB, so
-                // it goes through the path rather than Asset(), like SOUNDS.CWN
-                // loose in an installation, inside DATA1.CAB on a disc — 13 MB,
-                // so Asset() may hold it whole where SOUNDS.CWN may not
-                string? mapDat = Find("MAP.DAT") ?? Find("DATA/MAP.DAT");
-                byte[]? radar = mapDat != null ? File.ReadAllBytes(mapDat) : Asset("MAP.DAT");
-                if (radar != null && bgPal != null)
-                    br.WriteRadar(radar, PalFile.Load(bgPal), Say);
-
-                // ⚠ 18.08.2026 — DAS EMBLEM VON AKTE EUROPA, beide Darstellungen.
-                // Die neun Nischenbilder stecken im Schwanz von BRIEFG.DAT (die
-                // Bank ohne Kopfdaten, siehe BriefingExporter.Bank), das grosse
-                // Wasserzeichen ist SYMBOL.DAT — 748.800 Byte = 9 x 320 x 260,
-                // und der Lader @0x45C110 liest genau das auf die Textplatte.
-                if (dat != null && bgPal != null) br.WriteEmblem(dat, PalFile.Load(bgPal), Say);
-                // bug-513: die Pfeil- und START-Bilder aus derselben Bank
-                if (dat != null && bgPal != null) br.WriteKnoepfe(dat, PalFile.Load(bgPal), Say);
-                string? symDat = Find("SYMBOL.DAT") ?? Find("DATA/SYMBOL.DAT");
-                byte[]? sym = symDat != null ? File.ReadAllBytes(symDat) : Asset("SYMBOL.DAT");
-                if (sym != null && bgPal != null)
-                    br.WriteWatermark(sym, PalFile.Load(bgPal), Say);
-
-                // ⚠ 18.08.2026 — DAS FELD »NEUE TECHNOLOGIEN« desselben Schirms.
-                // Die Zuordnung Mission -> angekuendigte Technik ist eine eigene
-                // Tafel in GAME.EXE (224 Byte je Mission, zehn Eintraege zu 22),
-                // und die Bilder kommen aus ENCYCLOG.PIC — 96 Stueck zu 60x60,
-                // NICHT aus der PortraitBank. Siehe MissionTechExporter.
-                byte[]? exeB = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
-                var encTxt = Asset("ENCYCLOG.TXT");
-                string? encPicP = Find("ENCYCLOG.PIC") ?? Find("DATA/ENCYCLOG.PIC");
-                byte[]? encPic = encPicP != null ? File.ReadAllBytes(encPicP) : Asset("ENCYCLOG.PIC");
-                if (exeB != null && encTxt != null)
-                    MissionTechExporter.WriteAll(exeB, encTxt, encPic,
-                                                 bgPal != null ? PalFile.Load(bgPal) : null,
-                                                 _dst, Say);
-                else Say("mission-tech: GAME.EXE oder ENCYCLOG.TXT fehlt — Kasten bleibt leer");
-            }
-        }
-        catch (Exception e) { Say("Briefings: " + e.Message); }
+        if (BriefingsSchreiben(Say)) _erreicht.Add("briefings");
 
         Schritt++;
         // ---- die Hilfe- und Untermissionstexte ---------------------------------
@@ -326,6 +282,7 @@ public sealed class ContentBuilder
                 // HELPG.DAT traegt die Bildnummer je Text — siehe HelpExporter.
                 hx.Write(help, Say, Asset("HELPG.DAT"));
                 TablesWritten++;
+                _erreicht.Add("hilfe");
             }
         }
         catch (Exception e) { Say("Hilfetexte: " + e.Message); }
@@ -379,6 +336,173 @@ public sealed class ContentBuilder
         // a stream and never goes through Asset(), which reads a whole file into
         // memory. The six .MID files are copied through: the original plays them
         // with MCI and so do we, which means they are wanted as they are.
+        if (SoundSchreiben(Say)) _erreicht.Add("ton");
+
+        Schritt++;
+        // ---- die Kachelsaetze selbst, fuer den Karteneditor ------------------
+        CopyTilesets(Say);
+        if (TilesetsCopied > 0) _erreicht.Add("kachelsaetze");
+        Schritt = Schritte;
+
+        Say($"fertig: {MapsBaked} Karten, {EntitiesWritten} Spielstaende, " +
+            $"{TablesWritten} Tabellen, {SpriteFrames} Einheitenbilder, " +
+            $"{SoundsWritten} Klaenge, {MusicWritten} Musikstuecke, " +
+            $"{TilesetsCopied} Kachelsaetze");
+        foreach (string m in Missing()) Say("fehlt noch: " + m);
+        // ⭐ 16.10.2026 — der Inhaltsstand (Import/InhaltsStand.cs): was dieser
+        // Lauf geschafft hat, gilt als aktuell. Geschrieben wird der Stempel
+        // immer; --inhaltsstand-aus schaltet nur den Pruefer beim Start ab.
+        if (MapsBaked > 0) StempelnNachVollimport(Say);
+        return MapsBaked > 0;
+    }
+
+    /// <summary>Welche Teile <see cref="Run"/> erfolgreich geschrieben hat
+    /// (Schluessel aus <see cref="InhaltsStand.Teile"/>).</summary>
+    private readonly HashSet<string> _erreicht = new();
+
+    private void StempelnNachVollimport(Action<string> say)
+    {
+        var fehlt = InhaltsStand.FehlendeKarten(_dst, _src);
+        var teile = new List<string>();
+        foreach (string n in _erreicht)
+        {
+            if (InhaltsStand.TeilNach(n) is { } t && t.Bedarf == InhaltsStand.Bedarf.AlleKarten && fehlt.Count > 0)
+            {
+                say($"inhaltsstand: {t.Anzeige} bleibt auf altem Stand — der Quelle fehlen die eingelesenen " +
+                    $"Missionen {Core.DiscCoverage.Ranges(fehlt)}");
+                continue;
+            }
+            teile.Add(n);
+        }
+        if (teile.Count > 0) InhaltsStand.Erreicht(_dst, teile, _src);
+    }
+
+    /// <summary>
+    /// Nach einem Teil-Neuexport: ist er gelungen, den Teil im Stempel als
+    /// aktuell eintragen. Ein Teil, der ALLE Karten braucht, nur dann, wenn die
+    /// Quelle jede eingelesene Mission traegt — sonst blieben die Karten der
+    /// anderen CD alt, und der Stempel loege. Gibt <paramref name="ok"/> zurueck.
+    /// </summary>
+    private bool Stempeln(bool ok, string teil, Action<string>? say)
+    {
+        if (!ok) return false;
+        var t = InhaltsStand.TeilNach(teil);
+        if (t != null && t.Bedarf == InhaltsStand.Bedarf.AlleKarten)
+        {
+            var fehlt = InhaltsStand.FehlendeKarten(_dst, _src);
+            if (fehlt.Count > 0)
+            {
+                say?.Invoke($"inhaltsstand: {t.Anzeige} NICHT als aktuell eingetragen — der Quelle fehlen " +
+                            $"die eingelesenen Missionen {Core.DiscCoverage.Ranges(fehlt)}");
+                return ok;
+            }
+        }
+        InhaltsStand.Erreicht(_dst, new[] { teil }, _src);
+        return ok;
+    }
+
+    /// <summary>Nur die Briefings neu schreiben (Texte, Hintergrund, Radar,
+    /// Emblem, Knoepfe, Wasserzeichen, »Neue Technologien«). ⭐ 16.10.2026 fuer
+    /// den Inhaltsstand aus <see cref="Run"/> herausgezogen, Zeile fuer Zeile
+    /// unveraendert.</summary>
+    public bool ReexportBriefings(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-briefings: " + s); progress?.Invoke(s); }
+        Directory.CreateDirectory(_dst + "/Maps");
+        return Stempeln(BriefingsSchreiben(Say), "briefings", Say);
+    }
+
+    /// <summary>Nur Klaenge und Musik neu schreiben — derselbe Block wie in
+    /// <see cref="Run"/>, herausgezogen am 16.10.2026. GAME.EXE wird fuer die
+    /// Waffenklaenge gelesen, wie im vollen Import.</summary>
+    public bool ReexportSound(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-sound: " + s); progress?.Invoke(s); }
+        Directory.CreateDirectory(_dst);
+        if (_exe == null)
+        {
+            try
+            {
+                byte[]? exe = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
+                if (exe != null) _exe = ExeTables.FromBytes(exe);
+            }
+            catch (Exception e) { Say("GAME.EXE: " + e.Message); }
+        }
+        return Stempeln(SoundSchreiben(Say), "ton", Say);
+    }
+
+    /// <summary>Nur die Kachelsaetze fuer den Editor nachkopieren.</summary>
+    public bool ReexportTilesets(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-tilesets: " + s); progress?.Invoke(s); }
+        TilesetsCopied = 0;
+        CopyTilesets(Say);
+        return Stempeln(TilesetsCopied > 0, "kachelsaetze", Say);
+    }
+
+    /// <summary>Der Briefingteil von <see cref="Run"/>.</summary>
+    private bool BriefingsSchreiben(Action<string> Say)
+    {
+        bool ok = false;
+        try
+        {
+            var txt = Asset("BRIEFG.TXT");
+            if (txt == null) Say("BRIEFG.TXT fehlt — keine Missionstexte");
+            else
+            {
+                var br = new BriefingExporter(_dst + "/Maps", _dst + "/UI");
+                br.Write(txt, Say);
+                TablesWritten++;
+                ok = true;
+                var dat = Asset("BRIEFG.DAT");
+                string? bgPal = Find("DATA/01.PAL");
+                if (dat != null && bgPal != null) br.WriteBackdrop(dat, PalFile.Load(bgPal), Say);
+                // the radar monitor on that same screen — MAP.DAT is 13 MB, so
+                // it goes through the path rather than Asset(), like SOUNDS.CWN
+                // loose in an installation, inside DATA1.CAB on a disc — 13 MB,
+                // so Asset() may hold it whole where SOUNDS.CWN may not
+                string? mapDat = Find("MAP.DAT") ?? Find("DATA/MAP.DAT");
+                byte[]? radar = mapDat != null ? File.ReadAllBytes(mapDat) : Asset("MAP.DAT");
+                if (radar != null && bgPal != null)
+                    br.WriteRadar(radar, PalFile.Load(bgPal), Say);
+
+                // ⚠ 18.08.2026 — DAS EMBLEM VON AKTE EUROPA, beide Darstellungen.
+                // Die neun Nischenbilder stecken im Schwanz von BRIEFG.DAT (die
+                // Bank ohne Kopfdaten, siehe BriefingExporter.Bank), das grosse
+                // Wasserzeichen ist SYMBOL.DAT — 748.800 Byte = 9 x 320 x 260,
+                // und der Lader @0x45C110 liest genau das auf die Textplatte.
+                if (dat != null && bgPal != null) br.WriteEmblem(dat, PalFile.Load(bgPal), Say);
+                // bug-513: die Pfeil- und START-Bilder aus derselben Bank
+                if (dat != null && bgPal != null) br.WriteKnoepfe(dat, PalFile.Load(bgPal), Say);
+                string? symDat = Find("SYMBOL.DAT") ?? Find("DATA/SYMBOL.DAT");
+                byte[]? sym = symDat != null ? File.ReadAllBytes(symDat) : Asset("SYMBOL.DAT");
+                if (sym != null && bgPal != null)
+                    br.WriteWatermark(sym, PalFile.Load(bgPal), Say);
+
+                // ⚠ 18.08.2026 — DAS FELD »NEUE TECHNOLOGIEN« desselben Schirms.
+                // Die Zuordnung Mission -> angekuendigte Technik ist eine eigene
+                // Tafel in GAME.EXE (224 Byte je Mission, zehn Eintraege zu 22),
+                // und die Bilder kommen aus ENCYCLOG.PIC — 96 Stueck zu 60x60,
+                // NICHT aus der PortraitBank. Siehe MissionTechExporter.
+                byte[]? exeB = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
+                var encTxt = Asset("ENCYCLOG.TXT");
+                string? encPicP = Find("ENCYCLOG.PIC") ?? Find("DATA/ENCYCLOG.PIC");
+                byte[]? encPic = encPicP != null ? File.ReadAllBytes(encPicP) : Asset("ENCYCLOG.PIC");
+                if (exeB != null && encTxt != null)
+                    MissionTechExporter.WriteAll(exeB, encTxt, encPic,
+                                                 bgPal != null ? PalFile.Load(bgPal) : null,
+                                                 _dst, Say);
+                else Say("mission-tech: GAME.EXE oder ENCYCLOG.TXT fehlt — Kasten bleibt leer");
+            }
+        }
+        catch (Exception e) { Say("Briefings: " + e.Message); }
+
+        return ok;
+    }
+
+    /// <summary>Der Tonteil von <see cref="Run"/>.</summary>
+    private bool SoundSchreiben(Action<string> Say)
+    {
         string? unpacked = null;
         try
         {
@@ -414,17 +538,7 @@ public sealed class ContentBuilder
                 try { File.Delete(unpacked); } catch (Exception) { /* leave it */ }
         }
 
-        Schritt++;
-        // ---- die Kachelsaetze selbst, fuer den Karteneditor ------------------
-        CopyTilesets(Say);
-        Schritt = Schritte;
-
-        Say($"fertig: {MapsBaked} Karten, {EntitiesWritten} Spielstaende, " +
-            $"{TablesWritten} Tabellen, {SpriteFrames} Einheitenbilder, " +
-            $"{SoundsWritten} Klaenge, {MusicWritten} Musikstuecke, " +
-            $"{TilesetsCopied} Kachelsaetze");
-        foreach (string m in Missing()) Say("fehlt noch: " + m);
-        return MapsBaked > 0;
+        return SoundsWritten > 0;
     }
 
     private ExeTables? _exe;
@@ -591,7 +705,7 @@ public sealed class ContentBuilder
         else Say("game.007: nicht gefunden — der Prueflauf gegen den Originalmotor entfaellt");
 
         Say($"fertig: {done} Spielstaende neu geschrieben, {failed} fehlgeschlagen");
-        return done > 0 && failed == 0;
+        return Stempeln(done > 0 && failed == 0, "spielstaende", Say);
     }
 
     /// <summary>
@@ -661,7 +775,7 @@ public sealed class ContentBuilder
         rows.Sort((a, b) => a.Number.CompareTo(b.Number));
         Say($"fertig: {cat.Missions} Missionen ({rows[0].Number}..{rows[^1].Number}), "
             + $"{skipped} Spielstaende uebergangen");
-        return cat.Missions > 0;
+        return Stempeln(cat.Missions > 0, "kampagne", Say);
 
         static int Int(System.Text.Json.JsonElement e, string k)
             => e.TryGetProperty(k, out var v) && v.TryGetInt32(out int i) ? i : 0;
@@ -689,7 +803,7 @@ public sealed class ContentBuilder
             var enc = Asset("ENCYCLOG.TXT");
             if (enc == null) Say("ENCYCLOG.TXT nicht gefunden — Enzyklopaedie bleibt, wie sie ist");
             else new EncyclopediaExporter(_dst + "/UI").Write(enc, Say);
-            return hx.Texts > 0;
+            return Stempeln(hx.Texts > 0, "hilfe", Say);
         }
         catch (Exception e) { Say(e.Message); return false; }
     }
@@ -755,6 +869,7 @@ public sealed class ContentBuilder
         Say(ok == 0
             ? "KEINE Karte gefunden — zeigt der Pfad auf die Installation oder die CDs?"
             : $"{ok} Karten neu geschrieben, {failed} Fehler");
+        Stempeln(ok > 0 && failed == 0, "spielstaende", Say);
         return ok > 0;
     }
 
@@ -838,6 +953,7 @@ public sealed class ContentBuilder
               // gemessen: 578. Steht sie auf 0, ist entweder die
               // Sektion nicht da oder die Regel greift nicht.
               + $"; davon {lagenZellen} nur ueber die Zeichenlage (Sektion 20, Bruecken und Rampen)");
+        Stempeln(ok > 0 && failed == 0, "karten", Say);
         return ok > 0;
     }
 
@@ -1087,6 +1203,9 @@ public sealed class ContentBuilder
             }
             Say($"fertig: {cat.Weapons} Bauteile benannt, {cat.WeaponTypes} Bauarten, "
                 + $"{cat.InfantryArms} Infanteriewaffen");
+            // ⚠ ohne Karten nur die Tabellen aus GAME.EXE — dann ist der Teil
+            // NICHT vollstaendig erneuert und bleibt im Stempel, wo er war
+            if (levels > 0) Stempeln(cat.Weapons > 0, "tabellen", Say);
             return cat.Weapons > 0;
         }
         catch (Exception e) { Say("Katalogtabellen: " + e.Message); return false; }
@@ -1124,7 +1243,7 @@ public sealed class ContentBuilder
         }
         Say($"{ok} Tilesets geschrieben, {missing} uebersprungen");
         GeruestSelbsttest(Say);
-        return ok > 0 && missing == 0;
+        return Stempeln(ok > 0 && missing == 0, "gebaeude", Say);
     }
 
     /// <summary>Die Geruestkacheln eines Bauwerks im Bau — drei Muster
@@ -1249,6 +1368,7 @@ public sealed class ContentBuilder
                         $"Fenstermoebel {ui.ChromeTiles} Kacheln " +
                         $"({ui.ChromePixels} belegte Punkte), " +
                         $"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern");
+                    if (ui.Effects > 0) _erreicht.Add("oberflaeche");
                 }
             }
             catch (Exception e) { Say("Oberflaeche: " + e.Message); }
@@ -1436,7 +1556,7 @@ public sealed class ContentBuilder
                 $"Windfahne {ui.VaneFrames} Bilder, " +
                 $"Fenstermoebel {ui.ChromeTiles} Kacheln " +
                 $"({ui.ChromePixels} belegte Punkte)");
-            return ui.Effects > 0;
+            return Stempeln(ui.Effects > 0, "oberflaeche", Say);
         }
         catch (Exception e) { Say(e.Message); return false; }
     }
@@ -1504,7 +1624,7 @@ public sealed class ContentBuilder
         ex.Run(_combos, Say);
         SpriteFrames = ex.Frames;
         Say($"fertig: {ex.Frames} Bilder, {ex.Hulls} Fahrwerke, {ex.Turrets} Waffen, {ex.Combos} Kombinationen");
-        return ex.Frames > 0;
+        return Stempeln(ex.Frames > 0, "einheiten", Say);
     }
 
     /// <summary>

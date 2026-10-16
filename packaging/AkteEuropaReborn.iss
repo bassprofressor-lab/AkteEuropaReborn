@@ -78,3 +78,54 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; F
 [UninstallDelete]
 ; Die abgeleiteten Inhalte gehoeren dem Spieler; sie werden NICHT mitgeloescht.
 ; Wer sie los werden will, loescht %APPDATA%\Godot\app_userdata\ von Hand.
+
+; ---- Hinweis beim Update (16.10.2026, Spielerwunsch "Pruefer, ob Karten
+; gebacken werden muessen") ----------------------------------------------------
+; Der Installer KANN nicht backen: das braucht die CDs, und das tut das Spiel
+; selbst beim naechsten Start (Scripts/Import/InhaltsStand.cs und
+; Scripts/UI/MainMenuInhaltsstand.cs vergleichen den Stand der eingelesenen
+; Inhalte mit dem, den diese Version braucht, und bieten das Neu-Einlesen nur
+; der veralteten Teile an). Hier steht nur der HINWEIS darauf, und nur, wenn
+; schon eine ANDERE Version installiert ist. In /SILENT- und /VERYSILENT-Laeufen
+; erscheint keine Seite, also stoert er dort nicht.
+; UNSERE SETZUNG: eine eigene Seite nach der Begruessung statt eines
+; Meldungsfensters -- ein MsgBox wuerde auch in einem stillen Lauf anhalten,
+; wenn man ihn nicht eigens abfaengt.
+
+[CustomMessages]
+de.UpdateTitel=Update einer vorhandenen Installation
+de.UpdateUnter=Es ist bereits Version %1 installiert.
+de.UpdateText=Beim naechsten Start prueft das Spiel, ob Karten oder andere Inhalte neu eingelesen werden muessen -- halte ggf. deine CDs bereit (CD 1, fuer Karten auch CD 2).%n%nDeine eingelesenen Inhalte und Spielstaende im Benutzerordner (AppData) bleiben dabei erhalten. Musst du gerade nicht neu einlesen, kannst du im Spiel "Spaeter" waehlen.
+en.UpdateTitel=Updating an existing installation
+en.UpdateUnter=Version %1 is already installed.
+en.UpdateText=On its next start the game checks whether maps or other content must be re-imported -- keep your CDs at hand (CD 1, for maps also CD 2).%n%nYour imported content and saved games in your user folder (AppData) are kept. If you do not want to re-import right now, choose "Spaeter" (later) in the game.
+
+[Code]
+// AppId oben in [Setup] -- die doppelte Klammer dort ist nur die Schreibweise
+// des Praeprozessors. Inno legt den Deinstallationsschluessel unter
+// "<AppId>_is1" an, ohne Adminrechte unter HKCU.
+const
+  UninstKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{7C2B9A64-1E3D-4B7A-9C2E-AE1997CD0001}_is1';
+
+var
+  AlteVersion: String;
+
+function VorherigeVersion(): String;
+begin
+  Result := '';
+  if not RegQueryStringValue(HKCU, UninstKey, 'DisplayVersion', Result) then
+    if not RegQueryStringValue(HKLM, UninstKey, 'DisplayVersion', Result) then
+      Result := '';
+end;
+
+procedure InitializeWizard();
+begin
+  AlteVersion := VorherigeVersion();
+  // nur bei einem echten Update ueber eine ANDERE Version; dieselbe Version
+  // noch einmal zu installieren aendert am Importeur nichts
+  if (AlteVersion <> '') and (CompareText(AlteVersion, '{#AppVersion}') <> 0) then
+    CreateOutputMsgPage(wpWelcome,
+      CustomMessage('UpdateTitel'),
+      FmtMessage(CustomMessage('UpdateUnter'), [AlteVersion]),
+      CustomMessage('UpdateText'));
+end;
