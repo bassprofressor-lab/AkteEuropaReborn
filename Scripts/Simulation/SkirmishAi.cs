@@ -127,6 +127,8 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Die AUSGAENGE des Sektorangriffs, jeder einzeln — ohne sie
         /// ist »0 Angriffe« nicht von »nie versucht« zu unterscheiden.</summary>
         public int SektorVersuche, SektorGesperrt, SektorKeineFreien, SektorKeinZiel;
+        /// <summary>bug-576: wie oft das Wegtor 0x4BC75C einen Nachbarn verwarf.</summary>
+        public int SektorWegZuWeit;
 
         /// <summary>⭐ 03.09.2026 — WIE WEIT schickt die Sektormaschine ihre
         /// Einheiten? Gemeldet aus seinem Spiellauf Kampagne 3: »der letzte
@@ -1186,7 +1188,7 @@ public partial class MapEntityLayer : Node2D
             $"(Armee {ArmyOf(a.Player).Count}), im Ring {a.SawAny} Einheiten, " +
             $"{a.SawFoe} feindlich, {a.SawClass} in der eigenen Klasse " +
             $"| Sektor: {a.SektorVersuche} Versuche, {a.SektorGesperrt} gesperrt, " +
-            $"{a.SektorKeineFreien}x keine freien, {a.SektorKeinZiel}x kein Ziel, " +
+            $"{a.SektorKeineFreien}x keine freien, {a.SektorKeinZiel}x kein Ziel, {a.SektorWegZuWeit}x Weg >= 50 (bug-576), " +
             $"{a.SektorAngriffe} ANGRIFFE " +
             (a.SektorWeitenZahl > 0
                 ? $"(Weite: weiteste {a.SektorWeiteste}, Mittel " +

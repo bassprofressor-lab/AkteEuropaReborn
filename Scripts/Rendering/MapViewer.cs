@@ -5059,6 +5059,8 @@ _mausProbePunkt = karte;
             else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;
             // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
+            // bug-576 (KayelGee R6 #14): das Wegtor des Sektorangriffs, siehe Simulation/KiWegtor.cs.
+            else if (a == "--ki-wegtor-alt") MapEntityLayer.KiWegtorAlt = true;
             // Die drei Gegenproben zur Sektormaschine vom 01.09.2026, siehe
             // Simulation/SkirmishAiSectors.cs.
             else if (a == "--sektormaschine-alt") MapEntityLayer.SektormaschineAlt = true;

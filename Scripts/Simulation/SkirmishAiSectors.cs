@@ -1299,11 +1299,9 @@ public partial class MapEntityLayer : Node2D
     /// Einheit (Merker <c>byte[esp+0x13]</c>, gesetzt @<c>0x4BC638</c>, gelöscht
     /// @<c>0x4BC7BE</c>) — die ganze Gruppe greift also DASSELBE Ziel an.</para>
     ///
-    /// <para>⚠ <b>NICHT gebaut:</b> der Alarmklang 0x7A für den Menschen
-    /// (<c>0x4BC753…0x4BC7B7</c>: nur wenn <c>word[0xBCA0E0] &lt; 50</c>, der
-    /// Abklingzähler <c>word[0x538BAC]</c> auf 0 steht, <c>word[0x539934] !=
-    /// 14</c> und die Bündnisspalte 0 ist; danach Abklingzeit
-    /// <c>rand%3000 + 4000</c>), und das <c>+0x0F != 0xAB</c>-Tor, dessen
+    /// <para>⭐ <b>Seit 16.10.2026 gebaut</b> (bug-576): das Wegtor
+    /// <c>word[0xBCA0E0] &lt; 50</c> (KiWegtor.cs).
+    /// ⚠ <b>Weiter NICHT gebaut:</b> der Alarmklang 0x7A (<c>0x4BC753…0x4BC7B7</c>) und das <c>+0x0F != 0xAB</c>-Tor, dessen
     /// Bedeutung ungelesen ist.</para>
     /// </summary>
     private void AiGruppenangriff(AiPlayer a)
@@ -1335,6 +1333,16 @@ public partial class MapEntityLayer : Node2D
                         if (e.AiCpu0 is not (1 or 2)) continue;  // das Modus-Tor
                         var (ex, ey) = AiSektorVon(e.Col, e.Row);
                         if (ex != sx || ey != sy) continue;
+
+                        // ⭐⭐ 16.10.2026 (bug-576) — bei der ERSTEN abrufbereiten
+                        // Einheit (Merker byte[esp+0x13], geloescht @0x4BC7BE): das
+                        // Wegtor 0x4BC74E..0x4BC76B, dann Klang 122 @0x4BC79D. Ist
+                        // der Weg >= 50, faehrt aus diesem Sektor NIEMAND auf diesen
+                        // Nachbarn los (jae 0x4BC804). Siehe KiWegtor.cs/FeindNaht.cs.
+                        if (los == 0)
+                        {
+                            if (!AiWegtorOffen(p, i, ziel)) { a.SektorWegZuWeit++; break; }
+                        }
 
                         // ⭐ Die WEITE mitschreiben, bevor die Einheit losfaehrt
                         // — siehe AiPlayer.SektorWeiteste. Gemessen wird in
