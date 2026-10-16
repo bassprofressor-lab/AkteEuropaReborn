@@ -137,12 +137,17 @@ Bevor `hello` angekommen ist, nimmt der Server keine andere Nachricht an.
 
 ```json
 {"t":"create_room","rid":1,"name":"Freitagsrunde","max":4,"password":"",
+ "require_ready":false,
  "settings":{"map":"map_NET02","money":5000,"tech":8}}
 {"t":"join_room","rid":2,"id":"r_12","password":""}
 {"t":"leave_room"}
 {"t":"kick","player":"p_9c1d"}               // nur Gastgeber
 ```
 * `max` 2–8. `password` leer = offen; der Server speichert nur einen Hash.
+* `require_ready` (Vorgabe `false`): ob `start` nur geht, wenn alle menschlichen
+  Spieler `ready` sind. **Das Original kennt keinen Bereit-Zustand** — dort
+  startet der Gastgeber, wann er will. Das Spiel schickt darum normalerweise
+  `false`; mit `true` gelten die Bereit-Regeln unten.
 * `settings` — **beliebiges JSON-Objekt** (≤ 4 KiB), nur der Gastgeber ändert es
   (`set_settings`), der Server reicht es unverändert weiter. Einzige Ausnahme:
   `settings.map` (Text) erscheint in der Raumliste.
@@ -169,7 +174,8 @@ Fehlercodes: `room_full`, `bad_password`, `no_such_room`, `in_game`,
     {"slot":2,"player":null,"ai":"normal","team":2,"color":2},
     {"slot":3,"player":null,"ai":null}]}}
 ```
-* `slots` hat genau `max` Einträge. Ein Platz ist **Spieler**, **KI** (`ai` =
+* `slots` hat genau `max` Einträge. `team` ist eine freie Zahl 0–8 (0 = ohne
+  Team); das Spiel bildet daraus seine Bündnisse. Ein Platz ist **Spieler**, **KI** (`ai` =
   freier Text, z. B. `"leicht"|"normal"|"schwer"`, vom Gastgeber gesetzt) oder **frei**.
 * Neue Spieler bekommen den ersten freien Platz.
 
@@ -194,7 +200,7 @@ Jede Änderung an `settings`, `max`, KI-Plätzen oder Plätzen setzt **alle
 **Spiel → Server** (nur Gastgeber): `{"t":"start","rid":7}`
 
 Der Server prüft: Raum im Zustand `lobby`, mindestens **2 menschliche Spieler**,
-alle menschlichen Spieler `ready`. Dann:
+und — nur bei `require_ready:true` — alle menschlichen Spieler `ready`. Dann:
 
 **Server → alle im Raum**
 ```json
@@ -299,8 +305,9 @@ gegen den laufenden Server spielt und Folgendes nachweist (Ausgabe je Punkt
    `game_version` erscheint er **nicht**.
 4. Beitritt mit falschem Passwort → `bad_password`; voller Raum → `room_full`.
 5. `set_settings` durch Nicht-Gastgeber → `not_host`; durch Gastgeber → alle `ready:false`.
-6. `start` mit einem nicht bereiten Spieler → Fehler; alle bereit → `match_start`
-   bei allen mit **gleichem** `seed`, danach `go` nach allen `loaded`.
+6. Raum mit `require_ready:true`: `start` mit einem nicht bereiten Spieler → Fehler;
+   alle bereit → `match_start` bei allen mit **gleichem** `seed`, danach `go` nach
+   allen `loaded`. Raum mit `require_ready:false`: `start` geht ohne Bereitmeldung.
 7. **Reihenfolge**: drei Spieler senden gleichzeitig je 1000 Binärrahmen — alle
    drei empfangen **dieselben 3000 Rahmen in derselben Reihenfolge**, `seq` 1..3000
    lückenlos, jeder Rahmen unverändert, mit richtigem `slot`.
