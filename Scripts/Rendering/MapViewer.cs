@@ -4320,6 +4320,13 @@ _mausProbePunkt = karte;
             else if (a == "--torphase-alt") MapEntityLayer.TorphaseAlt = true;
             else if (a == "--auslass-unsichtbar-alt") MapEntityLayer.AuslassUnsichtbarAlt = true;
             else if (a == "--auslass-nur-tuer-alt") MapEntityLayer.AuslassNurTuerAlt = true;
+            else if (a == "--basis-aussenden-sofort") MapEntityLayer.BasisAussendenSofort = true;   // bug-591 B1
+            else if (a == "--auslass-rueckfall-alt") MapEntityLayer.AuslassRueckfallAlt = true;     // bug-591 B2
+            else if (a.StartsWith("--basis-aussenden-check")) _basisAussendenCheck = a.Length > 24 ? a[24..] : "a";
+            else if (a == "--unbewaffnet-angriff-alt") MapEntityLayer.UnbewaffnetAngriffAlt = true; // bug-598 A
+            else if (a == "--sprit-absturz-aus") MapEntityLayer.SpritAbsturzAus = true;             // bug-598 B
+            else if (a == "--sp-unten-alt") MapEntityLayer.SpUntenAlt = true;                       // bug-598 C
+            else if (a.StartsWith("--flieger-steht-check")) { _fliegerStehtCheck = a.Length > 22 ? a[22..] : "lauf"; MapEntityLayer.FliegerStehtAktiv = true; }
             else if (a == "--wait-ab-aus") MapEntityLayer.WaitAbAus = true;
             else if (a == "--vorplatz-raeumung-aus") MapEntityLayer.VorplatzRaeumungAus = true;
             else if (a == "--recycle-garage-alt") MapEntityLayer.RecycleGarageAlt = true;
@@ -6109,6 +6116,7 @@ _mausProbePunkt = karte;
             LuftbildAusgeben();
             HandLuftAusgeben();
             FlugtempoAusgeben();
+            FliegerStehtAusgeben();   // bug-598
             WacheAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
@@ -6436,6 +6444,7 @@ _mausProbePunkt = karte;
         LuftbildAusgeben();
         HandLuftAusgeben();
         FlugtempoAusgeben();
+        FliegerStehtAusgeben();   // bug-598
         WacheAusgeben();
         // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
@@ -8928,6 +8937,9 @@ _mausProbePunkt = karte;
             GetTree().Quit(0);
             return;
         }
+
+        if (BasisAussendenCheckLauf()) return;   // bug-591
+        if (FliegerStehtProbeLauf()) return;     // bug-598 Faelle spion/hand
 
         if (_depotreiterCheck && _entities.ErwartungBereit())
         {

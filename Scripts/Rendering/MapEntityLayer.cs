@@ -19887,11 +19887,16 @@ public partial class MapEntityLayer : Node2D
     /// (<see cref="AusfahrenAusGarage"/> sofort, mit Absage »kein freier Platz
     /// an der Tuer«) steht hinter <c>--aussenden-sofort</c>.</para>
     /// </summary>
-    public void DepotAussenden(List<int> griffe)
+    public void DepotAussenden(List<int> griffe, Entity? geb = null)
     {
-        var b = Fenstergebaeude();
+        // bug-591: die Basis hat kein Gebaeudefenster (Fenstergebaeude() kennt
+        // nur die Arten mit BuildingWindow) — ApplyAussenden reicht das Gebaeude
+        // aus dem Satz (P2) herein.
+        var b = geb ?? Fenstergebaeude();
         // ⭐ 22.09.2026 — auch aus dem BAHNHOF (Druckarm 0x448CBE, Befehl 504).
-        if (b == null || b.BType is not (5 or 6 or 12)) return;
+        // ⭐ bug-591 B1 — und aus der BASIS (Typ 1, Fensterart 6, @0x44A228):
+        // derselbe Befehl, derselbe Auslass (0x43DCA6). --basis-aussenden-sofort.
+        if (b == null || !(b.BType is 5 or 6 or 12 || (b.BType == 1 && !BasisAussendenSofort))) return;
         foreach (int g in griffe)
         {
             if (g < 0 || g >= _entities.Count) continue;
@@ -22672,9 +22677,15 @@ public partial class MapEntityLayer : Node2D
         // Entwurfsnummer. Die zweite Spalte trägt hier das LEBEN und keinen
         // Preis — eine untergestellte Einheit ist nicht gekauft, sie ist
         // hereingefahren, und was man von ihr wissen will, ist ihr Zustand.
+        // ⭐ bug-591 B1: eine ausgesandte, noch wartende Einheit (UKOL 0x33)
+        // heisst » (Ausgesandt)«. ⚠ UNSERE SETZUNG: übernommen von Fensterart 23
+        // (Depot, 0x479553 / 0x502108); ob der Zeichner der Basis 0x467C60 das
+        // ebenso schreibt, ist ungelesen.
         foreach (var u in e.Garage)
             rows.Add(new UI.BuildPanel.Row(
-                EinheitenWort(u), $"{u.Hp}/{u.HpMax}", true, false,
+                EinheitenWort(u) + (e.BType == 1 && u.Ukol == UkolVerlaesst && !BasisAussendenSofort
+                                    ? " (Ausgesandt)" : ""),
+                $"{u.Hp}/{u.HpMax}", true, false,
                 u.Infantry >= 0 ? UI.PortraitBank.PictureOfInfantry(u.Infantry) : 0));
 
         if (_designs == null) return rows;
@@ -22725,10 +22736,29 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 30.08.2026 — die Zeilen der EINGEFAHRENEN stehen vorn (DepotRows).
         // Eine von ihnen kommt mit ihrem eigenen Satz heraus, eine
         // Entwurfsnummer wird erst zur Einheit — zwei verschiedene Wege.
-        if (k >= 0 && k < e.Garage.Count) { AusfahrenAusGarage(e, k); return; }
+        // ⭐ bug-591 B1: die Basis lässt eine EINGEFAHRENE Einheit nicht sofort
+        // heraus — UKOL 0x33 (@0x410441), den Rest macht DepotAuslass wie der
+        // Gebäudetakt 0x43DCA6. Das ist der Netz-Altweg (Alt2("depot")) und der
+        // Rückfall für Gebäude ohne eigenen 504-Arm; ApplyAussenden geht direkt
+        // über DepotAussenden. Gegenschalter --basis-aussenden-sofort.
+        if (k >= 0 && k < e.Garage.Count)
+        {
+            if (e.BType == 1 && !BasisAussendenSofort && !AussendenSofort)
+            {
+                var gu = e.Garage[k];
+                gu.Ukol = UkolVerlaesst;
+                _order = $"{EinheitenWort(gu)} ausgesandt — wartet an der Tuer";
+                UpdatePanel();
+                QueueRedraw();
+                return;
+            }
+            AusfahrenAusGarage(e, k);
+            return;
+        }
         k -= e.Garage.Count;
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
-        SendOutOfDepot(e, k);
+        // bug-591 B2: auch die PRODUZIERTE Zeile nur über die Tür.
+        SendOutOfDepot(e, k, nurTuer: !AuslassRueckfallAlt);
         UpdatePanel();
     }
 
@@ -24609,6 +24639,7 @@ public partial class MapEntityLayer : Node2D
             Col = e.Col, Row = e.Row, Stored = true, Owner = e.Owner,
             HomeSlot = e.Slot, Pos = e.Pos, Footprint = e.Footprint,
             Speed = d.Speed, Hp = d.Hp, HpMax = d.Hp,
+            StufeUnten = SpUntenVorlage(d.Kind),   // bug-598 C, spawn_aircraft @0x4B15B6
             Ammo = d.Ammo, AmmoMax = d.Ammo, Fuel = d.Fuel, FuelMax = d.Fuel,
             Payload = d.Payload, Airframe = d.Airframe,
             Attack = d.Attack, Defence = d.Defence, Sight = d.Sight,
@@ -32637,6 +32668,17 @@ public partial class MapEntityLayer : Node2D
         return _nav.NearestFree(door, Simulation.NavGrid.MoveClass.Vehicle);
     }
 
+    /// <summary>bug-591 B2: nur die Türzelle, ohne Rückfall — null, wenn belegt.</summary>
+    private Vector2I? TuerFrei(Entity b)
+    {
+        if (_nav == null) return null;
+        var door = new Vector2I(b.Col + b.DoorCol, b.Row + b.DoorRow);
+        if (_nav.IsFree(door.X, door.Y, Simulation.NavGrid.MoveClass.Vehicle))
+        { SpawnedAtDoor++; return door; }
+        AuslassTuerzwangGewartet++;
+        return null;
+    }
+
     /// <summary>Wie oft eine Einheit wirklich auf der Türzelle entstand und wie
     /// oft daneben, weil die Tür belegt war. Getrennt gezählt, weil das zwei
     /// verschiedene Sachen sind.</summary>
@@ -32934,7 +32976,7 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     /// <returns>false, wenn kein Platz frei ist; das Gebäude behält seine
     /// Einheit dann und der Spieler kann es später wieder versuchen.</returns>
-    public bool SendOutOfDepot(Entity e, int k)
+    public bool SendOutOfDepot(Entity e, int k, bool nurTuer = false)
     {
         if (_nav == null || _designs == null) return false;
         if (k < 0 || k >= e.Depot.Count) return false;
@@ -32943,7 +32985,14 @@ public partial class MapEntityLayer : Node2D
         // Aufwertungen (0x4B1FB0 rechnet je Spielerblock). Siehe
         // Simulation/Aufwertung.cs, EntwurfFuer; Rueckfall --entwuerfe-global-alt.
         var d = EntwurfFuer(e.Owner, _designs[e.Depot[k] % _designs.Count]);
-        var cell = SpawnCellFor(e);
+        // ⭐ bug-591 B2 (nur der Spielerweg über das Basisfenster setzt nurTuer):
+        // keine Einheit neben der Tür. Belegt -> Absage, die Zeile bleibt.
+        // ⚠ UNSERE SETZUNG: das Original dockt einen Neubau an (0x4B1E0B ->
+        // 0x43BFC0) und sendet ihn aus (0x4B1E1C -> 0x410420), er WARTET also in
+        // der Liste; unsere Depotzeile ist eine Entwurfsnummer ohne Satz und kann
+        // nicht warten — darum Absage statt Warten (ungelesen, eigene Lesung).
+        // Die KI (SkirmishAi) behält den alten Weg. --auslass-rueckfall-alt.
+        var cell = nurTuer ? TuerFrei(e) : SpawnCellFor(e);
         if (cell == null)
         {
             _order = $"{d.Name} kann nicht heraus — kein freier Platz an der Tuer";
@@ -40408,6 +40457,25 @@ public partial class MapEntityLayer : Node2D
             // Hier stand `continue` = UNSERE Setzung; --absturz-drift-aus.
             if (a.Absturz) { AbsturzDrift(a, dt); continue; }
 
+            // ⭐ bug-598 B (Reaper R4, 22.10.2026) — SPRIT 0 IST EIN ABSTURZ.
+            // C-EXE, selbst gelesen (adis 0x422F40), im Kopf des Auftrags-
+            // verteilers, JEDEN Takt und für JEDES uk ausser 0 (Hangar) — auch
+            // uk 3 (Hand); nur die 300er-Heimkehr davor hängt am %20-Takt:
+            //   0x422F40  cmp word [+0x1C fuel], 0 / jne weiter
+            //   0x422F4F  log »air B (no fuel)«
+            //   0x422F61  call 0x401A37 -> 0x425EA0 axplode air -> uk := 100
+            // Bei uns hing ein leerer Flieger ohne Flugziel ewig in der Luft
+            // (AirDrift: `if (Fuel <= 0) return;`) — gemessen NET02 Seed 7: vier
+            // Maschinen 600 s regungslos (berichte/flieger-steht-opus.md §B).
+            // ⚠ UNSERE SETZUNG: FuelMax > 0 — ein Satz ohne Tankangabe ist bei
+            // uns eine Datenlücke, kein leerer Tank. Gegenschalter --sprit-absturz-aus.
+            if (!SpritAbsturzAus && a.Fuel <= 0 && a.FuelMax > 0)
+            {
+                SpritAbstuerze++;
+                FlugzeugAbschiessen(a, "air B (no fuel) @0x422F4A");
+                continue;
+            }
+
             // ⭐⭐ 20.09.2026 — uk 3: DIE HANDSTEUERUNG HAT GAR KEINEN ZWEIG.
             // AIR_RE 446. Die Maschine fliegt mit dir und sp geradeaus, sucht
             // kein Ziel, kreist nicht und kehrt auch bei leerem Tank nicht um
@@ -40428,6 +40496,28 @@ public partial class MapEntityLayer : Node2D
             // liste, nicht in _special), darum steht hier null — der Zweig
             // @0x424E31 ist damit ungebaut und NICHT etwa gemessen.
             FlugtempoTakt(a, null);
+
+            // ⭐ bug-598 A — EIN ANGRIFF OHNE MUNITION IST EINE HEIMKEHR.
+            // Der gemeinsame Auftragszweig uk 7 (»air R« @0x42369C) prüft die
+            // MUNITION, nicht die Bewaffnung:
+            //   0x4236AE  al = byte [+0x16 Munition] / jne 0x42386A (nur MIT anfliegen)
+            //   0x4236D2  Ziel := 0xFFFF
+            //   0x4236E3  call air_back_to_airport
+            // Ein Spion (Art 3, Munition 0) mit Angriffsbefehl — Knopf »Angriff«
+            // (502 Modus 7) oder KI-Luftangriff (AiAirTakeoff) — fliegt also
+            // SOFORT heim. Bei uns setzte nur ein Schuss (Ammo > 0) den Wendepunkt;
+            // der Spion klebte für immer über dem Ziel und verbrauchte dabei
+            // nicht einmal Sprit (Bild reaper6.png). Gilt ebenso für die Helis
+            // 11/12 mit Ziel; die Nachschubhelis (13/14) haben keinen uk 7.
+            // Gegenschalter --unbewaffnet-angriff-alt.
+            if (!UnbewaffnetAngriffAlt && a.Target >= 0 && a.Ammo <= 0 && !a.IsSupply)
+            {
+                a.Target = -1;                        // @0x4236D2
+                a.TurnPoint = null;
+                if (a.Angriffsauftrag) { a.Angriffsauftrag = false; a.PlayerGoal = null; }
+                a.Heimkehr = true;                    // @0x4236E3
+                AngriffOhneMunitionHeim++;
+            }
 
             // ⚠ Der Versorgungszweig sprang bis zum 14.08.2026 mit `goto move`
             // an der Heimkehr VORBEI — deshalb kam ein Nachschubheli nie nach
@@ -40679,6 +40769,7 @@ public partial class MapEntityLayer : Node2D
             a.Col = Mathf.Clamp((int)(a.Pos.X / TileW), 0, 255);
             a.Row = Mathf.Clamp((int)(a.Pos.Y / TileH), 0, 255);
         }
+        if (FliegerStehtAktiv) FliegerStehtTakt();   // bug-598, nur lesend
     }
 
     /// <summary>

@@ -292,11 +292,14 @@ public partial class MapEntityLayer
         var b = _entities[geb];
         int k = b.Garage.IndexOf(_entities[u]);
         if (k < 0) return false;
-        if (b.BType is 5 or 6 or 12)
+        // ⭐ bug-591 B1: auch die BASIS (Typ 1) setzt nur UKOL 0x33 und wartet
+        // auf ihren Gebäudetakt 0x43DCA6 — derselbe Busarm 0x4C37B5 -> 0x410420
+        // für alle drei Fenster. Gegenschalter --basis-aussenden-sofort.
+        if (b.BType is 5 or 6 or 12 || (b.BType == 1 && !BasisAussendenSofort))
         {
             // Der Zähler »Befehle 504« zählt der ABSENDER (PostDepotAussenden).
             int merkZahl = DepotAussendenBefehle;
-            ImSatz(c, geb, -1, () => DepotAussenden(new List<int> { u }));
+            ImSatz(c, geb, -1, () => DepotAussenden(new List<int> { u }, b));
             DepotAussendenBefehle = merkZahl;
         }
         else

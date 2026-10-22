@@ -401,6 +401,35 @@ public partial class MapEntityLayer : Node2D
     /// Tuer kein Platz ist, statt sie mit » (Ausgesandt)« warten zu lassen.</summary>
     public static bool AussendenSofort;
 
+    /// <summary>
+    /// ⭐ bug-591 B1 (KayelGee R7 #3, 22.10.2026) — <c>--basis-aussenden-sofort</c>:
+    /// der Stand 0.6.10. Die <b>Basis</b> (Gebäudeart 1) liess eine eingefahrene
+    /// Einheit beim Aussenden (Befehl 504) SOFORT heraus, und bei belegter Tür
+    /// über <see cref="SpawnCellFor"/> neben die Basis (<c>NearestFree</c>).
+    ///
+    /// <para>Das Original kennt dafür nur EINEN Weg: 504 → <c>0x410420</c> setzt
+    /// UKOL 0x33 (<c>@0x410441</c>), und der Gebäudetakt der Basis
+    /// <c>0x43DCA6…0x43DE58</c> lässt höchstens eine Einheit je Takt heraus, nur
+    /// bei freier Tür UND Folgezelle, Plätze 0..4, Ausdocken <c>0x43C120</c>,
+    /// dann Marschbefehl <c>0x40B070</c> (berichte/depot-ein-aussenden-opus.md
+    /// §a). Bei uns ist das <see cref="DepotAuslass"/>, das Typ 1 schon kannte —
+    /// die Basis kam nur nie dorthin.</para></summary>
+    public static bool BasisAussendenSofort;
+
+    /// <summary>
+    /// ⭐ bug-591 B2 — <c>--auslass-rueckfall-alt</c>: der Stand 0.6.10. Der
+    /// Auslass (<see cref="DepotAuslass"/>) liess Fussvolk ohne Türprüfung zu
+    /// <see cref="AusfahrenAusGarage"/>, und das fiel bei belegter Tür auf
+    /// <c>NearestFree</c> zurück — der Soldat stand neben dem Gebäude.
+    /// Ebenso »Aussenden« einer PRODUZIERTEN Zeile aus dem Basisfenster
+    /// (<see cref="SendOutOfDepot"/>). Im Original ist eine belegte Tür immer ein
+    /// WARTEN, nie ein Absetzen woanders (0x43DCD8..0x43DD0C).</summary>
+    public static bool AuslassRueckfallAlt;
+
+    /// <summary>bug-591: wie oft der Auslass wegen belegter Tür gewartet hat,
+    /// statt (wie 0.6.10) neben die Tür auszuweichen.</summary>
+    public int AuslassTuerzwangGewartet;
+
     /// <summary>Wieviele Ausgesandte der Takt herausgelassen hat und wie oft
     /// einer warten musste. ⚠ Ohne die zweite Zahl ist »kommt nicht heraus«
     /// nicht von »wurde nie ausgesandt« zu unterscheiden.</summary>
@@ -467,7 +496,27 @@ public partial class MapEntityLayer : Node2D
                     }
                     continue;
                 }
-                if (AusfahrenAusGarage(b, k)) { DepotAusgelassen++; break; }
+                // ⭐ bug-591 B2 — FUSSVOLK nur an einer freien Tür. Die Basis
+                // (0x43DCD8..0x43DD0C) lässt niemanden heraus, wenn auf Tür oder
+                // Folgezelle etwas steht, das kein Fussvolk ist (0x40224d), und
+                // Infanterie tritt auf der Tür aus (0x43DD67: 0x40224d(Tür)),
+                // neuer Trupp 0x401267 bzw. Anschluss 0x40107D. »Frei für
+                // Fahrzeuge« heisst bei uns genau das: leer ODER Fussvolk
+                // (NavGrid.IsFree, Infanterie ist überfahrbar).
+                // ⚠ UNSERE SETZUNG: die Folgezelle prüfen wir für Fussvolk nur an
+                // der Basis (Typ 1) — der Depottakt 0x43E19E lässt Infanterie
+                // »immer« (depotfenster-fable.md §4.3); dort sichert nur die Tür
+                // gegen das Absetzen daneben. Gegenschalter --auslass-rueckfall-alt.
+                bool tuerZwang = !AuslassRueckfallAlt;
+                if (fuss && tuerZwang
+                    && (!_nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle)
+                        || (b.BType == 1 && ZelleDarunterBelegt(tx, ty + 1))))
+                {
+                    DepotWartetAnTuer++;
+                    AuslassTuerzwangGewartet++;
+                    continue;
+                }
+                if (AusfahrenAusGarage(b, k, nurTuer: tuerZwang)) { DepotAusgelassen++; break; }
                 DepotWartetAnTuer++;
             }
         }
@@ -592,11 +641,25 @@ public partial class MapEntityLayer : Node2D
     /// und die Einheit erst entsteht.
     /// </summary>
     /// <returns>false, wenn an der Tuer kein Platz frei ist.</returns>
-    public bool AusfahrenAusGarage(Entity b, int k)
+    public bool AusfahrenAusGarage(Entity b, int k, bool nurTuer = false)
     {
         if (_nav == null || k < 0 || k >= b.Garage.Count) return false;
         var u = b.Garage[k];
-        var cell = SpawnCellFor(b);
+        // ⭐ bug-591 B2: aus dem AUSLASS nur über die Tür — nie der Rückfall
+        // NearestFree aus SpawnCellFor. Ist sie belegt, bleibt die Einheit
+        // ausgesandt in der Liste und der nächste Takt versucht es wieder
+        // (0x43DCD8: belegt -> raus, kein Absetzen woanders). Keine Absage im
+        // Meldefeld — der Auslass fragt jeden Takt, und das Original sagt nie ab.
+        Vector2I? cell;
+        if (nurTuer)
+        {
+            var tuer = new Vector2I(b.Col + b.DoorCol, b.Row + b.DoorRow);
+            if (!_nav.IsFree(tuer.X, tuer.Y, Simulation.NavGrid.MoveClass.Vehicle))
+            { AuslassTuerzwangGewartet++; return false; }
+            SpawnedAtDoor++;
+            cell = tuer;
+        }
+        else cell = SpawnCellFor(b);
         if (cell == null)
         {
             _order = $"{EinheitenWort(u)} kann nicht heraus — kein freier Platz an der Tuer";

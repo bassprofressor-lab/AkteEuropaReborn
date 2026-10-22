@@ -2450,6 +2450,7 @@ public partial class MapEntityLayer : Node2D
             Owner = a.Player, HomeSlot = ap.Slot, Pos = ap.Pos,
             Footprint = ap.Footprint,
             Speed = d.Speed, Hp = d.Hp, HpMax = d.Hp,
+            StufeUnten = SpUntenVorlage(d.Kind),   // bug-598 C, KI-Spawner @0x4B3156
             Ammo = d.Ammo, AmmoMax = d.Ammo, Fuel = d.Fuel, FuelMax = d.Fuel,
             Payload = d.Payload, Airframe = d.Airframe,
             Attack = d.Attack, Defence = d.Defence, Sight = d.Sight,
