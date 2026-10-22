@@ -65,7 +65,8 @@ public partial class MapEntityLayer : Node2D
             if (_nav.CrushableAt(c, r, i) == occ)
             {
                 // Fussvolk auf der Flanke
-                if (e.Infantry >= 0) return Step.Free;                  // 0x433DF0: Platz
+                // 0x433DF0: Platz, solange weniger als neun Mann (@0x433E3E, bug-596)
+                if (e.Infantry >= 0) return NeunerzelleVoll(c, r, i) ? Step.Blocked : Step.Free;
                 var u = FussvolkImWeg(i, e, o);                         // K2-Weiche
                 if (u == Step.Free && e.Move == MoveClass.Vehicle) fuss = occ;
                 return u;
@@ -95,6 +96,9 @@ public partial class MapEntityLayer : Node2D
         // das Ziel: was Ask sagt, und ein Fusssoldat darauf nach K2
         int zielFuss = -1;
         var zielUrteil = zielSay;
+        // bug-596: die Neunerzelle auch fuer das Ziel des Schraegschritts (0x433DF0).
+        if (zielUrteil == Step.Free && e.Infantry >= 0 && NeunerzelleVoll(next.X, next.Y, i))
+            zielUrteil = Step.Blocked;
         if (zielUrteil == Step.Free)
         {
             int foot = _nav.CrushableAt(next.X, next.Y, i);

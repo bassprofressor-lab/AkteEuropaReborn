@@ -779,6 +779,14 @@ public partial class MapEntityLayer : Node2D
         /// <summary>bug-425: der Kartenwert wurde schon einmal uebernommen.</summary>
         public bool SatzGeduldVerbraucht;
 
+        /// <summary>bug-596: der Unterzellen-Versatz eines Fusssoldaten, Satz
+        /// <c>+0x1D</c> (dx, −18…18) und <c>+0x1E</c> (dy, −7…7) — Aufsteller
+        /// <c>0x4B1D37/0x4B1D50</c>, create_unit <c>0x4B38BA/0x4B38D1</c>.
+        /// Siehe Simulation/Fussstreuung.cs.</summary>
+        public sbyte StreuX, StreuY;
+        /// <summary>bug-596: Versatz schon vergeben (Karte, Spielstand oder Hash).</summary>
+        public bool StreuGesetzt;
+
         /// <summary>What this unit still has to do after the current order.
         /// OURS — the original takes one order at a time; see
         /// <see cref="MaxOrders"/>.</summary>
@@ -3928,7 +3936,8 @@ public partial class MapEntityLayer : Node2D
             if (e.Infantry >= 0)
             {
                 tex = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
-                if (tex != null) { what = "Fusssoldat"; at = picC - EinheitenAnker(e); }
+                // bug-596: derselbe Ort wie im Zeichner (FussvolkOrt, mit Fussanker und dx/dy)
+                if (tex != null) { what = "Fusssoldat"; at = FussvolkOrt(e); }
             }
             if (tex == null)
             {
@@ -4033,6 +4042,7 @@ public partial class MapEntityLayer : Node2D
     {
         string path = Core.Content.Path($"Maps/{name}.entities.json");
         if (!FileAccess.FileExists(path)) return false;
+        _entitiesPfad = path;   // bug-596/602: die Pruefstaende lesen die Rohsaetze selbst nach
         // which root answered — the imported content or the development tree
         GD.Print($"entities: {path}");
         using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
@@ -4168,6 +4178,11 @@ public partial class MapEntityLayer : Node2D
                     Mark = raw.Length >= 0x44 * 2 ? HexByte(raw, 0x43) : -1,
                     // bug-425: der Geduldszaehler +0x1C (Byte) fuer --geduld-satzwert.
                     SatzGeduld = haveRaw ? HexByte(raw, 0x1C) : -1,
+                    // bug-596: der Unterzellen-Versatz +0x1D/+0x1E des Fussvolks (Klasse
+                    // +0x0A == 1), wie ihn der Aufsteller 0x4B1D37/0x4B1D50 gewuerfelt hat.
+                    StreuX = haveRaw && HexByte(raw, 0x0a) == 1 ? (sbyte)HexByte(raw, 0x1D) : (sbyte)0,
+                    StreuY = haveRaw && HexByte(raw, 0x0a) == 1 ? (sbyte)HexByte(raw, 0x1E) : (sbyte)0,
+                    StreuGesetzt = haveRaw && HexByte(raw, 0x0a) == 1,
                     // bug-421: das Wort +0x3E, die Entwurfsnummer fuer den Namen im Block.
                     Entwurf3E = raw.Length >= 0x40 * 2 ? HexByte(raw, 0x3E) | (HexByte(raw, 0x3F) << 8) : -1,
                     UnitType = GetI(e, "unit_type", -1),
@@ -5312,7 +5327,7 @@ public partial class MapEntityLayer : Node2D
         int punkte = fahrzeuge * LadungProFahrzeug + fussvolk * LadungProFussvolk;
         if (punkte <= 0) return;
 
-        var pos = e.Pos + new Vector2(-LadungBreite / 2f, -(BalkenHub(e) + LadungUeberLeben));
+        var pos = e.Pos + new Vector2(BalkenDx(e) - LadungBreite / 2f, -(BalkenHub(e) + LadungUeberLeben));
         DrawRect(new Rect2(pos - Vector2.One, new Vector2(LadungBreite + 2, LadungHoehe + 2)),
                  new Color(0, 0, 0, 0.75f));
         DrawRect(new Rect2(pos, new Vector2(LadungBreite, LadungHoehe)), LadungRahmen);
@@ -5353,12 +5368,17 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Dieselbe Hoehe, oeffentlich fuer <c>--anker-probe</c>.</summary>
     public float BalkenHubFuerProbe(Entity e) => BalkenHub(e);
 
+    /// <summary>bug-596: der Balken wandert mit dem Versatz dx des Fusssoldaten
+    /// (er haengt am Blitpunkt des Bildes, Balkenruf 0x42A720).</summary>
+    private float BalkenDx(Entity e) => BalkenhoeheAlt ? 0f : FussVersatzWirksam(e).X;
+
     private float BalkenHub(Entity e)
     {
         if (BalkenhoeheAlt) return BarLift;
         // Das Fussvolk haengt tiefer in der Leinwand — derselbe Versatz, den
         // auch Bild und Auswahlmarkierung nehmen (bug-084).
-        float fuss = FussVersatzFuer(e).Y;
+        // bug-596: derselbe Blitpunkt wie das Bild (FussvolkOrt), mit dy.
+        float fuss = FussVersatzWirksam(e).Y;
         float arm = e.Infantry >= 0 ? BarYFussvolk : BarYFahrzeug;
         // ⭐ 03.10.2026 (bug-410, berichte/hangfahrt-zeichnen-fable.md §3.3) — der
         // Balken hängt am SELBEN Blitpunkt wie das Bild (Fahrzeugruf 0x42A720
@@ -6199,8 +6219,16 @@ public partial class MapEntityLayer : Node2D
     /// (Umrechner <c>0x4B5280</c>), nicht über ein Sprite-Rechteck — ein anderes Verfahren,
     /// und unser Fußabdruck bildet es näher ab als jedes Bildrechteck.</para>
     /// </summary>
-    private static Rect2 BodyRect(Entity e)
+    /// <para>⭐ 22.10.2026, bug-602 (Paket E, berichte/fussvolk-klickkasten-opus.md):
+    /// der Fussvolkkasten ist jetzt der des Originals, Arm <c>0x431DD9</c> (F
+    /// <c>0x430F1B</c>): <c>sx+4 &lt; mx &lt; sx+19</c>, <c>sy+12 &lt; my &lt; sy+38</c> am
+    /// Zeichenpunkt (sx, sy) MIT dx/dy — aus derselben Funktion
+    /// <see cref="FussvolkBlit"/> wie das Bild. Gegenschalter
+    /// <c>--fussvolk-klickkasten-alt</c> (der mittige Kasten von vorher).</para>
+    private Rect2 BodyRect(Entity e)
     {
+        if (!KlickfeldAlt && !FussvolkKlickkastenAlt && !e.IsBuilding && !e.IsProp && e.Infantry >= 0)
+            return new Rect2(FussvolkBlit(e) + new Vector2(5, 13), new Vector2(14, 25));
         if (!KlickfeldAlt && !e.IsBuilding && !e.IsProp && e.GameUnitType is 0 or 1)
         {
             // Gattung 1 = Fussvolk, sonst Fahrzeug.
@@ -6264,7 +6292,8 @@ public partial class MapEntityLayer : Node2D
         // Bildes und ergaebe fuer eine Fahrzeugleinwand eine falsche Zahl.
         // Dieselbe Bedingung wie im Zeichner (e.Infantry >= 0), und dieselbe
         // Textur — AuswahlBild holt fuer Fussvolk GetInfantryTexture.
-        var fuss = FussVersatzFuer(e);
+        // bug-596: mit Fussanker und Versatz dx/dy des Bildes (FussvolkOrt).
+        var fuss = FussVersatzWirksam(e);
         // bug-485: die Bertha liegt +4/+4 gegen ein Fahrzeug (0x430598/0x430590).
         if (IstBertha(e) && BerthaBild(true, e.Facing) != null) fuss += BerthaVersatz;
         return PictureAnchor(e) - EinheitenAnker(e) + fuss + KoerperMitte(tex);
@@ -10077,6 +10106,7 @@ public partial class MapEntityLayer : Node2D
     {
         if (!additive) _sel.Clear();
         var norm = mapRect.Abs();
+        var gesammelt = new List<int>();
         for (int i = 0; i < _entities.Count; i++)
         {
             if (!Commandable(i)) continue;
@@ -10086,8 +10116,15 @@ public partial class MapEntityLayer : Node2D
             // — Gebaeude (60000+Platz) kommen darin nicht vor. --gummiband-gebaeude-alt.
             if (!GummibandGebaeudeAlt && _entities[i].IsBuilding) continue;
             if (!GummibandUkolAlt && GummibandUkolRiegel(_entities[i])) { GummibandUebersprungen++; continue; }
-            if (norm.Intersects(BodyRect(_entities[i]))) _sel.Add(i);
+            if (!GummibandFaengt(_entities[i], norm)) continue;
+            // bug-602 D: der Materialtransporter (+0x0E == 0x47) wird nur gesammelt
+            // (C 0x43496D) und am Ende nur gewaehlt, wenn sonst nichts gewaehlt ist
+            // (0x434E8A…0x434EBE); die Shift-Vorauswahl zaehlt mit.
+            if (!GummibandTransporterAlt && _entities[i].Part == MaterialtransporterTeil && !_entities[i].IsBuilding)
+            { gesammelt.Add(i); continue; }
+            _sel.Add(i);
         }
+        if (_sel.Count == 0) foreach (int k in gesammelt) _sel.Add(k);
         SetPrimary();
         _band = null;
         QueueRedraw();
@@ -35123,6 +35160,9 @@ public partial class MapEntityLayer : Node2D
         // Befehl über die Leitung und führt ihn erst aus, wenn er über Receive
         // im Ring zurückkommt. Unser bisheriger Direktzugriff war also nicht
         // bloss netzuntauglich, er war nie das Original.
+        // bug-596: Versatz neuer Soldaten VOR allem anderen — derselbe Taktzaehler
+        // wie beim Zeichnen, stromfrei (Simulation/Fussstreuung.cs).
+        FussStreuungZuteilen();
         CommandTick();
 
         // ⭐ 17.10.2026 (Direktbefehle2, Paket »pause«): die gemeinsame Pause
@@ -35478,6 +35518,9 @@ public partial class MapEntityLayer : Node2D
                 else
                 {
                     if (say != Simulation.NavGrid.Step.Free) { BlockedStep(i, e, say, dt); continue; }
+                    // bug-596: die Neunerzelle (0x433DF0, @0x433E3E cmp al,9) — Can_go 0.
+                    if (e.Infantry >= 0 && NeunerzelleVoll(next.X, next.Y, i))
+                    { BlockedStep(i, e, Simulation.NavGrid.Step.Blocked, dt); continue; }
                     // a foot soldier in the target cell does not stop the move; the
                     // original either drives through him (`pratelska_infa`
                     // @0x433fe0, all friendly) or over him (`prejet` @0x412980,
@@ -37246,9 +37289,27 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>Gegenschalter <c>--leichenanker-alt</c>.</para>
     /// </summary>
+    /// <para>⭐ 22.10.2026, bug-596 (Paket E): die Leinwand haengt jetzt am
+    /// Blitpunkt des Originals, <see cref="FussvolkBlit"/> — Zeile·20 − H − 24 − dy
+    /// (0x430332) und Spalte·40 + 5 + dx (0x43032D), Leinwandzeile 0 = Blitzeile,
+    /// Leinwandspalte <c>CanvasXPad</c> = Blitspalte. Der alte Weg (Unterkante des
+    /// Stehbildes + <see cref="FussTiefer"/>, 15 px tiefer) gilt unter
+    /// <c>--fussanker-tief-alt</c> und unter den drei aelteren Gegenschaltern;
+    /// der Versatz dx/dy wandert dort mit, solange <c>--fussstreuung-aus</c> fehlt.</para>
     private Vector2 FussvolkOrt(Entity e)
-        => PictureAnchor(e) - EinheitenAnker(e)
-           + (e.Dead && LeichenankerAlt ? Vector2.Zero : FussVersatzFuer(e));
+    {
+        if (FussankerTiefAlt || FussankerAlt || EinheitenankerAlt || (e.Dead && LeichenankerAlt))
+            return PictureAnchor(e) - EinheitenAnker(e)
+                   + (e.Dead && LeichenankerAlt ? Vector2.Zero : FussVersatzFuer(e))
+                   + StreuBild(e);
+        return FussvolkBlit(e) - new Vector2(Import.CwrFile.CanvasXPad, 0);
+    }
+
+    /// <summary>bug-596: was das Bild des Fusssoldaten gegen den Stand ohne
+    /// eigenen Versatz verschiebt — fuer Auswahlmarke und Lebensbalken, die am
+    /// selben Blitpunkt haengen (0x42AA88, Balkenruf 0x42A720).</summary>
+    private Vector2 FussVersatzWirksam(Entity e)
+        => e.Infantry < 0 ? Vector2.Zero : FussvolkOrt(e) - (PictureAnchor(e) - EinheitenAnker(e));
 
     /// <summary><c>--leichenanker-alt</c> — der Stand vor dem 11.09.2026: die
     /// Leiche ohne Fussversatz, 29…36 px ueber den Fuessen.</summary>
@@ -41889,6 +41950,7 @@ public partial class MapEntityLayer : Node2D
 
     public override void _Draw()
     {
+        FussStreuungZuteilen();   // bug-596: Versatz neuer Soldaten (stromfrei, Simulation/Fussstreuung.cs)
         // sec2 movement/zone overlay (single stretched texture, under everything)
         if (_showZones && _zoneTex != null)
             DrawTextureRect(_zoneTex, _zoneRect, false);
@@ -42438,7 +42500,7 @@ public partial class MapEntityLayer : Node2D
             // ⭐ Die Breite waechst mit HpMax (0x4B724C), sie ist nicht fest —
             // und der Balken ist auf x ZENTRIERT (0x4B6F6D: x -= breite/2).
             float bw = BarWidthOf(e.HpMax);
-            var hb = e.Pos + new Vector2(-bw / 2f, -BalkenHub(e));
+            var hb = e.Pos + new Vector2(BalkenDx(e) - bw / 2f, -BalkenHub(e));
             if (!BalkenbildAlt)
             {
                 // ⭐ 03.10.2026 (bug-410) — der Zeichner 0x4B6F60 wörtlich:
@@ -42524,7 +42586,7 @@ public partial class MapEntityLayer : Node2D
                              e.Intruder >= 0 ? OwnerColor(e.Intruder) : EinnahmeGrau);
                 continue;
             }
-            var cb = e.Pos + new Vector2(-breite / 2f, -BalkenHub(e) - CaptureBarH - 3f);
+            var cb = e.Pos + new Vector2(BalkenDx(e) - breite / 2f, -BalkenHub(e) - CaptureBarH - 3f);
             DrawRect(new Rect2(cb - Vector2.One, new Vector2(breite + 2, CaptureBarH + 2)),
                      new Color(0, 0, 0, 0.75f));
             DrawRect(new Rect2(cb, new Vector2(breite, CaptureBarH)),

@@ -882,14 +882,20 @@ public partial class MapEntityLayer : Node2D
                 // pruefen.
                 var eInf = _entities[inf];
                 var mitteNeu = AuswahlMitte(eInf);
+                var bildNeu = FussvolkOrt(eInf);
                 bool merk = FussankerAlt;
                 FussankerAlt = true;
                 var mitteAlt = AuswahlMitte(eInf);
+                var bildAlt = FussvolkOrt(eInf);
                 FussankerAlt = merk;
                 float wanderung = mitteNeu.Y - mitteAlt.Y;
-                bool folgtOk = Mathf.IsEqualApprox(wanderung, v.Y);
+                // bug-596 (22.10.2026): das Bild haengt jetzt am Blitpunkt des Originals
+                // (FussvolkBlit), nicht mehr an FussVersatzFuer — verglichen wird mit der
+                // Wanderung des BILDES selbst, nicht mit dem alten Fussversatz.
+                float bildWanderung = bildNeu.Y - bildAlt.Y;
+                bool folgtOk = Mathf.IsEqualApprox(wanderung, bildWanderung);
                 sb.AppendLine($"  Auswahlmarkierung: sie ist um {wanderung:0.0} Punkte "
-                            + $"mitgewandert (Bild: {v.Y:0.0}): "
+                            + $"mitgewandert (Bild: {bildWanderung:0.0}): "
                             + (folgtOk ? "haengt am Bild, richtig"
                                        : "FALSCH — sie haengt noch am alten Anker"));
                 // Und die Gegenprobe am FAHRZEUG: dort darf sich nichts
@@ -912,7 +918,7 @@ public partial class MapEntityLayer : Node2D
                     // der Oberkante der Leinwand. Bei uns also
                     // ComposedAnchor.Y - Fussversatz - Arm.
                     float hubVeh = BalkenHubFuerProbe(eVeh), hubInf = BalkenHubFuerProbe(eInf);
-                    float sollVeh = AnkerBezug.Y - 20f, sollInf = AnkerBezug.Y - v.Y - 10f;
+                    float sollVeh = AnkerBezug.Y - 20f, sollInf = eInf.Pos.Y - FussvolkOrt(eInf).Y - 10f;   // bug-596: Leinwandoberkante + 0x0A
                     bool hubOk = Mathf.IsEqualApprox(hubVeh, sollVeh)
                               && Mathf.IsEqualApprox(hubInf, sollInf);
                     sb.AppendLine($"  Lebensbalken ueber dem Bodenpunkt: Fahrzeug {hubVeh:0.0} "

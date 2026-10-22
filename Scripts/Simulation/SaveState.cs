@@ -123,6 +123,9 @@ public partial class MapEntityLayer
              .Num("eff_num", e.EffNum).Num("eff_den", e.EffDen).Num("hangar_size", e.HangarSize)
              .Num("research_tech", e.ResearchTech).Num("research_done", e.ResearchDone)
              .Num("deposit_start", e.DepositStart);
+            // bug-596: der Versatz je Soldat (+0x1D/+0x1E). Fehlt er (alter Stand),
+            // bleibt der Kartenwert der Vorlage oder es gibt einen neuen Hash.
+            if (e.Infantry >= 0 && e.StreuGesetzt) w.Num("streu_x", e.StreuX).Num("streu_y", e.StreuY);
             if (e.IsBuilding)
             {
                 var tueren = new List<int>();
@@ -464,6 +467,11 @@ public partial class MapEntityLayer
             e.ResearchTech = I("research_tech", e.ResearchTech);
             e.ResearchDone = I("research_done", e.ResearchDone);
             e.DepositStart = I("deposit_start", e.DepositStart);
+            if (d.ContainsKey("streu_x") && d.ContainsKey("streu_y"))
+            {
+                e.StreuX = (sbyte)I("streu_x", 0); e.StreuY = (sbyte)I("streu_y", 0); e.StreuGesetzt = true;
+            }
+            else if (v == null) { e.StreuX = e.StreuY = 0; e.StreuGesetzt = false; }
             if (bau)
             {
                 if (d.TryGetValue("door_cells", out var dc) && dc.VariantType == Variant.Type.Array)

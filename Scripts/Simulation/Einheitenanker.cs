@@ -70,7 +70,8 @@ public partial class MapEntityLayer
             {
                 var tex = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
                 if (tex == null) continue;
-                fuss.Add(FussvolkOrt(e).X + KoerperMitte(tex).X - picC.X);
+                // bug-596: der eigene Versatz dx des Soldaten herausgerechnet
+                fuss.Add(FussvolkOrt(e).X - StreuBild(e).X + KoerperMitte(tex).X - picC.X);
             }
             else
             {

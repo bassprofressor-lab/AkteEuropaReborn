@@ -21,9 +21,11 @@ using Godot;
 ///   Infanteriearm @0x406178: 0x433DF0 »Zelle hat Platz« (&lt; 9 Mann, egal wessen)
 ///                           -> 2 frei, er geht MIT in die Zelle
 /// </code>
-/// <para>⚠ UNSERE NAEHERUNG: die Neunerzelle haben wir nicht, eine Zelle traegt
-/// bei uns einen Satz. Fussvolk geht darum durch fremdes Fussvolk hindurch, wie
-/// es bei uns schon immer durch eigenes ging — keiner stirbt.</para>
+/// <para>⚠ UNSERE NAEHERUNG: eine Zelle traegt bei uns einen Stempel, keine
+/// Mannzahl. Fussvolk geht darum durch fremdes Fussvolk hindurch, wie es bei uns
+/// schon immer durch eigenes ging — keiner stirbt. ⭐ Seit dem 22.10.2026 (bug-596)
+/// zaehlt <see cref="NeunerzelleVoll"/> die Mannzahl nach (bis 9, 0x433E3E); der
+/// Deckel greift im Schrittcode VOR dieser Weiche (Simulation/Fussstreuung.cs).</para>
 ///
 /// <para><b>K3 — wie.</b> 0x412A50 ruft die Schadensroutine mit Angreifer
 /// <c>40200</c> (Rang 0, Angriff 200) auf die Zelle; der Infanteriezellen-Arm

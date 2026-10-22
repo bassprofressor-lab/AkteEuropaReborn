@@ -3946,6 +3946,7 @@ _mausProbePunkt = karte;
             if (WertelisteEigenSchalter(a)) continue;   // bug-586
             if (BauteilstufeSchalter(a)) continue;      // bug-589
             if (AuswahlwinkelSchalter(a)) continue;     // bug-590
+            if (FussvolkSchalter(a)) continue;          // bug-596/602, Simulation/FussvolkCheck.cs
             if (EntwuerfeSchalter(a)) continue;         // bug-592/593/594
             // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
             if (GrafikSchalter(a)) continue;
@@ -8957,6 +8958,7 @@ _mausProbePunkt = karte;
         }
 
         if (BasisAussendenCheckLauf()) return;   // bug-591
+        if (FussvolkPruefstand()) return;        // bug-596/602
         if (GebaeudeangriffCheckLauf()) return;  // bug-597
         if (FliegerStehtProbeLauf()) return;     // bug-598 Faelle spion/hand
 
@@ -9545,8 +9547,11 @@ _mausProbePunkt = karte;
             // A held left button with enough travel becomes a selection box
             // (a small wobble on click still selects the unit under the cursor).
             // ⚠ Im Setzmodus NICHT: dort ist der Zug kein Auswahlrahmen.
+            // bug-602 E: Rahmen erst bei mehr als 10 Spielpunkten auf EINER Achse
+            // (0x431BD6/0x431BF0), dann klebend — MapEntityLayer.IstRahmen.
+            // --gummiband-schwelle-alt: euklidisch 5 Bildschirmpunkte (ClickSlop).
             if (_leftDown && !_boxSelect && _entities.PlacementMode == 0 &&
-                (motion.Position - _leftStart).Length() > ClickSlop)
+                MapEntityLayer.IstRahmen(_bandStart, KartenMaus(), _leftStart, motion.Position, ClickSlop))
                 _boxSelect = true;
 
             // ⭐⭐ 03.10.2026 (bug-411) — ROLLEN 0x4B4AD0: Kamera += (Maus − Anker),
