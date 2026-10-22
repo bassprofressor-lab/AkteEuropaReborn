@@ -460,6 +460,12 @@ public partial class MapViewer : Node2D
                 { Name = "Missionsinfo" };
                 b.ProcessMode = Node.ProcessModeEnum.Always;
                 host.AddChild(b);
+                // ⭐ Paket N2 (bug-625): im Original ist »Missionsinformation« (Art 17 Element 1,
+                // F 0x44A8DE) ein HILFEFENSTER — show_text(50, 50, 500 + Mission) F 0x442480,
+                // dann Menü zu (0x446170) — und schickt darum bei »Pause bei Hilfe EIN« 993.
+                // Das Fenster selbst bleibt unser BriefingScreen (UNSERE SETZUNG, wie bisher);
+                // das 993 wirkt, sobald das Menü den Baum wieder freigibt.
+                UI.HelpWindow.NachDemOeffnen(this);
             };
 
         var wirt = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
@@ -1025,6 +1031,11 @@ public partial class MapViewer : Node2D
         if (NeustartCheckAn)
         {
             _ = NeustartCheckLauf();                  // Paket N, bug-615, Rendering/NeustartMenue.cs
+            return;
+        }
+        if (PauseBeiHilfeCheckAn)
+        {
+            _ = PauseBeiHilfeCheckLauf();             // Paket N2, bug-625, Rendering/PauseBeiHilfeCheck.cs
             return;
         }
         if (_kaufwegCheck)
@@ -6568,7 +6579,11 @@ _mausProbePunkt = karte;
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
         // Menue (ChangeSceneToFile) landen beide hier.
         FlakAusgeben();
+        // Paket N2: der Griff der »Pause bei Hilfe« darf diese Spielwelt nicht überleben.
+        if (UI.HelpWindow.PauseBeiHilfeSenden == _hilfePause) UI.HelpWindow.PauseBeiHilfeSenden = null;
     }
+
+    private System.Action? _hilfePause;
 
     /// <summary>
     /// `--leave-check` — was ueberlebt den Weg zurueck ins Hauptmenue?
@@ -8092,6 +8107,10 @@ _mausProbePunkt = karte;
         _entities.OnMeldung = (z1, z2, standzeit, mittig) => MeldungOeffnen(z1, z2, standzeit, mittig);
         // ⭐ 17.10.2026 (Direktbefehle2): Pause, Speichern, Laden des Netzspiels
         _entities.OnNetzPause = (an, wer) => NetzPauseZeigen(an, wer);
+        // ⭐ Paket N2 (bug-625): »Pause bei Hilfe« — das Öffnen eines Hilfefensters schickt 993
+        // über den Ring (F 0x442407/0x4425A7), siehe UI.HelpWindow.PauseBeiHilfeSenden.
+        _hilfePause = () => _entities.PostPause();
+        UI.HelpWindow.PauseBeiHilfeSenden = _hilfePause;
         // ⭐ Paket N (bug-615): 980 — Einzelspiel Szene neu, Netz Fenster zu (NeustartMenue.cs)
         _entities.OnNeustartEinzel = NeustartEinzelspiel;
         _entities.OnNeustartNetz = NeustartNetzFensterZu;

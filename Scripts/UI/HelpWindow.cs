@@ -223,6 +223,16 @@ public sealed partial class HelpWindow : PanelContainer
     /// umgestellt worden war.</para></summary>
     public static void VergissGezeigte() => Dismissed.Clear();
 
+    /// <summary>⚠ NUR für Prüfstände (Paket N2): alle offenen Hilfefenster so schliessen,
+    /// wie der Spieler es tut (Rechtsklick/ESC/X → <see cref="Dismiss"/>). Gibt die Zahl
+    /// zurück.</summary>
+    public static int SchliesseAlleWieSpieler()
+    {
+        var alle = Open.ToArray();
+        foreach (var w in alle) w.Dismiss();
+        return alle.Length;
+    }
+
     /// <summary>Aus dem Spielstand zurückholen.</summary>
     public static void MerkeGezeigt(int id) => Dismissed.Add(id);
 
@@ -390,6 +400,10 @@ public sealed partial class HelpWindow : PanelContainer
     /// hinter dem Pausenmenü weiter.</summary>
     private static void Anhalten(Node host)
     {
+        // ⭐ Paket N2 (bug-625): das Anhalten des Baums ist nur noch der Gegenschalter
+        // --pause-bei-hilfe-aus. Sonst gilt das Original: 993 beim Öffnen
+        // (PauseBeiHilfeSenden), beim Schliessen nichts.
+        if (!PauseBeiHilfeAlt) return;
         if (!PauseWhileOpen || !PauseErlaubt()) return;
         var tree = host.GetTree();
         if (tree == null) return;
@@ -419,6 +433,53 @@ public sealed partial class HelpWindow : PanelContainer
     }
 
     private static bool _hatAngehalten;
+
+    /// <summary>
+    /// ⭐ 22.10.2026, Paket N2 (bug-625) — <b>»PAUSE BEI HILFE« WIE IM ORIGINAL: BEFEHL 993
+    /// BEIM ÖFFNEN.</b> Lesung in F (<c>berichte/pausenfenster-40-opus.md</c>, »Bau N2«):
+    /// <list type="bullet">
+    /// <item>show_text2 F <c>0x4422D0</c> (C 0x4432E0, unser <see cref="Show"/>): Riegel
+    /// <c>byte[0x879E60+id]</c> gesetzt und 4. Argument 0 → raus; Stimme; Hilfe-Fenster-
+    /// Schalter <c>0x4FFE58</c> = 0 → raus; Riegel := 1; steht schon ein Fenster Art 30 mit
+    /// derselben Nummer → raus; sonst Fenster auf, und <b>am Ende</b> (F <c>0x442407</c>)
+    /// <c>if (byte[0x8B5308]) { word[0xB89438] := 0x3E1; Bus }</c> = 993.</item>
+    /// <item>show_text F <c>0x442480</c> (C 0x443490, unser <see cref="ShowOhneRiegel"/>):
+    /// schon offen → raus; sonst Fenster auf, Stimme, dann dasselbe Ende F
+    /// <c>0x4425A7..0x4425B9</c>.</item>
+    /// </list>
+    /// Folgen, genau so übernommen: das <b>Schliessen</b> der Hilfe schickt nichts — Art 40
+    /// bleibt stehen, bis jemand »Weiter«/P/Kreuz drückt; steht schon eine Pause, schaltet
+    /// das Öffnen sie AUS (993 ist ein Umschalter, Behandler F 0x4C41A7). Und weil 993 über
+    /// den Ring geht, steht die Pause im Netz bei allen. ⚠ Zeigt ein Untermissionen-Klick
+    /// zwei Fenster, gehen zwei 993 — Pause an und gleich wieder aus. Das ist das Original
+    /// (0x451530 ruft show_text je Untermission), kein Fehler von uns.
+    /// <para>Laufzeitmeldungen ohne Hilfetext (»Einkommen«, Id −1) sind im Original
+    /// Meldungsfenster Art 13 und schicken nichts.</para>
+    /// <para>Gegenschalter <c>--pause-bei-hilfe-aus</c>: der Weg bis 0.6.11 — der Baum steht,
+    /// solange ein Hilfefenster offen ist (<see cref="Anhalten"/>), kein 993.</para>
+    /// </summary>
+    public static System.Action? PauseBeiHilfeSenden;
+
+    /// <summary>Wie viele 993 die Hilfefenster abgeschickt haben — für den Prüfstand.</summary>
+    public static int PauseBeiHilfeGesendet { get; private set; }
+
+    /// <summary><c>--pause-bei-hilfe-aus</c>: der alte Weg (Baum anhalten), kein 993.</summary>
+    public static bool PauseBeiHilfeAlt =>
+        System.Array.IndexOf(Core.CommandLine.Args, "--pause-bei-hilfe-aus") >= 0;
+
+    /// <summary>Nach dem Öffnen eines Hilfefensters MIT Hilfetext (F 0x442407 / 0x4425A7).</summary>
+    public static void NachDemOeffnen(Node host)
+    {
+        if (PauseBeiHilfeAlt) { Anhalten(host); return; }
+        if (!PauseWhileOpen) return;
+        // ⚠ Kopflos weiter nur mit --help-pause bzw. den Prüfständen — ein Prüflauf ohne
+        // jemanden, der »Weiter« drückt, stünde sonst ab dem ersten Hilfefenster still.
+        if (!PauseErlaubt()) return;
+        if (PauseBeiHilfeSenden == null) return;   // keine Spielwelt (Menü-Kulisse)
+        PauseBeiHilfeGesendet++;
+        GD.Print($"Pause bei Hilfe: Befehl 993 (Hilfefenster offen: {Open.Count})");
+        PauseBeiHilfeSenden();
+    }
 
     /// <summary><b>OHNE BILDSCHIRM WIRD NICHT ANGEHALTEN.</b>
     ///
@@ -457,6 +518,8 @@ public sealed partial class HelpWindow : PanelContainer
             // muss selbst dafuer sorgen, dass der Lauf endet (z.B.
             // `--abbruch-check`, der nach fester Zeit aussteigt).
             else if (a == "--help-pause") erzwungen = true;
+            // Paket N2: die Prüfstände der »Pause bei Hilfe« beenden sich selbst.
+            else if (a == "--pause-bei-hilfe-check" || a == "--net-pause-bei-hilfe-check") erzwungen = true;
         }
         if (DisplayServer.GetName() == "headless" && !erzwungen) aus = true;
         _erlaubt = !aus;
@@ -548,7 +611,7 @@ public sealed partial class HelpWindow : PanelContainer
         // etwa. Vorher kam es danach wieder, jetzt nicht mehr.
         Dismissed.Add(id);
         Stimme(id);
-        Anhalten(host);
+        NachDemOeffnen(host);   // Paket N2: 993 wie F 0x442407
         return w;
     }
 
@@ -576,7 +639,7 @@ public sealed partial class HelpWindow : PanelContainer
         var w = new HelpWindow(id, paras, ox, oy);
         Layer(host).AddChild(w);
         Open.Add(w);
-        Anhalten(host);
+        NachDemOeffnen(host);   // Paket N2: 993 wie F 0x4425A7
         return w;
     }
 

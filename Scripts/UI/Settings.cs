@@ -218,11 +218,26 @@ public static class Settings
     /// <c>OPTIONS.CFG</c> trägt acht 0/1-Bytes auf +0x0C, also dieselbe Anzahl
     /// wie die acht genannten Schalter.</para>
     ///
-    /// <para>⚠ Welches der acht Bytes es ist, ist <b>nicht gelesen</b>; die
-    /// Vorgabe <b>an</b> folgt der Beobachtung des Spielers am laufenden
-    /// Original (18.08.2026), nicht der Datei.</para></summary>
+    /// <para>⭐ 22.10.2026, Paket N2 (bug-625) — <b>jetzt gelesen</b> (F; C +0xFA0):
+    /// <c>byte[0x8B5308]</c> (C <c>0x8B62A8</c>). OPTIONS.CFG Versatz <b>0x11</b>
+    /// (Leser F <c>0x445F7A</c>, Schreiber F <c>0x4460BA</c>: 4+4+4 Byte, dann
+    /// 0x990768, 0x991820, Hilfe-Fenster 0x4FFE58, Hilfe-Sprache 0x892524, Formation
+    /// 0x8B70C8, <b>Pause bei Hilfe</b>, MIDI 0x892518, Scrollen 0x8B62B0, 4 Byte
+    /// 0x4FFE54). Umschalter F <c>0x44B9D5</c>: <c>al := 1 − [0x8B5308]</c>.
+    /// Knopf im Einstellungsfenster Art 34 bei <b>(20, 220)</b>, 8 Kacheln, unter
+    /// »Autosichern« (20, 200): »Pause bei Hilfe EIN« (F <c>0x501370</c>) bzw.
+    /// »Pause bei Hilfe AUS« (F <c>0x501358</c>), Zeichner F <c>0x47E787</c>.
+    /// <b>Vorgabe EIN</b>: die OPTIONS.CFG in DATA1.CAB der CD trägt an Versatz 0x11
+    /// eine 1 (die F-Installation ebenso). Wirkung: siehe
+    /// <see cref="HelpWindow.PauseBeiHilfeSenden"/> (Befehl 993 beim ÖFFNEN eines
+    /// Hilfefensters).</para>
+    /// <para>Bei uns in <c>settings.cfg</c> statt OPTIONS.CFG (UNSERE Ablage).</para></summary>
     public static bool PauseOnHelp
-    { get => B("pause_on_help", true); set => Set("pause_on_help", value); }
+    { get => PauseOnHelpTest ?? B("pause_on_help", true); set => Set("pause_on_help", value); }
+
+    /// <summary>Nur für <c>--pause-bei-hilfe-check</c>: sticht <see cref="PauseOnHelp"/>,
+    /// schreibt aber nichts nach <c>settings.cfg</c>. null = die Datei gilt.</summary>
+    public static bool? PauseOnHelpTest;
 
     // ---- Gefecht ------------------------------------------------------------
 

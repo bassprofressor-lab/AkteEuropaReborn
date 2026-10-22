@@ -25,6 +25,7 @@ public sealed partial class NetGameRunner
 {
     private int _nsCheck;
     private bool _pfCheck;
+    private bool _pbhCheck;   // Paket N2: --net-pause-bei-hilfe-check (Ausloeser Hilfefenster statt P)
     private int _nsTakt = -1, _nsGesehen;
     private bool _nsGleich;
     private int _pfAuf = -1, _pfZu = -1, _pfPauseAn = -1, _pfPauseAus = -1;
@@ -52,8 +53,18 @@ public sealed partial class NetGameRunner
 
         if (_pfCheck)
         {
-            if (r == 300 && _link.IsHost) Say($"   Takt {_tick}: PAUSE-PROBE — {mv?.NetzProbeTasteP() ?? "kein MapViewer"}");
-            if (r == 400 && !_link.IsHost) Say($"   Takt {_tick}: PAUSE-PROBE — {mv?.NetzProbeWeiter() ?? "kein MapViewer"}");
+            if (_pbhCheck)
+            {
+                // Paket N2: Ausloeser ist ein HILFEFENSTER beim Mitspieler (auf und gleich wieder
+                // zu), »Weiter« klickt der Vermittler — Art 40 muss bei BEIDEN stehen bleiben.
+                if (r == 300 && !_link.IsHost) Say($"   Takt {_tick}: HILFE-PROBE — {mv?.NetzProbeHilfe() ?? "kein MapViewer"}");
+                if (r == 400 && _link.IsHost) Say($"   Takt {_tick}: PAUSE-PROBE — {mv?.NetzProbeWeiter() ?? "kein MapViewer"}");
+            }
+            else
+            {
+                if (r == 300 && _link.IsHost) Say($"   Takt {_tick}: PAUSE-PROBE — {mv?.NetzProbeTasteP() ?? "kein MapViewer"}");
+                if (r == 400 && !_link.IsHost) Say($"   Takt {_tick}: PAUSE-PROBE — {mv?.NetzProbeWeiter() ?? "kein MapViewer"}");
+            }
             var f = UI.PausenFenster.Offen;
             bool auf = f != null && f.Visible;
             if (auf && _pfAuf < 0) { _pfAuf = _tick; _pfLage = f!.Position; _pfGroesse = f.Size; }
@@ -91,10 +102,11 @@ public sealed partial class NetGameRunner
             bool gut = _pfAuf >= 0 && _pfZu > _pfAuf && _pfPauseAn == _pfAuf && _pfPauseAus == _pfZu && z == 2
                        && (_pfLage - soll).Length() < 1f
                        && _pfGroesse == new Vector2(180 * UI.PausenFenster.Scale, 60 * UI.PausenFenster.Scale);
-            Say($"PAUSENFENSTER-ERGEBNIS: Art 40 auf Takt {_pfAuf}, zu Takt {_pfZu}; Pausenwort 1000 von {_pfPauseAn} " +
+            Say($"{(_pbhCheck ? "PAUSE-BEI-HILFE-NETZ-ERGEBNIS (Ausloeser Hilfefenster)" : "PAUSENFENSTER-ERGEBNIS")}: Art 40 auf Takt {_pfAuf}, zu Takt {_pfZu}; Pausenwort 1000 von {_pfPauseAn} " +
                 $"bis {_pfPauseAus}; Lage ({_pfLage.X:0},{_pfLage.Y:0}) Soll ({soll.X:0},{soll.Y:0}) bei Schirm " +
                 $"{schirm.X:0}x{schirm.Y:0}, Größe {_pfGroesse.X:0}x{_pfGroesse.Y:0}; 993 angewandt {z}" +
                 (UI.PausenFenster.Alt ? " ⚠ NULLMODELL --pausenfenster-alt" : "") +
+                (_pbhCheck && UI.HelpWindow.PauseBeiHilfeAlt ? " ⚠ NULLMODELL --pause-bei-hilfe-aus" : "") +
                 $" -> {(gut ? "BESTANDEN" : "DURCHGEFALLEN")}");
             ok &= gut;
         }

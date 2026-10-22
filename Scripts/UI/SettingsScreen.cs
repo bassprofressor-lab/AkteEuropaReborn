@@ -164,10 +164,6 @@ public partial class SettingsScreen : Control
 
         box.AddChild(new HSeparator());
         box.AddChild(Head("Steuerung"));
-        // ⚠ Kein Schalter von uns: die Hilfezeilen der Optionen des Originals
-        // (Tafel 0x4F0280) nennen ihn woertlich. Siehe Settings.PauseOnHelp.
-        box.AddChild(Check("Spiel anhalten waehrend eines Hilfe-Fensters",
-            Settings.PauseOnHelp, v => Settings.PauseOnHelp = v));
         box.AddChild(Check("Rechte Maustaste gedrueckt halten schiebt die Karte",
             Settings.RightDragPan, v => Settings.RightDragPan = v));
         box.AddChild(Check("Zeiger zeigt an, was ein Klick tut",
@@ -205,6 +201,24 @@ public partial class SettingsScreen : Control
             autosave.Text = Settings.AutosaveText(Settings.AutosaveMinuten);
         };
         box.AddChild(Row("Automatische Sicherung", autosave));
+        // ⭐ 22.10.2026, Paket N2 (bug-625) — »PAUSE BEI HILFE« des Originals: ein Knopf wie
+        // die zwei darüber, beschriftet »Pause bei Hilfe EIN/AUS« (F 0x501370/0x501358,
+        // Zeichner F 0x47E787), im Original bei (20, 220) direkt UNTER »Autosichern«
+        // (20, 200) — darum hier die Zeile danach. Umschalter F 0x44B9D5 (1 − Byte).
+        // Hilfezeile woertlich »Spiel anhalten waehrend eines Hilfe-Fensters«.
+        // Wirkung: Befehl 993 beim Öffnen eines Hilfefensters (HelpWindow.PauseBeiHilfeSenden).
+        var pauseHilfe = new Button
+        {
+            Text = Settings.PauseOnHelp ? "Pause bei Hilfe EIN" : "Pause bei Hilfe AUS",
+            TooltipText = "Spiel anhalten waehrend eines Hilfe-Fensters\n"
+                        + "(das Öffnen eines Hilfefensters schaltet die Pause um, das Fenster »Pause« bleibt nach dem Schließen der Hilfe stehen)",
+        };
+        pauseHilfe.Pressed += () =>
+        {
+            Settings.PauseOnHelp = !Settings.PauseOnHelp;
+            pauseHilfe.Text = Settings.PauseOnHelp ? "Pause bei Hilfe EIN" : "Pause bei Hilfe AUS";
+        };
+        box.AddChild(Row("Pause bei Hilfe", pauseHilfe));
         // ⚠ Hier stand ein Schalter »Farbiger Ring unter jeder Einheit«.
         // Entfernt am 21.08.2026 — siehe MapEntityLayer.DrawUnitBody.
 

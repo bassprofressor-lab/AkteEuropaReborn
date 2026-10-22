@@ -183,6 +183,9 @@ public sealed partial class NetGameRunner : Node
             else if (a == "--net-neustart-check") r._nsCheck = 600;
             else if (a.StartsWith("--net-neustart-check=")) int.TryParse(a["--net-neustart-check=".Length..], out r._nsCheck);
             else if (a == "--pausenfenster-check") r._pfCheck = true;
+            // Paket N2 (bug-625): Pause bei Hilfe im Netz — Mitspieler oeffnet in Takt 300 ein
+            // Hilfefenster (993 ueber den Ring), Vermittler klickt in Takt 400 »Weiter«.
+            else if (a == "--net-pause-bei-hilfe-check") { r._pfCheck = true; r._pbhCheck = true; }
             else if (a.StartsWith("--wurf-spur="))
             {
                 var t = a["--wurf-spur=".Length..].Split('-');
