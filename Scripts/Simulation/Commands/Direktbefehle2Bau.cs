@@ -89,7 +89,7 @@ public partial class MapEntityLayer
             // Der Markt verkauft — über 530 wie das Marktfenster.
             var regal = MarketShelf();
             if (row < 0 || row >= regal.Count) { _order = "nichts gewaehlt"; return false; }
-            MarktBestellen(regal[row].Nr, e.Slot);
+            MarktBestellen(regal[row].Nr, e.Slot, basisfenster: true);   // bug-599: Meldung in der Nacharbeit
             return true;
         }
         if (e.BType == 9 || IsSupplyDepot(e))

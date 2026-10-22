@@ -94,6 +94,9 @@ public sealed partial class FabrikView : Control
 
     public void Neu() => _gedrueckt = -1;
 
+    /// <summary>Der Stand, aus dem <c>_Draw</c> malt — für den Prüfstand (bug-600).</summary>
+    public BuildingWindow.Stand? Gezeigt => _stand;
+
     public void Zeige(BuildingWindow.Stand s)
     {
         _stand = s;

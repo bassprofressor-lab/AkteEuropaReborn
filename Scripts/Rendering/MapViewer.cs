@@ -994,6 +994,11 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_ringNacharbeitCheck)
+        {
+            _ = RingNacharbeitLauf();                 // bug-600, Rendering/RingNacharbeitCheck.cs
+            return;
+        }
         if (_kaufwegCheck)
         {
             // GG NICHT hier ausgeben. Der erste Anlauf tat es, und der Lauf hat
@@ -2388,7 +2393,10 @@ public partial class MapViewer : Node2D
             GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = taste, Pressed = false, Position = p, GlobalPosition = p });
             for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             for (int t = 0; t < 3; t++) _entities.SimTickFuerProbe();       // der Ring wirkt nach 2 Takten
-            f.Refresh();
+            // ⭐ 22.10.2026 (bug-600): hier stand `f.Refresh()` — der Prüfstand malte
+            // das Fenster SELBST neu und sah darum nie, dass es nach der Ringbuchung
+            // veraltet blieb. Jetzt malt es das Spiel (Satznacharbeit/Fenstertakt).
+            for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
 
         _entities.FabrikProbeSetzen(idx, 100000, MapEntityLayer.StAktiv);
@@ -2396,8 +2404,11 @@ public partial class MapViewer : Node2D
         await Klick(2);
         Soll(fv.LetzterTreffer == 2, $"Klick kam an (Treffer {fv.LetzterTreffer})");
         Soll(_entities.FabrikZustand(idx).Zustand == 1, $"Anhalten: Zustand {_entities.FabrikZustand(idx).Zustand} (erwartet 1), Status »{fv.StatusZeile}«");
+        // bug-600: was das FENSTER zeigt — Nullmodell --fensterneumalen-alt --satznacharbeit-alt MUSS hier fallen
+        Soll(fv.Gezeigt?.Zustand == 1, $"Fenster zeigt den neuen Zustand ({fv.Gezeigt?.Zustand}, erwartet 1) ohne fremdes Refresh");
         await Klick(2);
         Soll(_entities.FabrikZustand(idx).Zustand == 0, $"Start: Zustand {_entities.FabrikZustand(idx).Zustand} (erwartet 0)");
+        Soll(fv.Gezeigt?.Zustand == 0, $"Fenster zeigt den neuen Zustand ({fv.Gezeigt?.Zustand}, erwartet 0)");
 
         var z0 = _entities.FabrikZustand(idx);
         int kosten = f.FabrikAnsicht != null ? z0.Geld : 0;
@@ -2529,6 +2540,10 @@ public partial class MapViewer : Node2D
             sb.Append("  ⚠ NULLMODELL --aussenden-sofort: hier MUSS die Absage stehen und keiner warten\n");
         Soll(MapEntityLayer.AussendenSofort ? z1.Ausgesandt == 0 : z1 == (2, 1),
              $"Einheit bleibt drin und wartet (drin {z1.Drin}, ausgesandt {z1.Ausgesandt})");
+        // bug-587: und das FENSTER sagt es — » (Ausgesandt)« (0x502108) an der Zeile.
+        int gezeigtAus = dv.Gezeigt?.DepotZeilen.FindAll(z => z.Ausgesandt).Count ?? -1;
+        Soll(gezeigtAus == z1.Ausgesandt,
+             $"Fenster zeigt {gezeigtAus}x »(Ausgesandt)« = {z1.Ausgesandt} im Zustand");
         for (int t = 0; t < 10; t++) _entities.SimTickFuerProbe();
         var z2 = _entities.DepotZustand(idx);
         Soll(z2.Drin == 2, $"bei gesperrter Tuer nach 10 Takten noch drin ({z2.Drin})");
@@ -2538,8 +2553,11 @@ public partial class MapViewer : Node2D
         var z3 = _entities.DepotZustand(idx);
         Soll(z3 == (1, 0), $"Tuer frei: sie kommt heraus (drin {z3.Drin}, ausgesandt {z3.Ausgesandt})");
 
-        f.Refresh();
-        for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        // ⭐ 22.10.2026 (bug-600): hier stand `f.Refresh()` — das Fenster wurde vom
+        // PRÜFSTAND neu gemalt. Jetzt muss es das Spiel tun: das Herausfahren ist
+        // kein Satz, also malt der Fenstertakt (0x4505F0, alle 30 Bilder). 32 Bilder
+        // warten. Nullmodell --fensterneumalen-alt MUSS hier fallen.
+        for (int i = 0; i < 32; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Soll(dv.Zeilen == 1 && dv.Markiert == 0, $"nach dem Klick: 1 Zeile, Markierung weg ({dv.Zeilen}/{dv.Markiert})");
 
         int rechts = dv.Rechtsklicks;
@@ -3572,6 +3590,12 @@ _mausProbePunkt = karte;
         GetViewport().PushInput(new InputEventMouseMotion { Position = schirmpunkt, GlobalPosition = schirmpunkt });
         Klick(true);
         Klick(false);
+        // ⭐ 22.10.2026 (bug-600): seit 7e6e4a7 setzt der Knopf Befehl 527 nur AB —
+        // gebucht wird am naechsten Taktanfang. Der Pruefstand mass sofort und war
+        // seitdem rot. Wie im Spiel: den Ring leerlaufen lassen, dann urteilen.
+        int ringTakte = 0;
+        for (; ringTakte < 8 && _entities.Commands.Pending > 0; ringTakte++) _entities.CommandTick();
+        sb.Append($"  Ring nach {ringTakte} Takt(en) leer\n");
 
         sb.Append("  Fenster sagt: " + _gebaeudeFenster.KlickZeile() + "\n");
         sb.Append($"  NACH DEM KLICK: Kontostand {geldVor} -> {_entities.GeldImFenster}"
@@ -3585,8 +3609,11 @@ _mausProbePunkt = karte;
         bool gekauft = _entities.GeldImFenster == geldVor - 150
                     && _entities.FlugzeugZahl == fliegtVor + 1;
         bool offen = _gebaeudeFenster.Visible && _entities.FensterHaetteInhalt;
+        // bug-587: was das FENSTER zeigt (nicht der Kontostand im Spiel)
+        int gezeigt = _gebaeudeFenster.AngezeigtesGeld;
         sb.Append($"  ERGEBNIS: gekauft {(gekauft ? "JA" : "NEIN")}, "
-                + $"Fenster bleibt offen {(offen ? "JA" : "NEIN")}\n");
+                + $"Fenster bleibt offen {(offen ? "JA" : "NEIN")}, "
+                + $"Fenster zeigt Kontostand {gezeigt} {(gezeigt == _entities.GeldImFenster ? "(aktuell)" : "(⚠ VERALTET)")}\n");
 
         // Nullmodell: ein Klick DANEBEN (unter den Knopf, noch im Fenster) darf
         // NICHTS kaufen. Ohne ihn wuerde die Messung oben auch dann gruen sein,
@@ -3599,6 +3626,7 @@ _mausProbePunkt = karte;
                 ButtonIndex = MouseButton.Left, Pressed = runter,
                 Position = daneben, GlobalPosition = daneben,
             });
+        for (int t = 0; t < 8 && _entities.Commands.Pending > 0; t++) _entities.CommandTick();   // bug-600
         sb.Append($"  Nullmodell: Klick daneben {daneben} -> Kontostand {geld2} -> "
                 + $"{_entities.GeldImFenster}, Flugzeuge {flieg2} -> {_entities.FlugzeugZahl}"
                 + $" (beides soll gleich bleiben)\n");
@@ -4613,6 +4641,11 @@ _mausProbePunkt = karte;
             else if (a == "--direktbefehle-alt") MapEntityLayer.DirektbefehleAlt = true;   // bug-530
             // Direktbefehle2 (17.10.2026): alle Pakete bzw. »=paket,paket« wieder unmittelbar
             else if (a == "--direktbefehle2-alt") MapEntityLayer.Direktbefehle2Alt = "*";
+            // bug-587/588/599 (22.10.2026): Fenstertakt und Satznacharbeit
+            else if (a == "--fensterneumalen-alt") UI.BuildingWindow.FensterneumalenAlt = true;
+            else if (a == "--satznacharbeit-alt") MapEntityLayer.SatzNacharbeitAlt = "*";
+            else if (a.StartsWith("--satznacharbeit-alt=")) MapEntityLayer.SatzNacharbeitAlt = a["--satznacharbeit-alt=".Length..];
+            else if (a == "--ring-nacharbeit-check") _ringNacharbeitCheck = true;
             else if (a.StartsWith("--direktbefehle2-alt=")) MapEntityLayer.Direktbefehle2Alt = a["--direktbefehle2-alt=".Length..];
             else if (a == "--no-building-body") MapEntityLayer.NoBuildingBody = true;
             // --demo-behind (C23): eine Einheit MITTEN in einen Gebaeudegrundriss
@@ -7805,6 +7838,12 @@ _mausProbePunkt = karte;
             if (_gebaeudeFenster.Visible && _gebaeudeFenster.OffeneArt == UI.BuildingWindow.Art.Geschaeftszentrum
                 && _gebaeudeFenster.Kennung == platz) _gebaeudeFenster.Refresh();
         };
+        // ⭐ 22.10.2026 (bug-587): die Satznacharbeit malt das offene Gebäudefenster
+        // neu, sobald ein Satz gewirkt hat (Commands/SatzNacharbeit.cs).
+        _entities.OnGebaeudefensterNeu = op =>
+        {
+            if (_gebaeudeFenster.Visible) _gebaeudeFenster.NeumalenBehutsam();
+        };
         _entities.OnMarktfensterZu = platz =>
         {
             if (_gebaeudeFenster.Visible && _gebaeudeFenster.OffeneArt == UI.BuildingWindow.Art.Geschaeftszentrum
@@ -8839,6 +8878,7 @@ _mausProbePunkt = karte;
         // ⭐ 03.10.2026 (bug-411) — ein verlorenes Loslassen darf den Zeiger
         // nicht gefangen lassen. MausTabLauf.cs.
         RollenWache();
+        FensterNeumalenTakt();                    // bug-587, Original 0x4505F0 Arm 0x45066C
         // ⚠ Das Erwartungsblatt erst im ERSTEN BILD, nicht beim Aufbau: beim
         // Aufbau ist das Missionsskript noch nicht geladen, und das Blatt
         // meldete »Mission -1, kein Skript«. Ein Blatt, das seine eigene

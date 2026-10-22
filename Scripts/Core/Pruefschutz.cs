@@ -12,7 +12,8 @@ namespace AkteEuropaReborn.Core;
 /// ist mit dem Spieler geteilt: jeder Prüflauf schrieb in SEINEN Kampagnenstand.</para>
 ///
 /// <para><b>Regel:</b> läuft das Spiel kopflos (<c>DisplayServer.GetName() ==
-/// "headless"</c>) ODER steht unter den Benutzerschaltern einer mit <c>-check</c>,
+/// "headless"</c>) ODER steht unter den Benutzerschaltern einer mit <c>-check</c>
+/// (seit 22.10.2026 auch <c>-probe</c> und <c>--net-direktbefehle*</c>),
 /// dann werden <c>campaign.cfg</c>, <c>settings.cfg</c> und <c>designs.cfg</c> beim
 /// Start nach <c>user://pruefstand/</c> KOPIERT, und alles Lesen und Schreiben geht
 /// auf die Kopie; Spielstände gehen nach <c>user://saves/pruefstand_kopflos</c>.
@@ -44,7 +45,13 @@ public static class Pruefschutz
             return false;
         }
         bool kopflos = DisplayServer.GetName() == "headless";
-        string? pruef = args.FirstOrDefault(a => a.Contains("-check"));
+        // ⭐ 22.10.2026 (Paket A, Prüfschutz-Befund): auch »-probe« und die
+        // Netzprüfstände »--net-direktbefehle(2)«. Kopflos waren sie schon
+        // geschützt; IM FENSTER schrieb --net-direktbefehle2 seinen Spielstand
+        // GAME.005 (Befehl 991, Direktbefehle2Probe) in user://saves des Spielers
+        // und überschrieb dort Platz 5. Dasselbe Loch hatten alle *-probe.
+        string? pruef = args.FirstOrDefault(a => a.Contains("-check") || a.Contains("-probe")
+                                                 || a.StartsWith("--net-direktbefehle"));
         if (!kopflos && pruef == null) return false;
         _grund = kopflos ? "kopflos" : $"Pruefschalter {pruef}";
 

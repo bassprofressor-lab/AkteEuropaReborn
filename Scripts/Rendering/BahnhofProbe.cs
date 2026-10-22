@@ -118,6 +118,11 @@ public partial class MapViewer
         int verlegt = _entities.BahnVerlegtEinheiten;
         var bz = _entities.GebaeudeZelle(basis);
         KartenschirmKlickBahn(bz.X, bz.Y);
+        // ⭐ 22.10.2026 (bug-600): seit 7e6e4a7 setzt der Kartenklick Befehl 518 nur
+        // AB; gezählt und verlegt wird im Behandler. Der Prüfstand mass sofort und
+        // war seitdem rot (»0 Befehl(e) 518«). Ring leerlaufen lassen wie der Takt.
+        int ringTakte = _entities.RingLeeren();
+        sb.Append($"  Ring nach {ringTakte} Takt(en) leer\n");
         Soll(_entities.BahnVerlegtEinheiten == verlegt + 1,
              $"Klick auf die Basis: {_entities.BahnVerlegtEinheiten - verlegt} Befehl(e) 518 (keine Verbindung: {_entities.BahnKeineVerbindung})");
         Soll(!_kartenschirm.Visible, "Planungskarte danach zu (0x4471A0)");
@@ -131,8 +136,14 @@ public partial class MapViewer
              $"die Einheit steht nach {n} Takten ({n / 50f:0.0} s) an der Tuer der Basis (Garage Basis {_entities.GarageZahl(basis)})");
 
         // ---- 3. Aussenden (504) aus dem Bahnhof
-        f.Refresh();
-        for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        // ⭐ 22.10.2026 (bug-600): hier stand `f.Refresh()` — der Prüfstand malte das
+        // Fenster selbst und sah die Geisterzeile der verlegten Einheit nie. Jetzt
+        // malen Satznacharbeit (518) und Fenstertakt; 32 Bilder warten und die
+        // Zeilen im FENSTER zählen.
+        for (int i = 0; i < 32; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        int zeilenGezeigt = bv.Gezeigt?.DepotZeilen.Count ?? -1;
+        Soll(zeilenGezeigt == _entities.GarageZahl(bhf),
+             $"Fenster zeigt {zeilenGezeigt} Zeile(n) = {_entities.GarageZahl(bhf)} im Bahnhof (keine Geisterzeile)");
         await Klick(bv.FeldAufDemSchirm(4));
         int aus = _entities.DepotAussendenBefehle;
         await Klick(bv.FeldAufDemSchirm(2));

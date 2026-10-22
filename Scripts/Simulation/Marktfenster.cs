@@ -130,11 +130,17 @@ public partial class MapEntityLayer
 
     /// <summary>»Bestellen« — Klickarm <c>0x44C6E1</c>: Befehl 530, keine
     /// Vorbedingung.</summary>
-    public void MarktBestellen(int nr, int platz)
+    public void MarktBestellen(int nr, int platz) => MarktBestellen(nr, platz, false);
+
+    /// <summary><paramref name="basisfenster"/>: der Kauf kommt aus einer Zeile des
+    /// Basisfensters (bug-599) — P4 = <see cref="MarktAusBasisfenster"/>, damit die
+    /// Nacharbeit die alte Auftragszeile schreibt. Der Behandler liest P4 nicht.</summary>
+    public void MarktBestellen(int nr, int platz, bool basisfenster)
     {
         int spieler = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
         Emit(CommandRecord.Make(CommandOp.MarktKauf, (byte)spieler,
-                                (short)nr, (short)spieler, (short)platz));
+                                (short)nr, (short)spieler, (short)platz,
+                                basisfenster ? MarktAusBasisfenster : (short)0));
     }
 
     /// <summary>Behandler <c>0x4C1360</c> (F <c>0x4C0E20</c>).</summary>
@@ -164,8 +170,12 @@ public partial class MapEntityLayer
         }
 
         int preis = o.Sold ? -1 : o.Price;            // 0xFFFF ist vorzeichenbehaftet −1
-        if (preis > Money(spieler)) { MarktKaufStill++; return true; }   // @0x4C138A — still
-        if (preis < 1) { MarktKaufStill++; return true; }                // @0x4C138E — still
+        // bug-599: nur fuer die Anzeige (SatzNacharbeit, Basisfenster-Weg) — was der
+        // Behandler tat. Er selbst bleibt stumm wie das Original.
+        _marktKaufPreis = preis;
+        if (preis > Money(spieler)) { MarktKaufStill++; _marktKaufErgebnis = 2; return true; }   // @0x4C138A — still
+        if (preis < 1) { MarktKaufStill++; _marktKaufErgebnis = 3; return true; }                // @0x4C138E — still
+        _marktKaufErgebnis = 1;
         o.Buyer = spieler;                            // @0x4C1396
         o.Sold = true;                                // @0x4C139C
         Money(spieler, Money(spieler) - preis);       // @0x4C13A6

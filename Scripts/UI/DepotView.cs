@@ -131,6 +131,9 @@ public sealed partial class DepotView : Control
     /// <summary>Den Schnappschuss setzen. Markierungen von Einheiten, die nicht
     /// mehr im Depot stehen, fallen weg — das ist das Nachrücken der Flaggen in
     /// <c>0x43C6F0</c>.</summary>
+    /// <summary>Der Stand, aus dem <c>_Draw</c> malt — für den Prüfstand (bug-587).</summary>
+    public BuildingWindow.Stand? Gezeigt => _stand;
+
     public void Zeige(BuildingWindow.Stand s)
     {
         _stand = s;

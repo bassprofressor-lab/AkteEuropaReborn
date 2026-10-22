@@ -190,11 +190,14 @@ public partial class MapEntityLayer
                 string name = Designer.ProposedName();
                 _entwurfProbe = true;                       // designs.cfg bleibt unberuehrt
                 DesignerInput(0, 0, true);
+                // bug-600: der Ringweg bleibt an — Befehl 505 wirken lassen, dann zählen.
+                for (int t = 0; t < 8 && Commands.Pending > 0; t++) CommandTick();
                 _entwurfProbe = false;
                 int angelegt = _designs.Count - vorher;
                 int gesperrt = EntwurfGesperrt - gesperrtVor;
                 // den Probeentwurf wieder wegnehmen (nur der eigene, Platz -1)
                 _designs.RemoveAll(d => d.Slot < 0 && d.Name == name && angelegt > 0);
+                if (angelegt > 0) UI.UnitStatBook.Austragen(name);   // bug-588: die Nacharbeit trug ihn ein
                 tastenpfad = angelegt == 1 && gesperrt == 0;
                 if (!aktiv) Designer.Close();
                 sb.AppendLine($"   {(tastenpfad ? "ok  " : "⚠ FALSCH")} Tastenpfad Enter (Listen mit allen Teilen: " +

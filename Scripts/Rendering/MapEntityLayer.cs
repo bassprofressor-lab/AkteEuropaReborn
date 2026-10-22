@@ -18418,7 +18418,12 @@ public partial class MapEntityLayer : Node2D
             if (d.Name == name) { Designer.Say("gibt es schon"); return; }
         int equip = Designer.CurrentEquipment?.Id ?? 0;
         // ⭐ 17.10.2026 (Direktbefehle2, Paket »entwurf«): Befehl 505 über den Ring.
-        if (!Alt2("entwurf") && !_entwurfProbe) { PostEntwurf(p.Id, equip, w.Id, name); return; }
+        // ⭐ 22.10.2026 (bug-600): `_entwurfProbe` heisst nur noch »designs.cfg nicht
+        // schreiben« — es schaltete hier zugleich den RINGWEG ab, und die Prüfstände
+        // massen deshalb einen Pfad, den der Spieler nicht nimmt (bug-588 blieb so
+        // unentdeckt). Das Wertebuch trägt auf dem Ring die Nacharbeit ein
+        // (Commands/SatzNacharbeit.cs); der Eintrag unten gilt nur dem Direktweg.
+        if (!Alt2("entwurf")) { PostEntwurf(p.Id, equip, w.Id, name); return; }
         var made = new Design(name, p.Id, equip, w.Id, true, -1);
         _designs.Add(made);
         if (!_entwurfProbe) SaveOwnDesigns();

@@ -126,6 +126,9 @@ public sealed partial class MineView : Control
         ProcessMode = ProcessModeEnum.Always;
     }
 
+    /// <summary>Der Stand, aus dem <c>_Draw</c> malt — für den Prüfstand (bug-587).</summary>
+    public BuildingWindow.Stand? Gezeigt => _stand;
+
     public void Zeige(BuildingWindow.Stand s)
     {
         _stand = s;

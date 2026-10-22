@@ -20,8 +20,10 @@ public partial class MapEntityLayer
 {
     public string WertelisteEigenCheck()
     {
-        var sb = new StringBuilder("werteliste-eigen-check (bug-586)"
-                                   + (UI.UnitStatBook.NachtragAlt ? " (⚠ Nullmodell --werteliste-nachtrag-alt: Teil 2 MUSS fallen)" : ""));
+        bool nullmodell = UI.UnitStatBook.NachtragAlt || NacharbeitAlt("katalog");
+        var sb = new StringBuilder("werteliste-eigen-check (bug-586/588)"
+                                   + (UI.UnitStatBook.NachtragAlt ? " (⚠ Nullmodell --werteliste-nachtrag-alt: Teil 2 MUSS fallen)" : "")
+                                   + (NacharbeitAlt("katalog") ? " (⚠ Nullmodell --satznacharbeit-alt=katalog: Teil 2 MUSS fallen)" : ""));
         LoadDesigns();
         LoadDesignParts();
         bool alleTeile = false;
@@ -50,7 +52,14 @@ public partial class MapEntityLayer
         int vorher = _designs.Count;
         _entwurfProbe = true;                                       // designs.cfg bleibt unberuehrt
         DesignerInput(0, 0, true);
+        // ⭐ 22.10.2026 (bug-600): `_entwurfProbe` schaltet den Ring NICHT mehr ab —
+        // der Klick setzt Befehl 505 ab wie beim Spieler, und erst der Behandler legt
+        // an. Ring leerlaufen lassen, DANN urteilen. Nullmodell
+        // --satznacharbeit-alt=katalog: Teil 2 MUSS fallen.
+        int ringTakte = 0;
+        for (; ringTakte < 8 && Commands.Pending > 0; ringTakte++) CommandTick();
         _entwurfProbe = false;
+        sb.Append($"\n   Weg: {(Alt2("entwurf") ? "DIREKT (--direktbefehle2-alt=entwurf)" : $"Ring, Befehl 505 nach {ringTakte} Takt(en) gewirkt")}");
         if (!aktiv) Designer.Close();
         bool angelegt = _designs.Count == vorher + 1;
         sb.Append($"\n   {(angelegt ? "ok  " : "FEHL")} Teil 0: Entwurf »{name}« angelegt (Fahrwerk {p}, Aufbau {w}, Verbesserung {q})"
@@ -95,7 +104,7 @@ public partial class MapEntityLayer
         UI.UnitStatBook.Austragen(name);
 
         bool alles = zeile && da && stimmt;
-        if (UI.UnitStatBook.NachtragAlt)
+        if (nullmodell)
             return sb.Append($"\n   Ergebnis: {(!da ? "NULLMODELL ROT wie erwartet (Teil 2 leer)" : "⚠ NULLMODELL GRUEN — der Pruefstand misst nichts")}").ToString();
         return sb.Append($"\n   Ergebnis: {(alles ? "BESTANDEN" : "DURCHGEFALLEN")}").ToString();
     }

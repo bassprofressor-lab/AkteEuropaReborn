@@ -173,19 +173,34 @@ public partial class MapEntityLayer : Node2D
         int modus = ziel >= 0 ? ZielModusZiel : ZielModusZelle;
         // ⭐ 17.10.2026 (Direktbefehle2, Paket »flughafen«): Befehl 502 je
         // Maschine über den Ring, wie 0x450310 ihn absetzt.
-        int n = Alt2("flughafen") ? StaffelStarten(flughafen, marke, ziel, col, row)
-                                  : PostStaffelStarten(flughafen, marke, ziel, col, row);
+        bool ring = !Alt2("flughafen");
+        int n = ring ? PostStaffelStarten(flughafen, marke, ziel, col, row)
+                     : StaffelStarten(flughafen, marke, ziel, col, row);
 
         if (modus == ZielModusZiel) ZielwahlAufZiel++;
         else ZielwahlAufZelle++;
-        ZielwahlMaschinen += n;
 
         string was = ziel >= 0 && ziel < _entities.Count
             ? (_entities[ziel].Name.Length > 0 ? _entities[ziel].Name : "ein Ziel")
             : $"({col},{row})";
-        _order = n > 0
-            ? $"{n} Maschinen greifen {was} an"
-            : "keine Maschine konnte starten";
+        // ⭐ 22.10.2026 (bug-599): auf dem Ring sind n die ABGESETZTEN Sätze, nicht
+        // die gestarteten Maschinen — gezählt und gemeldet wird erst in der
+        // Nacharbeit (Commands/SatzNacharbeit.cs), wenn der Behandler sie annimmt.
+        // --satznacharbeit-alt=meldung: Stand 0.6.10 (Sätze gezählt).
+        if (ring && n > 0 && !NacharbeitAlt("meldung"))
+        {
+            _zielwahlOffen = n;
+            _zielwahlGestartet = 0;
+            _zielwahlWas = was;
+            _order = $"Angriff auf {was} befohlen";       // UNSERE Setzung, bis die Sätze wirken
+        }
+        else
+        {
+            ZielwahlMaschinen += n;
+            _order = n > 0
+                ? $"{n} Maschinen greifen {was} an"
+                : "keine Maschine konnte starten";
+        }
         UpdatePanel();
         QueueRedraw();
         return true;

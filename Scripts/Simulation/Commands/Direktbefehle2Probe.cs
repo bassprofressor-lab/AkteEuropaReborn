@@ -9,8 +9,12 @@ using Godot;
 /// Kartenklick nehmen (17.10.2026, berichte/desync2-opus.md). Was hier vorab
 /// angewählt wird, ist Auswahl — örtlich wie ein Klick.
 ///
-/// <para>⚠ Der Spielstand-Teil schreibt <c>GAME.005</c> in den Benutzerordner
-/// (Platz 5, im Lauf von beiden Prozessen gleich) — nach dem Lauf löschen.</para>
+/// <para>⚠ Der Spielstand-Teil schreibt <c>GAME.005</c> (Platz 5, im Lauf von
+/// beiden Prozessen gleich). Seit bug-578 geht das kopflos nach
+/// <c>user://saves/pruefstand_kopflos</c>, seit 22.10.2026 auch im Fenster
+/// (<c>Core/Pruefschutz.cs</c> erkennt <c>--net-direktbefehle*</c>) — NIE mehr in
+/// die Spielstände des Spielers. ⚠ Zwei Netzläufe nicht parallel: beide Prozesse
+/// teilen sich diese eine Datei.</para>
 /// </summary>
 public partial class MapEntityLayer
 {

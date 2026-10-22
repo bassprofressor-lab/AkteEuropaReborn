@@ -79,6 +79,9 @@ public sealed partial class BahnhofView : Control
 
     public void Neu() { _marken.Clear(); _gedrueckt = 0; }
 
+    /// <summary>Der Stand, aus dem <c>_Draw</c> malt — für den Prüfstand (bug-587).</summary>
+    public BuildingWindow.Stand? Gezeigt => _stand;
+
     public void Zeige(BuildingWindow.Stand s)
     {
         _stand = s;

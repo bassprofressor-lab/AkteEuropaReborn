@@ -880,6 +880,10 @@ public partial class MapEntityLayer
         if (c.Player != ViewPlayer && c.Op is CommandOp.Eingraben or CommandOp.OursCancelBuild
                 or CommandOp.OursResearch or CommandOp.OursLaunchAll)
             _order = merkOrder;
+        // ⭐ 22.10.2026 (bug-587/588/599): die Nacharbeit, die früher hinter dem
+        // Klick stand — Neumalen, Wertebuch, Meldung. Nur Anzeige, siehe
+        // Commands/SatzNacharbeit.cs. Gegenschalter --satznacharbeit-alt[=…].
+        SatzNacharbeit(c, ok);
         if (ok) { AngenommenJeBefehl.TryGetValue(c.Op, out int k); AngenommenJeBefehl[c.Op] = k + 1; }
         // ⭐ 03.09.2026 — je Art zaehlen, was WIRKLICH angenommen wurde.
         // `--befehlsklang-probe` stellt diese Zahl neben die Klangzaehler:

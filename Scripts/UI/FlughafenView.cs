@@ -191,13 +191,24 @@ public sealed partial class FlughafenView : Control
 
     private int HTiles => HTilesJeReiter[Mathf.Clamp(_stand?.Reiter ?? 0, 0, 2)];
 
-    public void Zeige(BuildingWindow.Stand s)
+    /// <summary>Der Stand, aus dem <c>_Draw</c> malt — für den Prüfstand.</summary>
+    public BuildingWindow.Stand? Gezeigt => _stand;
+
+    /// <param name="takt">bug-587: Neumalen aus dem Fenstertakt bzw. der
+    /// Satznacharbeit — der Rollstand wird nur geklemmt, nicht zur Wahl gezogen
+    /// (sonst spränge die mit dem Mausrad gerollte Liste alle 30 Bilder zurück).</param>
+    public void Zeige(BuildingWindow.Stand s, bool takt = false)
     {
         _stand = s;
         Masse(s.Reiter);
+        if (takt)
+        {
+            int nz = s.Reiter == 2 ? s.Angebote.Count : s.HangarZeilen.Count;
+            _rollstand = Mathf.Clamp(_rollstand, 0, Mathf.Max(0, nz - ZeilenSicht));
+        }
         // Der Rollstand muss die gewaehlte Zeile im Blick halten, sonst wandert
         // die Auswahl aus dem Fenster, wenn der Halter sie von aussen setzt.
-        if (s.Reiter == 1)
+        else if (s.Reiter == 1)
         {
             int n = s.HangarZeilen.Count;
             _rollstand = Mathf.Clamp(_rollstand, 0, Mathf.Max(0, n - ZeilenSicht));

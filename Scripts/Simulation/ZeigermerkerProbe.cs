@@ -85,7 +85,13 @@ public partial class MapEntityLayer : Node2D
         // --- 5. SELBSTZERSTOERUNG als LETZTES -----------------------------
         int vor = Selbstzerstoert;
         string s5 = MenueAktion(CodeSelbstzerstoerung);
+        // ⭐ 22.10.2026 (bug-600): seit 7e6e4a7 setzt das Menue Befehl 13 nur
+        // AB — er wirkt am naechsten Taktanfang. Der Pruefstand mass sofort und
+        // war seitdem rot. Wie der Spieler: den Ring leerlaufen lassen, dann urteilen.
+        int ringTakte = 0;
+        for (; ringTakte < 8 && Commands.Pending > 0; ringTakte++) CommandTick();
         bool tot = _entities[idx].Dead;
+        sb.Append($"  (Ring nach {ringTakte} Takt(en) leer)\n");
         sb.Append($"  5. Selbstzerstoerung: »{s5}« -> Einheit tot {(tot ? "ja" : "NEIN")}, "
                 + $"Zaehler +{Selbstzerstoert - vor}\n");
         alles &= tot && Selbstzerstoert == vor + 1;

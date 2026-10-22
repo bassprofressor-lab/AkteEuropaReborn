@@ -798,6 +798,99 @@ public sealed partial class BuildingWindow : PanelContainer
         return b;
     }
 
+    // ================= NEUMALEN IM FENSTERTAKT (bug-587) =====================
+
+    /// <summary><c>--fensterneumalen-alt</c>: kein Neumalen im Fenstertakt — Stand
+    /// 0.6.10, das Fenster malt nur beim Klick und beim Öffnen.</summary>
+    public static bool FensterneumalenAlt;
+
+    /// <summary>Die Fensterarten, die der Arm <c>0x45066C</c> des Fenstertakts
+    /// <c>0x4505F0</c> alle 30 Bilder neu malt — selbst aus der Bytetafel
+    /// <c>0x45070C</c> gelesen (<c>berichte/depot-kontostand-opus.md</c> §3).</summary>
+    public static bool ImFenstertakt(int art)
+        => art is 2 or 5 or 8 or 9 or 11 or (>= 18 and <= 25) or (>= 27 and <= 29)
+               or 31 or 33 or 38;
+
+    /// <summary>Zähler für den Prüfstand: wie oft behutsam neu gemalt wurde, und wie
+    /// oft die Godot-Möbel dabei NICHT neu gebaut wurden (Inhalt gleich oder Maus
+    /// gedrückt).</summary>
+    public int BehutsamGemalt, MoebelGeschont;
+
+    /// <summary>Läuft gerade ein BEHUTSAMES Neumalen (Takt oder Satznacharbeit)?
+    /// Dann darf kein gehaltener Knopf verloren gehen, kein Rollstand springen und
+    /// kein Godot-Möbel ohne Not neu gebaut werden.</summary>
+    private bool _behutsam;
+
+    /// <summary>Was die Godot-Möbel zuletzt gezeigt haben (Abdruck des Standes).</summary>
+    private string _moebelAbdruck = "";
+
+    /// <summary>Der Stand, den die Godot-Möbel zuletzt gezeigt haben.</summary>
+    private Stand? _moebelStand;
+
+    /// <summary>
+    /// ⭐ bug-587 — <b>NEU MALEN, OHNE DEN SPIELER ZU STÖREN.</b> Aus dem
+    /// Fenstertakt (Original <c>0x4505F0</c> Arm <c>0x45066C</c>: alle 30 Bilder
+    /// <c>0x4013E3</c> = <c>0x4412E0</c>, Fenster neu zeichnen) und aus der
+    /// Satznacharbeit (<c>Commands/SatzNacharbeit.cs</c>).
+    ///
+    /// <para>⚠ Unterschied zu <see cref="Refresh"/> (Klick, Öffnen): der gehaltene
+    /// Druck des Nachschubpostens bleibt (<c>Zeige</c> setzte <c>_held = -1</c> —
+    /// ein Neumalen zwischen DRUCK und LOS hätte den Kauf verschluckt), der
+    /// Rollstand des Hangars springt nicht zur Wahl zurück, und die Godot-Möbel
+    /// (ohne WINDOWS.CWW) werden nur neu gebaut, wenn sich der INHALT geändert hat
+    /// und keine Maustaste gedrückt ist — sonst gingen alle 0,6 s Hover und Druck
+    /// verloren. Markierungen von Depot/Bahnhof behält <c>Zeige</c> ohnehin.</para>
+    /// </summary>
+    public void NeumalenBehutsam()
+    {
+        if (!Visible) return;
+        _behutsam = true;
+        try { Refresh(); BehutsamGemalt++; }
+        finally { _behutsam = false; }
+    }
+
+    /// <summary>Der Stand, den die gerade sichtbare Ansicht ZEIGT — nicht der
+    /// Spielzustand. Für den Prüfstand (<c>--ring-nacharbeit-check</c>): gelesen
+    /// wird das Feld, aus dem der Zeichner malt.</summary>
+    public Stand? AngezeigterStand
+    {
+        get
+        {
+            if (!Visible) return null;
+            if (_posten is { Visible: true }) return _posten.Gezeigt;
+            if (_flughafen is { Visible: true }) return _flughafen.Gezeigt;
+            if (_mine is { Visible: true }) return _mine.Gezeigt;
+            if (_depot is { Visible: true }) return _depot.Gezeigt;
+            if (_bahnhof is { Visible: true }) return _bahnhof.Gezeigt;
+            if (_senk.Visible) return _moebelStand;
+            return _letzterStand;
+        }
+    }
+
+    /// <summary>Der Kontostand, den das Fenster zeigt (−1 = keiner).</summary>
+    public int AngezeigtesGeld => AngezeigterStand?.Geld ?? -1;
+
+    /// <summary>Ein Abdruck dessen, was die Godot-Möbel aus dem Stand machen.</summary>
+    private string MoebelAbdruck(Stand s)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append((int)_art).Append('|').Append(s.Name).Append('|').Append(s.Hp).Append('/').Append(s.HpMax)
+          .Append('|').Append(s.Status).Append('|').Append(s.StockW).Append(',').Append(s.StockF).Append(',')
+          .Append(s.StockS).Append(',').Append(s.StockT).Append('|').Append(s.Kapazitaet).Append(',')
+          .Append(s.AusbauKosten).Append(',').Append(s.Geld).Append('|').Append(s.Vorkommen).Append(',')
+          .Append(s.VorkommenStart).Append(',').Append(s.Grad).Append(',').Append(s.Laeuft).Append('|')
+          .Append(s.HangarPlaetze).Append(':').Append(string.Join(";", s.Hangar)).Append('|');
+        foreach (var a in s.Angebote)
+            sb.Append(a.Name).Append(',').Append(a.Preis).Append(',').Append(a.Bezahlbar).Append(',')
+              .Append(a.PreisText).Append(',').Append(a.Kaufen != null).Append(';');
+        sb.Append('|');
+        foreach (var z in s.DepotZeilen)
+            sb.Append(z.Griff).Append(',').Append(z.Name).Append(',').Append(z.Ausgesandt).Append(';');
+        sb.Append('|');
+        foreach (var z in s.MarktZeilen) sb.Append(z.Nr).Append(',').Append(z.Preis).Append(';');
+        return sb.ToString();
+    }
+
     public void Refresh()
     {
         var s = _art == Art.Geschaeftszentrum ? MarktDaten?.Invoke(_kennung) : Daten?.Invoke();
@@ -929,7 +1022,7 @@ public sealed partial class BuildingWindow : PanelContainer
             // waren leer. Darum geht `Zeige` VORAUS.
             _letzterStand = s;
             _flughafen!.OnProdWahl = k => { _prodWahl = k; };
-            _flughafen!.Zeige(s);
+            _flughafen!.Zeige(s, takt: _behutsam);
             CustomMinimumSize = new Vector2(
                 FlughafenView.WTiles * WindowChrome.Cell * FlughafenView.Scale,
                 FlughafenView.HTilesJeReiter[System.Math.Clamp(s.Reiter, 0, 2)]
@@ -970,7 +1063,7 @@ public sealed partial class BuildingWindow : PanelContainer
                 SupplyShopView.WTiles * WindowChrome.Cell * SupplyShopView.Scale,
                 SupplyShopView.HTiles * WindowChrome.Cell * SupplyShopView.Scale);
             Size = CustomMinimumSize;
-            _posten!.Zeige(s);
+            _posten!.Zeige(s, behalteDruck: _behutsam);
             _titel.Text = "Angebot des Nachschubpostens";
             _knopfZahl = System.Math.Min(s.Angebote.Count, 2);
             return;
@@ -1006,6 +1099,18 @@ public sealed partial class BuildingWindow : PanelContainer
         _status.Visible = !posten;
         _energie.Text = $"Energie : {s.Hp} / {s.HpMax}";
         _status.Text = $"Status : {s.Status}";
+
+        // ⭐ bug-587: die Godot-Möbel bauen unten ALLE Kinder neu. Im behutsamen
+        // Neumalen nur, wenn sich der Inhalt geändert hat und keine Maustaste
+        // gedrückt ist (sonst Flackern, Hover- und Druckverlust alle 0,6 s).
+        string abdruck = MoebelAbdruck(s);
+        if (_behutsam && (abdruck == _moebelAbdruck || Input.IsMouseButtonPressed(MouseButton.Left)))
+        {
+            MoebelGeschont++;
+            return;
+        }
+        _moebelAbdruck = abdruck;
+        _moebelStand = s;
 
         foreach (var k in _mitte.GetChildren()) { _mitte.RemoveChild((Node)k); ((Node)k).QueueFree(); }
         foreach (var k in _knoepfe.GetChildren()) { _knoepfe.RemoveChild((Node)k); ((Node)k).QueueFree(); }

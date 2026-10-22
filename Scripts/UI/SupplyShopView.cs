@@ -95,12 +95,18 @@ public sealed partial class SupplyShopView : Control
 
     /// <summary>Den Stand uebernehmen und neu zeichnen. ⚠ NICHT <c>Show</c>
     /// genannt — das ist bei einem Control schon vergeben.</summary>
-    public void Zeige(BuildingWindow.Stand stand)
+    public void Zeige(BuildingWindow.Stand stand, bool behalteDruck = false)
     {
         _stand = stand;
-        _held = -1;
+        // ⚠ bug-587: im Fenstertakt (alle 30 Bilder) und in der Satznacharbeit
+        // bleibt der gehaltene Knopf — sonst verschluckte ein Neumalen zwischen
+        // DRUCK und LOS den Kauf. Beim Öffnen und nach dem Klick wie bisher.
+        if (!behalteDruck) _held = -1;
         QueueRedraw();
     }
+
+    /// <summary>Der Stand, aus dem <c>_Draw</c> malt — für den Prüfstand.</summary>
+    public BuildingWindow.Stand? Gezeigt => _stand;
 
     private int FontSize => WindowChrome.FontCell * Scale;
 
