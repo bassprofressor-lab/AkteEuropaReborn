@@ -173,7 +173,7 @@ public partial class MapEntityLayer : Node2D
             tafel[k] = der;
             EntwuerfeGerechnet++;
         }
-        return new Design(d.Name, d.Propulsion, d.Equip, d.Weapon, d.Available, d.Slot, der);
+        return new Design(d.Name, d.Propulsion, d.Equip, d.Weapon, d.Available, d.Slot, der, d.Selbst) { Entfernt = d.Entfernt };   // bug-593: Selbst durchreichen
     }
 
     /// <summary>Der Grundstand eines Bauteils aus <c>component_stats.json</c>

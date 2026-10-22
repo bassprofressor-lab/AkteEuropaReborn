@@ -420,27 +420,12 @@ public static class UnitStatBook
     /// wie <c>MapEntityLayer.LoadOwnDesigns</c> es tut.</summary>
     private static void ReadOwnDesigns()
     {
-        // ⚠ `using`, nicht bloss `new` — ConfigFile ist ein RefCounted, und ein
-        // nicht freigegebenes stirbt beim Herunterfahren im Finalizer. In
-        // Settings.cs hat genau dieses Muster am 13.08.2026 zu
-        // »Leaked unsafe reference to object: <ConfigFile#…>« in Serie und
-        // danach zu 0xC0000005 in GC.RunFinalizers geführt (Rückgabewerte
-        // 139/132 statt 0). Hier ist es je Aufruf eines statt je Bild, also
-        // harmlos genug für `using` statt eines gehaltenen Abbilds — aber es
-        // gehört freigegeben, zumal die Zeile darunter mitten heraus
-        // zurückspringt. Dieselbe Datei macht es bei FileAccess schon so.
-        using var c = new ConfigFile();
-        if (c.Load(Rendering.MapEntityLayer.OwnDesignsPath) != Error.Ok) return;
-        int n = (int)c.GetValue("designs", "count", 0);
-        for (int i = 0; i < n; i++)
+        // ⭐ 22.10.2026, bug-594: nicht mehr fest aus designs.cfg, sondern aus der
+        // Ablage der laufenden Partie (Kampagne/Gefecht/--entwuerfe-global),
+        // Simulation/EntwurfVerwalten.cs.
+        foreach (var (nm, prop, equip, weapon) in Rendering.MapEntityLayer.EigeneEntwuerfeFuerBuch())
         {
-            var v = c.GetValue("designs", $"d{i}", new Godot.Collections.Array());
-            if (v.VariantType != Variant.Type.Array) continue;
-            var a = v.AsGodotArray();
-            if (a.Count < 4) continue;
-            string nm = a[0].AsString();
             if (nm.Length == 0 || _byName!.ContainsKey(nm)) continue;
-            int prop = a[1].AsInt32(), equip = a[2].AsInt32(), weapon = a[3].AsInt32();
             _byName[nm] = new Entry(nm, weapon, prop, equip,
                                     Simulation.DesignMath.Compute(weapon, prop, equip));
         }

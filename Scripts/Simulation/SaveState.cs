@@ -55,6 +55,10 @@ public partial class MapEntityLayer
         for (int i = 0; i < _money.Length; i++) { w.ItemStart(); w.Num("v", _money[i]); w.ItemEnd(); }
         w.ArrayEnd();
 
+        // ⭐ bug-594: die eigenen Entwuerfe (Original: sec47 im game.00N, 0x41D6F1).
+        // Simulation/EntwurfVerwalten.cs; fehlt unter --entwuerfe-global.
+        EntwuerfeInSpielstand(w);
+
         // ⚠ Die Gruppen unten zeigen auf die STELLE IM SPIELSTAND, nicht auf
         // die Listenstelle im Spiel und nicht auf den Platz. Der Grund steht
         // bei "groups"; hier wird die Umrechnung nebenbei mitgeschrieben.
@@ -335,6 +339,9 @@ public partial class MapEntityLayer
     {
         ViewPlayer = GetI(root, "view_player");
         _clock = root.TryGetValue("clock", out var cv) ? (float)cv.AsDouble() : 0f;
+        // ⭐ bug-594: die eigenen Entwuerfe VOR den Einheiten (Warteschlangen und
+        // Depots sind Indizes in die Liste). Aelterer Stand ohne Abschnitt: bleibt.
+        EntwuerfeAusSpielstand(root);
 
         if (root.TryGetValue("money", out var mv) && mv.VariantType == Variant.Type.Array)
         {

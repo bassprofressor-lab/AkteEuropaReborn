@@ -56,7 +56,8 @@ public static class Pruefschutz
         _grund = kopflos ? "kopflos" : $"Pruefschalter {pruef}";
 
         DirAccess.MakeDirRecursiveAbsolute(Ordner);
-        foreach (var name in new[] { "campaign.cfg", "settings.cfg", "designs.cfg" })
+        // bug-594 (22.10.2026): auch die Gefechtsbibliothek designs-gefecht.cfg.
+        foreach (var name in new[] { "campaign.cfg", "settings.cfg", "designs.cfg", "designs-gefecht.cfg" })
         {
             string echt = "user://" + name, kopie = Ordner + "/" + name;
             if (FileAccess.FileExists(echt)) DirAccess.CopyAbsolute(echt, kopie);

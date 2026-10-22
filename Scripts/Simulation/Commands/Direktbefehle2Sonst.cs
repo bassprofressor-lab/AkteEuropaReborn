@@ -309,8 +309,8 @@ public partial class MapEntityLayer
         string name = NameEntpacken(c, 5, 7);
         if (name.Length == 0) return false;
         foreach (var d in _designs)
-            if (d.Name == name) { if (c.Player == ViewPlayer) Designer.Say("gibt es schon"); return false; }
-        var made = new Design(name, c.P3, c.P2, c.P1, true, -1);
+            if (d.Name == name && !d.Entfernt) { if (c.Player == ViewPlayer) Designer.Say("gibt es schon"); return false; }
+        var made = new Design(name, c.P3, c.P2, c.P1, true, -1) { Selbst = !EigeneZeileAlt };   // bug-593
         _designs.Add(made);
         // ⚠ Im Netz wird NICHT nach designs.cfg geschrieben — die Datei hielte
         // sonst auch die Entwürfe des Partners (SaveOwnDesigns schreibt jeden

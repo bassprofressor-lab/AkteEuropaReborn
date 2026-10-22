@@ -153,6 +153,8 @@ public sealed partial class BaseWindow : PanelContainer
 
     /// <summary>Palettenplatz 254 — gewöhnlicher Text, also auch alle ZIFFERN.</summary>
     public static Color TextFg => RowFg;
+    /// <summary>bug-593: Platz 80 der eigenen Zeile — fuer den Pruefstand.</summary>
+    public static Color EigeneZeileFg => RowOwnFg;
 
     /// <summary>
     /// ⭐⭐ <b>Die Farbe EINES Sinnbildes</b>, oder null für ein gewöhnliches
@@ -232,6 +234,11 @@ public sealed partial class BaseWindow : PanelContainer
 
     /// <summary>Der Knopf »Erstellen«.</summary>
     public Action? OnDesign;
+
+    /// <summary>bug-592: »Umbenennen« / »Entfernen« mit der gewählten Zeile der
+    /// Produktionsliste (<c>MapEntityLayer.EntwurfUmbenennenKlick</c> /
+    /// <c>EntwurfEntfernenKlick</c>).</summary>
+    public Action<int>? OnRename, OnRemove;
 
     /// <summary>Reiter »Forschung« — was das gewählte Gebäude gerade erforscht,
     /// und der Knopf, der es anstösst
@@ -562,11 +569,21 @@ public sealed partial class BaseWindow : PanelContainer
             keys.AddChild(b);
         }
         // Was wir wirklich können, kann man drücken; der Rest sagt, warum nicht.
-        _rename.Disabled = true;
-        _rename.TooltipText = "noch nicht angeschlossen — die Entwurfsliste liegt " +
-                              "in MapEntityLayer und ist von aussen nicht änderbar";
-        _remove.Disabled = true;
-        _remove.TooltipText = _rename.TooltipText;
+        // ⭐ 22.10.2026, bug-592 (Reaper R2): Umbenennen und Entfernen sind im
+        // Original IMMER drückbar (0x44A440 / 0x44A4BF, kein Sperrzweig im Zeichner
+        // 0x467C60…0x46B61C); die Absage ist die Meldung beim Klick. Ablauf in
+        // Simulation/EntwurfVerwalten.cs. ⚠ UNSERE SETZUNG: wirksam nur im Reiter
+        // »Produktion«. Gegenschalter --entwurf-knoepfe-alt (gesperrt wie 0.6.10).
+        if (Rendering.MapEntityLayer.EntwurfKnoepfeAlt)
+        {
+            _rename.Disabled = true;
+            _rename.TooltipText = "noch nicht angeschlossen — die Entwurfsliste liegt " +
+                                  "in MapEntityLayer und ist von aussen nicht änderbar";
+            _remove.Disabled = true;
+            _remove.TooltipText = _rename.TooltipText;
+        }
+        _rename.Pressed += () => { if (_tab == 1 && _sheet.Selected >= 0) OnRename?.Invoke(_sheet.Selected); Refresh(); };
+        _remove.Pressed += () => { if (_tab == 1 && _sheet.Selected >= 0) OnRemove?.Invoke(_sheet.Selected); Refresh(); };
         // ⚠ 17.08.2026 — DER KNOPF GEHÖRT JETZT DEM REITER (Fehler C2 und C6).
         // Er hiess fest »Produzieren« und rief fest die Produktion; die Reiter
         // »Forschung« und »Reparatur« waren gezeichnet und tot. Beide Mechaniken
@@ -1325,6 +1342,11 @@ public sealed partial class BaseWindow : PanelContainer
                 // faerben sie: die Auswahl ist allein der Balken oben (Platz 140), und
                 // die Bezahlbarkeit liest der Zeichner des Originals gar nicht.
                 var fg = r.Own ? RowOwnFg : RowFg;
+                // ⭐ 22.10.2026, bug-593: die eigene Zeile ZWEIFARBIG (Platz 80/84,
+                // 0x4BA5E0(…, 0x50, 0x54)) — UI/SchriftZweitfarbe.cs,
+                // Gegenschalter --schrift-zweitfarbe-alt.
+                var (zf, zfg, _) = SchriftZweitfarbe.ZeilenSchrift(r.Own, _font, RowFg, RowOwnFg);
+                fg = zfg;
                 // ⭐ 06.10.2026, bug-467 (KayelGee R4, Meldung 34): »im
                 // Forschungstab sind die Textfarben falsch«. 0x46A67C waehlt nach
                 // Byte +0x03 das Paar des Teilesymbols — 0 rot 0x99, 1 gold 0x96,
@@ -1335,10 +1357,10 @@ public sealed partial class BaseWindow : PanelContainer
                     0 => ArtRot, 1 => ArtGold, 2 => ArtLavendel, _ => fg,
                 };
                 float baseline = top + Step - Mathf.Max(2f, Step * 0.2f);
-                float costW = DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: true);
-                DrawString(_font, new Vector2(4, baseline), r.Name,
+                float costW = DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: true, zf);
+                DrawString(zf, new Vector2(4, baseline), r.Name,
                            HorizontalAlignment.Left, Size.X - 10 - costW, _size, nameFg);
-                DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: false);
+                DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: false, zf);
             }
         }
 
@@ -1359,9 +1381,10 @@ public sealed partial class BaseWindow : PanelContainer
         /// weg</b>, weil der Zeichner dann ein anderer ist
         /// (<c>0x4020A4(…, 0x50, 0x54)</c> statt <c>0x401041</c>).</para></summary>
         private float DrawCost(string cost, float right, float baseline, Color fg,
-                               bool own, bool measure)
+                               bool own, bool measure, Font? schrift = null)
         {
             if (_font == null || cost.Length == 0) return 0f;
+            var zf = schrift ?? _font;
             var bits = new List<(string Icon, Color IconCol, string Text)>();
             var parts = cost.Split('/');
             if (parts.Length == 3)
@@ -1383,11 +1406,11 @@ public sealed partial class BaseWindow : PanelContainer
             {
                 if (icon.Length > 0)
                 {
-                    DrawString(_font, new Vector2(x, baseline), icon,
+                    DrawString(zf, new Vector2(x, baseline), icon,
                                HorizontalAlignment.Left, -1, _size, own ? fg : iconCol);
                     x += W(icon);
                 }
-                DrawString(_font, new Vector2(x, baseline), text,
+                DrawString(zf, new Vector2(x, baseline), text,
                            HorizontalAlignment.Left, -1, _size, fg);
                 x += W(text);
             }

@@ -136,7 +136,7 @@ public partial class MapEntityLayer
         {
             // ⚠ UNSER Weg: ein selbst gezeichneter Entwurf hat keinen sec47-Platz.
             foreach (var d in _designs)
-                if (d.Name == c.Name) { at = SpawnAusEntwurf(d, -1, col, row, player); break; }
+                if (d.Name == c.Name && !d.Entfernt) { at = SpawnAusEntwurf(d, -1, col, row, player); break; }
         }
         if (at < 0) return -1;
         var e = _entities[^1];

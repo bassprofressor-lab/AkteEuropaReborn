@@ -133,6 +133,7 @@ public partial class MapEntityLayer
             or CommandOp.Selbstzerstoerung or CommandOp.Pionierauftrag or CommandOp.Abwahl
             or CommandOp.Bahnschalter or CommandOp.FlugzeugKauf or CommandOp.Flugzeugstart
             or CommandOp.EinheitBauen or CommandOp.Aussenden or CommandOp.EntwurfAnlegen
+            or CommandOp.EntwurfEntfernen or CommandOp.EntwurfUmbenennen
             or CommandOp.Verwerten or CommandOp.BuildShip or CommandOp.RouteFach
             or CommandOp.RouteStarten or CommandOp.RouteAnhalten or CommandOp.Bahnverlegung
             or CommandOp.HeliKauf or CommandOp.BombeWechseln or CommandOp.FlugzeugVerwerten
@@ -170,6 +171,8 @@ public partial class MapEntityLayer
                 CommandOp.Verwerten => ApplyVerwerten(c),
                 OpPanelzeile => ApplyPanelzeile(c),
                 CommandOp.EntwurfAnlegen => ApplyEntwurf(c),
+                CommandOp.EntwurfUmbenennen => ApplyEntwurfUmbenennen(c),   // bug-592
+                CommandOp.EntwurfEntfernen => ApplyEntwurfEntfernen(c),     // bug-592
                 CommandOp.RouteFach => ApplyRouteFach(c),
                 CommandOp.RouteStarten => ApplyRouteStarten(c),
                 CommandOp.RouteAnhalten => ApplyRouteAnhalten(c),

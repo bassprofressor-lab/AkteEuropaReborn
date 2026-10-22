@@ -692,6 +692,7 @@ public partial class MapViewer : Node2D
                 if (_freshCampaign)
                 {
                     Campaign.CampaignManager.Reset();
+                    _entities.EigeneEntwuerfeNeuLaden();   // bug-594: neue Kampagne beginnt leer
                     GD.Print("Kampagne: --fresh-campaign — Spielstand " +
                              "(geschaffte Missionen und Kontostand) auf 0 gesetzt");
                 }
@@ -1440,6 +1441,8 @@ public partial class MapViewer : Node2D
         if (BauteilstufePruefstand()) return;
         // ⭐ bug-590 — eine Fassung der Auswahlwinkel, Rendering/AuswahlwinkelLauf.cs.
         if (AuswahlwinkelPruefstand()) return;
+        // ⭐ bug-592/593/594 — eigene Entwuerfe, Rendering/EntwuerfeLauf.cs.
+        if (EntwuerfePruefstand()) return;
         // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
         if (GrafikPruefstand()) return;
         if (_untermissionCheck > 0)
@@ -3943,6 +3946,7 @@ _mausProbePunkt = karte;
             if (WertelisteEigenSchalter(a)) continue;   // bug-586
             if (BauteilstufeSchalter(a)) continue;      // bug-589
             if (AuswahlwinkelSchalter(a)) continue;     // bug-590
+            if (EntwuerfeSchalter(a)) continue;         // bug-592/593/594
             // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
             if (GrafikSchalter(a)) continue;
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
@@ -7947,6 +7951,15 @@ _mausProbePunkt = karte;
         };
         layer.AddChild(_designWindow);
 
+        // ⭐ 22.10.2026, bug-592 — Umbenennen/Entfernen mit Eingabefenster Art 36 und
+        // Abfragefenster Art 10 (UI/EntwurfDialog.cs, Simulation/EntwurfVerwalten.cs).
+        _baseWindow.OnRename = zeile => _entities.EntwurfUmbenennenKlick(zeile);
+        _baseWindow.OnRemove = zeile => _entities.EntwurfEntfernenKlick(zeile);
+        _entwurfDialog = new UI.EntwurfDialog();
+        layer.AddChild(_entwurfDialog);
+        _entities.OnNamensfenster = (frage, max, dann) => _entwurfDialog.FrageName(frage, max, dann);
+        _entities.OnAbfragefenster = (frage, ja) => _entwurfDialog.FrageJaNein(frage, ja);
+
         // ⚠ Die Befehlsleiste der EINHEIT — siehe UI/UnitOrderBar.cs. Sie liegt
         // auf derselben Ebene wie das Basisfenster, weil sie dieselbe Rolle
         // spielt: das Fenster bedient ein Gebaeude, die Leiste eine Einheit.
@@ -8345,6 +8358,7 @@ _mausProbePunkt = karte;
         _baseWindow?.SetFont(font, size);
         _orderBar?.SetFont(font, size);
         _designWindow?.SetFont(font, size);
+        _entwurfDialog?.SetFont(font, size);   // bug-592
         // Die Rohstoffleiste MUSS diese Schrift haben: ihre drei Sinnbilder sind
         // die Zeichen ] [ { aus FONT.CWD — mit einer anderen Schrift stünden
         // dort Klammern (siehe UI/GameHud.cs).

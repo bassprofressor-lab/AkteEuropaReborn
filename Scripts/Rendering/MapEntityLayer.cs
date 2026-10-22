@@ -17848,10 +17848,20 @@ public partial class MapEntityLayer : Node2D
 
         /// <summary>Satz <c>+0x01</c> (Schluessel "flags"[1]) — <b>ein selbst erstellter
         /// Entwurf</b>. Die Bauliste der Basis malt so eine Zeile ganz in Palettenplatz 80;
-        /// siehe UI.BuildPanel.Row.Own. In den ausgelieferten Daten ueberall 0.</summary>
-        public bool Selbst { get; }
+        /// siehe UI.BuildPanel.Row.Own. In den ausgelieferten Daten ueberall 0.
+        /// ⭐ 22.10.2026, bug-593: auch fuer JEDEN selbst erstellten Entwurf gesetzt
+        /// (NewDesign <c>0x4B2510</c> setzt <c>+0x00 = +0x01 = 1</c>) — vorher nahmen
+        /// alle drei Erzeuger den 6-Argument-Konstruktor und liessen ihn false.
+        /// Gegenschalter <c>--eigene-zeile-alt</c>, Simulation/EntwurfVerwalten.cs.</summary>
+        public bool Selbst { get; init; }
 
-        public string Name { get; }
+        /// <summary>⭐ 22.10.2026, bug-592: Befehl 507 (<c>0x4B2AE0</c>) nullt im
+        /// Original nur <c>+0x00</c> und <c>+0x18</c> — der Satz bleibt an seinem
+        /// Platz. Bei uns ebenso ein GRABSTEIN statt <c>RemoveAt</c>: Warteschlangen,
+        /// Depots und Spielstaende halten Indizes in <c>_designs</c>.</summary>
+        public bool Entfernt { get; init; }
+
+        public string Name { get; init; }
         public int Propulsion { get; }
 
         /// <summary>The record's derived tail: what the design costs, what it can
@@ -17962,6 +17972,7 @@ public partial class MapEntityLayer : Node2D
             // die Freigabe-Pruefung entfaellt, die Zuordnung zur Fabrik NICHT —
             // sonst baute die Waffen-Fabrik Ausruestungstraeger und der Reiter
             // haette keine Bedeutung mehr.
+            if (d.Entfernt) continue;              // bug-592: Grabstein, Simulation/EntwurfVerwalten.cs
             bool frei = tor ? d.Slot < 0 || _fahrplanFrei!.Contains(d.Slot % DesignsPerPlayer)
                             : d.Available;
             // Ausruestungstraeger: in der Kampagne nicht der Startstand der
@@ -17977,7 +17988,7 @@ public partial class MapEntityLayer : Node2D
         }
         if (list.Count == 0 && !tor)               // fall back to the whole roster
             for (int i = 0; i < _designs.Count; i++)
-                if (FitsFactory(_designs[i], bType)) list.Add(i);
+                if (!_designs[i].Entfernt && FitsFactory(_designs[i], bType)) list.Add(i);
         return list;
     }
 
@@ -18321,7 +18332,7 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Writes out every design the player drew up. They are the ones
     /// with no slot: a record read from sec47 has its place in the file, one
     /// made on the design screen has -1.</summary>
-    private static void SaveOwnDesigns()
+    private static void SaveOwnDesignsGlobal()   // bug-594: Stand 0.6.10, nur noch --entwuerfe-global
     {
         if (_designs == null) return;
         // ⚠ `using`: ConfigFile ist ein RefCounted, und ein nicht freigegebenes
@@ -18334,7 +18345,7 @@ public partial class MapEntityLayer : Node2D
         int n = 0;
         foreach (var d in _designs)
         {
-            if (d.Slot >= 0) continue;
+            if (d.Slot >= 0 || d.Entfernt) continue;
             c.SetValue("designs", $"d{n}",
                 new Godot.Collections.Array { d.Name, d.Propulsion, d.Equip, d.Weapon });
             n++;
@@ -18347,7 +18358,7 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Reads them back and appends them to the roster. Only the three
     /// components are stored — everything else about a design follows from them
     /// through the game's own arithmetic, so there is nothing else to keep.</summary>
-    private static void LoadOwnDesigns()
+    private static void LoadOwnDesignsGlobal()   // bug-594: Stand 0.6.10, nur noch --entwuerfe-global
     {
         if (_designs == null) return;
         // ⚠ `using`, und hier besonders: die Zeile darunter springt mitten aus
@@ -18367,7 +18378,7 @@ public partial class MapEntityLayer : Node2D
             if (a.Count < 4) continue;
             string nm = a[0].AsString();
             if (nm.Length == 0 || !seen.Add(nm)) continue;
-            _designs.Add(new Design(nm, a[1].AsInt32(), a[2].AsInt32(), a[3].AsInt32(), true, -1));
+            _designs.Add(new Design(nm, a[1].AsInt32(), a[2].AsInt32(), a[3].AsInt32(), true, -1) { Selbst = !EigeneZeileAlt });   // bug-593
             back++;
         }
         if (back > 0) GD.Print($"designs: {back} eigene Entwuerfe aus {OwnDesignsPath}");
@@ -18415,7 +18426,7 @@ public partial class MapEntityLayer : Node2D
         { Designer.Say("Fahrwerk zu leicht fuer diesen Aufbau"); EntwurfGesperrt++; return; }
         string name = Designer.ProposedName();
         foreach (var d in _designs)
-            if (d.Name == name) { Designer.Say("gibt es schon"); return; }
+            if (d.Name == name && !d.Entfernt) { Designer.Say("gibt es schon"); return; }
         int equip = Designer.CurrentEquipment?.Id ?? 0;
         // ⭐ 17.10.2026 (Direktbefehle2, Paket »entwurf«): Befehl 505 über den Ring.
         // ⭐ 22.10.2026 (bug-600): `_entwurfProbe` heisst nur noch »designs.cfg nicht
@@ -18424,7 +18435,7 @@ public partial class MapEntityLayer : Node2D
         // unentdeckt). Das Wertebuch trägt auf dem Ring die Nacharbeit ein
         // (Commands/SatzNacharbeit.cs); der Eintrag unten gilt nur dem Direktweg.
         if (!Alt2("entwurf")) { PostEntwurf(p.Id, equip, w.Id, name); return; }
-        var made = new Design(name, p.Id, equip, w.Id, true, -1);
+        var made = new Design(name, p.Id, equip, w.Id, true, -1) { Selbst = !EigeneZeileAlt };   // bug-593
         _designs.Add(made);
         if (!_entwurfProbe) SaveOwnDesigns();
         // bug-586: auch ins Wertebuch des Basisfensters (UnitStatBook.Eintragen).
@@ -19619,6 +19630,7 @@ public partial class MapEntityLayer : Node2D
     public void MeldungBasis(string zeile1, string zeile2 = "")
     {
         BasisMeldungen++;
+        LetzteBasisMeldung = zeile2.Length > 0 ? zeile1 + " / " + zeile2 : zeile1;   // bug-592: Pruefstand
         if (OnMeldung != null && !MeldungsfensterAus) OnMeldung(zeile1, zeile2, 3, false);
         else _order = zeile2.Length > 0 ? zeile1 + " " + zeile2 : zeile1;
     }

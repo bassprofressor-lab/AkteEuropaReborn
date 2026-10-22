@@ -500,6 +500,46 @@ public static class CampaignManager
         return wert;
     }
 
+    /// <summary>
+    /// ⭐ 22.10.2026, bug-594 (Reaper R3) — <b>die eigenen Entwürfe des
+    /// Kampagnenlaufs</b>. Im Original stehen sie in sec47, Block des Spielers,
+    /// Plätze 0…49 (NewDesign <c>0x4B2510</c> sucht von 40 abwärts); der
+    /// Missionsstart <c>0x4B23C0</c> nullt nur 50…199, sie überleben also den
+    /// Missionswechsel, und der Spielstand trägt sec47 (<c>0x41D6F1</c>).
+    /// ⚠ UNSERE SETZUNG: der Ablageort — ein Abschnitt <c>[entwuerfe]</c> in
+    /// <c>campaign.cfg</c> statt eines sec47-Abbilds. Je Eintrag
+    /// [Name, Fahrwerk, Ausrüstung, Waffe].
+    /// </summary>
+    public static List<(string Name, int Prop, int Equip, int Weapon)> Entwuerfe
+    {
+        get
+        {
+            var list = new List<(string, int, int, int)>();
+            using var c = new ConfigFile();
+            if (c.Load(SavePath) != Error.Ok) return list;
+            var roh = c.GetValue("entwuerfe", "liste", new Godot.Collections.Array());
+            if (roh.VariantType != Variant.Type.Array) return list;
+            foreach (var v in roh.AsGodotArray())
+            {
+                if (v.VariantType != Variant.Type.Array) continue;
+                var a = v.AsGodotArray();
+                if (a.Count < 4 || a[0].AsString().Length == 0) continue;
+                list.Add((a[0].AsString(), a[1].AsInt32(), a[2].AsInt32(), a[3].AsInt32()));
+            }
+            return list;
+        }
+        set
+        {
+            var arr = new Godot.Collections.Array();
+            foreach (var (n, p, e, w) in value)
+                arr.Add(new Godot.Collections.Array { n, p, e, w });
+            using var c = new ConfigFile();
+            c.Load(SavePath);
+            c.SetValue("entwuerfe", "liste", arr);
+            Speichern(c);
+        }
+    }
+
     public static void Reset()
     {
         Completed = 0;
@@ -522,6 +562,11 @@ public static class CampaignManager
         // frischer Durchlauf begann also mit den Endwerten des vorigen.
         // Gemeldet als »ich bekomme keine 50 $« und »ich kann nicht gewinnen«.
         c.SetValue("campaign", "vars", "");
+        // ⭐ 22.10.2026, bug-594: und die eigenen Entwürfe — das Original nullt bei
+        // »Neue Kampagne« (Eingabefenster Art 36 Modus 1) die Plätze 0…49
+        // +0x00/+0x01 (0x44D0C6…0x44D0E8). Gegenschalter --entwuerfe-global.
+        if (!Rendering.MapEntityLayer.EntwuerfeGlobal && c.HasSection("entwuerfe"))
+            c.EraseSection("entwuerfe");
         Speichern(c);
     }
 

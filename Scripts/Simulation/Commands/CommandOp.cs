@@ -619,6 +619,18 @@ public static class CommandOp
     /// Absender Art 6 Knopf 7 0x44A3C3.</summary>
     public const short Verwerten = 506;
 
+    /// <summary><b>507 = Entwurf entfernen</b> (→ <c>0x4B2AE0</c>, nullt Satz
+    /// <c>+0x00</c>/<c>+0x18</c>). P1 Spieler, P2 Satz. Absender Lösch-Abfrage
+    /// Art 10 <c>0x44B109</c> (F <c>0x44A0FC</c>). Bug-592,
+    /// Simulation/EntwurfVerwalten.cs.</summary>
+    public const short EntwurfEntfernen = 507;
+
+    /// <summary><b>533 = Entwurf umbenennen</b> (Busarm <c>0x4C3CAE</c>:
+    /// <c>strncpy(0x51CE22 + 46·(Satz + 200·Spieler), Name, 0x15)</c>). P1 Satz,
+    /// P2 Spieler, Name ab +0x24. Absender Eingabefenster Art 36 Modus 2
+    /// <c>0x44D0F2</c> (F <c>0x44C0D4</c>). Bug-592.</summary>
+    public const short EntwurfUmbenennen = 533;
+
     /// <summary><b>512 = Routenfach</b> (0x4C38A4 → 0x4362E0). P1 Fach 0..4,
     /// P2 Route (bei uns: der Wagen), P3 Gebäude oder 0xFF.</summary>
     public const short RouteFach = 512;
@@ -699,6 +711,8 @@ public static class CommandOp
         Unload => "Absetzen",
         RailRepairOrder => "Gleis reparieren",
         TerraSuche => "Terranium suchen",
+        EntwurfEntfernen => "Entwurf entfernen",
+        EntwurfUmbenennen => "Entwurf umbenennen",
         _ when op >= UnitFirst && op <= UnitLast => "Einheitenbefehl (Bereich A, unbenannt)",
         _ when op >= BuildFirst && op <= BuildLast => "Bau/Kauf (Bereich B, unbenannt)",
         _ when op >= SystemFirst && op <= SystemLast => "System (Bereich C, unbenannt)",
