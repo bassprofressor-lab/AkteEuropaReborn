@@ -111,7 +111,7 @@ public partial class MapEntityLayer
                 if (_marktKaufErgebnis == 2)
                 {
                     _order = "Sie haben leider nicht genug Geld.";       // 0x4FBDD0, wie MarketBuy
-                    Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                    Audio.GameSounds.Absage();   // Paket K (K2): stumm wie @0x4C138A
                     NacharbeitMeldung++;
                 }
                 else if (_marktKaufErgebnis == 1)
@@ -148,9 +148,9 @@ public partial class MapEntityLayer
                 // ⚠ UNSERE SETZUNG (Text): den Wächterfall gibt es nur bei uns
                 // (die Liste hat sich zwischen Klick und Takt verschoben). Der
                 // Direktweg kannte ihn nicht; stumm verpuffen darf der Klick nicht.
-                // Klang wie die übrigen Absagen der Forschung: Refused (140).
+                // Paket K (K2): Absagen sind im Original stumm; --ablehnklang-alt spielt 140.
                 _order = "Forschung — das Angebot hat sich geaendert, bitte neu waehlen.";
-                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                Audio.GameSounds.Absage();
                 NacharbeitMeldung++;
                 UpdatePanel();
                 break;

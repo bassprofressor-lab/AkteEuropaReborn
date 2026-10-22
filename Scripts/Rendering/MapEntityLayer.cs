@@ -12693,6 +12693,9 @@ public partial class MapEntityLayer : Node2D
                     && (Art7Einzeltreffer || WeaponRowOf(e.Weapon) != 8))
                     e.Ammo--;                    // one round per shot (@0x40c587)
                 DebugShots++;
+                // Paket K (K6): 120 auch auf unserem Angriffsweg (KI-Angriff, --rakete-selbstziel).
+                // UNSERE SETZUNG: das Original feuert ZBRAN 8 nur ueber 0x40C8C0 (siehe RaketenKlang).
+                if (WeaponRowOf(e.Weapon) == 8) RaketenKlang(e, original: false);
                 // ⚠ 24.08.2026 — HIER STAND EIN ABZWEIG FUER DEN MINENLEGER,
                 // und der war eine Abweichung. Das Original haengt das Legen
                 // NICHT am Gefecht, sondern an einem Minenfeld-Auftrag, den
@@ -13563,6 +13566,9 @@ public partial class MapEntityLayer : Node2D
         SkriptvarTod(victim);
         // ⭐ 06.09.2026 — ein GEBAEUDE geht mit Bild. Siehe GebaeudeSprengen.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeSprengen(victim);
+        // ⭐ 22.10.2026 (Paket K, K7) — und mit der Ansage 135 »Gebaeude zerstoert«,
+        // ohne Besitzertor. Simulation/KlangAbgleich.cs, --gebaeudezerstoert-klang-aus.
+        if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeZerstoertKlang(victim, grund);
         // ⭐ 14.09.2026 — der Gebaeudetod streicht die Routen mit demselben Streicher
         // wie die Einnahme (0x440190 @C 0x4C9A6C / F 0x4C961C). Simulation/EinnahmeAbschluss.cs.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) RouteGebaeudeStreichen(victim.Slot);
@@ -19589,7 +19595,9 @@ public partial class MapEntityLayer : Node2D
         if (e.State != StAktiv && !fabrikWoertlich)
         {
             _order = "Gebaeude beschaeftigt";
-            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            // Paket K (K2): stumm wie das Original (keine Klangstelle in
+            // 0x43F6xx..0x43FFxx); --ablehnklang-alt spielt wieder 140.
+            Audio.GameSounds.Absage();
             return false;
         }
         int owner = Mathf.Clamp(e.Owner, 0, 7);
@@ -19625,11 +19633,14 @@ public partial class MapEntityLayer : Node2D
         _order = lager ? $"Lagerausbau $ {cost}" : $"Produktionserw. $ {cost}";
         // ⚠ 13.09.2026: bei der FABRIK kommt der Klang erst beim ABSCHLUSS
         // (Takt-Arm @0x43E0E2 = 130, @0x43E163 = 129, nur fuer den Betrachter),
-        // der Behandler selbst ist stumm. Siehe Tick. Fuer die Mine bleibt es
-        // beim alten Stand — ihr Behandler ist nicht neu gelesen.
-        if (!fabrikWoertlich)
-            Audio.GameSounds.Play(lager ? Audio.GameSounds.Enlarging
-                                        : Audio.GameSounds.Upgrading);
+        // der Behandler selbst ist stumm. Siehe Tick.
+        // ⭐ 22.10.2026 (Paket K, K5): die MINE ebenso — ihr Takt-Arm spielt 130
+        // C 0x43E794 / F 0x43D7AC und 129 C 0x43E837 / F 0x43D84F beim Zaehlerstand
+        // 100, und ihre Behandler (0x43F6xx..0x43FFxx) enthalten keinen Klangruf.
+        // Der Stand bis 0.6.10 (Klang beim AUFTRAG) unter --minenausbau-klang-alt.
+        if (!fabrikWoertlich && (Audio.GameSounds.MinenausbauKlangAlt || !IsMine(e)))
+            Audio.GameSounds.Play(lager ? Audio.GameSounds.LagerVergroessert
+                                        : Audio.GameSounds.ErweiterungBeendet);
         return true;
     }
 
@@ -22568,7 +22579,7 @@ public partial class MapEntityLayer : Node2D
         {
             // Die Meldung des Originals, woertlich (0x4FBDD0).
             _order = "Sie haben leider nicht genug Geld.";
-            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            Audio.GameSounds.Absage();   // Paket K (K2): stumm wie @0x4C138A
             return;
         }
 
@@ -22588,7 +22599,7 @@ public partial class MapEntityLayer : Node2D
             if (ziel < 0)
             {
                 _order = "Lieferung ohne Ziel — der Handelsposten steht nicht in der Liste";
-                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                Audio.GameSounds.Absage();   // Paket K (K2): unser Fehlerfall, stumm
                 return;
             }
             Money(owner, Money(owner) - o.Price);
@@ -23556,7 +23567,7 @@ public partial class MapEntityLayer : Node2D
     /// <summary>
     /// <c>--leerlauf-alt</c> — der Stand vor dem 06.09.2026 zurueck: der
     /// Umschalter gilt fuer ALLE vier Gebaeudearten, und ein abgewiesener
-    /// Gebaeudeauftrag spielt wieder <see cref="Audio.GameSounds.Refused"/>.
+    /// Gebaeudeauftrag spielt wieder <see cref="Audio.GameSounds.ZielpunktWaehlen"/> (140).
     ///
     /// <para>Er gehoert hierher, weil die Behebung zwei Dinge auf einmal
     /// aendert — den Zweig UND den Klang. Ohne den Gegenschalter waere nicht
@@ -23578,7 +23589,7 @@ public partial class MapEntityLayer : Node2D
     /// <summary>
     /// Der Ablehnklang eines Gebaeudeauftrags — <b>und warum er weg ist</b>.
     ///
-    /// <para><see cref="Audio.GameSounds.Refused"/> (140) ist die Zeile
+    /// <para><see cref="Audio.GameSounds.ZielpunktWaehlen"/> (140) — ⚠ 22.10.2026: der Satz SAGT »Waehlen Sie Zielpunkt« (Routenfenster, Paket K); hier stand, er sei die Zeile
     /// »Sie besitzen nicht genuegend Einzelteile« aus dem Ersatzteil- und
     /// Hangarfenster (<c>@0x44b6e9</c>, <c>@0x448961</c>). In den
     /// Gebaeudebefehlen steht sie NICHT: 0x43FF10, 0x43F940, 0x43FB40 und
@@ -23611,7 +23622,7 @@ public partial class MapEntityLayer : Node2D
         if (LeerlaufAlt)
         {
             AblehnklangGespielt++;
-            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            Audio.GameSounds.Play(Audio.GameSounds.ZielpunktWaehlen);   // nur --leerlauf-alt
             return;
         }
         AblehnklangUnterdrueckt++;
@@ -27219,6 +27230,16 @@ public partial class MapEntityLayer : Node2D
                 if (!PowerRollPasses(e)) continue;
                 e.Deposit--;
                 e.StockT++;
+                // ⭐ 22.10.2026 (Paket K, K4) — »Minenlager voll«, Klang 128:
+                // C 0x43E6CD / F 0x43D6E5. Wie bei 127 (Fabrik) `jne`, nicht `jge`:
+                // GENAU im treffenden Schritt, nur fuer das eigene Gebaeude.
+                // Gegenschalter --minenlager-klang-aus. Reine Ausgabe.
+                if (e.StockT == MineStoreCap(e) && e.Owner == ViewPlayer
+                    && !Audio.GameSounds.MinenlagerKlangAus)
+                {
+                    MinenlagerVollMeldungen++;
+                    Audio.GameSounds.Play(Audio.GameSounds.MinenlagerVoll);
+                }
             }
         }
 
@@ -27237,9 +27258,10 @@ public partial class MapEntityLayer : Node2D
             {
                 e.Capacity += IsMine(e) ? MineCapacityGain : CapacityGain;
                 e.CostStore = e.CostStore * 3 / 2;
-                // Klang 130 beim Abschluss, nur fuer den Betrachter (@0x43E0E2).
-                if (IsFactory(e) && !FabrikfensterAlt && e.Owner == ViewPlayer)
-                    Audio.GameSounds.Play(Audio.GameSounds.Enlarging);
+                // Klang 130 beim Abschluss, nur fuer den Betrachter (@0x43E0E2;
+                // Mine C 0x43E794 / F 0x43D7AC seit Paket K, K5).
+                if (AbschlussKlingt(e))
+                    Audio.GameSounds.Play(Audio.GameSounds.LagerVergroessert);
             }
         }
         else if (fact && st == FaProdUp)                     // Produktionserweiterung
@@ -27249,14 +27271,28 @@ public partial class MapEntityLayer : Node2D
             if (Advance(e))
             {
                 e.ProdSpeed++; e.CostProd = e.CostProd * 3 / 2;
-                // Klang 129 beim Abschluss, nur fuer den Betrachter (@0x43E163).
-                if (IsFactory(e) && !FabrikfensterAlt && e.Owner == ViewPlayer)
-                    Audio.GameSounds.Play(Audio.GameSounds.Upgrading);
+                // Klang 129 beim Abschluss, nur fuer den Betrachter (@0x43E163;
+                // Mine C 0x43E837 / F 0x43D84F seit Paket K, K5).
+                if (AbschlussKlingt(e))
+                    Audio.GameSounds.Play(Audio.GameSounds.ErweiterungBeendet);
             }
         }
 
         UpdateResearch(e);
         Haul(e);
+    }
+
+    /// <summary>Klingt der ABSCHLUSS eines Ausbaus (129/130)? Eigenes Gebaeude
+    /// (Besitzer == <c>byte[0x4FA284]</c>, F <c>byte[0x4F928C]</c> @0x43D797/0x43D83A);
+    /// die Fabrik wie seit dem 13.09., die Mine seit Paket K (K5) — ausser unter
+    /// <c>--minenausbau-klang-alt</c>, wo sie wie bis 0.6.10 beim Auftrag klingt.
+    /// Reine Ausgabe, kein Wurf.</summary>
+    private bool AbschlussKlingt(Entity e)
+    {
+        if (e.Owner != ViewPlayer) return false;
+        if (IsFactory(e)) return !FabrikfensterAlt;
+        if (IsMine(e)) return !Audio.GameSounds.MinenausbauKlangAlt;
+        return false;
     }
 
     /// <summary>+1 hp every 4th tick; back to "aktiv" once the building is whole.
@@ -30107,7 +30143,7 @@ public partial class MapEntityLayer : Node2D
         {
             _order = letzterGrund;
             BeladenAbgewiesen++;
-            if (melden) Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            if (melden) Audio.GameSounds.Absage();   // Paket K (K2): Beladeweg ohne Klangstelle, stumm
             return -1;
         }
 

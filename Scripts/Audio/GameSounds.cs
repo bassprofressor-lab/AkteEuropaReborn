@@ -75,13 +75,102 @@ public static class GameSounds
     /// plays nothing there.</summary>
     public const int VolumeProbe = 0;
 
-    /// <summary>Refused: "Sie besitzen nicht genuegend Einzelteile." @0x44b6e9,
-    /// and the same number again @0x448961 among the hangar and parts
-    /// messages.</summary>
-    public const int Refused = 140;
+    // ⚠⚠ 22.10.2026 BERICHTIGT (Paket K, K1; berichte/klangnamen-abgleich-opus.md):
+    // hier standen `Refused = 140` (»Sie besitzen nicht genuegend Einzelteile«,
+    // @0x44b6e9 und @0x448961) und `Refused2 = 141` (»Kann nicht starten«,
+    // @0x44b8ad). Beide Namen kamen aus der Spalte »Marke davor« von KLAENGE.md,
+    // nicht aus dem Gesprochenen. 140 SAGT »Waehlen Sie Zielpunkt«, 141 »Transport
+    // gestartet«, und alle drei Saetze 139..141 gehoeren allein dem ROUTENFENSTER
+    // (Fensterart 16). @0x448961 ist gar kein Klangruf; die Stelle ist 0x4489B4.
+    // Gespielt haben wir 140 dafuer an sechs Absagen, an denen das Original
+    // STUMM bleibt — siehe Absage().
 
-    /// <summary>Refused, the second kind: "Kann nicht starten." @0x44b8ad.</summary>
-    public const int Refused2 = 141;
+    /// <summary>139 »Waehlen Sie Startpunkt« — Routenfenster, Knopf 1 »Von«:
+    /// C <c>0x44B671</c> / F <c>0x44A657</c> (selbst gelesen: +0x8C2D40 := 1,
+    /// +0x8C2D44 := 0, dann <c>push 0x8b; call 0x401627</c>). Modus 0.</summary>
+    public const int StartpunktWaehlen = 139;
+
+    /// <summary>140 »Waehlen Sie Zielpunkt« — Routenfenster, VIER Stellen:
+    /// Menuezeile »Transportzyklus einstellen« C <c>0x4489B4</c> / F <c>0x4479A8</c>
+    /// (Fenster auf, Klang, dann Befehl 514); Knopf 2 »Nach« C <c>0x44B6E9</c> /
+    /// F <c>0x44A6CF</c>; Knopf 3 »Leeren« C <c>0x44B7C1</c> / F <c>0x44A7A7</c>
+    /// (5x Befehl 512 mit 0xFF, dann »Nach« + Klang). Modus 0.</summary>
+    public const int ZielpunktWaehlen = 140;
+
+    /// <summary>141 »Transport gestartet« — Routenfenster, Knopf 4 »Start«,
+    /// NUR bei vollstaendiger Route: C <c>0x44B8AD</c> / F <c>0x44A893</c>, danach
+    /// Befehl 513 (<c>mov word[0xB89438], 0x201</c> @F 0x44A8A1). Die unvollstaendige
+    /// Route bekommt nur die Meldung »Kann nicht starten.« (F 0x44A87B ueber
+    /// 0x401CB2) — OHNE Klang.</summary>
+    public const int TransportGestartet = 141;
+
+    /// <summary>120 »Rakete gestartet« — Schussroutine C <c>0x40BB00</c> / F
+    /// <c>0x40B9F0</c>: nach dem Tuertor (C 0x40BB2E, in F fehlt es) und dem
+    /// Munitionstor (C 0x40BB44 / F 0x40BA07, <c>byte[+0x39] == 0</c> → kein
+    /// Schuss), wenn ZBRAN <c>byte[+0x0D] == 8</c> (C 0x40BB5E / F 0x40BA25):
+    /// <c>push 0x78</c>, Modus 0, OHNE Besitzertor — jeder hoert ihn. ⚠ Der Klang
+    /// steht VOR dem Nachladetor (C 0x40BC78) und der Reichweite (C 0x40BF64).
+    /// Gerufen wird 0x40BB00 fuer ZBRAN 8 nur ueber den Verteiler C 0x40C8C0 /
+    /// F 0x40C780 (Busbefehl 9 @F 0x4C28B0, Skript-fire_at @F 0x4D069E); die
+    /// Schiessuhr kehrt bei ZBRAN 8 vorher um (F 0x40DC26).</summary>
+    public const int RaketeGestartet = 120;
+
+    /// <summary>135 »Gebaeude zerstoert« — Stufenzeichner C <c>0x4C95E0</c> / F
+    /// <c>0x4C9190</c>: <c>bl</c> = Schadensstufe <c>byte[Geb+0x0A]</c> (F 0x4C91B2),
+    /// <c>cl</c> = Stufenzahl <c>byte[0xBB3200 + 10·Art]</c> (F 0x4C92B3);
+    /// Flagge = (bl == cl) (F 0x4C92E5 sete), dann <c>push 0x87</c> C 0x4C9924 /
+    /// F 0x4C94D4, Modus 0, ohne Besitzertor. Siehe <c>MapEntityLayer.Kill</c>
+    /// fuer die drei Rufer und was davon gebaut ist.</summary>
+    public const int GebaeudeZerstoert = 135;
+
+    // ---- nie gespielt: 121, 126, 137, 142 -----------------------------------
+    // 121 »Ziel erfasst«, 126 »Produktion gestoppt«, 137 »Handelsschiff
+    // angekommen«, 142 »Nachricht eingetroffen« liegen in der Bank, aber keine
+    // der 111 Klangstellen (C 0x4047E0 / F 0x4047C0) liefert sie: keine feste
+    // Nummer, und die 22 Rechenstellen bleiben unter 80 oder ab 150
+    // (berichte/klangnamen-abgleich-opus.md §3). Bei uns spielt sie ebenfalls
+    // niemand (grep 22.10.2026); --klang-abgleich-check Teil G wacht darueber.
+    public static readonly int[] NieGespielt = { 121, 126, 137, 142 };
+
+    // ---- Gegenschalter Paket K ------------------------------------------------
+    /// <summary><c>--ablehnklang-alt</c> (K2): die sechs Absagen spielen wieder 140.</summary>
+    public static bool AblehnklangAlt;
+    /// <summary><c>--routenklang-aus</c> (K3): das Routenfenster bleibt stumm.</summary>
+    public static bool RoutenklangAus;
+    /// <summary><c>--minenlager-klang-aus</c> (K4): kein 128 am Minenlager.</summary>
+    public static bool MinenlagerKlangAus;
+    /// <summary><c>--minenausbau-klang-alt</c> (K5): Mine klingt beim Auftrag, nicht beim Abschluss.</summary>
+    public static bool MinenausbauKlangAlt;
+    /// <summary><c>--raketenklang-aus</c> (K6): kein 120.</summary>
+    public static bool RaketenklangAus;
+    /// <summary><c>--gebaeudezerstoert-klang-aus</c> (K7): kein 135.</summary>
+    public static bool GebaeudeZerstoertKlangAus;
+
+    /// <summary>Zaehler fuer den Pruefstand: stumm gebliebene und (unter
+    /// --ablehnklang-alt) gespielte Absagen.</summary>
+    public static int AbsageStumm, AbsageGespielt;
+
+    /// <summary>
+    /// Eine ABSAGE (Markt ohne Geld, Ausbau auf beschaeftigtem Gebaeude, Beladen
+    /// abgewiesen, Lieferung ohne Ziel, Forschungswaechter). ⭐ Das Original ist
+    /// an all diesen Stellen STUMM: keine der 111 Klangstellen liegt in den
+    /// Gebaeudebehandlern 0x43F6xx..0x43FFxx (C), im Kaufbehandler 0x4C1360
+    /// (stumm @0x4C138A) oder im Beladeweg. Darum spielt diese Methode nichts,
+    /// ausser unter <c>--ablehnklang-alt</c> (der Stand bis 0.6.10: 140).
+    /// </summary>
+    public static void Absage()
+    {
+        if (AblehnklangAlt) { AbsageGespielt++; Play(ZielpunktWaehlen); return; }
+        AbsageStumm++;
+    }
+
+    /// <summary>Ein Satz des Routenfensters (139/140/141), oertlich beim
+    /// Klickenden, VOR dem Bus wie im Original. Reine Ausgabe.</summary>
+    public static void Routenklang(int nr)
+    {
+        if (RoutenklangAus) return;
+        Play(nr);
+    }
 
     /// <summary>Briefing opens — @0x44d8b9, immediately after the game prints
     /// "End of briefing starts".</summary>
@@ -210,19 +299,23 @@ public static class GameSounds
     /// the rest of that family.</summary>
     public const int BuildingCaptured = 132;
 
-    /// <summary>Mining — @0x43e6cd, between the routine's own "mining 3" and
-    /// "mining 4".</summary>
-    public const int Mining = 128;
+    /// <summary>128 »Minenlager voll« (22.10.2026 umbenannt, war <c>Mining</c>):
+    /// Minentakt C <c>0x43E6CD</c> / F <c>0x43D6E5</c> — <c>inc word[Geb+0x2E]</c>
+    /// (F 0x43D6BD), <c>cmp</c> gegen den Lagerplatz (F 0x43D6CC), <c>jne</c>: GENAU
+    /// im treffenden Schritt; Besitzer == eigener Spieler (F 0x43D6D0..D8). Modus 0.</summary>
+    public const int MinenlagerVoll = 128;
 
-    /// <summary>A building is being enlarged — @0x43e794, immediately after
-    /// "enlarging". Which of the remake's two jobs that is (Lagerausbau or
-    /// Produktionserweiterung) is OURS: "enlarging" is read as the storage one
-    /// and "upgrading" as the production one.</summary>
-    public const int Enlarging = 130;
+    /// <summary>130 »Lager vergroessert« (war <c>Enlarging</c>): beim ABSCHLUSS des
+    /// Lagerausbaus, eigenes Gebaeude. Fabrik C 0x43E0E2; Mine C <c>0x43E794</c> /
+    /// F <c>0x43D7AC</c> (Zaehler +0x877B36 erreicht 100 alle 5 Takte, dann
+    /// <c>add word[+0x877B38], 0x1e</c>); Flughafen C 0x43E4DA (Hangarausbau, bei uns
+    /// nicht gebaut — K8).</summary>
+    public const int LagerVergroessert = 130;
 
-    /// <summary>A building is being upgraded — @0x43e837, immediately after
-    /// "upgrading".</summary>
-    public const int Upgrading = 129;
+    /// <summary>129 »Erweiterung beendet« (war <c>Upgrading</c>): beim ABSCHLUSS der
+    /// Produktionserweiterung, eigenes Gebaeude. Fabrik C 0x43E163; Mine
+    /// C <c>0x43E837</c> / F <c>0x43D84F</c>.</summary>
+    public const int ErweiterungBeendet = 129;
 
     /// <summary><b>Repair has no sound</b>, and that is a finding rather than a
     /// gap: @0x43e196 plays one after "mining 3", after "enlarging" and after

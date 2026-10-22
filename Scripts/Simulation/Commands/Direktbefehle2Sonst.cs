@@ -168,12 +168,20 @@ public partial class MapEntityLayer
     /// örtlich auf, Befehl 514.</summary>
     public bool PostRouteFensterOeffnen()
     {
-        if (Alt2("route")) return RouteFensterOeffnen();
+        // Paket K (K3): Klang 140 »Waehlen Sie Zielpunkt« beim Oeffnen, oertlich und
+        // VOR dem Bus wie das Original (C 0x4489B4 / F 0x4479A8, dann Befehl 514).
+        if (Alt2("route"))
+        {
+            bool auf = RouteFensterOeffnen();
+            if (auf) Audio.GameSounds.Routenklang(Audio.GameSounds.ZielpunktWaehlen);
+            return auf;
+        }
         int i = RouteAuswahlWagen();
         if (i < 0) return false;
         var u = _entities[i];
         if (RouteVon(u) == null && (KeineTransportrouten || !IstTransporter(u)))
         { RouteNote = "dieser Wagen fuehrt keinen Umschlagsatz"; return false; }
+        Audio.GameSounds.Routenklang(Audio.GameSounds.ZielpunktWaehlen);
         Emit(CommandRecord.Make(CommandOp.RouteAnhalten, (byte)ViewPlayer, (short)i));
         RouteFensterWagen = i;
         RouteWahlModus = 2;
@@ -219,19 +227,32 @@ public partial class MapEntityLayer
     /// <summary>Knopf »Leeren« — fünfmal 512 mit 0xFF (0x44B73F).</summary>
     public void PostRouteLeeren()
     {
-        if (Alt2("route")) { RouteLeeren(); return; }
+        if (Alt2("route"))
+        {
+            if (RouteFensterSatz() != null) Audio.GameSounds.Routenklang(Audio.GameSounds.ZielpunktWaehlen);
+            RouteLeeren();
+            return;
+        }
         if (RouteFensterWagen < 0) return;
         for (int f = 0; f < 5; f++)
             Emit(CommandRecord.Make(CommandOp.RouteFach, (byte)ViewPlayer, (short)f,
                                     (short)RouteFensterWagen, (short)0xFF));
         RouteWahlModus = 2;
         RouteNote = "geleert — Ziel anklicken";
+        // Paket K (K3): nach den fuenf 512 »Nach« gedrueckt + Klang 140
+        // (C 0x44B7C1 / F 0x44A7A7, F 0x44A785..0x44A7A7 selbst gelesen).
+        Audio.GameSounds.Routenklang(Audio.GameSounds.ZielpunktWaehlen);
     }
 
     /// <summary>Knopf »Start« (0x44B7E5): Probe beim Absender, Befehl 513.</summary>
     public bool PostRouteStartKnopf()
     {
-        if (Alt2("route")) return RouteStartKnopf();
+        if (Alt2("route"))
+        {
+            bool los = RouteStartKnopf();
+            if (los) Audio.GameSounds.Routenklang(Audio.GameSounds.TransportGestartet);
+            return los;
+        }
         var r = RouteFensterSatz();
         if (r == null || RouteFensterWagen < 0) return false;
         bool keineQuelle = true;
@@ -239,8 +260,11 @@ public partial class MapEntityLayer
         if (keineQuelle || r.Ziel < 0)
         {
             RouteNote = "Kann nicht starten. Waehlen Sie bitte Start- und Zielgebaeude.";
-            return false;
+            return false;                          // ohne Klang (F 0x44A87B, nur Meldung)
         }
+        // Paket K (K3): 141 »Transport gestartet« nur bei vollstaendiger Route, VOR
+        // Befehl 513 (C 0x44B8AD / F 0x44A893, dann F 0x44A8A1 0x201).
+        Audio.GameSounds.Routenklang(Audio.GameSounds.TransportGestartet);
         Emit(CommandRecord.Make(CommandOp.RouteStarten, (byte)ViewPlayer, (short)RouteFensterWagen));
         RouteNote = "Transport gestartet";
         RouteFensterSchliessen();

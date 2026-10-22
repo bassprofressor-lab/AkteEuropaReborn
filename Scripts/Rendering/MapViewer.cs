@@ -1356,6 +1356,7 @@ public partial class MapViewer : Node2D
         if (MapEntityLayer.M2AngriffCheckAn) { _ = M2AngriffLauf(); return; }
         if (MapEntityLayer.M2UntermissionCheckAn) { _ = M2UntermissionLauf(); return; }
         if (MapEntityLayer.FeindNahtCheckSzenario.Length > 0) { _ = FeindNahtLauf(); return; }
+        if (MapEntityLayer.KlangAbgleichCheckAn) { _ = KlangAbgleichLauf(); return; }
         if (MapEntityLayer.WerferPoseCheckAn && _shotPath.Length > 0) { _ = WerferPoseBildLauf(); return; }
         if (MapEntityLayer.ZugEinfahrtCheckAn && _shotPath.Length > 0) { _ = ZugEinfahrtBildLauf(); return; }
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
@@ -2130,6 +2131,14 @@ public partial class MapViewer : Node2D
             if (_entities.M1AngriffMessen()) break;
         }
         GD.Print(_entities.M1AngriffBericht());
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--klang-abgleich-check</c> (Paket K): siehe Simulation/KlangAbgleich.cs.</summary>
+    private async System.Threading.Tasks.Task KlangAbgleichLauf()
+    {
+        for (int i = 0; i < 10; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(_entities.KlangAbgleichCheck());
         GetTree().Quit(0);
     }
 
@@ -5200,6 +5209,15 @@ _mausProbePunkt = karte;
             // bug-575/576 (KayelGee R6 #7/#14): Klang 122 »Der Feind naht« und das
             // Wegtor des Sektorangriffs, siehe Simulation/FeindNaht.cs und KiWegtor.cs.
             else if (a == "--feind-naht-alt") MapEntityLayer.FeindNahtAlt = true;
+            // ⭐ 22.10.2026 — Paket K, der Klangabgleich 120..143 (Simulation/KlangAbgleich.cs,
+            // Audio/GameSounds.cs). Je Punkt ein Gegenschalter, dazu der Pruefstand.
+            else if (a == "--klang-abgleich-check") MapEntityLayer.KlangAbgleichCheckAn = true;
+            else if (a == "--ablehnklang-alt") Audio.GameSounds.AblehnklangAlt = true;
+            else if (a == "--routenklang-aus") Audio.GameSounds.RoutenklangAus = true;
+            else if (a == "--minenlager-klang-aus") Audio.GameSounds.MinenlagerKlangAus = true;
+            else if (a == "--minenausbau-klang-alt") Audio.GameSounds.MinenausbauKlangAlt = true;
+            else if (a == "--raketenklang-aus") Audio.GameSounds.RaketenklangAus = true;
+            else if (a == "--gebaeudezerstoert-klang-aus") Audio.GameSounds.GebaeudeZerstoertKlangAus = true;
             else if (a == "--ki-wegtor-alt") MapEntityLayer.KiWegtorAlt = true;
             else if (a.StartsWith("--feind-naht-check=")) MapEntityLayer.FeindNahtCheckSzenario = a[19..];
             // Die drei Gegenproben zur Sektormaschine vom 01.09.2026, siehe

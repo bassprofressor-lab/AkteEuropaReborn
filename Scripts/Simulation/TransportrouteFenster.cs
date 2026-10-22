@@ -205,6 +205,10 @@ public partial class MapEntityLayer : Node2D
     {
         RouteWahlModus = modus;
         RouteNote = modus == 1 ? "Quellen anklicken" : "Ziel anklicken";
+        // Paket K (K3): »Von« 139 (C 0x44B671 / F 0x44A657), »Nach« 140 (C 0x44B6E9 /
+        // F 0x44A6CF), beide Modus 0, nur beim Klickenden. Reine Ausgabe.
+        Audio.GameSounds.Routenklang(modus == 1 ? Audio.GameSounds.StartpunktWaehlen
+                                                : Audio.GameSounds.ZielpunktWaehlen);
     }
 
     /// <summary>Knopf »Leeren« — im Original fuenfmal Befehl 512 mit

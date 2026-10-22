@@ -219,6 +219,7 @@ public partial class MapEntityLayer : Node2D
                 if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e))) e.Ammo--;
                 DebugShots++; BodenSchuesse++;
                 BeschussZelleZaehlen();          // `--beschuss-check`
+                if (WeaponRowOf(e.Weapon) == 8) RaketenKlang(e, original: false);   // Paket K (K6), SETZUNG
                 BodenSchuss(i, e, z, mitte, w.Damage);
             }
             return true;

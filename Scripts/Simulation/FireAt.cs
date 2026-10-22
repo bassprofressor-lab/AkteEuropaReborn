@@ -95,6 +95,9 @@ public partial class MapEntityLayer : Node2D
             if (b.IsBuilding && !b.IsProp && !b.Dead && AufDerTuerzelle(b, hier))
                 return Nein("Tuerzelle (Lage 99, @0x40BB2E)");
         if (!HasAmmo(s)) return Nein("keine Munition (@0x40BB44)");
+        // Paket K (K6): Klang 120 »Rakete gestartet« fuer ZBRAN 8 — C 0x40BB6E / F 0x40BA35,
+        // hinter dem Munitionstor und VOR Nachladen und Reichweite, ohne Besitzertor.
+        if (zbran == 8) RaketenKlang(s, original: true);
         if (s.Cooldown > 0) return Nein("laedt nach (NABYTO, @0x40BC78)");
 
         // 0x40BF64 — Reichweite in Bildpunkten
