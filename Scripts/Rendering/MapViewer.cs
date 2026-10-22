@@ -1431,6 +1431,10 @@ public partial class MapViewer : Node2D
         if (SpritWeiterPruefstand()) return;
         // ⭐ bug-586 — Werte eigener Entwuerfe, Rendering/WertelisteEigenLauf.cs.
         if (WertelisteEigenPruefstand()) return;
+        // ⭐ bug-589 — Forschungsstufe in den Klammern, Rendering/BauteilstufeLauf.cs.
+        if (BauteilstufePruefstand()) return;
+        // ⭐ bug-590 — eine Fassung der Auswahlwinkel, Rendering/AuswahlwinkelLauf.cs.
+        if (AuswahlwinkelPruefstand()) return;
         // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
         if (GrafikPruefstand()) return;
         if (_untermissionCheck > 0)
@@ -3909,6 +3913,8 @@ _mausProbePunkt = karte;
             if (AnfahrenSchalter(a)) continue;
             if (SpritWeiterSchalter(a)) continue;   // bug-585
             if (WertelisteEigenSchalter(a)) continue;   // bug-586
+            if (BauteilstufeSchalter(a)) continue;      // bug-589
+            if (AuswahlwinkelSchalter(a)) continue;     // bug-590
             // ⭐ 04.10.2026 — Paket 4 Grafik (bug-426/427), Rendering/GrafikLauf.cs.
             if (GrafikSchalter(a)) continue;
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
@@ -4676,6 +4682,10 @@ _mausProbePunkt = karte;
                      int.TryParse(a["--k24-flucht-check=".Length..], out int kfs)) _k24FluchtCheck = kfs;
             else if (a == "--zellabstand-schach") MapEntityLayer.ZellabstandSchach = true;
             else if (a == "--m26-tuergriff-aus") Campaign.MissionScript.SetzungAus.Add(a);
+            // ⭐ bug-595 — M6 Wissenschaftler: BEWUSSTE ABWEICHUNG vom Originalfehler
+            // @0x49A9FD (je statt jne), Standard korrigiert; dieser Schalter stellt das
+            // Original her (Untermission scheitert sofort). Data/mission_scripts.json R16.
+            else if (a == "--m6-wissenschaftler-original") Campaign.MissionScript.SetzungAus.Add(a);
             // ⭐ 12.10.2026 — der Endblock von M26 (berichte/k26-ende.md): Gegenschalter
             // nimmt die vier von Hand abgeschriebenen Zweige zurueck, Pruefstand je Fall.
             else if (a == "--m26-endregeln-alt") Campaign.MissionScript.SetzungAus.Add(a);

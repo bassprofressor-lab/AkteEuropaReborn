@@ -189,13 +189,47 @@ public static class UnitStatBook
 
     /// <summary>Der kurze Bauteilname (Satz +0x02) mit dem »(n)« des Originals
     /// dahinter — siehe Klassenkopf. Leer, wenn es die Zeile nicht gibt.</summary>
-    public static string ComponentLabel(int row)
+    public static string ComponentLabel(int row, int spieler = -1)
     {
         Load();
         if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r)) return "";
         string n = Import.Cp437.GetString(r, 0x02, 11);
         if (n.Length == 0) return "";
-        return $"{n} ({r[0x01]})";
+        return $"{n} ({StufeAus(r, row, spieler)})";
+    }
+
+    /// <summary><c>--bauteilstufe-global-alt</c> — Stand bis 0.6.10 (Nullmodell zu
+    /// bug-589): die Zahl in der Klammer kommt wieder aus der Tafel der EXE, in der
+    /// niemand schreibt — sie bleibt nach jeder Forschung auf 0 stehen.</summary>
+    public static bool BauteilStufeGlobalAlt;
+
+    /// <summary><c>--klammerschreibweise-alt</c> — Stand bis 0.6.10: Forschungsreiter
+    /// »Name(n)« und Produktions-Werteliste »Name (n)«, also genau vertauscht gegen
+    /// das Original (0x46A5AF → " (" 0x5019C0, 0x469337 → "(" 0x5017E4).</summary>
+    public static bool KlammerschreibweiseAlt;
+
+    /// <summary>
+    /// ⭐ bug-589 (Reaper R1, 19.10.2026: »im Erstellungsmenü bleibt die Zahl in den
+    /// Klammern auf 0 stehen«). Die Stufe <b>+0x01</b> eines Bauteils FÜR EINEN
+    /// SPIELER. Das Original liest sie in jedem Fensterzeichner aus dem Spielerblock
+    /// der Bauteiltafel, <c>0x5045A1 + 58·(Bauteil + 200·Spieler)</c>, und der Spieler
+    /// ist <c>byte[0x4FA284]</c> (der eigene): Forschungsreiter <c>0x46A5A3/0x46A5C9</c>,
+    /// Erstellung Fahrwerk <c>0x46CC18/0x46CC66</c>, Infofenster <c>0x4702DA/0x470334</c>
+    /// (Vollerhebung <c>berichte/forschungsstufe-erstellung-opus.md</c>: 32 von 33
+    /// Lesern laden <c>0x4FA284</c>, der 33. — Werteliste <c>0x46933F</c> — rechnet den
+    /// Block aus dem Stapel). Diesen Block hebt der Forschungsabschluss
+    /// (<c>0x4AAACA</c>, bei uns <c>Aufwertung.AufwertungSchreiben</c>).
+    /// <para>Der Block kommt über denselben Nachschlager wie die Entwurfsrechnung
+    /// (<see cref="Simulation.DesignMath.SpielerZeileOder"/>), darum greift auch
+    /// <c>--entwuerfe-global-alt</c> hier. Ohne Spieler (−1, Wiki-Ausfuhr) oder ohne
+    /// Karte bleibt es bei der Grundtafel.</para>
+    /// </summary>
+    private static int StufeAus(byte[] grund, int row, int spieler)
+    {
+        if (spieler >= 0 && !BauteilStufeGlobalAlt
+            && Simulation.DesignMath.SpielerZeileOder(row, spieler) is { Length: > 0x01 } z)
+            return z[0x01];
+        return grund[0x01];
     }
 
     /// <summary>Der LANGE Bauteilname (Satz +0x25) mit derselben Klammer — das
@@ -217,13 +251,14 @@ public static class UnitStatBook
 
     /// <summary>⭐ 04.10.2026, bug-421 — das Byte <b>+0x01</b> einer Bauteilzeile, die Zahl
     /// in der Klammer der zweiten Blockzeile (<c>0x4702C9</c>). ⚠ Das Original liest die
-    /// Forschungskopie JE SPIELER; wir haben hier die Tafel der EXE, in der +0x01 überall
-    /// 0 ist (V: die Stufe). −1, wenn es die Zeile nicht gibt.</summary>
-    public static int ComponentStufe(int row)
+    /// Forschungskopie JE SPIELER — seit bug-589 wir auch, wenn ein <paramref name="spieler"/>
+    /// mitkommt (sonst die Tafel der EXE, in der +0x01 überall 0 ist). −1, wenn es die Zeile
+    /// nicht gibt.</summary>
+    public static int ComponentStufe(int row, int spieler = -1)
     {
         Load();
         if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r)) return -1;
-        return r[0x01];
+        return StufeAus(r, row, spieler);
     }
 
     /// <summary>⭐ 07.10.2026, bug-474 — das Byte <b>+0x23</b> einer Bauteilzeile: die
@@ -271,13 +306,13 @@ public static class UnitStatBook
         foreach (var k in keys) yield return k;
     }
 
-    public static string ComponentLongLabel(int row)
+    public static string ComponentLongLabel(int row, int spieler = -1)
     {
         Load();
         if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r)) return "";
         string n = Import.Cp437.GetString(r, 0x25, 24);
-        if (n.Length == 0) return ComponentLabel(row);
-        return $"{n} ({r[0x01]})";
+        if (n.Length == 0) return ComponentLabel(row, spieler);
+        return $"{n} ({StufeAus(r, row, spieler)})";
     }
 
     /// <summary>Was ein einzelnes Bauteil kostet — die drei Bytes, aus denen

@@ -342,6 +342,10 @@ public static class DesignMath
         return _rows != null && _rows.TryGetValue(row, out var r) ? r : null;
     }
 
+    /// <summary>bug-589: dieselbe Zeile nach aussen — die Fensterzeichner lesen die
+    /// Stufe +0x01 aus dem Block, aus dem auch <see cref="Compute"/> rechnet.</summary>
+    public static byte[]? SpielerZeileOder(int row, int spieler) => Zeile(row, spieler);
+
     private static int B(int row, int off, int spieler)
     {
         var r = Zeile(row, spieler);

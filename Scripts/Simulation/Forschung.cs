@@ -533,14 +533,19 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
             // ⭐ 06.10.2026, bug-467 (KayelGee R4, Meldung 34): das Original
-            // schreibt »Name(Zahl)« (0x46A5xx..0x46A667, »(« 0x5017E4, »)«
+            // schreibt »Name (Zahl)« (0x46A5xx..0x46A667, » (« 0x5019C0 — bug-589, vorher hier falsch »(« 0x5017E4 —, »)«
             // 0x5017E0) und keine Vorschau. Art nach Byte +0x03: Fahrwerk 1,
             // Bauteil < 50 Waffe 0, sonst Spezial 2 (Zuordnung V aus den
             // Sinnbildpaaren). --forschungstext-alt fuer den alten Wortlaut.
             int art = a.Fahrwerk ? 1 : a.Bauteil < 50 ? 0 : 2;
             if (!ForschungstextAlt)
             {
-                raus.Add(new UI.BuildPanel.Row($"{a.Name}({a.Stufe})",
+                // ⭐ bug-589 Nachtrag: »Name (Zahl)« MIT Leerzeichen — 0x46A5AF lädt
+                // edi = 0x5019C0, und dort steht " (" (C-Bau gelesen 22.10.2026;
+                // »(« 0x5017E4 ohne Leerzeichen nimmt die Produktions-Werteliste
+                // 0x469337). --klammerschreibweise-alt: Stand bis 0.6.10 ohne.
+                string auf = UI.UnitStatBook.KlammerschreibweiseAlt ? "(" : " (";
+                raus.Add(new UI.BuildPanel.Row($"{a.Name}{auf}{a.Stufe})",
                     $"${a.Preis}", _money[spieler] >= a.Preis, false, art: art));
                 continue;
             }

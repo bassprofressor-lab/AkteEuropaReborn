@@ -28987,11 +28987,22 @@
        "op": "=="
       },
       {
+       "_nur_mit": "--m6-wissenschaftler-original",
+       "_original": "ORIGINALFEHLER @0x49A9FD je statt jne (C und F byte-gleich, F 0x49A2F0): scheitert, solange der Wissenschaftler LEBT (berichte/m6-wissenschaftler-opus.md)",
        "a": 11,
        "b": 193,
        "c": 0,
        "kind": "unit_is_var",
        "op": "!="
+      },
+      {
+       "_schalter": "--m6-wissenschaftler-original",
+       "_unsere_setzung": "bug-595 (KayelGee R7, 20.10.2026) — BEWUSSTE ABWEICHUNG VOM ORIGINAL, vom Spieler am 22.10.2026 freigegeben: scheitern erst, wenn die Einheit v11 die Marke 193 NICHT mehr traegt (tot/entfernt), wie die Zwillingsregel des Forschers @0x49A984 (jne). --m6-wissenschaftler-original stellt das Original her.",
+       "a": 11,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
       }
      ]
     },

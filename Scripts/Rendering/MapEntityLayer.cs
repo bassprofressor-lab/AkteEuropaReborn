@@ -5064,8 +5064,21 @@ public partial class MapEntityLayer : Node2D
     /// <b>14 Punkte über dem Bodenpunkt</b>, also auf dem Fahrzeugkörper und
     /// nicht auf der Zelle.</para>
     ///
-    /// <para>⚠ Was UNSERE Setzung bleibt: dass die <b>Hauptauswahl</b> (die,
-    /// die das Feld beschreibt) etwas heller gezeichnet wird als die übrigen.</para>
+    /// <para>⭐ bug-590 (KayelGee R7, 18.10.2026: »bei einer Einheit in einer Gruppe ist
+    /// der Auswahlrahmen dicker«) — <b>eine Fassung für ALLE markierten Einheiten</b>.
+    /// Hier stand bis 0.6.10 als UNSERE Setzung, die Hauptauswahl werde heller und
+    /// stärker gezeichnet (weiß/2 gegen α 0,65/1,5). Die Lesung
+    /// (<c>berichte/auswahlwinkel-gruppe-opus.md</c>) widerlegt das: alle sieben
+    /// Blitstellen des Einheitenzeichners (C <c>0x42A798</c>, <c>0x42AA7E</c>,
+    /// <c>0x42AC09</c>, <c>0x42AE81</c>, <c>0x42B0B2</c>, <c>0x42BB7C</c>,
+    /// <c>0x42CB8E</c>) fragen nur die Marke <c>+0x1B ≠ 0</c> (Werte {0, 1}, kein
+    /// eigener Wert für die Hauptauswahl) und blitten das feste Bild 0 der Zeigerart
+    /// 7/8; die Hauptauswahl <c>word[0x4FA0C8]</c> kommt im Zeichner 0-mal vor.
+    /// Fremdaufnahme <c>tutorial12.png</c>: elf Einheiten, gleiche Winkel. Alle
+    /// bekommen jetzt die bisherige Hauptfassung (weiß, Stärke 2).
+    /// <c>--auswahlwinkel-haupt-alt</c>: Stand bis 0.6.10.
+    /// ⚠ Weiter UNSERE Setzung: gezeichnete Linien statt des Sprites (ohne dessen
+    /// dunklen Saum) — Vorschlag B/C des Berichts, nicht gebaut.</para>
     ///
     /// <para>⚠⚠ <b>ZURÜCKGEZOGEN (19.08.2026).</b> Hier stand: »Das Original
     /// zeigt für eine GRUPPE etwas anderes — ein weisses Rechteck um alle und
@@ -5098,8 +5111,7 @@ public partial class MapEntityLayer : Node2D
     /// jeder Stelle, welchen Punkt sie meint.</remarks>
     private void DrawSelectionBrackets(Vector2 mitte, bool primary, float hw = 13f, float hh = 8f)
     {
-        var col = primary ? new Color(1f, 1f, 1f, 1f) : new Color(1f, 1f, 1f, 0.65f);
-        float w = primary ? 2f : 1.5f;
+        var (col, w) = AuswahlwinkelStil(primary);
 
         // je Richtung: die Spitze aussen, zwei Arme schraeg zurueck nach innen
         Vector2[] richtung = { new(0, -1), new(0, 1), new(-1, 0), new(1, 0) };
@@ -5113,6 +5125,21 @@ public partial class MapEntityLayer : Node2D
             DrawLine(spitze, a1, col, w);
             DrawLine(spitze, a2, col, w);
         }
+    }
+
+    /// <summary><c>--auswahlwinkel-haupt-alt</c> — Nullmodell zu bug-590: die
+    /// Hauptauswahl wieder weiß/2, alle übrigen α 0,65/1,5 (Stand bis 0.6.10).</summary>
+    public static bool AuswahlwinkelHauptAlt;
+
+    /// <summary>bug-590: Farbe und Stärke der Auswahlwinkel als reine Funktion — der
+    /// Prüfstand <c>--auswahlwinkel-check</c> misst hier, weil kopflos kein
+    /// <c>_Draw</c> verlässlich läuft. <paramref name="primary"/> wirkt nur noch unter
+    /// dem Gegenschalter; das Original kennt den Unterschied nicht (siehe
+    /// <see cref="DrawSelectionBrackets"/>).</summary>
+    internal static (Color Farbe, float Staerke) AuswahlwinkelStil(bool primary)
+    {
+        if (AuswahlwinkelHauptAlt && !primary) return (new Color(1f, 1f, 1f, 0.65f), 1.5f);
+        return (new Color(1f, 1f, 1f, 1f), 2f);
     }
 
     /// <summary>Wie weit die vier Spitzen von der Mitte stehen — am Bild
@@ -19732,9 +19759,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary>»Name(n)« — die Infoblöcke hängen »(« n »)« OHNE Leerzeichen an
     /// (0x5017E4/0x5017E0); ComponentLabel schreibt » (n)« für die Bauteillisten
     /// des Erstellungsfensters. Gemeinsam für Depotfenster und Einheiten-Info.</summary>
-    private static string InfoBauteil(int zeile)
+    private string InfoBauteil(int zeile)
     {
-        string l = UI.UnitStatBook.ComponentLabel(zeile);
+        // ⭐ bug-589: die Stufe aus dem Block des eigenen Spielers (byte[0x4FA284],
+        // Vollerhebung berichte/forschungsstufe-erstellung-opus.md), bei uns der Betrachter.
+        string l = UI.UnitStatBook.ComponentLabel(zeile, ViewPlayer);
         int p = l.LastIndexOf(" (", System.StringComparison.Ordinal);
         return p >= 0 ? l.Remove(p, 1) : l;
     }

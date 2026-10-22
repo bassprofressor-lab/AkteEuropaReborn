@@ -103,7 +103,9 @@ public partial class MapEntityLayer
         if (e.Equipment != 0)
         {
             string n = UI.UnitStatBook.ComponentPlain(e.Equipment);
-            int stufe = UI.UnitStatBook.ComponentStufe(e.Equipment);
+            // ⭐ bug-589: Block des EIGENEN Spielers — 0x4702DA lädt byte[0x4FA284]
+            // (nicht den Besitzer der Einheit); bei uns der Betrachter.
+            int stufe = UI.UnitStatBook.ComponentStufe(e.Equipment, ViewPlayer is >= 0 and < 8 ? ViewPlayer : 0);
             if (n.Length > 0) return $"{n}({(stufe < 0 ? 0 : stufe)})";
         }
         return warnung;

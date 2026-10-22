@@ -713,6 +713,72 @@ public partial class MapEntityLayer
                 Soll(V(99) >= 1 && texte.Contains(text), $"v99 = {V(99)}, Text {text} {(texte.Contains(text) ? "gezeigt" : "fehlt")}");
                 break;
             }
+            case 6:
+            {
+                // ⭐ bug-595 (KayelGee R7) — M6 Wissenschaftler-Untermission, R16 @0x49A9FF.
+                // Standard = KORRIGIERT (bewusste Abweichung vom Originalfehler je/jne):
+                // laeuft weiter, Ankunft auf (54,8) zahlt 200 $; --m6-probe-tod: Tod -> 601.
+                // Nullmodell --m6-wissenschaftler-original: scheitert sofort (Original).
+                // Aus der Scratchpad-Kopie des Leseagenten uebernommen (berichte/m6-wissenschaftler-opus.md §2).
+                bool orig = Campaign.MissionScript.SetzungAus.Contains("--m6-wissenschaftler-original");
+                bool tod = Core.CommandLine.Args.Contains("--m6-probe-tod");
+                sb.AppendLine($"  Schalter --m6-wissenschaftler-original {orig}, --m6-probe-tod {tod}");
+                var klaenge = new List<string>();
+                var alterKlang = ms.PlaySound;
+                ms.PlaySound = k => { klaenge.Add($"{k}@Takt{ms.Ticks}/v102={V(102)}"); alterKlang?.Invoke(k); };
+                Entity? bote = null;
+                foreach (var e in _entities)
+                    if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == 0 && e.Mobile && e.Mark != 193) { bote = e; break; }
+                Immer(bote != null, $"Bote Spieler 0: Platz {bote?.Slot}");
+                if (bote == null) break;
+                Eingriff($"Platz {bote.Slot} auf (54,8) gestellt (Zelle vor dem Minenausgang (54,7))");
+                Stelle(bote, new[] { (54, 8) });
+                int tA = Takte(200, () => V(102) == 2);
+                Immer(V(102) == 2 && texte.Contains(161), $"0x49A63B nach {tA} Takten: v102 = {V(102)}, Text 161 {texte.Contains(161)}, v220 = {V(220)}");
+                Eingriff("Bote von (54,8) weg");
+                Stelle(bote, Ring(54, 14));
+                long t0 = ms.Ticks;
+                int tB = Takte(SimHz * 900, () => MitMarke(0, 193) != null);
+                var w = MitMarke(0, 193);
+                Immer(w != null, $"Wissenschaftler (Marke 193) erscheint nach {tB} Takten ({tB / (double)SimHz:0.0} s): Platz {w?.Slot} bei ({w?.Col},{w?.Row})");
+                if (w == null) break;
+                sb.AppendLine($"    im Ankunftstakt: v11 = {V(11)}, v102 = {V(102)}, Klaenge [{string.Join(", ", klaenge)}]");
+                Takte(SimHz * 5);
+                sb.AppendLine($"    +5 s: v11 = {V(11)}, v102 = {V(102)}, Klaenge [{string.Join(", ", klaenge)}], Wissenschaftler lebt {!w.Dead}");
+                if (orig)
+                {
+                    Immer(V(102) == 1 && klaenge.Any(k => k.StartsWith("601")),
+                          $"ORIGINAL: Untermission sofort gescheitert (v102 = {V(102)}, Klang 601 {klaenge.Any(k => k.StartsWith("601"))})");
+                    Eingriff("Wissenschaftler trotzdem auf (54,8) gestellt");
+                    Stelle(w, new[] { (54, 8) });
+                    int g0 = geld; Takte(SimHz * 2);
+                    Immer(V(102) == 1 && geld == g0, $"ORIGINAL: Ankunft wirkungslos (v102 = {V(102)}, Geld +{geld - g0})");
+                }
+                else
+                {
+                    Immer(V(102) == 2 && !klaenge.Any(k => k.StartsWith("601")),
+                          $"KORREKTUR: Untermission laeuft (v102 = {V(102)}, kein Klang 601)");
+                    if (tod)
+                    {
+                        Eingriff("Wissenschaftler getoetet");
+                        Kill(_entities.IndexOf(w), w, view, "m6-probe: Wissenschaftler tot");
+                        Takte(SimHz * 2);
+                        Immer(V(102) == 1 && klaenge.Any(k => k.StartsWith("601")), $"KORREKTUR/Tod: gescheitert v102 = {V(102)}, Klaenge [{string.Join(", ", klaenge)}]");
+                    }
+                    else
+                    {
+                        Eingriff("Wissenschaftler auf (54,8) gestellt");
+                        Stelle(w, new[] { (54, 8) });
+                        int g0 = geld; Takte(SimHz * 2);
+                        Immer(V(102) == 10 && geld - g0 == 200 && w.Dead && klaenge.Any(k => k.StartsWith("600")),
+                              $"KORREKTUR/Ankunft: v102 = {V(102)}, Geld +{geld - g0} (200), entfernt {w.Dead}, Klaenge [{string.Join(", ", klaenge)}]");
+                    }
+                }
+                Takte(SimHz * 5);
+                Immer(!ms.Ended && ms.Grace < 0, $"kein Missionsende ausgeloest (beendet {ms.Ended}, Nachfrist {ms.Grace})");
+                ms.PlaySound = alterKlang;
+                break;
+            }
             case 30:
             {
                 Takte(60 * 45, () => texte.Contains(400) || ms.Minutes > 6);

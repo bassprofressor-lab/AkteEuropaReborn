@@ -71,7 +71,7 @@ public partial class MapEntityLayer
         sb.Append($"  Erstellen-Fenster (Mission {UI.SkirmishSetup.CampaignMission}): Fahrwerke [{Ids(Designer.Propulsions)}], "
                 + $"Waffen [{Ids(Designer.Weapons)}], Ausruestung [{Ids(Designer.Equipment)}], nicht besessen {fremd}"
                 + (EntwurfAlleTeile ? " (Nullmodell --entwurf-alle-teile)" : "") + (eOk ? "\n" : "   ⚠\n"));
-        // bug-467 (Meldung 34): die Forschungszeilen — Originalform »Name(Zahl)«,
+        // bug-467 (Meldung 34): die Forschungszeilen — Originalform »Name (Zahl)« (bug-589),
         // jede mit Teileart 0..3 (Farbe nach Byte +0x03).
         if (ProbeBasisfensterWaehlen() >= 0)
         {

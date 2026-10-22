@@ -430,9 +430,11 @@ public sealed partial class DesignWindow : PanelContainer
     /// <summary>Der lange Bauteilname mit der Klammer des Originals; ist er
     /// nicht in der Bauteiltabelle zu finden, bleibt der Name, unter dem die
     /// Entwurfsstelle das Teil führt.</summary>
-    private static string Name(DesignScreen.Part p)
+    internal static string Name(DesignScreen.Part p)   // internal: --bauteilstufe-check liest denselben Text
     {
-        string s = UnitStatBook.ComponentLongLabel(p.Id);
+        // ⭐ bug-589: die Stufe aus dem Block des EIGENEN Spielers — 0x46CC18 lädt
+        // byte[0x4FA284], dieselbe Wahl wie die Werte oben (Compute(…, Human)).
+        string s = UnitStatBook.ComponentLongLabel(p.Id, SkirmishSetup.Human);
         return s.Length > 0 ? s : $"{p.Name} ({p.Id})";
     }
 

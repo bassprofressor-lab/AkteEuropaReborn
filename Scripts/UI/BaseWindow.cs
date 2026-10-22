@@ -1024,20 +1024,51 @@ public sealed partial class BaseWindow : PanelContainer
             // Schiffe und Hubschrauber stehen nicht in sec47 — dann steht hier
             // nichts, statt fremde Zahlen zu zeigen.
             return "";
+        // ⭐ bug-589 — die Werteliste des EIGENEN Spielers. Das Original liest hier
+        // die Entwurfstafel des Spielers 0x51CE20 (bug-586), und die rechnet der
+        // Forschungsabschluss aus SEINEM Bauteilblock neu (0x4B24B0 → 0x4B1FB0,
+        // Aufwertung.cs); die Stufe in der Klammer kommt aus demselben Block
+        // (0x46933F, blockindiziert 0x4692CF…0x4692F8). Unser Wertebuch rechnet
+        // seine Einträge ohne Spieler, also aus der Grundtafel — darum hier neu.
+        // ⚠ UNSERE Setzung: der Spieler ist der Mensch (wie DesignWindow); das
+        // Original nimmt ihn an dieser einen Stelle aus dem Stapel ([esp+0x14]).
+        // --werteliste-global-alt: Stand bis 0.6.10 (Werte und Zahl aus der Grundtafel).
+        int spieler = WertelisteGlobalAlt ? -1 : SkirmishSetup.Human;
+        var d = spieler >= 0
+            ? Simulation.DesignMath.Compute(e.Weapon, e.Propulsion, e.Equip, spieler)
+            : e.Derived;
+        int min = d.Tail is { Length: > 0x23 - 0x1a }
+            ? d.Tail[0x22 - 0x1a] | (d.Tail[0x23 - 0x1a] << 8) : 0;
         var sb = new System.Text.StringBuilder();
-        sb.Append("Energie : ").Append(e.Hp).Append('\n');
-        string w = UnitStatBook.ComponentLabel(e.Weapon);
+        sb.Append("Energie : ").Append(d.Hp).Append('\n');
+        string w = WertelisteBauteil(e.Weapon, spieler);
         if (w.Length > 0) sb.Append(w).Append('\n');
-        sb.Append("Nachladen ").Append(UnitStatBook.AnzeigeNachladen(e.Reload)).Append('\n');
-        string p = UnitStatBook.ComponentLabel(e.Propulsion);
+        sb.Append("Nachladen ").Append(UnitStatBook.AnzeigeNachladen(d.Reload)).Append('\n');
+        string p = WertelisteBauteil(e.Propulsion, spieler);
         if (p.Length > 0) sb.Append(p).Append('\n');
-        sb.Append("A/V ").Append(e.Attack).Append('/').Append(e.Defence).Append('\n');
-        sb.Append("Geschw. ").Append(e.Speed).Append('\n');
-        sb.Append("Sicht ").Append(e.Sight).Append('\n');
-        sb.Append("Reichw. ").Append(e.Range).Append('/').Append(e.MinRange).Append('\n');
-        sb.Append("Sprit ").Append(e.Fuel).Append('\n');
-        sb.Append("Munition ").Append(e.Ammo);
+        sb.Append("A/V ").Append(d.Attack).Append('/').Append(d.Defence).Append('\n');
+        sb.Append("Geschw. ").Append(d.Speed).Append('\n');
+        sb.Append("Sicht ").Append(d.Sight).Append('\n');
+        sb.Append("Reichw. ").Append(d.Range).Append('/').Append(min).Append('\n');
+        sb.Append("Sprit ").Append(d.Fuel).Append('\n');
+        sb.Append("Munition ").Append(d.Ammo);
         return sb.ToString();
+    }
+
+    /// <summary><c>--werteliste-global-alt</c> — Nullmodell zu bug-589, Nebenbefund 1:
+    /// die Produktions-Werteliste rechnet wieder aus der Grundtafel.</summary>
+    public static bool WertelisteGlobalAlt;
+
+    /// <summary>bug-589 Nachtrag: »Name(n)« OHNE Leerzeichen — 0x469337 lädt
+    /// edi = 0x5017E4, und dort steht "(" (C-Bau, gelesen 22.10.2026). Das » (« mit
+    /// Leerzeichen gehört den Bauteillisten des Erstellungsfensters (0x46CC6D →
+    /// 0x5019C0). <c>--klammerschreibweise-alt</c>: Stand bis 0.6.10 mit.</summary>
+    private static string WertelisteBauteil(int row, int spieler)
+    {
+        string l = UnitStatBook.ComponentLabel(row, spieler);
+        if (UnitStatBook.KlammerschreibweiseAlt) return l;
+        int i = l.LastIndexOf(" (", StringComparison.Ordinal);
+        return i >= 0 ? l.Remove(i, 1) : l;
     }
 
     // ---- Ziehen an der Titelleiste (⚠ unsere Zutat) --------------------------
