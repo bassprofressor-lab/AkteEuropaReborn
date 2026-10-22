@@ -2125,6 +2125,8 @@ public partial class MapEntityLayer
         e.Reserved = null;
         e.Orders.Clear();
         AuftragLoeschen(e);            // bug-417: das neue Ziel ersetzt +0x36 ganz
+        // bug-597: order() raeumt ein gehaltenes Gebaeudeziel (STRILI_NA >= 8000 @0x410279)
+        e.SchussZelle = null; e.SchussZelleFuer = -1; e.GebaeudeFahrtFuer = -1;
         return true;
     }
 

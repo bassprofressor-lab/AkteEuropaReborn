@@ -107,13 +107,16 @@ public partial class MapEntityLayer
     /// <summary>
     /// Der Schuss ohne Flugbild. true = erledigt (der Aufrufer trifft nicht mehr selbst).
     /// </summary>
-    private bool SchussOhneFlugbild(int si, Entity shooter, int vi, Entity victim, int art, Vector2 dir, int schaden)
+    private bool SchussOhneFlugbild(int si, Entity shooter, int vi, Entity victim, int art, Vector2 dir, int schaden,
+                                    Vector2? gebaeudePunkt = null)
     {
+        // bug-597: auf ein Gebaeude geht Spur/Strahl zur SCHUSSZELLE des Schuetzen.
+        var zielPos = gebaeudePunkt ?? victim.Pos;
         var start = shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row, shooter.Facing, shooter)
                     + dir * MuzzleReach;
         if (LeuchtspurAlt)
         {
-            _tracers.Add((start, victim.Pos - new Vector2(0, 6), 0.10f));
+            _tracers.Add((start, zielPos - new Vector2(0, 6), 0.10f));
             SchussLeuchtspuren++;
             return false;
         }
@@ -126,7 +129,7 @@ public partial class MapEntityLayer
             // Boden-Laserhandwaffen«, Luftschuss.StrahlTakt).
             _strahlen.Add(new Strahl
             {
-                Pos = start, Ziel = victim.Pos, Zielgriff = vi, Schaden = schaden,
+                Pos = start, Ziel = zielPos, Zielgriff = vi, Schaden = schaden,
                 Owner = shooter.Owner, Name = LabelOf(shooter), Schuetze = si, Punkt = "strahlpunkt_gruen",
             });
             SchussBodenstrahlen++;
@@ -134,7 +137,7 @@ public partial class MapEntityLayer
         }
         if (art == 12)
         {
-            _tracers.Add((start, victim.Pos - new Vector2(0, 6), 0.10f));
+            _tracers.Add((start, zielPos - new Vector2(0, 6), 0.10f));
             SchussLeuchtspuren++;
         }
         else SchussOhneBild++;

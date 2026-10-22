@@ -2267,6 +2267,15 @@ public sealed class NavGrid
     /// <summary>Anzahl der Eintraege mit Radius &lt; r (T[r]) — fuer Pruefstaende.</summary>
     public static int RingTafelBis(int r) { RingTafelBauen(); return _ringAb![Math.Clamp(r, 0, 127)]; }
 
+    /// <summary>bug-597: Eintrag <paramref name="k"/> der Ringtafel <c>0x79A008</c>
+    /// (Spalte, Zeile) — die Spirale der Schiessuhr <c>0x40DDB0</c> (@0x40DF2D/0x40DF30).</summary>
+    public static (int Dx, int Dy) RingEintrag(int k)
+    {
+        RingTafelBauen();
+        var e = _ringTafel![Math.Clamp(k, 0, _ringTafel.Length - 1)];
+        return (e.Dx, e.Dy);
+    }
+
     /// <summary>
     /// <b>Das Ersatzziel von <c>Search:</c></b> (@0x4D3AA5..0x4D3B83): die
     /// Ringtafel ab Eintrag 0 bis T[50] durchlaufen, Kartengrenze pruefen

@@ -872,7 +872,16 @@ public partial class MapEntityLayer : Node2D
         /// 30000+Spalte, wenn der Angriff keiner Einheit gilt. Siehe
         /// Simulation/Bodenangriff.cs.</summary>
         public Vector2I? AngriffsZelle;
-        public bool Ordered;             // true = the player ordered this attack
+        /// <summary>bug-597: die SCHUSSZELLE <c>+0x3B/+0x3C</c> auf einem Gebaeude
+        /// (@0x40E1FE/0x40E204), gueltig nur fuer das Ziel <see cref="SchussZelleFuer"/>.
+        /// Simulation/Gebaeudeangriff.cs.</summary>
+        public Vector2I? SchussZelle;
+        public int SchussZelleFuer = -1;
+        /// <summary>bug-597: die gewuerfelte Fahrzelle um das Gebaeude (0x40FC90 →
+        /// CX/CY) und fuer welches Ziel sie gilt — fuer den Ankunftsarm 0x407D1D.</summary>
+        public Vector2I? GebaeudeFahrzelle;
+        public int GebaeudeFahrtFuer = -1;
+        public bool Ordered;            // true = the player ordered this attack
         public bool DugIn;               // "Eingraben" — holds position, harder to kill
 
         /// <summary>
@@ -12547,13 +12556,29 @@ public partial class MapEntityLayer : Node2D
         }
 
         var w = WeaponOf(e.Weapon);
-        float dist = CellDistance(e, t);
+        float dist;
+        Vector2 zielRichtung = t.Pos - e.Pos;
+        // ⭐ bug-597 (22.10.2026) — EIN GEBAEUDE WIRD UEBER SEINE SCHUSSZELLE
+        // beschossen (+0x3B/+0x3C), nicht ueber den Anker: Abstand, Turm und
+        // Einschlag gehen auf die eine Fussabdruckzelle, die DIESE Einheit
+        // aufgenommen hat. Ohne Zelle faehrt sie die gewuerfelte Zelle um das
+        // Gebaeude an (0x40FC90). Simulation/Gebaeudeangriff.cs, --gebaeudeziel-alt.
+        if (t.IsBuilding && !GebaeudezielAlt)
+        {
+            if (!GebaeudeSchusszelle(i, e, t, out dist, out var zp))
+            {
+                GebaeudeAnfahren(i, e, t);
+                return;
+            }
+            zielRichtung = zp - e.Pos;
+        }
+        else dist = CellDistance(e, t);
 
         // ⭐ 03.10.2026 (bug-406/407) — ein eigener Turm SPRINGT nicht: die
         // Schiessuhr setzt nur den Wunsch +0x17 (0x40E7DA–0x40E7F0), gedreht
         // wird stufig in TurmTakt. Gegenschalter --turm-alt.
-        if (TurmEigen(e)) TurmZielWunsch(e, DirToFacing(t.Pos - e.Pos));
-        else e.AimFacing = DirToFacing(t.Pos - e.Pos);   // the turret tracks its target
+        if (TurmEigen(e)) TurmZielWunsch(e, DirToFacing(zielRichtung));
+        else e.AimFacing = DirToFacing(zielRichtung);   // the turret tracks its target
 
         if (InFiringWindow(e, dist))
         {
@@ -12918,7 +12943,11 @@ public partial class MapEntityLayer : Node2D
         // wirklich — nicht dort, wo die Buendnisfrage haette gestellt werden
         // muessen. Siehe Simulation/BeschussCheck.cs.
         BeschussZaehlen(shooter, victim);
-        Vector2 dir = (victim.Pos - shooter.Pos).Normalized();
+        // bug-597: auf ein Gebaeude zielt der Schuss auf die SCHUSSZELLE des
+        // Schuetzen (0x40BB00 @0x40BD57: Zellmitte, Hoehe +10 @0x40BDA0).
+        var gebZiel = GebaeudeZielpunkt(shooter, victim, si, vi);
+        Vector2 zielPunkt = gebZiel?.Punkt ?? ShotAim(victim);
+        Vector2 dir = ((gebZiel?.Punkt ?? victim.Pos) - shooter.Pos).Normalized();
         // ⚠ 11.08.2026 — der Muendungsfeuerball (ANIM.CWA-Folge 232) wurde fuer
         // JEDE Waffe gleich gesetzt: gemeldet als »der Feuerball, der bei einer
         // richtigen Kanone stimmt, kommt auch bei Infanterie und beim
@@ -13061,7 +13090,7 @@ public partial class MapEntityLayer : Node2D
                     //     y' = y − (zufall mod 10) + 4   ->   −5 .. +4
                     // Wieder 2:1. Zwei Rohre streuen UNABHAENGIG — deshalb
                     // steht das hier drin und nicht vor dem Aufruf.
-                    Aim = ShotAim(victim)
+                    Aim = zielPunkt
                           + new Vector2(Simulation.Determinism.Roll(20) - 9,
                                         Simulation.Determinism.Roll(10) - 4),
                     Target = vi, Shooter = si, Damage = w.Damage,
@@ -13069,12 +13098,12 @@ public partial class MapEntityLayer : Node2D
                     Speed = schnell,
                     // Die Wurfbahn: Scheitel = Entfernung mal Faktor, siehe
                     // Scheitelteiler. Bei gerader Bahn bleibt beides 0.
-                    Weite = muendung.DistanceTo(ShotAim(victim)),
+                    Weite = muendung.DistanceTo(zielPunkt),
                     // ⭐ 17.09.2026 (Aufgabe H): der Scheitel rechnet mit der Weite in
                     // KARTENmassen, nicht in Bildschirmpunkten — das Original verdoppelt
                     // dafuer dy (die Schraegsicht staucht y auf die Haelfte). Vorher war
                     // der Bogen bei einem Schuss nach oben/unten bis zu 2x zu flach.
-                    Scheitel = Scheitelteiler(art) * WurfWeite(muendung, ShotAim(victim)),
+                    Scheitel = Scheitelteiler(art) * WurfWeite(muendung, zielPunkt),
                     // Die Flughoehe. Sie faengt auf der Muendungshoehe ueber dem
                     // Gelaende des SCHUETZEN an (Feld +0x14 der Geschosstafel,
                     // heute frueh als Hoehe geklaert) und laeuft linear auf die
@@ -13084,7 +13113,7 @@ public partial class MapEntityLayer : Node2D
                     // ⭐ 17.09.2026 (Aufgabe E): das Original zielt auf den Boden am Ziel
                     // PLUS 10 — eine Einheit wird nicht am Fuss getroffen, sondern am Rumpf
                     // (Gebaeude ebenso). Die Trefferschwelle 15 deckte das bisher zu.
-                    HoeheZiel = ElevOf(victim.Col, victim.Row) * 15 + 10,
+                    HoeheZiel = gebZiel?.Hoehe ?? ElevOf(victim.Col, victim.Row) * 15 + 10,
                 });
             }
 
@@ -13106,7 +13135,7 @@ public partial class MapEntityLayer : Node2D
 
         // bug-514 (KayelGee R5#23): die Leuchtspur nur bei Art 12, der
         // Fussvolk-Laser als Strahl, alles andere ohne Bild — Schussbild.cs.
-        if (SchussOhneFlugbild(si, shooter, vi, victim, art, dir, w.Damage)) return;
+        if (SchussOhneFlugbild(si, shooter, vi, victim, art, dir, w.Damage, gebZiel?.Punkt)) return;
         // ⚠ OFFEN, ausdruecklich: ob das Original bei DIREKTEM Beschuss einen
         // EINSCHLAG zeigt, ist nicht gelesen. Der Geschossweg fuegt bei
         // Ankunft eine "explosion" hinzu, dieser Weg nicht. Gesucht wurde die
@@ -35985,7 +36014,12 @@ public partial class MapEntityLayer : Node2D
                         e.RetryIn = 1;
                         WegFortgesetzt++;
                     }
-                    else NextQueued(i, e); // one waypoint done: take the next order
+                    else
+                    {
+                        // bug-597: Ankunft im Angriff auf ein Gebaeude (Arm 0x407D1D)
+                        if (e.GebaeudeFahrtFuer >= 0) GebaeudeAnkunft(i, e);
+                        NextQueued(i, e); // one waypoint done: take the next order
+                    }
                 }
                 // ⭐⭐ 25.08.2026 — HIER STAND DER ZWEITE SPRITABZUG, und er ist
                 // ERSATZLOS GESTRICHEN. Gemeldet als: »Mit der Einheit, mit der

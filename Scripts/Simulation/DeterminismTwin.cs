@@ -355,6 +355,7 @@ public sealed partial class DeterminismTwinRunner : Node
         _done = true;
         Say($"TWIN-ENDE takte={_ticks} keim={Determinism.Seed} " +
             $"wuerfe A={Determinism.DrawsOf(0)} B={Determinism.DrawsOf(1)} ergebnis={(ok ? "GLEICH" : "AUSEINANDER")}");
+        Say($"TWIN-GEBAEUDE A: {_a.GebaeudeangriffLine()} | B: {_b.GebaeudeangriffLine()}");   // bug-597
         _log?.Close();
         _log = null;
         GetTree().Quit(ok ? 0 : 1);

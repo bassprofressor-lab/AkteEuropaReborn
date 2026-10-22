@@ -404,6 +404,9 @@ public partial class MapEntityLayer
                 e.Garage.Clear(); e.Depot.Clear(); e.BuildQueue.Clear(); e.Orders.Clear();
                 e.TorZustand.Clear();
                 e.Path = null; e.SpritWeg = null; e.Reserved = null; e.InGebaeude = null; e.Target = -1;
+                // bug-597: Schusszelle/Fahrzelle gehoeren zum Ziel, und das Ziel wird nicht
+                // gespeichert — also auch sie nicht (nichts Neues im Spielstand).
+                e.SchussZelle = null; e.SchussZelleFuer = -1; e.GebaeudeFahrzelle = null; e.GebaeudeFahrtFuer = -1;
             }
             int I(string k, int dflt) => d.TryGetValue(k, out var x) ? x.AsInt32() : dflt;
             e.Slot = slot; e.Col = col; e.Row = row; e.Elev = el;

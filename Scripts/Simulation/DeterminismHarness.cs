@@ -191,6 +191,7 @@ public partial class MapEntityLayer
         {
             DetWrite($"DET-KEIM seed={Determinism.Seed} vergiftet={Determinism.Poisoned} " +
                      $"bilder={_detFrames} mittleres_dt={(_detFrames > 0 ? _detClock / _detFrames : 0):0.000000}");
+            DetWrite(GebaeudeangriffLine());   // bug-597: wieviel der Gebaeudeangriff gewuerfelt hat
             _detFile?.Close();
             _detFile = null;
         }

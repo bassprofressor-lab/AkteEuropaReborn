@@ -4325,6 +4325,9 @@ _mausProbePunkt = karte;
             else if (a == "--auslass-unsichtbar-alt") MapEntityLayer.AuslassUnsichtbarAlt = true;
             else if (a == "--auslass-nur-tuer-alt") MapEntityLayer.AuslassNurTuerAlt = true;
             else if (a == "--basis-aussenden-sofort") MapEntityLayer.BasisAussendenSofort = true;   // bug-591 B1
+            else if (a == "--gebaeudeziel-alt") MapEntityLayer.GebaeudezielAlt = true;               // bug-597 A/B
+            else if (a == "--gebaeudeangriff-ankunft-alt") MapEntityLayer.GebaeudeangriffAnkunftAlt = true; // bug-597 Arm 0x407D1D
+            else if (a.StartsWith("--gebaeudeangriff-check")) _gebaeudeangriffCheck = a.Length > 24 ? a[24..] : "";
             else if (a == "--auslass-rueckfall-alt") MapEntityLayer.AuslassRueckfallAlt = true;     // bug-591 B2
             else if (a.StartsWith("--basis-aussenden-check")) _basisAussendenCheck = a.Length > 24 ? a[24..] : "a";
             else if (a == "--unbewaffnet-angriff-alt") MapEntityLayer.UnbewaffnetAngriffAlt = true; // bug-598 A
@@ -6173,6 +6176,7 @@ _mausProbePunkt = karte;
             string sicht = _entities.AiSichtLine();
             if (sicht.Length > 0) GD.Print(sicht);
             GD.Print(_entities.ChaseWatchLine());
+            GD.Print(_entities.GebaeudeangriffLine());   // bug-597
             GD.Print(_entities.TruemmerWatchLine());
             // ⭐ 08.09.2026 — die Materialrouten gehoeren in jeden Lauf: ohne die
             // Zeile ist »es faehrt kein Transporter« nicht von »die KI hat es nie
@@ -8953,6 +8957,7 @@ _mausProbePunkt = karte;
         }
 
         if (BasisAussendenCheckLauf()) return;   // bug-591
+        if (GebaeudeangriffCheckLauf()) return;  // bug-597
         if (FliegerStehtProbeLauf()) return;     // bug-598 Faelle spion/hand
 
         if (_depotreiterCheck && _entities.ErwartungBereit())
