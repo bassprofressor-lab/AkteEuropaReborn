@@ -245,7 +245,9 @@ public partial class MapViewer
                 break;
             case 1: ZeigeGruppen(-1); break;
             case 2: ZeigeLokator(-1); break;
-            default: TogglePause(); break;
+            // ⭐ Paket N: der Menüknopf öffnet auch im Netz das Haupt-Menü (Art 17) wie
+            // im Original (C 0x44AFF7, kein Netztor). NeustartMenue.cs, --netz-menue-alt.
+            default: MenueKnopf(); break;
         }
     }
 }

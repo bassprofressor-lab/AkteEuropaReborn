@@ -138,6 +138,7 @@ public partial class MapEntityLayer
             or CommandOp.RouteStarten or CommandOp.RouteAnhalten or CommandOp.Bahnverlegung
             or CommandOp.HeliKauf or CommandOp.BombeWechseln or CommandOp.FlugzeugVerwerten
             or CommandOp.Patrouille or CommandOp.Laden or CommandOp.Speichern or CommandOp.Pause
+            or CommandOp.Neustart
             or OpPanelzeile or OpStaffelmarke or OpSchonfrist or OpProbeHerrichten => true,
         _ => false,
     };
@@ -185,6 +186,7 @@ public partial class MapEntityLayer
                 CommandOp.Pause => ApplyPause(c),
                 CommandOp.Speichern => ApplySpeichern(c),
                 CommandOp.Laden => ApplyLaden(c),
+                CommandOp.Neustart => ApplyNeustart(c),          // Paket N, Neustart.cs
                 OpProbeHerrichten => ApplyProbeHerrichten(c),
                 _ => false,
             };

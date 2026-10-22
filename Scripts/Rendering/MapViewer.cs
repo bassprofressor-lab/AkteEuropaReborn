@@ -142,8 +142,22 @@ public partial class MapViewer : Node2D
         // gemeinsam — Befehl 993 über den Ring (Umschalter word[0x4FA280]); ein
         // angehaltener Baum hielte nur diese Maschine an, der Taktgeber der
         // anderen wartete. Menüs gibt es im Netz darum nicht über ESC.
-        if (MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("pause")) { _entities.PostPause(); return; }
+        // ⭐ 22.10.2026, Paket N: im Netz darf das Haupt-Menü offen sein (Menüknopf des
+        // Bedienfelds) — ESC schliesst es zuerst, wie im Einzelspiel.
         if (_pause != null || _hauptmenue != null) { ClosePause(); return; }
+        // ⭐ Paket N (bug-616), ⚠ UNSERE SETZUNG gegen die Falle des Originals: dort räumt
+        // ESC alle Fenster (0x44FE10(0)) und der Schliesser setzt beim Art-40-Fenster das
+        // Pausenwort ÖRTLICH auf 0 (C 0x4472F5) — im Netz bliebe die Pause dann nur beim
+        // Drückenden aufgehoben. Bei uns hebt ESC eine stehende Pause über den Ring auf
+        // (993), im Einzel- wie im Netzspiel. --pause-esc-oertlich = die Falle (NUR zum
+        // Messen).
+        if (_entities.NetzPause != 0)
+        {
+            if (PauseEscOertlich) { _entities.NetzPause = 0; NetzPauseZeigen(false, _entities.ViewPlayer); return; }
+            _entities.PostPause();
+            return;
+        }
+        if (MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("pause")) { _entities.PostPause(); return; }
         if (UI.MainMenuWindow.Usable && !UI.MainMenuWindow.Alt) { OeffneHauptmenue(); return; }
 
         _pause = new UI.PauseMenu { CanSave = true };
@@ -155,7 +169,7 @@ public partial class MapViewer : Node2D
             if (SpeicherfensterNeu) { ClosePause(); SpeicherfensterOeffnen(); }
             else { SpielstandSchreiben(); ClosePause(); }
         };
-        _pause.Restarted += () => { ClosePause(); GetTree().ReloadCurrentScene(); };
+        _pause.Restarted += NeustartKnopf;   // Paket N: Abfrage Art 10/3, dann 980 (NeustartMenue.cs)
         _pause.Quit += () => { ClosePause(); ZumHauptmenue(); };
         (_panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0)).AddChild(_pause);
         GetTree().Paused = true;
@@ -368,7 +382,9 @@ public partial class MapViewer : Node2D
     {
         var w = new UI.MainMenuWindow();
         w.OnClose = ClosePause;
-        w.OnRestart = () => { ClosePause(); GetTree().ReloadCurrentScene(); };
+        // ⭐ Paket N (bug-615): Knopf 6 »Mission wiederholen« (C 0x44B9D3) → Abfrage Art 10
+        // Unterart 3 → »Ja« → 980 über den Ring. NeustartMenue.cs; --neustart-alt = sofort.
+        w.OnRestart = NeustartKnopf;
         // bug-522: Knopf 8 → 0x44BA04: Art 15 bei (MausX−3, MausY−3), Menü zu.
         // ⚠ Reihenfolge Menü zu → Fenster auf ist SETZUNG (Pause), siehe Speicherfenster.cs.
         w.OnSave = () =>
@@ -459,6 +475,11 @@ public partial class MapViewer : Node2D
         // das Menue als flacher Strich da, und jeder Klick ginge daneben.
         for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
         _hauptmenue = w;
+        // ⭐ Paket N: im Netz hält das Menü den Baum NICHT an (⚠ SETZUNG) — ein angehaltener
+        // Baum hielte nur diese Maschine an, der Taktgeber der anderen wartete. Im Original
+        // sendet das Öffnen von Art 17 kein 993 (keiner der sieben Sender liegt im Weg).
+        // Was im Menü den Gleichschritt bräche, sperrt NetzMenueSperren (NeustartMenue.cs).
+        if (MapEntityLayer.ImNetz) { NetzMenueSperren(w); return; }
         GetTree().Paused = true;
     }
 
@@ -530,6 +551,7 @@ public partial class MapViewer : Node2D
 
     public override void _Ready()
     {
+        Aktiv = this;   // Paket N: Griff fuer die Netzpruefstaende (NeustartMenue.cs)
         // ⚠ 27.08.2026 — WER ZWEI FENSTER NEBENEINANDER VERGLEICHT, muss sie
         // auseinanderhalten koennen. Ein Rueckfallschalter, dem man das Fenster
         // nicht ansieht, macht aus einer Gegenprobe ein Ratespiel.
@@ -998,6 +1020,11 @@ public partial class MapViewer : Node2D
         if (_ringNacharbeitCheck)
         {
             _ = RingNacharbeitLauf();                 // bug-600, Rendering/RingNacharbeitCheck.cs
+            return;
+        }
+        if (NeustartCheckAn)
+        {
+            _ = NeustartCheckLauf();                  // Paket N, bug-615, Rendering/NeustartMenue.cs
             return;
         }
         if (_kaufwegCheck)
@@ -8046,6 +8073,9 @@ _mausProbePunkt = karte;
         _entities.OnMeldung = (z1, z2, standzeit, mittig) => MeldungOeffnen(z1, z2, standzeit, mittig);
         // ⭐ 17.10.2026 (Direktbefehle2): Pause, Speichern, Laden des Netzspiels
         _entities.OnNetzPause = (an, wer) => NetzPauseZeigen(an, wer);
+        // ⭐ Paket N (bug-615): 980 — Einzelspiel Szene neu, Netz Fenster zu (NeustartMenue.cs)
+        _entities.OnNeustartEinzel = NeustartEinzelspiel;
+        _entities.OnNeustartNetz = NeustartNetzFensterZu;
         _entities.OnNetzSpeichern = (platz, name) => SpielstandSchreiben(platz, name).Length > 0;
         _entities.OnNetzLaden = platz =>
         {
@@ -9728,8 +9758,11 @@ _mausProbePunkt = karte;
                 case Key.T: _entities.ToggleBuildings(); break;
                 case Key.U: _entities.ToggleSprites(); break;
                 // Taste P ist im Original die Pause (0x4136F5 → 993); im Netz gilt sie.
-                case Key.P when MapEntityLayer.ImNetz && !MapEntityLayer.Alt2("pause"): _entities.PostPause(); break;
-                case Key.P: _entities.ToggleNav(); break;
+                // ⭐ Paket N (bug-617): P ist Pause wie im Original (F 0x4134C5 → 993), auch
+                // im Einzelspiel. Die Navi-Anzeige (unser Begehbarkeitsraster, im Original
+                // ohne Gegenstück und ohne Taste) liegt nur noch auf --nav bzw. unter
+                // --taste-p-navi-alt wieder auf P.
+                case Key.P: TasteP(); break;
                 case Key.X: _entities.PostAnhalten(); break;      // bug-530: Befehl 12
                 case Key.R: _entities.ToggleRanges(); break;
                 case Key.E: _entities.PostEingraben(); break;     // bug-530: Befehl 26

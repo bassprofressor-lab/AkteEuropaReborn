@@ -662,6 +662,12 @@ public static class CommandOp
     /// P1 Gebäude.</summary>
     public const short Patrouille = 537;
 
+    /// <summary><b>980 = Mission neu starten</b> (Behandler C 0x4C4113 / F 0x4C3C84:
+    /// <c>byte[0x4F5F9C] := 0</c>, dann Missions-Reset C 0x4D0290 / F 0x4CFE40). Keine
+    /// Felder. Absender: »Ja« der Abfrage Art 10 Unterart 3 (C 0x44B18C / F 0x44A17F).
+    /// Paket N (22.10.2026), Simulation/Commands/Neustart.cs.</summary>
+    public const short Neustart = 980;
+
     /// <summary><b>990 = Laden</b> »game.00«+P1 (0x4C44E8, F 0x4C405A).</summary>
     public const short Laden = 990;
 
@@ -713,6 +719,10 @@ public static class CommandOp
         TerraSuche => "Terranium suchen",
         EntwurfEntfernen => "Entwurf entfernen",
         EntwurfUmbenennen => "Entwurf umbenennen",
+        Neustart => "Mission neu starten",
+        Laden => "Spielstand laden",
+        Speichern => "Spielstand speichern",
+        Pause => "Pause",
         _ when op >= UnitFirst && op <= UnitLast => "Einheitenbefehl (Bereich A, unbenannt)",
         _ when op >= BuildFirst && op <= BuildLast => "Bau/Kauf (Bereich B, unbenannt)",
         _ when op >= SystemFirst && op <= SystemLast => "System (Bereich C, unbenannt)",

@@ -154,6 +154,10 @@ public sealed partial class MainMenuWindow : Control
     /// <c>0x451530</c>, danach das Menue zu (<c>0x4471A0</c>).</summary>
     public Action? OnSubMissions;
 
+    /// <summary>⭐ Paket N (22.10.2026): ein Grund, der nur für DIESES Fenster gilt — im
+    /// Netz gesperrte Knöpfe sagen so, warum (MapViewer.NetzMenueSperren).</summary>
+    public readonly string?[] GrundHier = new string?[12];
+
     private int _held = -1;
     private bool _zieht;
 
@@ -358,6 +362,7 @@ public sealed partial class MainMenuWindow : Control
         if (h < 1) return "";
         int i = h - 1;
         if (Geht(i)) return Labels[i];
+        if (GrundHier[i] is { Length: > 0 } hier) return hier;
         return Grund[i].Length > 0 ? Grund[i]
                                    : $"»{Labels[i]}« ist hier nicht eingehängt.";
     }

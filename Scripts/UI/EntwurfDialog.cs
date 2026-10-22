@@ -35,8 +35,16 @@ public sealed partial class EntwurfDialog : PanelContainer
     /// <summary>Welches Fenster offen ist: 0 keins, 36 Eingabe, 10 Abfrage.</summary>
     public int Art { get; private set; }
 
+    /// <summary>Paket N (Neustart 980): das zuletzt angelegte Fenster und seine Frage —
+    /// für die Prüfstände, die »Ja«/»Nein« über denselben Weg drücken wie die Maus.</summary>
+    public static EntwurfDialog? Letzter;
+    public string Frage => _frage.Text;
+    public void JaKlick() => Bestaetigen();
+    public void NeinKlick() => Schliessen();
+
     public EntwurfDialog()
     {
+        Letzter = this;
         Visible = false;
         MouseFilter = MouseFilterEnum.Stop;
         ProcessMode = ProcessModeEnum.Always;

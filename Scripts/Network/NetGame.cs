@@ -179,6 +179,10 @@ public sealed partial class NetGameRunner : Node
             else if (a == "--nettakt-alt") NettaktAlt = true;              // bug-527
             else if (a == "--net-direktbefehle") r._direkt = true;         // bug-530
             else if (a == "--net-direktbefehle2") { r._direkt2 = true; MapEntityLayer.NetzProbe2An = true; }   // Direktbefehle2
+            // Paket N (22.10.2026): Neustart 980 und Pausenfenster Art 40 im Netz
+            else if (a == "--net-neustart-check") r._nsCheck = 600;
+            else if (a.StartsWith("--net-neustart-check=")) int.TryParse(a["--net-neustart-check=".Length..], out r._nsCheck);
+            else if (a == "--pausenfenster-check") r._pfCheck = true;
             else if (a.StartsWith("--wurf-spur="))
             {
                 var t = a["--wurf-spur=".Length..].Split('-');
@@ -216,6 +220,15 @@ public sealed partial class NetGameRunner : Node
             return;
         }
         _s = _link.Session;
+
+        // ⭐ 22.10.2026, bug-620 (Paket N, Gegenprobe): die zwei Prozesse EINES Prüflaufs
+        // teilten sich user://saves/pruefstand_kopflos/GAME.005 — schrieb der eine noch,
+        // während der andere lud, las dieser »unlesbar«, lud nicht, und die Partie lief
+        // auseinander (gemessen: NET07 6000 Takte ROT bei Takt 5520, Laden 990 bei B
+        // unlesbar, bei A geladen). Zwei echte Rechner haben je ihren eigenen Ordner; der
+        // Prüflauf bekommt das jetzt auch, je Spielerplatz. Nur unter dem Prüfschutz.
+        if (Core.Pruefschutz.Aktiv && Core.SaveGame.OrdnerPruefstand == null)
+            Core.SaveGame.OrdnerPruefstand = $"{Core.Pruefschutz.SaveOrdner}/netz_platz{_s.MySlot}";
 
         // ⚠ AB HIER GEHÖRT DER TAKT UNS.
         _sim.SetProcess(false);
@@ -326,6 +339,10 @@ public sealed partial class NetGameRunner : Node
 
         _tick = _start = common;
 
+        // ⭐ Paket N (bug-615): der Startstand für Befehl 980 — hier, im gemeinsamen Anfang,
+        // hat jede Maschine denselben Stand. Liest nur.
+        _sim.NetzStartstandMerken();
+
         // Die ersten Lead Takte sind schon entschieden: für sie kann niemand
         // mehr einen Befehl haben, denn erst ab jetzt reden wir. Also gehen sie
         // leer hinaus — sonst wartete jeder auf jeden.
@@ -402,6 +419,9 @@ public sealed partial class NetGameRunner : Node
             if (_phase != Phase.Laufen) return;
 
             _link.ForgetBefore(_tick - 8);
+
+            // 4b) Paket N: Neustart- und Pausenfenster-Prüfstand
+            PaketNTakt();
 
             // 5) Der Prüfstand setzt selbst Befehle ab — sonst reist nichts.
             if (_order > 0 && ++_ticksSinceOrder >= _order) { _ticksSinceOrder = 0; OrderSomething(); }
@@ -768,6 +788,12 @@ public sealed partial class NetGameRunner : Node
                 Say("⚠ ABER: ein Satz wurde verschluckt und der Abdruckvergleich hat es NICHT " +
                     "gefunden. Der Netzprüfstand ist blind — sein grünes Ergebnis würde " +
                     "nichts belegen.");
+            FinishAfterAusklang(false);
+            return;
+        }
+
+        if ((_nsCheck > 0 || _pfCheck) && !PaketNUrteil())
+        {
             FinishAfterAusklang(false);
             return;
         }
