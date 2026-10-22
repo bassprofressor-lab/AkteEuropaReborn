@@ -153,7 +153,14 @@ public partial class MapEntityLayer : Node2D
             sb.Append($"   (Konto {kontoVor} $ auf {a.Preis} $ gesetzt — Messwerkzeug)\n");
         }
         int kontoDavor = _money[spieler];
-        bool gekauft = ForschungKaufen(basis, wahl);
+        // bug-600 (Fortsetzung): der Kauf geht wie der Knopf als Satz 2005 durch
+        // den Ring (Basis anwaehlen, PostForschung, leeren). »angenommen« wird am
+        // ZUSTAND gelesen: an dieser Basis laeuft eine Forschung. Nullmodell:
+        // --direktbefehle-alt.
+        int ringF = ForschungUeberRing(basis, wahl);
+        bool gekauft = ForschungLaeufeAn(basis) > 0;
+        sb.Append($"   (Kauf ueber den Ring: {ringF} Takt geleert" +
+                  $"{(DirektbefehleAlt || ForschungAlt ? ", --direktbefehle-alt: direkt" : "")})\n");
         sb.Append($"   Kauf: {a.Name} Stufe {stufeVor} → {stufeVor + 1}, " +
                   $"${a.Preis}, Arm {a.Wurf}{(a.Wurf == 2 && a.Fahrwerk ? " (TANK)" : "")} " +
                   $"— {(gekauft ? "angenommen" : "⚠ ABGELEHNT")}\n");
@@ -182,8 +189,11 @@ public partial class MapEntityLayer : Node2D
         if (nachher.Count > 0)
         {
             _money[spieler] = 60000;                       // Messwerkzeug
-            ForschungKaufen(basis, 0);
-            ForschungKaufen(basis, 0);
+            // ⚠ Ueber den Ring mit Leeren ZWISCHEN den Kaeufen: der Absender
+            // rechnet die Waechterzahl (Preis der Zeile) aus dem Stand, den er
+            // sieht. Ohne Leeren saehe der zweite Klick den alten Stand.
+            ForschungUeberRing(basis, 0);
+            ForschungUeberRing(basis, 0);
             loeschOk = ForschungAbgebrochen == abgebrochenVor + 1;
             sb.Append($"   Loeschlauf: zwei Kaeufe an derselben Basis → " +
                       $"{ForschungAbgebrochen - abgebrochenVor} Abbruch " +
@@ -194,5 +204,26 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"   → {(alles ? "BESTANDEN" : "⚠ DURCHGEFALLEN")}\n");
         _forschungProbeRc = alles ? 0 : 1;
         return sb.ToString();
+    }
+
+    /// <summary>bug-600 (Fortsetzung, 22.10.2026): ein Forschungskauf wie der
+    /// Knopf — Basis anwaehlen, Satz 2005 (<see cref="PostForschung"/>), Ring
+    /// leeren. Gibt die Zahl der geleerten Takte zurueck.</summary>
+    private int ForschungUeberRing(Entity basis, int zeile)
+    {
+        int bi = _entities.IndexOf(basis);
+        _sel.Clear(); _sel.Add(bi); _selected = bi;
+        PostForschung(zeile);
+        return RingLeeren();
+    }
+
+    /// <summary>Wie viele Forschungen gerade an dieser Basis laufen (Zustand
+    /// statt Rueckgabewert).</summary>
+    private int ForschungLaeufeAn(Entity basis)
+    {
+        int n = 0;
+        for (int i = 0; i < ForschungPlaetze; i++)
+            if (_forschung[i].Belegt && _forschung[i].Basis == basis.Slot) n++;
+        return n;
     }
 }

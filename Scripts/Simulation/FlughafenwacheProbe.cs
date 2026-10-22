@@ -47,7 +47,14 @@ public partial class MapEntityLayer : Node2D
         r.Hp = r.HpMax / 2;                      // halb zerschossen
         int w0 = feld.StockW, f0 = feld.StockF, s0 = feld.StockS;
         int vorher = RecycleVerwertet;
-        bool getan = RecycleAmFlughafen(feld.Slot, r.Slot);
+        // bug-600 (Fortsetzung): der Knopf »Recycle« schickt Satz 535 in den Ring
+        // (PostRecycleAmFlughafen). Sein Rueckgabewert heisst nur »abgesetzt« —
+        // »getan« wird darum am ZUSTAND gemessen: Maschine tot und aus dem Hangar.
+        PostRecycleAmFlughafen(feld.Slot, r.Slot);
+        int ringR = RingLeeren();
+        bool getan = r.Dead && !(feld.Hangar?.Contains(r.Slot) ?? false);
+        sb.Append($"  (Recycle ueber den Ring: {ringR} Takt geleert"
+                + $"{(Alt2("flughafen") ? ", --direktbefehle2-alt: direkt" : "")})\n");
         int dW = feld.StockW - w0, dF = feld.StockF - f0, dS = feld.StockS - s0;
         if (RecycleAus)
         {

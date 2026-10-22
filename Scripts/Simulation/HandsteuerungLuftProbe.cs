@@ -48,8 +48,16 @@ public partial class MapEntityLayer : Node2D
         bool alles = true;
 
         // --- 1. EINTRITT ----------------------------------------------------
-        bool eingetreten = HandsteuerungLuftBeginnen(a.Slot);
+        // bug-600 (Fortsetzung): Eintritt (502 Modus 6) und Austritt (30) gehen
+        // wie Knopf und Rechtsklick ueber den Ring; »uebernommen« wird am
+        // ZUSTAND gelesen (HandLuftIdx), nicht am Rueckgabewert des Absenders.
+        // Nullmodell des Umbaus: --direktbefehle2-alt=hand.
+        PostHandLuftBeginnen(a.Slot);
+        int ringH = RingLeeren();
+        bool eingetreten = HandLuftIdx == idx;
         bool gewaehlt = HandLuftIdx == idx;
+        sb.Append($"  (Eintritt ueber den Ring: {ringH} Takt geleert"
+                + $"{(Alt2("hand") ? ", --direktbefehle2-alt: direkt" : "")})\n");
         sb.Append($"  1. Eintritt (Taste 9, Platz {a.Slot}"
                 + (ausDemHangar ? ", aus dem Hangar" : ", schon in der Luft")
                 + $"): uebernommen {HandJa(eingetreten)}, Maschine gewaehlt {HandJa(gewaehlt)}, "
@@ -144,7 +152,8 @@ public partial class MapEntityLayer : Node2D
 
         // --- 7. AUSTRITT -> air_back_to_airport ------------------------------
         int beendetVor = HandLuftBeendet;
-        HandsteuerungLuftBeenden("Probe");
+        PostHandLuftBeenden("Probe");
+        RingLeeren();
         bool ausOk = HandLuftIdx < 0 && HandLuftBeendet == beendetVor + 1
                      && (a.Heimkehr || a.Stored || a.Dead);
         sb.Append($"  7. Austritt: Handsteuerung aus {HandJa(HandLuftIdx < 0)}, "
@@ -159,7 +168,9 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Stufe 0, damit kein Flugschritt die Zelle wechselt.
         if (!a.Dead && !a.Stored && !a.Absturz)
         {
-            bool wieder = HandsteuerungLuftBeginnen(a.Slot);
+            PostHandLuftBeginnen(a.Slot);
+            RingLeeren();
+            bool wieder = HandLuftIdx == idx;
             a.Stufe = 0;
             int boden = ElevOf(a.Col, a.Row) * AltJeHoehenstufe;
             int s = AbsturzSchwelle(a.Col, a.Row, out bool kg, out string zellart);
@@ -176,7 +187,7 @@ public partial class MapEntityLayer : Node2D
             int zerschellt = HandLuftBodenAbstuerze - bodenVor;
             // Die Handsteuerung endet im naechsten Takt von selbst (Absturz).
             HandProbeTakt();
-            if (HandLuftIdx >= 0) HandsteuerungLuftBeenden("Probe");
+            if (HandLuftIdx >= 0) { PostHandLuftBeenden("Probe"); RingLeeren(); }
             bool bodenOk = HandsteuerungLuftBodenAlt
                 ? zerschellt == 0 && AbstuerzeBegonnen == begVor && !a.Absturz
                 : zerschellt == 1 && AbstuerzeBegonnen == begVor + 1 && a.Absturz

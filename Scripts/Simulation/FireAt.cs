@@ -274,21 +274,19 @@ public partial class MapEntityLayer : Node2D
         if (ff.Schuetze >= 0)
         {
             var o = _entities[ff.Opfer];
-            ff.Geschossen = FireAtAusfuehren(ff.Schuetze, o.Col, o.Row);
-            ff.Grund = FireAtGrund;
-            // N: derselbe Schuetze sofort noch einmal
+            ff.Geschossen = FireAtUeberRing(ff.Schuetze, o.Col, o.Row, out ff.Grund);
+            // N: derselbe Schuetze sofort noch einmal (zwischen F und N laeuft
+            // kein Simulationstakt — RingLeeren ruft nur den Befehlstakt)
             var fn = new FireAtFall { Name = 'N', Titel = "sofort noch einmal          ", Schuetze = ff.Schuetze, Takt = _taktNr };
             _faFaelle.Add(fn);
-            fn.Geschossen = FireAtAusfuehren(ff.Schuetze, o.Col, o.Row);
-            fn.Grund = FireAtGrund;
+            fn.Geschossen = FireAtUeberRing(ff.Schuetze, o.Col, o.Row, out fn.Grund);
             _entities[ff.Schuetze].Cooldown = 9999f;
         }
         var fv = Fall('V', "verbuendetes Fahrzeug        ", true, false);
         if (fv.Schuetze >= 0)
         {
             var o = _entities[fv.Opfer];
-            fv.Geschossen = FireAtAusfuehren(fv.Schuetze, o.Col, o.Row);
-            fv.Grund = FireAtGrund;
+            fv.Geschossen = FireAtUeberRing(fv.Schuetze, o.Col, o.Row, out fv.Grund);
             _entities[fv.Schuetze].Cooldown = 9999f;
         }
         var fw = Fall('W', "Zelle jenseits der Reichweite", false, false);
@@ -301,14 +299,40 @@ public partial class MapEntityLayer : Node2D
             { fw.Notiz = $"keine Zelle jenseits der Reichweite ({weit}) auf der Karte"; fw.Schuetze = -1; }
             else
             {
-                fw.Geschossen = FireAtAusfuehren(fw.Schuetze, zc, s.Row);
-                fw.Grund = FireAtGrund;
+                fw.Geschossen = FireAtUeberRing(fw.Schuetze, zc, s.Row, out fw.Grund);
                 s.Cooldown = 9999f;
             }
         }
         foreach (var f in _faFaelle)
             GD.Print($"fireat-check: {f.Name} {f.Titel.Trim()} — Schuetze {f.Schuetze}, Opfer {f.Opfer}, "
                    + $"{(f.Geschossen ? "geschossen" : "kein Schuss: " + f.Grund)} {f.Notiz}");
+    }
+
+    /// <summary>
+    /// bug-600 (Fortsetzung, 22.10.2026): der Schuss des Pruefstands geht als
+    /// Satz 9 (fire_at, P1 Schuetze, P2/P3 Zelle) durch den Ring — derselbe Arm,
+    /// den der Handsteuerungsklick nimmt (<c>ApplyFireAtBefehl</c> →
+    /// <see cref="FireAtAusfuehren"/>). Das Missionsskript ruft
+    /// <see cref="FireAtAusfuehren"/> weiter unmittelbar im Takt (es IST der Takt).
+    /// »geschossen« wird am Behandler gezaehlt (<c>HandKlickSchuesse</c>), nicht
+    /// am Rueckgabewert. Nullmodell des Umbaus: <c>--direktbefehle2-alt=hand</c>
+    /// ruft den Kern wie bisher unmittelbar.
+    /// </summary>
+    private bool FireAtUeberRing(int si, int col, int row, out string grund)
+    {
+        FireAtGrund = "";
+        if (Alt2("hand"))
+        {
+            bool ok = FireAtAusfuehren(si, col, row);
+            grund = FireAtGrund;
+            return ok;
+        }
+        int vor = HandKlickSchuesse;
+        Emit(Simulation.Commands.CommandRecord.Make(Simulation.Commands.CommandOp.FireAt,
+             (byte)ViewPlayer, (short)si, (short)col, (short)row));
+        RingLeeren();
+        grund = FireAtGrund;
+        return HandKlickSchuesse > vor;
     }
 
     public string FireAtCheckLine()

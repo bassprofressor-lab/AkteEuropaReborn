@@ -684,7 +684,10 @@ public partial class MapEntityLayer
                 Eingriff($"Entwurf {nr} ({d.Name}, W{d.CostW} F{d.CostF} S{d.CostS}) ins Depot von Platz {b.Slot} gelegt und verwertet");
                 b.Depot.Add(nr);
                 _selected = bi;
-                RecycleFromPanel(b.Garage.Count + b.Depot.Count - 1);
+                // bug-600 (Fortsetzung): »Recycle« wie der Knopf — Satz 2007 durch
+                // den Ring, dann leeren. Nullmodell: --direktbefehle2-alt=depot.
+                PostRecycleFromPanel(b.Garage.Count + b.Depot.Count - 1);
+                RingLeeren();
                 Takte(150);
                 Soll(V(31) == w0 + d.CostW && V(32) == f0 + d.CostF && V(190) == 0,
                      $"Regeln 0x49A37F/0x49A3A9: Siegmarke v31 {w0} -> {V(31)} (+{d.CostW}), v32 {f0} -> {V(32)} (+{d.CostF}), v190 = {V(190)}");
@@ -705,7 +708,10 @@ public partial class MapEntityLayer
                 Eingriff("Kontostand 1 000 000 $, Kauf von Regalzeile 0");
                 Money(view, 1_000_000);
                 int d0 = MarketDelivered;
-                MarketBuy(markt, 0);
+                // bug-600 (Fortsetzung): der Kauf wie im Marktfenster — Satz 530
+                // durch den Ring (MarktBestellen), dann leeren.
+                MarktBestellen(MarketShelf()[0].Nr, markt.Slot);
+                RingLeeren();
                 Takte(60 * 120, () => MarketDelivered > d0);
                 Immer(MarketDelivered > d0, $"Lieferung angekommen ({MarketDelivered - d0} Stueck)");
                 Takte(250);

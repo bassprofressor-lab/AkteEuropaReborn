@@ -80,13 +80,18 @@ public partial class MapEntityLayer
         ap.StockS = Mathf.Max(ap.StockS, 99);
 
         // einen KAMPFtyp kaufen (Art 1 Jagdflieger, 2 Bomber, 10 Kampfhubschrauber)
+        // bug-600 (Fortsetzung): der Kauf geht ueber den Fensterknopf und den
+        // RING (PostBuildPanelPick -> 501), wie im Spiel; nach jedem Klick leeren.
         int vorher = _special.Count;
         var menu = AirMenu(ap);
+        int apIdx = _entities.IndexOf(ap);
+        _sel.Clear(); _sel.Add(apIdx); _selected = apIdx;
         for (int i = 0; i < menu.Count; i++)
         {
             if (menu[i].Kind is not (1 or 2 or 10)) continue;
-            ap.MenuIndex = i;
-            if (BuyAircraft(ap)) break;
+            PostBuildPanelPick(i);
+            RingLeeren();
+            if (_special.Count > vorher) break;
         }
         if (_special.Count == vorher)
         { sb.Append($"  KEIN URTEIL: kein Kampfflugzeug kaufbar ({_order})"); GD.Print(sb); return; }
@@ -103,8 +108,17 @@ public partial class MapEntityLayer
         sb.AppendLine($"    Sight={a.Sight} {(a.Sight > 0 ? "ok" : "⚠ NULL — der Suchkreis ist leer")}");
         sb.AppendLine($"    Fuel={a.Fuel}/{a.FuelMax}, Dir={a.Dir}");
 
-        int launched = LaunchAircraft(me);
-        sb.Append($"  gestartet: {launched}");
+        // bug-600 (Fortsetzung): »Alle starten« = Satz 2006. Der Rueckgabewert
+        // von PostAlleStarten zaehlt Saetze, nicht Starts — gezaehlt wird am
+        // ZUSTAND: wie viele eigene Maschinen standen vorher eingelagert und
+        // wie viele nachher.
+        int imHangarVor = 0, imHangarNach = 0;
+        foreach (var s in _special) if (s.Owner == me && s.Stored && !s.Dead) imHangarVor++;
+        PostAlleStarten(me);
+        int ringL = RingLeeren();
+        foreach (var s in _special) if (s.Owner == me && s.Stored && !s.Dead) imHangarNach++;
+        int launched = imHangarVor - imHangarNach;
+        sb.Append($"  gestartet: {launched} (eingelagert {imHangarVor} -> {imHangarNach}, Ring {ringL} Takt)");
         _flugStart = a.Pos;
         _flugLog = sb;
         _flugSim = DebugTicks;
@@ -152,7 +166,8 @@ public partial class MapEntityLayer
         {
             sb.AppendLine("  (Probe war gelandet — das neue, gewollte Verhalten; " +
                           "fuer die Auswahl neu gestartet)");
-            LaunchAircraft(a.Owner);
+            PostAlleStarten(a.Owner);
+            RingLeeren();
         }
         SelectAt(a.Pos - new Vector2(0, AirHoehePx(a)));
         bool gewaehlt = _selAir >= 0 && _special[_selAir] == a;

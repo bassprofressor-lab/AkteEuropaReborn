@@ -67,7 +67,7 @@ public partial class MapEntityLayer
         AwStelle(fz[1], new Vector2I(tx, ty + 1));
         bool mobilVor = blockA.Mobile;
         blockA.Mobile = false;                  // laesst sich nicht wegschicken
-        u.Ukol = UkolVerlaesst;                 // Befehl 504
+        DaAussendenUeberRing(bi, ui);           // Befehl 504 ueber den Ring
         for (int t = 0; t < 20; t++) SimTickFuerProbe();
         bool inListeA = b.Garage.Contains(u);
         int aufTuerA = _nav.OccupantAt(tx, ty);
@@ -93,7 +93,7 @@ public partial class MapEntityLayer
         AwStelle(fz[2], new Vector2I(tx, ty));
         blockB.Ukol = UkolFrei; blockB.Path = null; blockB.Target = -1;
         int wegVor = WaitAbWeggeschickt;
-        u.Ukol = UkolVerlaesst;
+        DaAussendenUeberRing(bi, ui);           // Befehl 504 ueber den Ring
         Vector2I? zielB = null;
         int takteBisHeraus = -1;
         for (int t = 0; t < 120; t++)
@@ -111,6 +111,19 @@ public partial class MapEntityLayer
                 + $"{(WaitAbAus ? " (Nullmodell --wait-ab-aus)" : "")}{(bOk ? "" : "   ⚠")}\n");
         sb.Append(ok ? "depotauslass-check: BESTANDEN" : "depotauslass-check: DURCHGEFALLEN");
         return sb.ToString();
+    }
+
+    /// <summary>bug-600 (Fortsetzung, 22.10.2026): »Aussenden« wie im Depotfenster
+    /// — Depot anwaehlen, <see cref="PostDepotAussenden"/> (Satz 504), Ring leeren.
+    /// Bis heute setzte der Pruefstand UKOL 51 selbst. Nullmodell:
+    /// --direktbefehle2-alt=depot.</summary>
+    private void DaAussendenUeberRing(int bi, int ui)
+    {
+        int merk = _selected;
+        _selected = bi; _sel.Clear(); _sel.Add(bi);
+        PostDepotAussenden(new List<int> { ui });
+        RingLeeren();
+        _selected = merk; _sel.Clear(); if (merk >= 0) _sel.Add(merk);
     }
 }
 
@@ -237,7 +250,11 @@ public partial class MapEntityLayer
         int w0 = b.StockW, f0 = b.StockF, s0 = b.StockS, n0 = b.Garage.Count;
         int selVor = _selected;
         _selected = bi;
-        RecycleFromPanel(0);
+        // bug-600 (Fortsetzung): »Recycle« = Satz 506 (Garagenzeile) ueber den
+        // Ring; erst leeren, dann Lager und Liste lesen. Nullmodell:
+        // --direktbefehle2-alt=depot; --recycle-garage-alt schickt 2007.
+        PostRecycleFromPanel(0);
+        RingLeeren();
         _selected = selVor;
         int dw = b.StockW - w0, df = b.StockF - f0, ds = b.StockS - s0;
         bool cOk = b.Garage.Count == n0 - 1 && rz.Dead && dw == sollW && df == sollF && ds == sollS;

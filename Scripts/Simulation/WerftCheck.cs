@@ -114,7 +114,10 @@ public partial class MapEntityLayer
         // ---- 3. Klick mit dem Lager der Karte --------------------------------
         int pick = Mathf.Max(0, rows.FindIndex(r => r.Affordable));
         int w0 = yard?.StockW ?? 0, f0 = yard?.StockF ?? 0, s0 = yard?.StockS ?? 0;
-        if (rows.Count > 0) BuildPanelPick(pick);
+        // bug-600 (Fortsetzung): der Knopf schickt Satz 508 in den Ring
+        // (PostBuildPanelPick); erst leeren, dann Bauzeit und Lager lesen.
+        // Nullmodell: --direktbefehle2-alt=produktion.
+        if (rows.Count > 0) { PostBuildPanelPick(pick); RingLeeren(); }
         sb.AppendLine($"  3. Produzieren Zeile {pick + 1} mit dem Kartenlager: »{_order}«, Bauzeit {dock.BuildTime:0.0}s");
 
         // ---- 4. Klick mit genug Teilen (EINGRIFF) ----------------------------
@@ -125,7 +128,8 @@ public partial class MapEntityLayer
             yard.StockS = Mathf.Max(yard.StockS, 999);
             int wv = yard.StockW, fv = yard.StockF, sv = yard.StockS;
             _selected = di; _sel.Clear(); _sel.Add(di);
-            BuildPanelPick(0);
+            PostBuildPanelPick(0);
+            RingLeeren();
             var d = ShipMenu(dock)[dock.MenuIndex % ShipMenu(dock).Count];
             bautOk = dock.BuildTime > 0f && wv - yard.StockW == d.CostW
                      && fv - yard.StockF == d.CostF && sv - yard.StockS == d.CostS;

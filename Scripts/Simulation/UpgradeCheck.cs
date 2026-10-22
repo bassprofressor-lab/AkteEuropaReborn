@@ -89,7 +89,12 @@ public partial class MapEntityLayer
                       $"Preis Produktion ${_preisP0}, Konto ${_geld0}");
 
         // ---- DRÜCKEN, über den Knopfweg ----
-        StartUpgrade(true);
+        // bug-600 (Fortsetzung): der Fensterknopf schickt 509 in den Ring
+        // (PostUpgradeFromPanel, wie BaseWindow.OnUpgrade); erst leeren, dann
+        // Zustand und Konto lesen.
+        PostUpgradeFromPanel(true);
+        int ringA = RingLeeren();
+        sb.AppendLine($"  Ring {ringA} Takt(e) geleert");
         sb.AppendLine($"  gedrueckt: Zustand jetzt {StateName(f)} " +
                       (f.State == FaExpand ? "— richtig, der Ausbau laeuft" : "— FALSCH"));
         sb.AppendLine($"  Konto ${_geld0} -> ${_money[owner]} " +
@@ -143,6 +148,7 @@ public partial class MapEntityLayer
     // ================= die zwei anderen neuen Knöpfe ==========================
 
     private int _knopfCheck = -1;
+    private (int, int, int)? _eingriffTeile;
 
     /// <summary><c>--knopf-check</c> anwerfen.</summary>
     public void KnopfCheckStart() => _knopfCheck = 0;
@@ -187,16 +193,55 @@ public partial class MapEntityLayer
                                           : $"schon \"{vorher}\" — der Fall ist unsauber"));
             int owner = Mathf.Clamp(e.Owner, 0, 7);
             int geld = _money[owner];
-            ProduceFromSelection();
+            // bug-600 (Fortsetzung): Taste B / Knopf »Produzieren« (503) und
+            // »Abbrechen« (2004) gehen ueber den Ring wie im Spiel; nach jedem
+            // Druck leeren, erst dann die Knoepfe lesen.
+            _order = "";
+            int gelegtVor = NeubauInListeGelegt;
+            PostProduzieren();
+            int ringP = RingLeeren();
+            int gelegt = NeubauInListeGelegt - gelegtVor;
             string? jetzt = CancelChoiceOfSelection();
-            sb.AppendLine($"  nach dem Knopf »Produzieren«: " +
-                          (jetzt != null ? $"»Abbrechen ({jetzt})« steht da — richtig"
-                                         : "KEIN Abbrechen-Knopf — FALSCH oder nichts bestellbar") +
-                          $"  [Konto ${geld} -> ${_money[owner]}]");
+            // ⚠ 22.10.2026 (bug-600 Fortsetzung): seit bug-462 (06.10.) hat der
+            // Spielerbau KEINE Bauzeit mehr (0x4B1840 ohne Zeitfeld) — die Einheit
+            // liegt sofort als Satz in der Basis, es bleibt nichts abzubrechen.
+            // Bis heute verlangte dieser Punkt trotzdem einen Abbrechen-Knopf und
+            // war seit dem 06.10. ROT, ohne dass am Spiel etwas falsch war.
+            // Gemessen wird jetzt: der Bau WIRKT (ein Satz gelegt) und der Knopf
+            // bleibt weg.
+            sb.AppendLine($"  nach dem Knopf »Produzieren« (Ring {ringP} Takt): {gelegt} Satz gelegt, " +
+                          (jetzt == null ? (gelegt > 0 ? "kein Abbrechen-Knopf — richtig (keine Bauzeit, bug-462)"
+                                                       : "NICHTS gebaut — FALSCH oder nichts bestellbar")
+                                         : $"»Abbrechen ({jetzt})« steht da — FALSCH, es gibt keine Bauzeit") +
+                          $"  [Konto ${geld} -> ${_money[owner]}]" +
+                          (_order.Length > 0 ? $"  Meldung »{_order}«" : ""));
+            // Den Abbrechen-Satz 2004 trotzdem ueber den Ring pruefen: ⚠ EINGRIFF,
+            // eine Bestellung mit bezahlten Teilen in die Warteschlange (wie sie die
+            // KI-Wege mit Bauzeit noch anlegen).
+            if (jetzt == null && _designs is { Count: > 0 })
+            {
+                var menu = BuildableFor(e.BType, e.Owner);
+                if (menu.Count > 0)
+                {
+                    var d = _designs[menu[0] % _designs.Count];
+                    int w0 = e.StockW, f0 = e.StockF, s0 = e.StockS;
+                    e.StockW -= d.CostW; e.StockF -= d.CostF; e.StockS -= d.CostS;
+                    e.BuildQueue.Add(menu[0]);
+                    jetzt = CancelChoiceOfSelection();
+                    sb.AppendLine($"  ⚠ EINGRIFF: \"{d.Name}\" mit bezahlten Teilen in die Warteschlange — " +
+                                  (jetzt != null ? "»Abbrechen« steht da — richtig" : "KEIN Abbrechen-Knopf — FALSCH"));
+                    geld = _money[owner];
+                    _eingriffTeile = (w0, f0, s0);
+                }
+            }
             if (jetzt != null)
             {
-                CancelBuild();
+                PostBauAbbrechen();
+                int ringA = RingLeeren();
                 string? danach = CancelChoiceOfSelection();
+                if (_eingriffTeile is { } t)
+                    sb.AppendLine($"  Abbrechen ueber den Ring ({ringA} Takt): Teile " +
+                                  ((e.StockW, e.StockF, e.StockS) == t ? "zurueck — richtig" : "NICHT zurueck — FALSCH"));
                 sb.AppendLine($"  nach dem Knopf »Abbrechen«: " +
                               (danach == null ? "der Knopf ist weg — richtig"
                                               : $"steht immer noch \"{danach}\" — FALSCH") +
@@ -230,12 +275,28 @@ public partial class MapEntityLayer
             var h = _entities[hafen];
             _sel.Clear(); _sel.Add(hafen); _selected = hafen;
             int n = HangarOfSelection() ?? -1;
+            if (n == 0)
+            {
+                // ⚠ KULISSE (22.10.2026, bug-600 Fortsetzung): ein leerer Hangar
+                // misst »Alle starten« nicht. Zwei Probejaeger hinein, damit der
+                // Knopf etwas zu tun hat; danach die Gegenrichtung wie bisher.
+                sb.AppendLine($"  Flughafen \"{h.Name}\": Hangar 0, Knopf bleibt weg (leer) — richtig");
+                ProbeMaschine(h, art: 1, stored: true, owner: h.Owner);
+                ProbeMaschine(h, art: 1, stored: true, owner: h.Owner);
+                n = HangarOfSelection() ?? -1;
+                sb.AppendLine($"  ⚠ KULISSE: zwei Probejaeger in den Hangar gestellt");
+            }
             sb.AppendLine($"  Flughafen \"{h.Name}\": Hangar {n}, Knopf " +
                           (n > 0 ? "steht da" : "bleibt weg (leer)"));
             if (n > 0)
             {
-                int los = LaunchAircraft(ViewPlayer);
+                // bug-600 (Fortsetzung): »Alle starten« ist Satz 2006. Der
+                // Rueckgabewert von PostAlleStarten zaehlt SAETZE (0/1), nicht
+                // Starts — gezaehlt wird darum am ZUSTAND: Hangar vorher − nachher.
+                PostAlleStarten(ViewPlayer);
+                RingLeeren();
                 int rest = HangarOfSelection() ?? -1;
+                int los = rest >= 0 ? n - rest : 0;
                 // ⚠⚠ DIESE ZEILE HAT EINEN ECHTEN FEHLER GEFUNDEN: sie meldete
                 // »gestartet: 6, Hangar jetzt 6«. `LaunchAircraft` hat das
                 // Flugzeug fliegen lassen, es aber nicht aus der Hangarliste

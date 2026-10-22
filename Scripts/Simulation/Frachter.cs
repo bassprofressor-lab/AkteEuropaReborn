@@ -130,7 +130,16 @@ public partial class MapEntityLayer
         if (MarketShelf().Count == 0) return sb.Append("  KEIN URTEIL: Regal leer").ToString();
         Money(owner, 1_000_000);                                     // EINGRIFF: Geld
         int einheiten0 = _entities.Count;
-        MarketBuy(markt, 0);
+        // bug-600 (Fortsetzung): der Kauf geht wie im Marktfenster als Satz 530
+        // (MarktBestellen) durch den Ring und wird geleert — der Behandler
+        // 0x4C1360 bucht, nicht mehr der Rumpf MarketBuy. Die Kaufrechnung
+        // (Konto, verkauft) sitzt jetzt im Behandler.
+        int geld0 = Money(owner);
+        var ware = MarketShelf()[0];
+        MarktBestellen(ware.Nr, markt.Slot);
+        int ringL = RingLeeren();
+        Soll(ware.Sold && Money(owner) == geld0 - ware.Price,
+             $"Kauf ueber den Ring ({ringL} Takt): Platz verkauft {ware.Sold}, Konto {geld0} -> {Money(owner)} (Preis {ware.Price})");
         Soll(_entities.Count == einheiten0, "im Kauftakt entsteht keine Einheit");
 
         // bis zur Phase 222
@@ -144,12 +153,27 @@ public partial class MapEntityLayer
         // die Flugzeit nachrechnen, Ganzzahl fuer Ganzzahl (0x4C0508..0x4C0567)
         int soll = 0; { int x = f.Col, rest = f.Frac; while (x != ziel && soll < 10000) { int d = ziel - x; if (d > 10) x++; else { int st = Mathf.Max(1, 4 * d) + rest; if (st > 39) { x += st / 40; rest = st % 40; } else rest = st; } soll++; } }
         int blitze0 = Lichtblitze, flug = 0;
-        while (_entities.Count == einheiten0 && flug < 2000) { SimTickFuerProbe(); flug++; }
+        // ⚠ 22.10.2026 (bug-600 Fortsetzung): hier wurde die Ankunft an
+        // `_entities.Count` erkannt — und K11 setzt waehrend des Wartens zwei
+        // FREMDE Einheiten ein (Missionsskript, Spieler 1). Der Lauf hielt das
+        // fuer die Ankunft (»nach 0 Takten«) und war darum ROT, ohne dass an
+        // der Lieferung etwas falsch war. Gezaehlt wird jetzt die LIEFERUNG
+        // selbst (MarketDelivered), und die neue Einheit ist die eigene unter
+        // den Saetzen, die im Ankunftstakt dazukamen.
+        int fremd = _entities.Count - einheiten0;
+        if (fremd != 0)
+            sb.Append($"  (vor dem Flug {fremd} Saetze mehr, zuletzt {LabelOf(_entities[^1])} Besitzer "
+                    + $"{_entities[^1].Owner} — nicht die Lieferung)\n");
+        int geliefert0 = MarketDelivered, nVorTakt = _entities.Count;
+        while (MarketDelivered == geliefert0 && flug < 2000)
+        { nVorTakt = _entities.Count; SimTickFuerProbe(); flug++; }
         Soll(flug == soll, $"Ankunft nach {flug} Takten (gerechnet {soll}) an Spalte {ziel}, Zeile {f.Row}");
-        Soll(_entities.Count == einheiten0 + 1, "die Einheit ist im Ankunftstakt da");
-        if (_entities.Count == einheiten0 + 1)
+        Entity? neu = null;
+        for (int i = nVorTakt; i < _entities.Count; i++)
+            if (!_entities[i].IsBuilding && _entities[i].Owner == owner) { neu = _entities[i]; break; }
+        Soll(MarketDelivered == geliefert0 + 1 && neu != null, "die Einheit ist im Ankunftstakt da");
+        if (neu != null)
         {
-            var neu = _entities[^1];
             // 0x4C13E0: Ring 0 ist der Anker selbst, wenn er freies Land ist (auf allen 13 Kampagnenmaerkten)
             sb.Append($"  (Landezelle ({neu.Col},{neu.Row}), Anker ({markt.Col},{markt.Row}), Frachterziel ({ziel},{f.Row}); " +
                       $"Rumpf {neu.Facing}, Turm {neu.AimFacing})\n");

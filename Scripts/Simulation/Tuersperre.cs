@@ -918,11 +918,18 @@ public partial class MapEntityLayer : Node2D
                     // der Oberkante der Leinwand. Bei uns also
                     // ComposedAnchor.Y - Fussversatz - Arm.
                     float hubVeh = BalkenHubFuerProbe(eVeh), hubInf = BalkenHubFuerProbe(eInf);
-                    float sollVeh = AnkerBezug.Y - 20f, sollInf = eInf.Pos.Y - FussvolkOrt(eInf).Y - 10f;   // bug-596: Leinwandoberkante + 0x0A
+                    // ⭐ 22.10.2026 (Paket H2): das Fahrzeug haengt seit bug-402 an
+                    // SEINEM Anker (EinheitenAnker, 45 statt ComposedAnchor 55), und
+                    // der Balken seit bug-410 am selben Blitpunkt (0x42A720 bekommt
+                    // [esp+0x1E]/[esp+0x1C] von 0x429C2D/0x429C32). Hier stand weiter
+                    // ComposedAnchor − 0x14 = 35, und der Lauf meldete FALSCH (25),
+                    // obwohl der Balken am Bild sass. Soll ist die Leinwandoberkante
+                    // des Fahrzeugbildes + 0x14. Nullmodell --balkenanker-alt: 35 → FALSCH.
+                    float sollVeh = EinheitenAnker(eVeh).Y - 20f, sollInf = eInf.Pos.Y - FussvolkOrt(eInf).Y - 10f;   // bug-596: Leinwandoberkante + 0x0A
                     bool hubOk = Mathf.IsEqualApprox(hubVeh, sollVeh)
                               && Mathf.IsEqualApprox(hubInf, sollInf);
                     sb.AppendLine($"  Lebensbalken ueber dem Bodenpunkt: Fahrzeug {hubVeh:0.0} "
-                                + $"(erwartet {sollVeh:0.0} = Anker - 0x14), Fussvolk {hubInf:0.0} "
+                                + $"(erwartet {sollVeh:0.0} = Fahrzeuganker {EinheitenAnker(eVeh).Y:0} - 0x14), Fussvolk {hubInf:0.0} "
                                 + $"(erwartet {sollInf:0.0} = Anker - Fussversatz - 0x0A): "
                                 + (hubOk ? "richtig" : "FALSCH"));
                     // ⭐⭐ 07.09.2026 — SITZT JEDER BILDBLOCK AUF DEMSELBEN ANKER?

@@ -1539,7 +1539,10 @@ public partial class MapEntityLayer
             // ⚠ Ueber den KLICKWEG des Fensters, nicht ueber MarketBuy direkt.
             _selected = mi;
             _order = "";
-            BuildPanelPick(0);
+            // bug-600 (Fortsetzung): der Klick geht als Satz in den Ring (PostBuildPanelPick),
+            // erst leeren, dann lesen. Nullmodell: --direktbefehle2-alt=produktion.
+            PostBuildPanelPick(0);
+            RingLeeren();
 
             _buyLog.AppendLine($"  Meldung des Kaufwegs: \"{_order}\"");
             _buyLog.AppendLine($"  KAUF: Preis ${_buyCheckPrice}; Konto ${_buyCheckMoney0} -> ${Money(owner)} " +

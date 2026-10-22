@@ -114,7 +114,11 @@ public partial class MapEntityLayer
 
         // ---- 4) und der Start aus dem Hangar ---------------------------------
         int vorStart = e.Hangar?.Count ?? 0;
-        LaunchAircraft(e.Owner);
+        // bug-600 (Fortsetzung): der Knopf »Starten« setzt Satz 2006 ab
+        // (OnFlugzeugStart → PostAlleStarten); erst leeren, dann den Hangar
+        // zaehlen. Nullmodell: --direktbefehle-alt.
+        PostAlleStarten(e.Owner);
+        RingLeeren();
         int nachStart = e.Hangar?.Count ?? 0;
         bool gestartet = vorStart > 0 && nachStart < vorStart;
         sb.Append($"  4. »Starten« aus dem Hangar: {vorStart} -> {nachStart} "

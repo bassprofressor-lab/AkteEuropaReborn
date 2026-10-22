@@ -482,7 +482,20 @@ public partial class MapEntityLayer : Node2D
                 // nur heraus, wenn Tuerzelle UND die Zelle darunter frei sind;
                 // wir fragten nur die Tuer, und StepOutOfDoor (das beide fragt)
                 // liess die Einheit dann auf der Tuer stehen.
-                if (!fuss && (!_nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle)
+                // ⭐ 22.10.2026, bug-604 — EIN FAHRZEUG KOMMT NUR AN EINER TUER OHNE
+                // FUSSVOLK HERAUS. Gelesen (C, F gepaart): der Fahrzeugarm prueft
+                // den ROHEN imap-Wert der Tuer, `cmp word[Tuer], 0xFFFE / jae
+                // heraus` — Basis @0x43DD5A (F @0x43CD63), Depot @0x43E254
+                // (F @0x43D263), Bahnhof @0x43E38C. Ein Trupp traegt 10000+k, also
+                // < 0xFFFE: das Fahrzeug WARTET, gleich ob der Trupp voll ist oder
+                // nicht (die Neunerprobe 0x433F90 steht nur im Torarm der Basis
+                // @0x43DCEA und haelt bei VOLLEM Trupp zusaetzlich das Fussvolk
+                // fest). Unser IsFree(Fahrzeug) zaehlt Fussvolk als frei
+                // (ueberfahrbar), und das Fahrzeug kam AUF der Tuer heraus, auf der
+                // der Soldat stand. Gegenschalter --tuer-fussvolk-frei-alt.
+                bool fussAufTuer = !fuss && !TuerFussvolkFreiAlt && FussvolkAufZelle(tx, ty);
+                if (fussAufTuer) TuerFussvolkGewartet++;
+                if (!fuss && (!_nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle) || fussAufTuer
                               || (!AuslassNurTuerAlt && ZelleDarunterBelegt(tx, ty + 1))))
                 {
                     DepotWartetAnTuer++;
@@ -542,6 +555,24 @@ public partial class MapEntityLayer : Node2D
         return !o.Dead && !o.IsBuilding && o.Infantry < 0;
     }
 
+    /// <summary><c>--tuer-fussvolk-frei-alt</c> — Nullmodell zu bug-604: Fussvolk auf
+    /// der Tuer haelt ein ausgesandtes Fahrzeug nicht fest (Stand bis 22.10.2026),
+    /// und »wait B/C« schickt auch einen Soldaten weg.</summary>
+    public static bool TuerFussvolkFreiAlt;
+
+    /// <summary>bug-604: wie oft ein Fahrzeug wegen Fussvolk auf der Tuer gewartet hat.</summary>
+    public int TuerFussvolkGewartet;
+
+    /// <summary>Steht Fussvolk auf dieser Zelle (im Original imap 10000..13999)?</summary>
+    private bool FussvolkAufZelle(int c, int r)
+    {
+        if (_nav == null || !_nav.InBounds(c, r)) return false;
+        int g = _nav.OccupantAt(c, r);
+        if (g < 0 || g >= _entities.Count) return false;
+        var o = _entities[g];
+        return !o.Dead && !o.IsBuilding && !o.IsProp && o.Infantry >= 0;
+    }
+
     private void WartendeSchicktWeg(Entity wartend, int c, int r)
     {
         if (_nav == null || !_nav.InBounds(c, r)) return;
@@ -549,6 +580,11 @@ public partial class MapEntityLayer : Node2D
         if (g < 0 || g >= _entities.Count) return;
         var b = _entities[g];
         if (b.IsBuilding || b.IsProp || b.Dead || !b.Mobile || b.DugIn) return;
+        // bug-604: »wait B/C« nimmt nur einen EINHEITENSATZ (imap < 8000,
+        // `cmp cx,0x1F40 / jae` @0x409BB7 Tuer, @0x409C1D Zelle darunter) — ein
+        // Trupp (10000+k) wird nicht weggeschickt, das Fahrzeug wartet, bis er
+        // von selbst geht. Gegenschalter --tuer-fussvolk-frei-alt.
+        if (!TuerFussvolkFreiAlt && b.Infantry >= 0) return;
         if (b.Ukol != UkolFrei || b.Path is { Count: > 0 } || b.Orders.Count > 0 || b.Target >= 0) return;
         if (b.Owner != wartend.Owner && !Allied(wartend.Owner, b.Owner)) return;
         if (b.FuelMax > 0 && b.Fuel <= 0 && b.Infantry < 0) return;

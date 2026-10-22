@@ -82,7 +82,7 @@ public partial class MapEntityLayer
         }
 
         // ---- 1. Klicksperre, Taste K und Fensterweg --------------------------------
-        int gemessen = 0;
+        int gemessen = 0, ringRk = 0;
         foreach (var (name, art) in new (string, System.Func<Entity, bool>)[]
                  { ("Basis", x => x.BType == 1), ("Fabrik", x => x.BType is 2 or 3 or 4), ("Mine", x => x.BType is 10 or 15) })
         {
@@ -93,10 +93,14 @@ public partial class MapEntityLayer
             b.State = StAktiv; b.Hp = b.HpMax - 60;
             int h0 = b.Hp, soll1 = 29 * h0 / 30, still0 = ReparaturKlickStill;
             _sel.Clear(); _sel.Add(idx); _selected = idx;
-            StartRepair();                                        // Taste K, erster Klick
+            // bug-600 (Fortsetzung): Taste K und der Fensterknopf gehen wie im Spiel
+            // ueber den RING (519/521/522/520), und nach JEDEM Klick wird geleert —
+            // sonst sieht der zweite Klick den alten Stand (Klicksperre noch offen)
+            // und der Pruefstand misst einen Doppelabzug, den es im Spiel nicht gibt.
+            PostReparaturTaste(); ringRk += RingLeeren();         // Taste K, erster Klick
             int h1 = b.Hp;
-            StartRepair();                                        // Taste K, zweiter Klick
-            BuildingWindowRepair();                               // Fensterweg (Fenstergebaeude)
+            PostReparaturTaste(); ringRk += RingLeeren();         // Taste K, zweiter Klick
+            PostBuildingWindowRepair(); ringRk += RingLeeren();   // Fensterweg (Fenstergebaeude)
             int saetze = PostRepairFromPanel();                   // Basisfensterweg durch den Ring
             for (int k = 0; k < 5; k++) SimTickFuerProbe();       // Ring leerlaufen (Ankunft mitmessen)
             int h2 = b.Hp;
@@ -136,7 +140,7 @@ public partial class MapEntityLayer
             GebaeudeStufeNachziehen(g, zuenden: false);           // Stand wie nach einem Treffer
             int stufeVor = g.Schadensstufe;
             _sel.Clear(); _sel.Add(_entities.IndexOf(g)); _selected = _entities.IndexOf(g);
-            StartRepair();
+            PostReparaturTaste(); ringRk += RingLeeren();         // Taste K ueber den Ring
             _sel.Clear(); _selected = -1;
             int t = 0;
             while (t < 20000 && (DamageFrame(g) >= stufeVor || g.Hp < grenze + 8) && g.Hp < g.HpMax) { SimTickFuerProbe(); t++; }
@@ -153,7 +157,8 @@ public partial class MapEntityLayer
             _ = still;
         }
 
-        sb.AppendLine($"  --reparaturklick-alt {ReparaturklickAlt}, --reparaturstufe-alt {ReparaturstufeAlt}");
+        sb.AppendLine($"  --reparaturklick-alt {ReparaturklickAlt}, --reparaturstufe-alt {ReparaturstufeAlt}, "
+                      + $"Ring {ringRk} Takt(e) geleert{(Alt2("reparatur") ? " (--direktbefehle2-alt: Taste K/Fenster direkt)" : "")}");
         return sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN").ToString();
     }
 }

@@ -58,9 +58,16 @@ public partial class MapEntityLayer
         if (K21LagerSchalter && !_k21Geschaltet && _k21Zeit >= 5f)
         {
             _k21Geschaltet = true;
-            bool ok = RailSetFlag(2, GoodW, 1) & RailSetFlag(2, GoodF, 1)
-                    & RailSetFlag(5, GoodW, 1) & RailSetFlag(5, GoodF, 1) & RailSetFlag(5, GoodS, 1);
-            GD.Print($"k21-lager-check: Befehl 500 x5 (Linie 2: W,F -> Kn2; Linie 5: W,F,S -> Kn2) {(ok ? "angenommen" : "ABGELEHNT")}");
+            // bug-600 (Fortsetzung): die Schalter gehen wie im Fenster (Art 4)
+            // als Satz 500 in den Ring (PostRailSetFlag). Der Lauf ist ein
+            // Bildtakt-Poll: der naechste Takt leert den Ring, gemessen wird
+            // ohnehin erst 15 s spaeter. »abgesetzt« heisst darum nur: beim
+            // Absender angenommen; die Wirkung zeigt die Zeile »Schalter L2/L5«.
+            // Nullmodell: --direktbefehle2-alt=bahn.
+            bool ok = PostRailSetFlag(2, GoodW, 1) & PostRailSetFlag(2, GoodF, 1)
+                    & PostRailSetFlag(5, GoodW, 1) & PostRailSetFlag(5, GoodF, 1) & PostRailSetFlag(5, GoodS, 1);
+            GD.Print($"k21-lager-check: Befehl 500 x5 (Linie 2: W,F -> Kn2; Linie 5: W,F,S -> Kn2) {(ok ? "abgesetzt" : "ABGELEHNT")}"
+                   + (Alt2("bahn") ? " (--direktbefehle2-alt: direkt)" : ""));
         }
         var h = PlayerStocks(ViewPlayer);
         if (_k21LeisteVor is { } v && (h.W < v.W || h.F < v.F || h.S < v.S))

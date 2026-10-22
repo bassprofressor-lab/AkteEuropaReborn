@@ -74,41 +74,58 @@ public partial class MapEntityLayer : Node2D
                 + $"({BuildingTypeName(ziel.BType)}), Quelle Platz {quelle.Slot} "
                 + $"({BuildingTypeName(quelle.BType)})\n");
 
+        // bug-600 (Fortsetzung): jeder Schritt geht ueber den Absender und den
+        // RING (514 Oeffnen, 512 Fach, 513 Start), und nach JEDEM Schritt wird
+        // geleert. Der Rueckgabewert eines Post* heisst nur »beim Absender
+        // angenommen« — geurteilt wird am ZUSTAND des Satzes (Ziel, Quelle,
+        // Gestartet). Nullmodell des Umbaus: --direktbefehle2-alt=route.
+        int ringT = 0;
         // --- 1. Fenster auf -------------------------------------------------
-        bool auf = RouteFensterOeffnen();
+        bool auf = PostRouteFensterOeffnen();
+        ringT += RingLeeren();
         var r = RouteFensterSatz();
         bool steht = r != null && !r.Gestartet;
         sb.Append($"  1. Fenster auf: {(auf ? "ja" : "NEIN")}, Route haelt an: "
                 + $"{(steht ? "ja" : "NEIN")}, Modus {RouteWahlModus} (2 = Nach)\n");
 
         // --- 5. Gegenprobe zuerst: Start ohne Ziel muss scheitern ------------
-        bool frueh = RouteStartKnopf();
+        bool fruehAbs = PostRouteStartKnopf();
+        ringT += RingLeeren();
+        // Zustand: laeuft die Route, oder hat der Knopf das Fenster geschlossen?
+        bool frueh = (r != null && r.Gestartet) || RouteFensterWagen < 0;
         sb.Append($"  2. Start OHNE Ziel: {(frueh ? "ANGENOMMEN (falsch)" : "abgelehnt")} "
+                + $"(Absender {(fruehAbs ? "nahm an" : "lehnte ab")}) "
                 + $"— »{RouteNote}«\n");
 
         // --- 2. Klick auf das Ziel ------------------------------------------
         PickOhneNebel = true;
-        bool k1 = RouteKlickAufGebaeude(BodyRect(ziel).GetCenter());
+        bool k1 = PostRouteKlickAufGebaeude(BodyRect(ziel).GetCenter());
+        ringT += RingLeeren();
         bool zielGesetzt = r != null && r.Ziel == ziel.Slot;
         sb.Append($"  3. Klick auf das Ziel: {(k1 ? "genommen" : "ABGEWIESEN")}, Ziel gesetzt "
                 + $"{(zielGesetzt ? "ja" : "NEIN")}, Modus jetzt {RouteWahlModus} (1 = Von)\n");
 
         // --- 3. Klick auf die Quelle ----------------------------------------
-        bool k2 = RouteKlickAufGebaeude(BodyRect(quelle).GetCenter());
+        bool k2 = PostRouteKlickAufGebaeude(BodyRect(quelle).GetCenter());
+        ringT += RingLeeren();
         bool quelleGesetzt = false;
         if (r != null) foreach (int q in r.Quelle) if (q == quelle.Slot) quelleGesetzt = true;
         sb.Append($"  4. Klick auf die Quelle: {(k2 ? "genommen" : "ABGEWIESEN")}, Quelle gesetzt "
                 + $"{(quelleGesetzt ? "ja" : "NEIN")}\n");
 
         // --- 4. Start --------------------------------------------------------
-        bool start = RouteStartKnopf();
+        bool start = PostRouteStartKnopf();
+        ringT += RingLeeren();
         bool laeuft = r != null && r.Gestartet;
         bool zu = RouteFensterWagen < 0;
         PickOhneNebel = false;
         sb.Append($"  5. Start: {(start ? "angenommen" : "ABGELEHNT")}, Route laeuft "
                 + $"{(laeuft ? "ja" : "NEIN")}, Fenster zu {(zu ? "ja" : "NEIN")}\n");
 
-        bool ok = auf && steht && !frueh && zielGesetzt && quelleGesetzt && start && laeuft && zu;
+        // Geurteilt wird am Zustand; »start« (Absender nahm an) steht nur noch
+        // als Auskunft in Zeile 5.
+        bool ok = auf && steht && !frueh && zielGesetzt && quelleGesetzt && laeuft && zu;
+        sb.Append($"  Ring {ringT} Takt(e) geleert{(Alt2("route") ? " (--direktbefehle2-alt: direkt)" : "")}\n");
         sb.Append(ok ? "  WIE ERWARTET — der Spieler kann eine Route setzen"
                      : "  NICHT wie erwartet (siehe die Zeile, die NEIN sagt)");
         GD.Print(sb.ToString());

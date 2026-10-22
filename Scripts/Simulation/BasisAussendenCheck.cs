@@ -466,15 +466,20 @@ public partial class MapEntityLayer
             }
         }
 
-        // ================= E: Nebenbefund — Fussvolk auf der Tuer, Fahrzeug wartet? ==
-        // NUR MESSUNG, kein Urteil (berichte/basis-zeile-tuer-opus.md, Abweichung 4):
-        // im Original verlangt die Fahrzeugtuer imap[Tuer] >= 0xFFFE (@0x43DD5A), ein
-        // nicht voller Trupp auf der Tuer haelt das Fahrzeug fest. Unser DepotAuslass
-        // fragt IsFree(..., Vehicle), und dort ist Fussvolk ueberfahrbar.
+        // ================= E: Fussvolk auf der Tuer — das Fahrzeug WARTET (bug-604) ==
+        // Original (C, F gepaart): der Fahrzeugarm verlangt imap[Tuer] >= 0xFFFE —
+        // Basis @0x43DD5A, Depot @0x43E254, Bahnhof @0x43E38C. Ein Trupp traegt
+        // 10000+k: das Fahrzeug wartet, gleich ob der Trupp voll ist. »wait B«
+        // (@0x409BB7, imap < 0x1F40) schickt einen Trupp NICHT weg.
+        // E1: Soldat steht (unbeweglich gemacht, ⚠ EINGRIFF) auf der Tuer, das
+        //     Fahrzeug wird ausgesandt → 120 Takte NICHT heraus, Soldat bleibt.
+        // E2: Soldat weg (⚠ EINGRIFF, versetzt) → das Fahrzeug kommt AUF der Tuer
+        //     heraus, ohne zweiten Klick.
+        // Nullmodell --tuer-fussvolk-frei-alt: E1 faellt (heraus AUF der Tuer).
         {
             int si = fi >= 0 && fi < _entities.Count && !_entities[fi].Dead && _entities[fi].Infantry >= 0 ? fi : -1;
             if (si >= 0 && b.Garage.Contains(_entities[si])) si = -1;
-            if (si < 0 || blocker < 0) sb.Append("  E (Messung) Fussvolk auf der Tuer: kein freier Soldat — NICHT GEMESSEN\n");
+            if (si < 0 || blocker < 0) { sb.Append("  E Fussvolk auf der Tuer: kein freier Soldat — NICHT GEMESSEN   ⚠\n"); ok = false; }
             else
             {
                 var soldat = _entities[si];
@@ -495,6 +500,7 @@ public partial class MapEntityLayer
                 int belegt = _nav.OccupantAt(tx, ty);
                 bool freiFuerFz = _nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle);
                 Vector2I? zelleE = null;
+                int gewartetVor = TuerFussvolkGewartet;
                 if (fz != null)
                 {
                     BaAussendenKlicken(w, new[] { b.Garage.IndexOf(fz) });
@@ -504,10 +510,33 @@ public partial class MapEntityLayer
                         if (BaSichtbar(b, fz)) zelleE = new Vector2I(fz.Col, fz.Row);
                     }
                 }
-                sb.Append($"  E (Messung, kein Urteil) 1 Soldat auf der Tuer (Belegung {belegt}, IsFree(Fahrzeug) {freiFuerFz}), Fahrzeug {(fz != null ? $"»{fz.Name}«" : "KEINES eingefahren")} ausgesandt: "
-                        + (zelleE is { } ze ? $"heraus auf ({ze.X},{ze.Y}) {(ze.X == tx && ze.Y == ty ? "AUF DER TUER, wo der Soldat steht" : "daneben")}, Soldat jetzt ({soldat.Col},{soldat.Row})"
+                bool soldatBlieb = soldat.Col == tx && soldat.Row == ty && !soldat.Dead;
+                bool e1Ok = fz != null && zelleE == null && soldatBlieb && TuerFussvolkGewartet > gewartetVor;
+                ok &= e1Ok;
+                sb.Append($"  E1 1 Soldat auf der Tuer (Belegung {belegt}, IsFree(Fahrzeug) {freiFuerFz}), Fahrzeug {(fz != null ? $"»{fz.Name}«" : "KEINES eingefahren")} ausgesandt: "
+                        + (zelleE is { } ze ? $"heraus auf ({ze.X},{ze.Y}) {(ze.X == tx && ze.Y == ty ? "AUF DER TUER, wo der Soldat steht" : "daneben")}"
                                             : "wartet (nicht heraus in 120 Takten)")
-                        + " — Original @0x43DD5A: Fahrzeug WARTET\n");
+                        + $", Soldat {(soldatBlieb ? "steht noch auf der Tuer" : $"jetzt ({soldat.Col},{soldat.Row})")}, gewartet {TuerFussvolkGewartet - gewartetVor}x"
+                        + (TuerFussvolkFreiAlt ? " (Nullmodell --tuer-fussvolk-frei-alt)" : "")
+                        + $" — Soll (Original @0x43DD5A): Fahrzeug WARTET{(e1Ok ? "" : "   ⚠")}\n");
+                // E2: der Soldat geht — dann kommt das Fahrzeug auf der Tuer heraus.
+                if (fz != null && zelleE == null)
+                {
+                    var wegS = _nav.NearestFree(new Vector2I(tx + 6, ty + 6), soldat.Move);
+                    if (wegS != null) AwStelle(si, wegS.Value);
+                    Vector2I? zelle2 = null;
+                    int takt2 = -1;
+                    for (int t = 0; t < 120 && zelle2 == null; t++)
+                    {
+                        SimTickFuerProbe();
+                        if (BaSichtbar(b, fz)) { zelle2 = new Vector2I(fz.Col, fz.Row); takt2 = t + 1; }
+                    }
+                    bool e2Ok = zelle2 is { } z2e && z2e.X == tx && z2e.Y == ty;
+                    ok &= e2Ok;
+                    sb.Append($"  E2 Soldat weg (versetzt): Fahrzeug "
+                            + (zelle2 is { } z3 ? $"heraus auf ({z3.X},{z3.Y}) {(z3.X == tx && z3.Y == ty ? "Tuer" : "DANEBEN")} nach {takt2} Takten" : "NIE erschienen")
+                            + $" — Soll: auf der Tuer, ohne zweiten Klick{(e2Ok ? "" : "   ⚠")}\n");
+                }
                 soldat.Mobile = true;
             }
         }

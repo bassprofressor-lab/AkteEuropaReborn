@@ -16446,13 +16446,18 @@ public partial class MapEntityLayer : Node2D
         int keep = _money[who];
         _money[who] = HeliPrice - 1;
         int hadPoor = _special.Count;
-        BuildPanelPick(0);
+        // bug-600 (Fortsetzung): der Klick geht wie im Spiel als Satz 527 in den
+        // Ring (PostBuildPanelPick); erst leeren, dann zaehlen. Nullmodell des
+        // Umbaus: --direktbefehle2-alt=produktion.
+        PostBuildPanelPick(0);
+        int ringD1 = RingLeeren();
         bool poor = _special.Count > hadPoor;
-        sb.Append($"\n   mit ${HeliPrice - 1}: {(poor ? "GEKAUFT — falsch!" : "abgelehnt")}  ({_order})");
+        sb.Append($"\n   mit ${HeliPrice - 1} (Ring {ringD1} Takt): {(poor ? "GEKAUFT — falsch!" : "abgelehnt")}  ({_order})");
 
         _money[who] = keep < HeliPrice ? HeliPrice * 2 : keep;
         int before = _money[who], hadAir = _special.Count;
-        BuildPanelPick(0);
+        PostBuildPanelPick(0);
+        RingLeeren();
         bool ok = _special.Count > hadAir;
         sb.Append($"\n   mit ${before}: {(ok ? "gekauft" : "ABGELEHNT — falsch!")}  " +
                   $"Kontostand ${_money[who]} (-{before - _money[who]}), " +
@@ -16587,6 +16592,38 @@ public partial class MapEntityLayer : Node2D
         }
         sb.Append($"   v[3] = {v3} (die Regel verlangt 1)\n");
 
+        // ---- 3b. Die PLATTE besetzen (bug-600 Fortsetzung, 22.10.2026) ------
+        // Seit bug-440 (05.10.) ist ein HERRENLOSER Posten nur waehlbar, wenn ein
+        // eigenes Fahrzeug auf (x+3, y+3) steht (@0x4325FC). Ohne das traf der
+        // Klick seitdem NICHTS, und der Kauf blieb ungemessen. ⚠ EINGRIFF: ein
+        // eigenes Fahrzeug wird auf die Platte gestellt — so steht der Spieler
+        // im Spiel vor dem Posten.
+        if (e.Owner != ViewPlayer && !PostenPlatteBesetzt(e, ViewPlayer)
+            && _nav != null && _nav.InBounds(e.Col + 3, e.Row + 3))
+        {
+            int pc = e.Col + 3, pr = e.Row + 3, u = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var q = _entities[i];
+                if (q.IsBuilding || q.IsProp || q.Dead || q.Owner != ViewPlayer
+                    || q.Infantry >= 0 || Untergestellt(q)) continue;
+                if (q.Col == 63 && q.Row == 7) continue;     // der Merker von 3.
+                u = i; break;
+            }
+            if (u >= 0 && _nav.OccupantAt(pc, pr) < 0)
+            {
+                var q = _entities[u];
+                _nav.SetOccupant(q.Col, q.Row, -1);
+                q.Col = pc; q.Row = pr;
+                q.Pos = CellCenter(pc, pr);
+                _nav.SetOccupant(pc, pr, u);
+                sb.Append($"   ⚠ EINGRIFF: eigenes Fahrzeug Platz {q.Slot} auf die Platte ({pc},{pr}) " +
+                          $"gestellt (Waehlbarkeit @0x4325FC, bug-440) — besetzt " +
+                          $"{(PostenPlatteBesetzt(e, ViewPlayer) ? "ja" : "NEIN")}\n");
+            }
+            else sb.Append($"   Platte ({pc},{pr}) nicht besetzbar (Fahrzeug {u}, Belegung {_nav.OccupantAt(pc, pr)})\n");
+        }
+
         // ---- 4. DER KLICK, und zwar der ECHTE ------------------------------
         //
         // ⚠⚠ ÜBER SelectAt, NICHT über `_sel.Add(idx); SetPrimary();`. Genau
@@ -16650,13 +16687,19 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Beide Richtungen. Ein Kauf, der nur GELINGEN kann, prueft nichts:
         // er sieht genauso aus wie einer, der den Kontostand gar nicht liest.
         var probe = BuildingWindowData();
+        bool postenKaufOk = false;
         if (probe != null && probe.Angebote.Count > 0 && probe.Angebote[0].Kaufen != null)
         {
             int merke = _money[wer];
             _money[wer] = HeliPrice - 1;
             int fliegtVor = _special.Count;
             BuildingWindowData()!.Angebote[0].Kaufen!.Invoke();
-            sb.Append($"   KAUF mit ${HeliPrice - 1}: Flugzeuge {fliegtVor} -> " +
+            // bug-600 (Fortsetzung): der Knopf schickt Satz 527 in den Ring —
+            // erst leeren, dann zaehlen. Sonst »besteht« die Absage, weil gar
+            // nichts gebucht wurde, und der Kauf mit Geld faellt.
+            int ring1 = RingLeeren();
+            bool abgelehnt1 = _special.Count == fliegtVor;
+            sb.Append($"   KAUF mit ${HeliPrice - 1} (Ring {ring1} Takt): Flugzeuge {fliegtVor} -> " +
                       $"{_special.Count} " +
                       $"{(_special.Count > fliegtVor ? "GEKAUFT — falsch!" : "abgelehnt")} " +
                       $"({_order})\n");
@@ -16665,7 +16708,10 @@ public partial class MapEntityLayer : Node2D
             int geldVor = _money[wer];
             fliegtVor = _special.Count;
             BuildingWindowData()!.Angebote[0].Kaufen!.Invoke();
-            sb.Append($"   KAUF mit ${geldVor}: Flugzeuge {fliegtVor} -> {_special.Count} " +
+            int ring2 = RingLeeren();
+            postenKaufOk = abgelehnt1 && _special.Count == fliegtVor + 1
+                        && geldVor - _money[wer] == HeliPrice;
+            sb.Append($"   KAUF mit ${geldVor} (Ring {ring2} Takt): Flugzeuge {fliegtVor} -> {_special.Count} " +
                       $"{(_special.Count > fliegtVor ? "gekauft" : "ABGELEHNT — falsch!")}, " +
                       $"Kontostand ${geldVor} -> ${_money[wer]} " +
                       $"(-{geldVor - _money[wer]}, erwartet -{HeliPrice})\n");
@@ -16688,6 +16734,11 @@ public partial class MapEntityLayer : Node2D
         UI.WindowManager.Schliessen(UI.WindowManager.ArtKarte);
 
         if (_mscript != null && alterText != null) _mscript.ShowText = alterText;
+        // bug-600 (Fortsetzung): ein Urteil ueber den Kaufweg (Fenster offen,
+        // Absage ohne Geld, Kauf mit Geld, Preis abgezogen).
+        sb.Append($"\n   Ergebnis Kauf: Fenster {(fenster != null ? "offen" : "ZU")}, " +
+                  $"Kauf {(postenKaufOk ? "wie erwartet" : "NICHT wie erwartet")} — " +
+                  $"{(fenster != null && postenKaufOk ? "BESTANDEN" : "DURCHGEFALLEN")}");
         return sb.ToString();
     }
 
@@ -21331,7 +21382,7 @@ public partial class MapEntityLayer : Node2D
         if (pick < 0) return;
         var b = _entities[_panelPending];
         _panelPending = -1;
-        BuildPanelPick(pick);
+        PostBuildPanelPick(pick); RingLeeren();   // bug-600: ueber den Ring wie der Knopf
         GD.Print($"demo-buildpanel: nach {DebugClock:0.0}s bezahlbar — Zeile {pick + 1} " +
                  $"\"{rows[pick].Name}\" ({rows[pick].Cost}) geklickt: {_order}; " +
                  $"Lager jetzt W{b.StockW} F{b.StockF} S{b.StockS} T{b.StockT}, " +
@@ -21469,7 +21520,10 @@ public partial class MapEntityLayer : Node2D
                          $"Platz {_entities[_depotFlowAt].Slot} uebernommen und Lager gefuellt; " +
                          $"{_depotFlowUnits} Einheitensaetze vorher, Depot " +
                          $"{_entities[_depotFlowAt].Depot.Count}");
-                BuildPanelPick(0);
+                // bug-600 (Fortsetzung): der Klick geht als Satz in den Ring (PostBuildPanelPick),
+                // erst leeren, dann lesen. Nullmodell: --direktbefehle2-alt=produktion.
+                PostBuildPanelPick(0);
+                RingLeeren();
                 _depotFlow = 1;
                 return;
 
@@ -22001,7 +22055,7 @@ public partial class MapEntityLayer : Node2D
             von.Depot.Clear(); nach.Depot.Clear();
             von.Depot.Add(0);
             int zielVor = nach.Depot.Count;
-            TransportFromPanel(0, z);
+            TransportUeberRing(0, z);
 
             // ⚠⚠ HIER STAND `an = nach.Depot.Count == zielVor + 1` — der
             // Pruefstand hat also geprueft, dass die Einheit SPRINGT. Seit dem
@@ -22041,7 +22095,7 @@ public partial class MapEntityLayer : Node2D
             {
                 von.Depot.Clear(); von.Depot.Add(0);
                 int nein = TransportNoLink;
-                TransportFromPanel(0, ohne);
+                TransportUeberRing(0, ohne);
                 bool abgelehnt = von.Depot.Count == 1 && TransportNoLink == nein + 1;
                 ablehnungGeprueft = true; abgelehntOk = abgelehnt;
                 sb.AppendLine($"  Gegenprobe {q} -> {ohne} (ohne Anschluss): " +
@@ -22101,7 +22155,11 @@ public partial class MapEntityLayer : Node2D
 
         // 0. LEERES DEPOT — hier darf nichts passieren.
         int w0 = e.StockW, f0 = e.StockF, s0 = e.StockS;
-        RecycleFromPanel(0);
+        // bug-600 (Fortsetzung): »Recycle« ueber den Absender (2007 Depotzeile,
+        // Handlung 1) und den Ring, nach JEDEM Durchgang geleert. Nullmodell:
+        // --direktbefehle2-alt=depot.
+        int ringRc = 0;
+        PostRecycleFromPanel(0); ringRc += RingLeeren();
         bool leerOk = e.StockW == w0 && e.StockF == f0 && e.StockS == s0;
         sb.AppendLine($"  leeres Depot: Lager W{e.StockW} F{e.StockF} S{e.StockS} " +
                       $"(unveraendert: {(leerOk ? "JA" : "NEIN — es zahlt aus dem Nichts")}) " +
@@ -22115,7 +22173,7 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  im Depot: {tief1}x {d.Name} (Preis W{d.CostW} F{d.CostF} S{d.CostS}), " +
                       $"Lager W{w1} F{f1} S{s1}");
 
-        RecycleFromPanel(0);
+        PostRecycleFromPanel(0); ringRc += RingLeeren();
         int dW = e.StockW - w1, dF = e.StockF - f1, dS = e.StockS - s1;
         bool eins = e.Depot.Count == tief1 - 1 &&
                     dW == d.CostW && dF == d.CostF && dS == d.CostS;
@@ -22124,13 +22182,13 @@ public partial class MapEntityLayer : Node2D
                       $"{(eins ? "stimmt" : "STIMMT NICHT")}");
 
         int w2 = e.StockW, f2 = e.StockF, s2 = e.StockS;
-        RecycleFromPanel(0);
+        PostRecycleFromPanel(0); ringRc += RingLeeren();
         bool zwei = e.Depot.Count == 0 && e.StockW - w2 == d.CostW &&
                     e.StockF - f2 == d.CostF && e.StockS - s2 == d.CostS;
         sb.AppendLine($"  2. Durchgang: Depot {e.Depot.Count} (erwartet 0), " +
                       $"Lager +W{e.StockW - w2} +F{e.StockF - f2} +S{e.StockS - s2}: " +
                       $"{(zwei ? "stimmt" : "STIMMT NICHT")}");
-        sb.AppendLine($"  verwertet insgesamt: {RecycledParts} (erwartet 2)");
+        sb.AppendLine($"  verwertet insgesamt: {RecycledParts} (erwartet 2), Ring {ringRc} Takt(e) geleert");
 
         sb.Append(leerOk && eins && zwei && RecycledParts == 2
                   ? "  BESTANDEN" : "  DURCHGEFALLEN");
@@ -22169,7 +22227,10 @@ public partial class MapEntityLayer : Node2D
                       $"Hangar {vorher}/{Mathf.Max(1, ap.HangarSize)}");
 
         // 1. kaufen — ueber den Klickweg, nicht ueber BuyAircraft direkt
-        BuildPanelPick(0);
+        // bug-600 (Fortsetzung): der Klick geht als Satz in den Ring (PostBuildPanelPick),
+        // erst leeren, dann lesen. Nullmodell: --direktbefehle2-alt=produktion.
+        PostBuildPanelPick(0);
+        RingLeeren();
         int nachKauf = ap.Hangar?.Count ?? 0;
         int zeilen = DepotRows().Count;
         sb.AppendLine($"  nach dem Kauf: Hangar {nachKauf} (erwartet {vorher + 1}: " +
@@ -22181,7 +22242,10 @@ public partial class MapEntityLayer : Node2D
 
         // 2. aussenden
         int fliegtVor = _special.Count(x => !x.Stored && !x.Dead);
-        SendOutFromPanel(0);
+        // bug-600 (Fortsetzung): »Aussenden« ist eine Hangarzeile = Satz 2007
+        // (Handlung 0, Waechter Flugzeugplatz); erst leeren, dann zaehlen.
+        PostSendOutFromPanel(0);
+        RingLeeren();
         int nachStart = ap.Hangar?.Count ?? 0;
         int fliegtNach = _special.Count(x => !x.Stored && !x.Dead);
         sb.AppendLine($"  nach dem Aussenden: Hangar {nachStart} (erwartet {nachKauf - 1}), " +
@@ -22408,7 +22472,10 @@ public partial class MapEntityLayer : Node2D
             int preis = MarketShelf()[0].Price;
             _selected = maerkte[0];
             _order = "";
-            BuildPanelPick(0);
+            // bug-600 (Fortsetzung): der Klick geht als Satz in den Ring (PostBuildPanelPick),
+            // erst leeren, dann lesen. Nullmodell: --direktbefehle2-alt=produktion.
+            PostBuildPanelPick(0);
+            RingLeeren();
             // ⚠ Regel 33/L: wer eine Bedingung stellt, muss sie danach LESEN.
             // Ohne diese Zeile sagt der Pruefstand nur "FALSCH" und nicht,
             // WORAN es lag — und genau das kostet dann eine Extrarunde.
@@ -23010,6 +23077,18 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Welcher Depotplatz auf ein Ziel wartet, −1 = keiner.
     /// Gesetzt von <see cref="TransportArmFromPanel"/>, abgeräumt vom nächsten
     /// Klick in <see cref="SelectAt"/>.</summary>
+    /// <summary>bug-600 (Fortsetzung, 22.10.2026): »Transportieren« wie der
+    /// Spieler — der Zielklick (<see cref="TransportZielGewaehlt"/>) schickt die
+    /// Depotzeile als Satz 2007 (Handlung 2) in den Ring; danach leeren. Bis
+    /// heute rief <c>--transport-netz-check</c> den Rumpf unmittelbar.
+    /// Nullmodell: --direktbefehle2-alt=depot.</summary>
+    private void TransportUeberRing(int platz, int ziel)
+    {
+        _transportWartet = platz; _transportEinheit = -1;
+        TransportZielGewaehlt(ziel);
+        RingLeeren();
+    }
+
     private int _transportWartet = -1;
 
     /// <summary>Wartet gerade ein Transport auf sein Ziel? Für die
@@ -23363,7 +23442,11 @@ public partial class MapEntityLayer : Node2D
             int before = b.BuildQueue.Count;
             bool running = b.BuildTime > 0f;
             int gelegtVor = NeubauInListeGelegt;     // bug-462: ohne Bauzeit sofort ein Satz
-            BuildPanelPick(pick);
+            // bug-600 (Fortsetzung): jede Bestellung als Satz 503 in den Ring,
+            // ZWISCHEN den Bestellungen leeren — sonst zaehlt »angenommen« nichts.
+            // Nullmodell: --direktbefehle2-alt=produktion.
+            PostBuildPanelPick(pick);
+            RingLeeren();
             if (b.BuildQueue.Count > before || (!running && b.BuildTime > 0f)
                 || NeubauInListeGelegt > gelegtVor) _queueOrdered++;
         }
@@ -23669,6 +23752,14 @@ public partial class MapEntityLayer : Node2D
     {
         var sb = new System.Text.StringBuilder("repair-check\n");
         int merk = _selected;
+        // bug-600 (Fortsetzung): Taste K und Reiterklick gehen wie im Spiel ueber
+        // den RING (PostReparaturTaste 519/522/520/521, PostStopRepairFromPanel
+        // 511/517/524/525), und nach JEDEM Druck wird geleert — sonst rechnet der
+        // zweite Druck eines Umschalters aus dem alten Stand. Nullmodell des Umbaus:
+        // --direktbefehle2-alt=reparatur (Taste K wieder direkt).
+        int ringTakte = 0;
+        void TasteK() { PostReparaturTaste(); ringTakte += RingLeeren(); }
+        void Reiter() { PostStopRepairFromPanel(); ringTakte += RingLeeren(); }
         int idx = -1;
         for (int i = 0; i < _entities.Count; i++)
             if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].HpMax > 0)
@@ -23682,21 +23773,21 @@ public partial class MapEntityLayer : Node2D
 
         // 1. UNBESCHAEDIGT -> darf nicht anfangen
         e.Hp = e.HpMax; e.State = 0;
-        StartRepair();
+        TasteK();
         bool heilOk = e.State == 0;
         sb.AppendLine($"  unbeschaedigt: Zustand {e.State} (erwartet 0): " +
                       $"{(heilOk ? "faengt nicht an, richtig" : "FAENGT AN — falsch")}");
 
         // 2. BESCHAEDIGT -> faengt an
         e.Hp = Mathf.Max(1, e.HpMax / 2); e.State = 0;
-        StartRepair();
+        TasteK();
         bool startOk = e.State is FaRepair or StRepair;
         sb.AppendLine($"  beschaedigt: Zustand {e.State} " +
                       $"({(startOk ? "reparieren, richtig" : "FAENGT NICHT AN")})");
 
         // 3. REITERWECHSEL -> haelt an
         int vorher = RepairsStopped;
-        StopRepairFromPanel();
+        Reiter();
         bool stopOk = e.State == 0 && RepairsStopped == vorher + 1;
         sb.AppendLine($"  Reiterwechsel: Zustand {e.State} (erwartet 0), " +
                       $"angehalten {RepairsStopped - vorher} (erwartet 1): " +
@@ -23704,7 +23795,7 @@ public partial class MapEntityLayer : Node2D
 
         // 4. Gegenprobe: etwas ANDERES darf er nicht anfassen
         e.State = 99;
-        StopRepairFromPanel();
+        Reiter();
         bool fremdOk = e.State == 99;
         sb.AppendLine($"  fremder Zustand 99: bleibt {e.State}: " +
                       $"{(fremdOk ? "unangetastet, richtig" : "UEBERSCHRIEBEN — falsch")}");
@@ -23721,9 +23812,9 @@ public partial class MapEntityLayer : Node2D
             var b = _entities[i];
             if (!b.IsBuilding || b.Dead || b.BType is 2 or 3 or 4) continue;
             b.Owner = b.Team = ViewPlayer;
-            _sel.Clear(); _sel.Add(i);
+            _sel.Clear(); _sel.Add(i); _selected = i;   // der Reiter meint das Gebaeude des Fensters
             b.State = StExpand;                       // = 2, aber KEIN Reparieren
-            StopRepairFromPanel();
+            Reiter();
             zahlOk = b.State == StExpand;
             sb.AppendLine($"  Basis/Flughafen im Ausbau (Zustand {StExpand}): " +
                           $"bleibt {b.State}: " +
@@ -23742,20 +23833,20 @@ public partial class MapEntityLayer : Node2D
         e.Owner = e.Team = ViewPlayer;
 
         e.Hp = 300; e.State = 0;
-        StartRepair();
+        TasteK();
         int erwartet300 = 29 * 300 / 30;              // = 290
         bool preisOk = e.Hp == erwartet300;
         sb.AppendLine($"  Preis bei 300 TP: {e.Hp} (erwartet {erwartet300} = 29*300/30): " +
                       $"{(preisOk ? "richtig" : "FALSCH")}");
 
         e.Hp = 50; e.State = 0;
-        StartRepair();
+        TasteK();
         bool schrankeOk = e.Hp == 50;                 // 50 ist NICHT > 50
         sb.AppendLine($"  Schranke bei genau 50 TP: {e.Hp} (erwartet 50, kostet nichts): " +
                       $"{(schrankeOk ? "richtig" : "FALSCH — die Schranke ist >, nicht >=")}");
 
         e.Hp = 51; e.State = 0;
-        StartRepair();
+        TasteK();
         bool schranke2Ok = e.Hp == 29 * 51 / 30;      // = 49
         sb.AppendLine($"  eins darueber (51 TP): {e.Hp} (erwartet {29 * 51 / 30}): " +
                       $"{(schranke2Ok ? "richtig" : "FALSCH")}");
@@ -23770,7 +23861,7 @@ public partial class MapEntityLayer : Node2D
         // gerade festgeschrieben. Jetzt fragt er nach der Art.
         bool istUmschalter = LeerlaufIstUmschalter(e);
         e.Hp = Mathf.Max(2, e.HpMax / 2); e.State = 0;
-        StopRepairFromPanel();
+        Reiter();
         bool umschaltOk = istUmschalter
             ? e.State is FaRepair or StRepair
             : e.State == StAktiv;
@@ -23796,7 +23887,7 @@ public partial class MapEntityLayer : Node2D
         int lbVor = LeerlaufBedingungslos, akVor = AblehnklangUnterdrueckt;
         int agVor = AblehnklangGespielt;
         e.Hp = e.HpMax; e.State = StAktiv;
-        StopRepairFromPanel();
+        Reiter();
         int lb = LeerlaufBedingungslos - lbVor, ak = AblehnklangUnterdrueckt - akVor;
         int ag = AblehnklangGespielt - agVor;
         bool klangOk = ag == 0 && (istUmschalter
@@ -23811,6 +23902,8 @@ public partial class MapEntityLayer : Node2D
         _selected = merk;
         bool alles = heilOk && startOk && stopOk && fremdOk && zahlOk
                      && preisOk && schrankeOk && schranke2Ok && umschaltOk && klangOk;
+        sb.AppendLine($"  Ring: {ringTakte} Takt(e) geleert" +
+                      $"{(Alt2("reparatur") ? " (Taste K direkt, --direktbefehle2-alt)" : "")}");
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
@@ -24101,7 +24194,7 @@ public partial class MapEntityLayer : Node2D
                      "Terranium, aber keine Teile; es wird gewartet");
             return b.Pos;
         }
-        BuildPanelPick(pick);
+        PostBuildPanelPick(pick); RingLeeren();   // bug-600: ueber den Ring wie der Knopf
         GD.Print($"demo-buildpanel: Zeile {pick + 1} \"{rows[pick].Name}\" geklickt — " +
                  $"{_order}; Lager jetzt W{b.StockW} F{b.StockF} S{b.StockS}, " +
                  $"Bauzeit {b.BuildTime:0.0}s");
@@ -25707,7 +25800,10 @@ public partial class MapEntityLayer : Node2D
                 DockExitReport(dock);
                 _dockCheckShips = _shipsBuilt;
                 _selected = _dockCheckAt;
-                BuildPanelPick(0);
+                // bug-600 (Fortsetzung): der Klick geht als Satz in den Ring (PostBuildPanelPick),
+                // erst leeren, dann lesen. Nullmodell: --direktbefehle2-alt=produktion.
+                PostBuildPanelPick(0);
+                RingLeeren();
                 _dockCheck = 1;
                 return;
             }
@@ -31919,18 +32015,26 @@ public partial class MapEntityLayer : Node2D
     /// Abstand auf Kampagne 5 schlechter statt besser. Erst die
     /// schattenfreie Farbfläche bestand.</para>
     /// </summary>
+    /// <summary><c>--auswahl-bezug-alt</c> — <c>--auswahl-check</c> misst wieder
+    /// gegen die nackte Leinwandecke (Stand bis 22.10.2026).</summary>
+    public static bool AuswahlBezugAlt;
+
     public string AuswahlCheck()
     {
         var sb = new System.Text.StringBuilder();
         int n = 0;
-        double altX = 0, altY = 0, neuX = 0, neuY = 0, altMax = 0, neuMax = 0;
+        double altX = 0, altY = 0, neuX = 0, neuY = 0, altMax = 0, neuMax = 0, fussMax = 0, fahrMax = 0;
+        int nFuss = 0, nFahr = 0;
         foreach (var e in _entities)
         {
             if (e.IsBuilding || e.IsProp || e.Dead) continue;
-            var tex = e.Infantry >= 0
-                ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
-                : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e))
-                  ?? GetComposedTexture(e.Combo, e.Facing);
+            // dasselbe Bild, das der Zeichner und der Kranz nehmen (Bertha!)
+            var tex = AuswahlBezugAlt
+                ? (e.Infantry >= 0
+                    ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
+                    : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e))
+                      ?? GetComposedTexture(e.Combo, e.Facing))
+                : AuswahlBild(e);
             if (tex == null) continue;
             var img = tex.GetImage();
             if (img == null) continue;
@@ -31945,7 +32049,20 @@ public partial class MapEntityLayer : Node2D
                         if (y > y1) y1 = y;
                     }
             if (x1 < x0) continue;
+            // ⭐ 22.10.2026 (Paket H2): der Bezugspunkt ist der ZEICHENPUNKT, an
+            // dem das Bild wirklich liegt. Fussvolk zeichnet seit bug-075/bug-596
+            // an FussvolkOrt (Fussanker, Versatz dx/dy je Soldat), die Bertha +4/+4
+            // (bug-485). Hier stand bis heute die nackte Leinwandecke
+            // PictureAnchor − EinheitenAnker — der Pruefstand mass also gegen eine
+            // Stelle, an der beim Fussvolk kein Bild mehr liegt, und meldete »NICHT
+            // BESSER« (K4: groesster Abstand 34,2), obwohl der Kranz am Bild sass.
+            // Gegenschalter --auswahl-bezug-alt: wieder die Leinwandecke.
             var ecke = PictureAnchor(e) - EinheitenAnker(e);
+            if (!AuswahlBezugAlt)
+            {
+                ecke += FussVersatzWirksam(e);
+                if (IstBertha(e) && BerthaBild(true, e.Facing) != null) ecke += BerthaVersatz;
+            }
             var farbe = ecke + new Vector2((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f);
             var alt = e.Pos - new Vector2(0, SelMarkLift);
             var neu = AuswahlMitte(e);
@@ -31954,6 +32071,8 @@ public partial class MapEntityLayer : Node2D
             altX += ax; altY += ay; neuX += nx; neuY += ny;
             altMax = Mathf.Max(altMax, Mathf.Sqrt(ax * ax + ay * ay));
             neuMax = Mathf.Max(neuMax, Mathf.Sqrt(nx * nx + ny * ny));
+            if (e.Infantry >= 0) { nFuss++; fussMax = Mathf.Max(fussMax, Mathf.Sqrt(nx * nx + ny * ny)); }
+            else { nFahr++; fahrMax = Mathf.Max(fahrMax, Mathf.Sqrt(nx * nx + ny * ny)); }
             n++;
         }
         if (n == 0)
@@ -31962,7 +32081,8 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"   ALT (Pos − Hub {SelMarkLift:0}):  |dx| {altX / n:0.0}  |dy| {altY / n:0.0}" +
                       $"   groesster Abstand {altMax:0.0}");
         sb.AppendLine($"   NEU (Bildmitte):        |dx| {neuX / n:0.0}  |dy| {neuY / n:0.0}" +
-                      $"   groesster Abstand {neuMax:0.0}");
+                      $"   groesster Abstand {neuMax:0.0}  (Fussvolk {nFuss}: {fussMax:0.0}, Fahrzeuge {nFahr}: {fahrMax:0.0})"
+                      + (AuswahlBezugAlt ? "  [--auswahl-bezug-alt: Leinwandecke]" : ""));
         sb.AppendLine(neuMax < altMax
             ? "   besser — der Kranz sitzt naeher an der Farbflaeche."
             : "   ⚠ NICHT BESSER. Die Umstellung bringt nichts und gehoert zurueckgenommen.");
@@ -38721,8 +38841,25 @@ public partial class MapEntityLayer : Node2D
             return _griffZelle.TryGetValue((col, row), out int platz) && platz == e.Slot;
         }
         int w = Mathf.Max(1, e.FootW), h = Mathf.Max(1, e.FootH);
-        return col >= e.Col && col < e.Col + w && row >= e.Row && row < e.Row + h;
+        bool imRechteck = col >= e.Col && col < e.Col + w && row >= e.Row && row < e.Row + h;
+        // ⭐ 22.10.2026, bug-605 — DER GRIFF EINES ANDEREN GEHT VOR. Das Original
+        // findet ein Gebaeude NUR ueber den Griff der Mauszelle (imap 60000+n,
+        // sec52 @0x432150). Der Rechteck-Rueckfall fuer Plaetze ohne Griffzelle
+        // ist UNSERE SETZUNG (Neubauten, aeltere Importe) — er darf aber keine
+        // Zelle an sich ziehen, deren imap ausdruecklich ein ANDERES Gebaeude
+        // nennt. Gemessen an K23: Platz 190 (Art 27, 3x3, ohne jeden Griff) liegt
+        // ganz in Platz 191 (Art 31, 4x4, zwoelf Griffzellen); jeder Klick auf 191
+        // traf 190, weil beide in Zeile 50 stehen und 190 frueher in der Liste.
+        // Gegenschalter --griffvorrang-alt.
+        if (imRechteck && !GriffvorrangAlt
+            && _griffZelle.TryGetValue((col, row), out int fremd) && fremd != e.Slot) return false;
+        return imRechteck;
     }
+
+    /// <summary><c>--griffvorrang-alt</c> — Nullmodell zu bug-605: der
+    /// Rechteck-Rueckfall eines Platzes ohne Griff schlaegt wieder den Griff eines
+    /// anderen Gebaeudes.</summary>
+    public static bool GriffvorrangAlt;
 
     /// <summary>
     /// <c>--gebaeudeklick-check</c> — <b>laesst sich jedes Gebaeude der Karte
@@ -38752,12 +38889,16 @@ public partial class MapEntityLayer : Node2D
     /// ueber 16 durchfallen; faellt dann nichts durch, misst der Stand nicht,
     /// was er zu messen vorgibt.</para>
     /// </summary>
+    /// <summary><c>--gebaeudeklick-mitte-alt</c> — der Pruefstand klickt wieder
+    /// die Rahmenmitte (Stand bis 22.10.2026, Paket H2).</summary>
+    public static bool GebaeudeklickMitteAlt;
+
     public string GebaeudeklickCheck()
     {
         var sb = new System.Text.StringBuilder("gebaeudeklick-check\n");
         bool nebelVor = PickOhneNebel;
         PickOhneNebel = true;
-        int gut = 0, schlecht = 0;
+        int gut = 0, schlecht = 0, ohneGriffZahl = 0;
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -38770,10 +38911,62 @@ public partial class MapEntityLayer : Node2D
             // faellt der Stand auf map_05 an sieben leeren Saetzen durch und
             // behauptet einen Fehler, den es nicht gibt.
             var rect = BodyRect(e);
-            int t = Pick(rect.GetCenter());
+            // ⭐ 22.10.2026 (Paket H2) — DER KLICKPUNKT. Seit bug-439 (05.10.)
+            // findet Pick ein Gebaeude ueber den GRIFF der Mauszelle (imap
+            // 60000+n, sec52 @0x432150), nicht mehr ueber sein Rechteck. Die
+            // Rahmenmitte ist darum nicht immer eine eigene Griffzelle: K23
+            // Platz 104 (Bunker Art 44) hat dort gar keinen Griff, und Platz 191
+            // (Art 31) liegt mit 190 (Art 27) uebereinander — die Karte selbst
+            // traegt in der Mitte 60190, im Original findet der Klick dort also
+            // 190. Der Pruefstand klickt jetzt auf die eigene Griffzelle, die der
+            // Mitte am naechsten liegt (wie ein Spieler, der auf das sichtbare
+            // Gebaeude zielt). Hat ein Bau in der imap KEINE eigene Griffzelle
+            // mehr, ist er auch im Original nicht anklickbar — das steht dann als
+            // eigene Zeile da und zaehlt nicht als Fehler unseres Picks.
+            // Gegenschalter: --gebaeudeklick-mitte-alt (wieder die Rahmenmitte).
+            var klick = rect.GetCenter();
+            string klickNotiz = "";
+            bool ohneGriff = false;
+            var mzq = CellAt(klick);
+            if (!GebaeudeklickMitteAlt && !GebaeudepickBboxAlt && e.Slot >= 0 && _griffPlaetze.Contains(e.Slot)
+                && (mzq is not { } mz0 || !GebaeudeAufZelle(e, mz0.X, mz0.Y)))
+            {
+                var mz = mzq ?? new Vector2I(-1, -1);
+                (int C, int R)? besteZ = null; float bd = float.MaxValue;
+                foreach (var kv in _griffZelle)
+                {
+                    if (kv.Value != e.Slot) continue;
+                    float d = CellCenter(kv.Key.Col, kv.Key.Row).DistanceSquaredTo(klick);
+                    if (d < bd) { bd = d; besteZ = kv.Key; }
+                }
+                if (besteZ is { } bz)
+                {
+                    // einen Punkt suchen, den CellAt wirklich dieser Zelle zuordnet
+                    var p0 = CellCenter(bz.C, bz.R);
+                    klick = p0;
+                    for (int oy = -20; oy <= 20 && !(CellAt(klick) is { } k0 && k0.X == bz.C && k0.Y == bz.R); oy += 4)
+                        klick = p0 + new Vector2(0, oy);
+                    int mitteVon = _griffZelle.TryGetValue((mz.X, mz.Y), out int mp) ? mp : -1;
+                    klickNotiz = mzq == null
+                        ? $" [Mitte liegt ausserhalb der Karte -> Klick auf eigene Griffzelle ({bz.C},{bz.R})]"
+                        : $" [Mitte ({mz.X},{mz.Y}) traegt {(mitteVon < 0 ? "keinen Griff" : $"den Griff von Platz {mitteVon}")}"
+                          + $" -> Klick auf eigene Griffzelle ({bz.C},{bz.R})]";
+                }
+                else ohneGriff = true;
+            }
+            int t = Pick(klick);
             bool ok = t == i;
             bool leerSatz = e.BType <= 0;
-            if (!leerSatz) { if (ok) gut++; else schlecht++; }
+            // Ein Platz OHNE jede Griffzelle, dessen Klickzelle laut imap einem
+            // ANDEREN Gebaeude gehoert, das der Klick auch trifft: im Original
+            // findet die Maus genau dieses andere (sec52 liest nur die imap) —
+            // der Platz ist dort verdeckt und nicht anklickbar (K23: 190 in 191).
+            if (!ok && t >= 0 && !GebaeudeklickMitteAlt && !GriffvorrangAlt && !_griffPlaetze.Contains(e.Slot)
+                && CellAt(klick) is { } vz && _griffZelle.TryGetValue((vz.X, vz.Y), out int vg)
+                && vg == _entities[t].Slot && _griffPlaetze.Contains(vg))
+                ohneGriff = true;
+            if (ohneGriff) { klickNotiz += " [KEINE eigene Griffzelle in der imap, die Zelle gehoert einem anderen — im Original ebenso nicht anklickbar, nicht gewertet]"; ohneGriffZahl++; }
+            else if (!leerSatz) { if (ok) gut++; else schlecht++; }
             var bt = Patterns?.GetBuildingType(e.BType) ?? default;
             int ruine = Import.BuildingPatterns.RuinPattern(Patterns!, e.BType);
             // ⚠ 10.09.2026 — WIEVIELE SEINER ZELLEN GELTEN ALS KOERPER?
@@ -38816,6 +39009,28 @@ public partial class MapEntityLayer : Node2D
             string wer = t < 0 ? "NICHTS"
                        : t == i ? "sich selbst"
                        : $"Platz {_entities[t].Slot} (Art {_entities[t].BType})";
+            if (!ok && !leerSatz)
+            {
+                // Auskunft fuer den Fehlfall: Griffzellen und was unter dem Klick liegt.
+                int eigene = 0;
+                foreach (var kv in _griffZelle) if (kv.Value == e.Slot) eigene++;
+                var kz = CellAt(klick);
+                string unter = kz is { } u
+                    ? $"({u.X},{u.Y}) Griff {(_griffZelle.TryGetValue((u.X, u.Y), out int gp) ? gp.ToString() : "keiner")}, "
+                      + $"im Rahmen {(u.X >= e.Col && u.X < e.Col + e.FootW && u.Y >= e.Row && u.Y < e.Row + e.FootH ? "ja" : "NEIN")}"
+                    : "ausserhalb der Karte";
+                klickNotiz += $" [eigene Griffzellen {eigene}, Klickzelle {unter}]";
+                if (t >= 0 && t != i && _entities[t].IsBuilding)
+                {
+                    var tb = _entities[t];
+                    int tg = 0;
+                    foreach (var kv in _griffZelle) if (kv.Value == tb.Slot) tg++;
+                    string wie = !_griffPlaetze.Contains(tb.Slot) ? "RECHTECK (Platz ohne Griff in der imap)"
+                               : kz is { } u2 && tb.DoorCells.Exists(d => tb.Col + d.Col == u2.X && tb.Row + d.Row == u2.Y) ? "TUERZELLE"
+                               : "Griff";
+                    klickNotiz += $" [Treffer Platz {tb.Slot}: {tg} Griffzellen, getroffen ueber {wie}, Zeile {tb.Row} gegen {e.Row}]";
+                }
+            }
             sb.Append($"  Platz {e.Slot,3} Art {e.BType,3} bei ({e.Col,3},{e.Row,3}) "
                     + $"Grundriss {e.FootW}x{e.FootH} Rahmen {rect.Size} "
                     + $"Hp {e.Hp}/{e.HpMax} Besitzer {e.Owner} "
@@ -38824,13 +39039,15 @@ public partial class MapEntityLayer : Node2D
                     + $"Nebel {(ImNebelVerborgen(e) ? "verdeckt" : "frei   ")} "
                     + $"{mzellen} Musterzellen, davon {koerper} Koerper, "
                     + $"Todesstapel deckt {ruinZellen} (Ruine allein {nurRuine}) "
-                    + $"{muster} -> Klick trifft {wer}"
+                    + $"{muster} -> Klick trifft {wer}{klickNotiz}"
                     + (leerSatz ? "   (freier Satz, nicht gewertet)"
                                 : ok ? "" : "   ⚠"));
             sb.Append((char)10);
         }
         PickOhneNebel = nebelVor;
-        sb.Append($"  {gut} von {gut + schlecht} Gebaeuden treffen sich selbst\n");
+        sb.Append($"  {gut} von {gut + schlecht} Gebaeuden treffen sich selbst"
+                + (ohneGriffZahl > 0 ? $" ({ohneGriffZahl} ohne eigene Griffzelle, nicht gewertet)" : "")
+                + (GebaeudeklickMitteAlt ? " [--gebaeudeklick-mitte-alt: Rahmenmitte]" : "") + "\n");
         // ⭐⭐ 10.09.2026 — UND DIE GANZE KETTE BIS ZUM MISSIONSZIEL.
         // Anklicken ist nicht zerstoeren, und zerstoeren ist noch nicht
         // gewonnen: das Skript von Mission 7 endet erst, wenn

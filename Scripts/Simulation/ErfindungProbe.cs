@@ -127,7 +127,10 @@ public partial class MapEntityLayer : Node2D
                 _money[0] = 60000;                       // Messwerkzeug
                 int vorher = ErfindungFertig;
                 int preis = angebot[zeile].Preis;
-                bool gekauft = ForschungKaufen(basis, zeile);
+                // bug-600 (Fortsetzung): ueber den Ring wie der Knopf (2005);
+                // »gekauft« am Zustand: an der Basis laeuft eine Forschung.
+                ForschungUeberRing(basis, zeile);
+                bool gekauft = ForschungLaeufeAn(basis) > 0;
                 int takte = 0;
                 while (ErfindungFertig == vorher && takte < preis + 10) { ForschungTick(); takte++; }
                 durchstichOk = gekauft && ErfindungFertig == vorher + 1 && takte == preis;

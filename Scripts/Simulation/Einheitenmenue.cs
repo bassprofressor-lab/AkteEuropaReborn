@@ -175,6 +175,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--doppelklick-alt</c> — siehe <see cref="MenueEinheitUnter"/>.</summary>
     public static bool DoppelklickAlt;
 
+    /// <summary>Fuer <c>--doppelklick-check</c> (22.10.2026): die Mitte des
+    /// Klickkastens dieser Einheit in Kartenpunkten — dort trifft <c>Pick</c>.</summary>
+    public Vector2 KlickMitteFuerProbe(int idx)
+        => idx >= 0 && idx < _entities.Count ? BodyRect(_entities[idx]).GetCenter() : Vector2.Zero;
+
     /// <summary>Eine Einheit anwaehlen — fuer die Pruefstaende, die keinen
     /// Mausklick haben.</summary>
     public bool WaehleFuerProbe(int idx)

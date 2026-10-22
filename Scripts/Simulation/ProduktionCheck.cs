@@ -33,7 +33,11 @@ public partial class MapEntityLayer
         int zeile = 0;
         for (int k = 0; k < menu.Count; k++)
             if (TypeOfChassis(_designs![menu[k]].Propulsion) == 0) { zeile = k; break; }
-        BuildPanelPick(zeile);
+        // bug-600 (Fortsetzung): der Knopf schickt Satz 503 in den Ring
+        // (PostBuildPanelPick); »sofort« heisst: nach dem Leeren des Rings, vor
+        // dem ersten Simulationstakt. Nullmodell: --direktbefehle2-alt=produktion.
+        PostBuildPanelPick(zeile);
+        int ringP = RingLeeren();
         bool sofortInListe = _entities.Count > vorEnt && b.Garage.Count > vorListe;
         var neu = _entities.Count > vorEnt ? _entities[^1] : null;
         int sichtbarNach = -1;
@@ -48,7 +52,7 @@ public partial class MapEntityLayer
                 + $"Entwurfsnummern im Depot {vorDepot} -> {b.Depot.Count}, sichtbar auf der Karte nach "
                 + $"{(sichtbarNach < 0 ? "— (nicht in 400 Takten)" : sichtbarNach + " Takten")}"
                 + (neu != null ? $" bei ({neu.Col},{neu.Row})" : "")
-                + (BauzeitAlt ? " (Nullmodell --bauzeit-alt)" : "") + "\n");
+                + (BauzeitAlt ? " (Nullmodell --bauzeit-alt)" : "") + $", Ring {ringP} Takt\n");
         sb.Append(ok ? "produktion-check: BESTANDEN" : "produktion-check: DURCHGEFALLEN");
         return sb.ToString();
     }

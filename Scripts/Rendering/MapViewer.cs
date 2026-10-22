@@ -3776,6 +3776,10 @@ _mausProbePunkt = karte;
     /// wirklich auf?</summary>
     private bool _doppelklickCheck;
     private bool _doppelklickGelaufen;
+
+    /// <summary><c>--doppelklick-mitte-alt</c> — der Pruefstand klickt wieder auf
+    /// die Schirmmitte statt auf die Einheit (Stand bis 22.10.2026).</summary>
+    private static bool DoppelklickMitteAlt;
     private float _handUhr;
     private float _doppelklickUhr;
 
@@ -3812,6 +3816,29 @@ _mausProbePunkt = karte;
         _entities.WaehleFuerProbe(idx);
         bool vorher = _unitMenu.Visible;
 
+        // ⭐ 22.10.2026 (Paket H2): seit bug-502 (0.6.8) oeffnet der Doppelklick
+        // das Menue nur, wenn er die gewaehlte Einheit TRIFFT (MenueEinheitUnter
+        // → Pick). Der Pruefstand klickte aber auf die Schirmmitte, wo die Einheit
+        // nicht steht, und war seitdem ROT, ohne dass am Spiel etwas falsch war.
+        // Jetzt liegt der Mauspunkt auf der Mitte ihres Klickkastens (derselbe
+        // Ueberschreiber wie --bedienung-check), und die Gegenprobe daneben MUSS
+        // zu bleiben. Gegenschalter --doppelklick-mitte-alt: wieder die Schirmmitte.
+        var neben = _entities.KlickMitteFuerProbe(idx) + new Vector2(0, 400);
+        bool danebenOffen = false;
+        if (!DoppelklickMitteAlt)
+        {
+            _mausProbePunkt = neben;
+            GetViewport().PushInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left, Pressed = true, DoubleClick = true,
+                Position = GetViewportRect().Size * 0.5f,
+            });
+            danebenOffen = _unitMenu.Visible;
+            if (danebenOffen) _unitMenu.Visible = false;
+            _entities.WaehleFuerProbe(idx);
+            _mausProbePunkt = _entities.KlickMitteFuerProbe(idx);
+        }
+
         var e = new InputEventMouseButton
         {
             ButtonIndex = MouseButton.Left,
@@ -3820,8 +3847,12 @@ _mausProbePunkt = karte;
             Position = GetViewportRect().Size * 0.5f,
         };
         GetViewport().PushInput(e);
+        _mausProbePunkt = null;
 
         bool offen = _unitMenu.Visible;
+        if (!DoppelklickMitteAlt)
+            sb.Append($"  Gegenprobe: Doppelklick 400 Punkte neben der Einheit -> Menue "
+                    + $"{(danebenOffen ? "OFFEN — falsch (bug-502: nur auf der Einheit)" : "zu, richtig")}\n");
         int belegt = 0;
         foreach (int c in _unitMenu.Codes) if (c >= 0) belegt++;
         sb.Append($"  Einheit {idx} gewaehlt, Menue vorher {(vorher ? "offen" : "zu")}, "
@@ -3849,8 +3880,11 @@ _mausProbePunkt = karte;
                 + $"{_unitMenu.HTiles * UI.WindowChrome.Cell} Punkte; "
                 + $"anklickbar {klickbar} von {belegt}"
                 + (taub > 0 ? $" — TAUB:{tauben}" : "") + "\n");
+        if (danebenOffen) offen = false;   // die Gegenprobe zieht das Urteil herunter
         sb.Append(offen && belegt > 0 && taub == 0
                   ? "  WIE ERWARTET — der Doppelklick oeffnet das Menue, und jedes Symbol trifft"
+                  : danebenOffen
+                    ? "  DURCHGEFALLEN — der Doppelklick oeffnet das Menue auch NEBEN der Einheit"
                   : taub > 0
                     ? "  DURCHGEFALLEN — ein gezeichnetes Symbol, das der Klick nicht erreicht"
                     : "  NICHT wie erwartet — der Doppelklick kommt nicht an");
@@ -4291,6 +4325,8 @@ _mausProbePunkt = karte;
             else if (a == "--werteliste-check") _wertelisteCheck = true;
             else if (a == "--einsteigen-check") _einsteigenCheck = true;
             else if (a == "--gebaeudeklick-check") _gebaeudeklickCheck = true;
+            else if (a == "--gebaeudeklick-mitte-alt") MapEntityLayer.GebaeudeklickMitteAlt = true;   // Paket H2
+            else if (a == "--griffvorrang-alt") MapEntityLayer.GriffvorrangAlt = true;   // bug-605
             else if (a == "--treffer-check") _trefferCheck = true;
             else if (a == "--fensterwerte-check") _fensterwerteCheck = true;
             else if (a == "--depotauslass-check") _depotauslassCheck = true;
@@ -4331,6 +4367,7 @@ _mausProbePunkt = karte;
             else if (a == "--gebaeudeangriff-ankunft-alt") MapEntityLayer.GebaeudeangriffAnkunftAlt = true; // bug-597 Arm 0x407D1D
             else if (a.StartsWith("--gebaeudeangriff-check")) _gebaeudeangriffCheck = a.Length > 24 ? a[24..] : "";
             else if (a == "--auslass-rueckfall-alt") MapEntityLayer.AuslassRueckfallAlt = true;     // bug-591 B2
+            else if (a == "--tuer-fussvolk-frei-alt") MapEntityLayer.TuerFussvolkFreiAlt = true;   // bug-604
             else if (a == "--depotzeile-absage") MapEntityLayer.DepotzeileAbsage = true;           // bug-603 B4
             else if (a == "--ausgesandt-alt") MapEntityLayer.AusgesandtAlt = true;                 // bug-603 B5
             else if (a.StartsWith("--basis-aussenden-check")) _basisAussendenCheck = a.Length > 24 ? a[24..] : "a";
@@ -4490,6 +4527,7 @@ _mausProbePunkt = karte;
                 _tickCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 10f;
             else if (a == "--verdeck-check") _verdeckCheck = true;
             else if (a == "--auswahl-check") _auswahlCheck = true;
+            else if (a == "--auswahl-bezug-alt") MapEntityLayer.AuswahlBezugAlt = true;   // Paket H2
             else if (a == "--flammen-oben") MapEntityLayer.FlammenOben = true;
             // ⚠ NUR FUER BILDVERGLEICHE: ohne die Hilfefenster sind zwei Laeufe
             // ueberhaupt vergleichbar. Sie standen im ersten Vergleich an
@@ -5141,6 +5179,7 @@ _mausProbePunkt = karte;
             else if (a == "--einheitenmenue-check") _menueCheck = true;
             else if (a == "--zeigermerker-probe") _merkerProbe = true;
             else if (a == "--doppelklick-check") _doppelklickCheck = true;
+            else if (a == "--doppelklick-mitte-alt") DoppelklickMitteAlt = true;   // Paket H2
             else if (a == "--fahrzeugname-alt") MapEntityLayer.FahrzeugnameAlt = true;
             else if (a == "--befehlsleiste-alt") BefehlsleisteAlt = true;
             else if (a == "--gruppenfenster-alt") GruppenfensterAlt = true;
@@ -6402,7 +6441,10 @@ _mausProbePunkt = karte;
         GD.Print(zeile.Length > 0
             ? zeile
             : "zielwahl-check: keine Zielwahl benutzt — NICHT GEMESSEN");
+        GD.Print(_entities.ZielwahlProbeUrteil());
     }
+
+    private bool _zielwahlProbeFertig;
 
     /// <summary>⭐⭐ <c>--handsteuerung-luft-check</c> — am Ausstieg, aus
     /// demselben Grund wie die drei darueber: eine Handsteuerung sieht man
@@ -8981,10 +9023,16 @@ _mausProbePunkt = karte;
             int markiert = _baseWindow.ProbeMarkiert;
             int vor = _entities.GarageVerwertet;
             _baseWindow.ProbeRecycle();
+            // bug-600 (Fortsetzung): »Recycle« schickt Satz 506 bzw. 2007 in den
+            // Ring; gebucht wird erst im Takt. Erst leeren, dann zaehlen.
+            int ringTakte = _entities.RingLeeren();
             int verwertet = _entities.GarageVerwertet - vor;
-            int soll = UI.BaseWindow.DepotreiterEinzelwahl ? 1 : 2;
-            bool okd = drin == 3 && verwertet == 2;
-            GD.Print(sbd.Append($": {drin} eingefahren, Zeilen 0 und 2 angeklickt, markiert {markiert}, Recycle verwertet {verwertet} (Soll 2)"
+            // Urteil gegen EIN Soll (vorher hart »== 2« neben einer toten Variablen
+            // soll = 1/2): zwei Zeilen angeklickt, also zwei verwertet. Das Nullmodell
+            // --depotreiter-einzelwahl verwertet nur eine und faellt durch die MESSUNG.
+            int soll = 2;
+            bool okd = drin == 3 && verwertet == soll;
+            GD.Print(sbd.Append($": {drin} eingefahren, Zeilen 0 und 2 angeklickt, markiert {markiert}, Recycle verwertet {verwertet} (Soll {soll}, Ring {ringTakte} Takt)"
                    + (UI.BaseWindow.DepotreiterEinzelwahl ? " (Nullmodell --depotreiter-einzelwahl)" : "")
                    + (okd ? " — BESTANDEN" : " — DURCHGEFALLEN")).ToString());
             GetTree().Quit(0);
@@ -9098,6 +9146,18 @@ _mausProbePunkt = karte;
         {
             _entities.FireAtCheckStart();
             _fireAtGestartet = true;
+        }
+
+        // bug-600 (Fortsetzung, 22.10.2026): --zielwahl-check stellt seinen Fall
+        // selbst her (Simulation/ZielwahlProbe.cs) — bis heute meldete er immer
+        // »NICHT GEMESSEN«, weil kopflos niemand »Angriff« drueckt.
+        if (_zielwahlCheck && !_zielwahlProbeFertig && _entities.ErwartungBereit()
+            && _entities.ZielwahlProbeTakt())
+        {
+            _zielwahlProbeFertig = true;
+            ZielwahlAusgeben();
+            GetTree().Quit(0);
+            return;
         }
 
         if (_svCheck && !_svGestartet && _entities.ErwartungBereit())
