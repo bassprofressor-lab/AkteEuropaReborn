@@ -315,14 +315,34 @@ upgrade in the game. Thank you, and welcome aboard!
   `--ki-brueckennachfuehrung-aus`, `--ki-cpu1-nullen-alt`; test
   `--ki-tafeln-check` (33 of 33 maps; the original's routes in mission 25 are
   now 20 of 20 open).
-- **Production release and mode 20 for AI transporters are built, but off for
-  now.** The original's production release (`0x4BB7D0`, lock
-  `0x4BB615`/`0x4BB744`) and mode 20 for AI transporters (`0x4BB32B`) are in
-  the code, but they act on inputs that are not yet faithful, so they stay off
-  until those are cleared. Switches `--ki-produktionsfreigabe`, `--ki-modus20`
-  turn them on.
+- **Production release and mode 20 for AI transporters.** The original's
+  production release (`0x4BB7D0`, lock `0x4BB615`/`0x4BB744`: a factory without
+  a free transporter does not build) and mode 20 for AI transporters
+  (`0x4BB32B`, the AI state machine leaves them alone) are built and **on by
+  default** — once the campaign AI's setup targets (below) were in place, the
+  inputs they act on were faithful. Switches `--ki-produktionsfreigabe-aus`,
+  `--ki-modus20-aus`.
 
-<!-- W4 -->
+- **The campaign AI gets its setup targets.** At mission start the original
+  hands every AI player its targets (`0x4884BE`): 336 calls in 30 missions,
+  identical in both EXE builds — four kinds of loop (every own building, every
+  built building, every neutral building, units 0..19) plus fixed calls. None of
+  them were in our mission data, so the computer opponents of the campaign
+  mostly had no targets of their own. Checked entry by entry against the
+  original's save files (mission 25: player 2 has 20 of 20). Our own rule from
+  2 October that gave the ally Myre in mission 26 is gone — it is literally one
+  of these setup calls. ⚠ With the original targets, player 1 in mission 26
+  defends much harder; the ally needs several attempts on Myre (or your help).
+  Old mission 26 saves from earlier versions may load with shifted script rules.
+  Switch `--setup-ziele-aus`, test `--setup-ziele-check` (33 of 33).
+- **Network: the sector tables are compared at session start.** Every player's
+  AI tables (`AIxx.CWI`, or computed if not read in) go into a checksum; if they
+  differ, the session stops with a clear message instead of drifting apart
+  later. Switch `--net-tafelpruefung-aus`.
+- **Built but off for now: emptying the stations into the base** (AI tick 14,
+  `0x4BFA30`). The original's developer save files contradict it (a field
+  station keeps growing where tick 14 should have emptied it 24 times); until
+  that is understood it stays off, `--bahnhofleerung` turns it on.
 
 - **Skirmish: the computer opponent becomes active.** In skirmish the AI now
   uses the same building blocks as the campaign — target selection, groups,

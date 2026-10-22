@@ -332,14 +332,36 @@ willkommen!
   `--ki-tafeln-gerechnet`, `--ki-brueckennachfuehrung-aus`,
   `--ki-cpu1-nullen-alt`, Prüfstand `--ki-tafeln-check` (33 von 33 Karten; die
   Wege des Originals in Mission 25 sind jetzt 20 von 20 offen).
-- **Produktionsfreigabe und Modus 20 für KI-Transporter sind gebaut, aber
-  vorerst aus.** Die Produktionsfreigabe des Originals (`0x4BB7D0`, Sperre
-  `0x4BB615`/`0x4BB744`) und Modus 20 für KI-Transporter (`0x4BB32B`) stehen im
-  Code, wirken aber auf Eingaben, die noch nicht originaltreu sind; deshalb
-  bleiben sie aus, bis diese geklärt sind. `--ki-produktionsfreigabe` und
-  `--ki-modus20` schalten sie ein.
+- **Produktionsfreigabe und Modus 20 für KI-Transporter.** Die
+  Produktionsfreigabe des Originals (`0x4BB7D0`, Sperre `0x4BB615`/`0x4BB744`:
+  eine Fabrik ohne freien Transporter baut nicht) und Modus 20 für
+  KI-Transporter (`0x4BB32B`, die KI-Zustandsmaschine lässt sie in Ruhe) sind
+  gebaut und **standardmäßig an** — seit die Setup-Ziele der Kampagnen-KI (unten)
+  stehen, sind ihre Eingaben originaltreu. Gegenschalter
+  `--ki-produktionsfreigabe-aus`, `--ki-modus20-aus`.
 
-<!-- W4 -->
+- **Die Kampagnen-KI bekommt ihre Setup-Ziele.** Beim Missionsstart gibt das
+  Original jedem KI-Spieler seine Ziele (`0x4884BE`): 336 Aufrufe in 30
+  Missionen, in beiden EXE-Fassungen gleich — vier Schleifenformen (jedes eigene
+  Gebäude, jedes gebaute Gebäude, jedes neutrale Gebäude, Einheiten 0..19) und
+  feste Aufrufe. Keiner davon stand in unseren Missionsdaten; die
+  Computergegner der Kampagne hatten also meist gar keine eigenen Ziele. Geprüft
+  Eintrag für Eintrag gegen die Original-Speicherstände (Mission 25: Spieler 2
+  hat 20 von 20). Unsere eigene Regel vom 2. Oktober, die dem Verbündeten in
+  Mission 26 Myre gab, entfällt — sie ist wörtlich einer dieser Setup-Aufrufe.
+  ⚠ Mit den Originalzielen wehrt sich Spieler 1 in Mission 26 deutlich stärker;
+  der Verbündete braucht mehrere Anläufe auf Myre (oder deine Hilfe). Alte
+  Spielstände aus Mission 26 früherer Fassungen können mit verschobenen
+  Skriptregeln laden. Gegenschalter `--setup-ziele-aus`, Prüfstand
+  `--setup-ziele-check` (33 von 33).
+- **Netz: Die Sektortafeln werden beim Sitzungsbeginn verglichen.** Die
+  KI-Tafeln jedes Spielers (`AIxx.CWI`, oder gerechnet, wenn nicht eingelesen)
+  gehen in eine Prüfzahl; weichen sie ab, bricht die Sitzung mit klarer Meldung
+  ab, statt später auseinanderzulaufen. Gegenschalter `--net-tafelpruefung-aus`.
+- **Gebaut, aber vorerst aus: Bahnhöfe in die Basis leeren** (KI-Takt 14,
+  `0x4BFA30`). Die Entwicklerstände des Originals widersprechen ihm (ein
+  Feldbahnhof wächst weiter, wo Takt 14 ihn 24-mal hätte leeren müssen); bis
+  das verstanden ist, bleibt er aus, `--bahnhofleerung` schaltet ihn ein.
 
 - **Gefecht: Der Computergegner wird aktiv.** Im Gefecht nutzt die KI jetzt
   dieselben Bausteine wie die Kampagne — Zielwahl, Gruppen, Wegpunktmarsch mit
