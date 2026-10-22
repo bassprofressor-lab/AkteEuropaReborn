@@ -715,6 +715,12 @@ public partial class MapEntityLayer : Node2D
         /// siehe Simulation/KiMarschwege.cs. UNSERE Buchführung: das Original
         /// befiehlt in jedem Gruppenlauf neu (Sprungtafel 0x4BD7CC), wir einmal.</summary>
         public bool Losgeschickt = true;
+
+        /// <summary>⭐ Paket W3 (23.10.2026, bug-631) — NUR IM GEFECHT: die Stärke beim
+        /// Bilden (Sollstärke für das Auffüllen nach Verlusten) und die Zahl der
+        /// Gruppenläufe ohne Weiterschalten im Marsch (Nachzüglerfrist). Beides UNSERE
+        /// SETZUNG, siehe Simulation/GefechtKiMarsch.cs; in der Kampagne immer 0.</summary>
+        public int Soll, Frist;
     }
 
     private readonly AiGruppe[][] _aiGruppen = ErzeugeGruppen();
@@ -748,7 +754,7 @@ public partial class MapEntityLayer : Node2D
     /// Einheit mit <c>faze == 0</c>, <c>UKOL &lt; 45</c>, <c>CPU0 &lt; 5</c>.</para>
     /// </summary>
     /// <returns>Die Gruppennummer 0…3, oder -1 für »Attack group not available«.</returns>
-    private int AiGruppeBilden(int p, MissionTarget auftrag, int po)
+    private int AiGruppeBilden(int p, MissionTarget auftrag, int po, AiPlayer? gefecht = null)
     {
         int frei = -1;
         _kiLetzterPlatz = -1;
@@ -782,6 +788,8 @@ public partial class MapEntityLayer : Node2D
             ? _aiSec110[p] != 0 && _aiSec61[p] != 5
             : _aiSec110[p] == 0 || _aiSec61[p] == 5;
         if (alles) groesse = 99;
+        // ⭐ Paket W3 (bug-631) — UNSERE SETZUNG im Gefecht: Mindestgroesse je Stufe.
+        if (gefecht != null) groesse = Math.Max(groesse, GefechtStufe(gefecht.Level).Mindest);
 
         var gruppe = _aiGruppen[p][frei];
         gruppe.Auftrag = auftrag;
@@ -798,6 +806,9 @@ public partial class MapEntityLayer : Node2D
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || !e.Mobile) continue;
             if (tuer ? e.Infantry >= 0 : !CanFight(e)) continue;
+            // Paket W3 — im Gefecht: keine Unbewaffneten (AiUnarmed), keine Eingegrabenen,
+            // nicht der Gebaeudegreifer (AiGrab). UNSERE SETZUNG.
+            if (gefecht != null && (AiUnarmed(e) || e.DugIn || i == gefecht.Grabber)) continue;
 
             int s;
             if (_aiSec110[p] == 0)
@@ -821,7 +832,11 @@ public partial class MapEntityLayer : Node2D
                     var (ox, oy) = AiSektorVon(e.Col, e.Row);
                     s = SektorIndex(ox, oy);
                 }
-                if (r[s].Def >= r[s].Belegt) continue;   // der Sektor braucht sie
+                // ⭐ Paket W3 — UNSERE SETZUNG im Gefecht: gegen DEF_robots (+8, die
+                // Verteidigerzahl der Betriebsart) statt gegen DEF (+7), damit Aufnahme und
+                // »Not free attacker« (0x4BE790, rechnet mit +8) dieselbe Zahl meinen.
+                int bedarf = gefecht != null ? r[s].DefRobots : r[s].Def;
+                if (bedarf >= r[s].Belegt) continue;   // der Sektor braucht sie
             }
 
             if (gruppe.Einheiten.Count >= AiGruppe.MaxEinheiten) break;
@@ -940,6 +955,7 @@ public partial class MapEntityLayer : Node2D
         gruppe.Einheiten.Clear();
         gruppe.Auftrag = null;
         gruppe.Losgeschickt = true;   // Paket W; sec108 bleibt stehen wie im Original
+        gruppe.Soll = 0; gruppe.Frist = 0;   // Paket W3
     }
 
     /// <summary>Eine Einheit aus ihrer Gruppe entlassen: <c>CPU0 = 0</c>,
@@ -1057,6 +1073,10 @@ public partial class MapEntityLayer : Node2D
             // Stand (berichte/k24-flucht-fable.md §2.2/§3.2). Gegenschalter
             // --ki-faze-alt (der Stand vom 01.09.2026: faze wird nicht gefragt).
             if (!KiFazeAlt && e.Faze != 0) { fazeGesperrt++; continue; }
+            // ⭐ Paket W3 (bug-631) — UNSERE SETZUNG im Gefecht: Unbewaffnete (Bau-,
+            // Transportfahrzeuge) stehen nicht in der Maschine, sie zaehlten sonst als
+            // Verteidiger. Das Original fragt hier keine Waffe (0x4BBE10).
+            if (GefechtKiMarschAn && AiUnarmed(e)) continue;
 
             switch (e.AiCpu0)
             {
@@ -1407,6 +1427,9 @@ public partial class MapEntityLayer : Node2D
             var (ex, ey) = AiSektorVon(e.Col, e.Row);
             if (ex != sx || ey != sy) continue;
             if (!e.Mobile) continue;                     // Landeinheit, kein Schiff
+            // Paket W3 (bug-635): im Gefecht nur, was diese KI gesehen hat (KiAufklaerung,
+            // --ki-sicht-check). Das Original kennt keinen Nebel fuer die KI. UNSERE SETZUNG.
+            if (GefechtKiMarschAn && !KiKennt(p, e)) continue;
             return i;
         }
         return -1;

@@ -66,6 +66,9 @@ public partial class MapEntityLayer
                       (rueckwaerts.Count == 0 ? "kein Wegpunkt" : string.Join(" ", Enumerable.Reverse(rueckwaerts).Select(w => $"({w.Item1},{w.Item2})")));
         if (KiWegLog.Count < 200) KiWegLog.Add($"Takt {_taktNr}: {text}");
         if (!KiPruefAn) return;
+        // Paket W3: ein neuer Weg im selben Gruppenplatz beginnt ohne Vorgeschichte —
+        // sonst zaehlte P3 ein Weiterschalten gegen den Stand der VORIGEN Gruppe.
+        foreach (var key in _kiPruefLetzter.Keys.Where(x => x.gi == 4 * p + g).ToList()) _kiPruefLetzter.Remove(key);
         var r = new KiPruefGruppe
         {
             P = p, G = g, Takt = _taktNr, Index = _kiSec108[b], Start = (sx, sy), Ziel = (zx, zy),

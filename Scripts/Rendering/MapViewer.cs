@@ -1429,6 +1429,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_gefechtKiAktivCheck > 0)
+        {
+            GD.Print(_entities.GefechtKiAktivCheck(_gefechtKiAktivCheck));
+            GetTree().Quit(0);
+            return;
+        }
         if (_kiTafelnCheck)
         {
             GD.Print(_entities.KiTafelnCheck());
@@ -1741,6 +1747,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--ki-einnahme-check[=sekunden]</c> — siehe Simulation/KiEinnahmeCheck.cs
     /// (02.10.2026, bug-384). 0 = aus.</summary>
     private int _kiEinnahmeCheck;
+    /// <summary><c>--gefecht-ki-aktiv-check[=takte]</c> — Paket W3, Simulation/GefechtKiAktivCheck.cs.</summary>
+    private int _gefechtKiAktivCheck;
+
     /// <summary><c>--ki-wegpunkte-check[=takte]</c> — Paket W, Simulation/KiWegpunkteCheck.cs.</summary>
     private int _kiWegpunkteCheck;
     /// <summary><c>--ki-tafeln-check</c> — Paket W2, Simulation/KiTafelnCheck.cs.</summary>
@@ -5304,6 +5313,16 @@ _mausProbePunkt = karte;
             else if (a == "--k25-ki-check") _k25KiCheck = true;
             else if (a == "--ki-freigabe-protokoll") MapEntityLayer.KiFreigabeProtokoll = true;
             else if (a == "--ki-wegpunkte-check") _kiWegpunkteCheck = 6000;
+            // ⭐ Paket W3 (23.10.2026, bug-631..634): Gruppen und Marsch der Gefechts-KI,
+            // Simulation/GefechtKiMarsch.cs und GefechtKiAktivCheck.cs.
+            else if (a == "--gefecht-ki-marsch-aus") MapEntityLayer.GefechtKiMarschAus = true;
+            else if (a == "--gefecht-ki-originalfehler") MapEntityLayer.GefechtKiOriginalfehler = true;
+            else if (a == "--gefecht-ki-aktiv-check") _gefechtKiAktivCheck = 30000;
+            else if (a.StartsWith("--gefecht-ki-aktiv-check=") &&
+                     int.TryParse(a["--gefecht-ki-aktiv-check=".Length..], out int gka)) _gefechtKiAktivCheck = gka;
+            else if (a.StartsWith("--spielstand-check-nach=") &&
+                     float.TryParse(a["--spielstand-check-nach=".Length..], System.Globalization.NumberStyles.Float,
+                                    System.Globalization.CultureInfo.InvariantCulture, out float ssn)) SpielstandCheckNach = ssn;
             else if (a.StartsWith("--ki-wegpunkte-check=") &&
                      int.TryParse(a["--ki-wegpunkte-check=".Length..], out int kwp)) _kiWegpunkteCheck = kwp;
             else if (a.StartsWith("--feind-naht-check=")) MapEntityLayer.FeindNahtCheckSzenario = a[19..];

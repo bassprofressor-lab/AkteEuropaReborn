@@ -266,6 +266,10 @@ public partial class MapEntityLayer : Node2D
             var a = new AiPlayer(p) { Level = level, Think = 0.5f + p * 0.13f };
             AiLoadPlan(a);
             _ai.Add(a);
+            // ⭐ Paket W3 (bug-631): im Gefecht mit Gruppen ist die Betriebsart (sec61,
+            // pro_style) der Verteidigerregler der Stufe. UNSERE SETZUNG, siehe
+            // Simulation/GefechtKiMarsch.cs. --gefecht-ki-marsch-aus: bleibt 2 wie bisher.
+            if (GefechtKiMarschAn) SetAiBetriebsart(p, GefechtStufe(level).Betriebsart);
         }
         _aiOn = _ai.Count > 0;
         GD.Print($"KI aktiv fuer Spieler {string.Join(", ", _ai.Select(a => a.Player))} " +
@@ -870,6 +874,17 @@ public partial class MapEntityLayer : Node2D
         // Original hinter der Spielerschleife (Konto, Namen) und vor den Toren
         // fuer Flugzeuge/Schiffe — hier am Ende des Gefechtsstarts. --gefecht-besitz-alt.
         GefechtBesitzStart(AirProbeTechstandard);
+        // ⭐ Paket W3 (bug-631): die Sektortafeln auch im Gefecht — aus AI(50+xx).CWI
+        // fuer NETxx, sonst zur Laufzeit gerechnet. Nur mit Gruppen (die alte
+        // Gefechts-KI braucht sie nicht, und der Gegenschalter soll exakt der alte
+        // Stand sein).
+        if (GefechtKiMarschAn)
+        {
+            KiSektorTafelnBauen();
+            GD.Print($"KI-Sektortafeln (Gefecht): {KiTafelQuelle}; {KiTafelSuchen} Suchen in {KiTafelMs} ms, " +
+                     $"Brueckensaetze geoeffnet {KiBrueckenGeoeffnet}; Gruppenstufe {level}: " +
+                     GefechtStufeZeile(level));
+        }
         return human;
     }
 
@@ -1401,7 +1416,11 @@ public partial class MapEntityLayer : Node2D
             if (!InCampaign)
             {
                 AiGrab(a);
-                AiFight(a, waveSize, guard);
+                // ⭐⭐ Paket W3 (23.10.2026, bug-631): die Gefechts-KI bildet Gruppen und
+                // marschiert ueber Sektoren wie die Kampagnen-KI (Simulation/
+                // GefechtKiMarsch.cs). --gefecht-ki-marsch-aus = AiFight wie bis 0.6.10.
+                if (GefechtKiMarschAn) GefechtKiZug(a, guard);
+                else AiFight(a, waveSize, guard);
             }
             else
             {
@@ -3250,6 +3269,7 @@ public partial class MapEntityLayer : Node2D
             {
                 var u = _entities[ui];
                 if (u.DugIn) continue;
+                if (GefechtKiMarschAn && u.AiCpu0 == 10) continue;   // W3: kein Gruppenmitglied
                 float d = new Vector2(b.Col - u.Col, b.Row - u.Row).Length();
                 if (d >= bestD) continue;
                 bestD = d; bestB = bi; bestU = ui;

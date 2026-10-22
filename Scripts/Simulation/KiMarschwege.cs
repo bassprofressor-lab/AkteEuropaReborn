@@ -137,7 +137,8 @@ public partial class MapEntityLayer
         Array.Clear(_kiBrueckenSaetze);
         KiTafelSuchen = 0;
         KiBrueckenNachgefuehrt = KiBrueckenGeoeffnet = 0;
-        KiTafelNummer = InCampaign ? UI.SkirmishSetup.CampaignMission : -1;
+        // Paket W3 (bug-631): im Gefecht mit Gruppen die Netzkarte NETxx -> AI(50+xx).CWI.
+        KiTafelNummer = InCampaign ? UI.SkirmishSetup.CampaignMission : GefechtKiTafelNummer();
         if (!KiTafelnGerechnet && !KiSektorankerAlt && KiCwiLaden(KiTafelNummer))
         {
             KiTafelMs = 0;
@@ -645,7 +646,7 @@ public partial class MapEntityLayer
         {
             if (cx == sx && cy == sy)
             {
-                if (KiWegendeBerichtigt && kk == 29)
+                if ((KiWegendeBerichtigt || GefechtBerichtigt) && kk == 29)
                 {
                     // UNSERE Berichtigung (Bericht W3): Start == Ziel -> keine Wegpunkte.
                     _kiSec108[b] = 0; _kiSec108[b + 1] = 0;
@@ -706,21 +707,7 @@ public partial class MapEntityLayer
         int b = 62 * (4 * p + g);
         int index = _kiSec108[b];
         int wx = KiSec108(b + 2 + 2 * index), wy = KiSec108(b + 3 + 2 * index);
-        int loX, hiX, loY, hiY;
-        int ax = (24 * wx) & 0xFF, ay = (24 * wy) & 0xFF;     // imul cl, nur al
-        if (KiWegkastenBerichtigt)
-        {
-            int rx = 24 * wx, ry = 24 * wy;                    // UNSERE Berichtigung
-            loX = rx <= 5 ? rx : rx - 6; hiX = rx + 30;
-            loY = ry <= 5 ? ry : ry - 6; hiY = ry + 30;
-        }
-        else
-        {
-            loX = ax <= 5 ? ax : 6;                            // ⚠ Fehler des Originals
-            hiX = (ax + 30) & 0xFF;                            // ⚠ Byteueberlauf
-            loY = ay <= 5 ? ay : (ay - 6) & 0xFF;
-            hiY = (ay + 30) & 0xFF;
-        }
+        var (loX, hiX, loY, hiY) = KiWegKasten(wx, wy);
 
         int drin = 0;
         foreach (int i in gruppe.Einheiten)
@@ -749,13 +736,36 @@ public partial class MapEntityLayer
         int neu = (index + 1) & 0xFF;
         _kiSec108[b] = (byte)neu;
         KiWegWeiter++;
-        if (_kiSec108[b + 1] == neu || (KiWegendeBerichtigt && neu >= _kiSec108[b + 1]))
+        if (_kiSec108[b + 1] == neu || ((KiWegendeBerichtigt || GefechtBerichtigt) && neu >= _kiSec108[b + 1]))
         {
             _kiSec108[b + 1] = 0;                              // @0x4BD780
             KiWegEnde++;
             if (KiPruefAn) KiPruefEnde(p, g);
             GD.Print($"KI P{p}: Gruppe {g} hat ihren Marschweg beendet (Index {neu}) — Angriff ab dem naechsten Lauf");
         }
+    }
+
+    /// <summary>Der Sammelkasten eines Wegpunkts (aus <see cref="KiWegpunktfahrt"/>
+    /// herausgezogen, Paket W3; dieselbe Rechnung). Im Gefecht mit Gruppen gilt die
+    /// Berichtigung (UNSERE SETZUNG, <see cref="GefechtBerichtigt"/>).</summary>
+    private (int loX, int hiX, int loY, int hiY) KiWegKasten(int wx, int wy)
+    {
+        int loX, hiX, loY, hiY;
+        int ax = (24 * wx) & 0xFF, ay = (24 * wy) & 0xFF;     // imul cl, nur al
+        if (KiWegkastenBerichtigt || GefechtBerichtigt)
+        {
+            int rx = 24 * wx, ry = 24 * wy;                    // UNSERE Berichtigung
+            loX = rx <= 5 ? rx : rx - 6; hiX = rx + 30;
+            loY = ry <= 5 ? ry : ry - 6; hiY = ry + 30;
+        }
+        else
+        {
+            loX = ax <= 5 ? ax : 6;                            // ⚠ Fehler des Originals
+            hiX = (ax + 30) & 0xFF;                            // ⚠ Byteueberlauf
+            loY = ay <= 5 ? ay : (ay - 6) & 0xFF;
+            hiY = (ay + 30) & 0xFF;
+        }
+        return (loX, hiX, loY, hiY);
     }
 
     /// <summary>Zähler: Fahrbefehle, Weiterschaltungen, beendete Marschwege.</summary>
@@ -835,7 +845,7 @@ public partial class MapEntityLayer
             if (KiPruefAn) KiWegProtokollieren(p, g, sx, sy, -1, -1, new List<(int, int)>());
             return false;
         }
-        var z = KiWegzielBester ? _kiZielBest : _kiZielLetzt;
+        var z = KiWegzielBester || GefechtBerichtigt ? _kiZielBest : _kiZielLetzt;   // W3: im Gefecht berichtigt
         if (z.x < 0) z = _kiZielBest;
         if (z.x < 0) return false;
         KiWegSchreiben(p, g, sx, sy, z.x, z.y);
@@ -888,6 +898,8 @@ public partial class MapEntityLayer
                 int auftrag = gr.Auftrag == null ? -1 : _missionTargets[p].IndexOf(gr.Auftrag);
                 w.ItemStart();
                 w.Num("p", p).Num("g", g).Num("auftrag", auftrag).Bool("los", gr.Losgeschickt);
+                // Paket W3 (bug-634): Sollstaerke und Marschfrist der Gefechtsgruppen
+                if (gr.Soll != 0 || gr.Frist != 0) w.Num("soll", gr.Soll).Num("frist", gr.Frist);
                 if (auftrag < 0 && gr.Auftrag != null)
                     w.Num("kind", gr.Auftrag.Kind).Num("prio", gr.Auftrag.Priority)
                      .Num("word", gr.Auftrag.Word).Num("second", gr.Auftrag.Second);
@@ -905,7 +917,7 @@ public partial class MapEntityLayer
         for (int p = 0; p < 8; p++)
         {
             _missionTargets[p].Clear();
-            for (int g = 0; g < 4; g++) { _aiGruppen[p][g].Einheiten.Clear(); _aiGruppen[p][g].Auftrag = null; _aiGruppen[p][g].Losgeschickt = true; }
+            for (int g = 0; g < 4; g++) { _aiGruppen[p][g].Einheiten.Clear(); _aiGruppen[p][g].Auftrag = null; _aiGruppen[p][g].Losgeschickt = true; _aiGruppen[p][g].Soll = 0; _aiGruppen[p][g].Frist = 0; }
         }
         if (KiSpielstandAlt || !root.ContainsKey("ki_sec108")) { KiZustandGeladen = false; return; }
         KiZustandGeladen = true;
@@ -977,6 +989,8 @@ public partial class MapEntityLayer
                         ? new MissionTarget { Kind = I(d, "kind"), Priority = I(d, "prio"), Word = I(d, "word"), Second = I(d, "second") }
                         : null;
                 gr.Losgeschickt = !d.TryGetValue("los", out var lv) || lv.AsBool();
+                gr.Soll = I(d, "soll");
+                gr.Frist = I(d, "frist");
                 if (d.TryGetValue("members", out var mv) && mv.VariantType == Variant.Type.Array)
                     foreach (var q in mv.AsGodotArray())
                     {
@@ -1017,6 +1031,7 @@ public partial class MapEntityLayer
                 if (gr.Auftrag != null)
                     auftraege += (gr.Auftrag.Kind * 7 + gr.Auftrag.Priority * 13 + gr.Auftrag.Word * 3 + gr.Auftrag.Second) * (4 * p + g + 1);
                 if (!gr.Losgeschickt) auftraege += 1000003 * (4 * p + g + 1);
+                auftraege += (gr.Soll * 17 + gr.Frist * 5) * (4 * p + g + 1);   // W3
                 foreach (int i in gr.Einheiten)
                 {
                     if (i < 0 || i >= _entities.Count) continue;

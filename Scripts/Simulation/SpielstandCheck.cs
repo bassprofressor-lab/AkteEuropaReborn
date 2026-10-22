@@ -28,6 +28,10 @@ public partial class MapViewer
 {
     public static bool SpielstandCheckAn;
 
+    /// <summary><c>--spielstand-check-nach=S</c> (Paket W3): nach so vielen Sekunden
+    /// speichern (Vorgabe 8) — im Gefecht, damit eine echte Gruppe im Marsch ist.</summary>
+    public static float SpielstandCheckNach = 8f;
+
     /// <summary>0 = laeuft noch nicht, 1 = gespeichert, die neue Szene laedt,
     /// 2 = verglichen, wartet auf den Skriptzustand, 3 = fertig.</summary>
     private static int _ssPhase;
@@ -38,7 +42,7 @@ public partial class MapViewer
     {
         if (!SpielstandCheckAn || _entities == null) return;
         _ssUhr += (float)delta;
-        if (_ssPhase == 0 && _ssUhr >= 8f)
+        if (_ssPhase == 0 && _ssUhr >= SpielstandCheckNach)
         {
             _ssGelegt = _entities.SpielstandProbeVorbereiten();
             _ssVorher = _entities.SpielstandFingerabdruck();

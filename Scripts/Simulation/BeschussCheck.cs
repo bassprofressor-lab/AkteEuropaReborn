@@ -51,6 +51,7 @@ public partial class MapEntityLayer : Node2D
     /// NACHDEM feststeht, dass wirklich geschossen wird.</summary>
     private void BeschussZaehlen(Entity schuetze, Entity opfer)
     {
+        if (GefechtKiCheckAn) GefechtKiSchussZaehlen(schuetze, opfer);   // Paket W3, --gefecht-ki-aktiv-check
         if (schuetze.Owner is < 0 or > 7 || opfer.Owner is < 0 or > 7)
         { BeschussOhnePlatz++; return; }
         _beschuss[schuetze.Owner, opfer.Owner]++;
