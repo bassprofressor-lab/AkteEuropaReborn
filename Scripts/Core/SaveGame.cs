@@ -33,7 +33,9 @@ public static class SaveGame
 {
     /// <summary>Bumped whenever the fields below change meaning. A save from an
     /// older build is refused with a word rather than half-loaded.</summary>
-    public const int Format = 2;
+    /// <para>Format 3 (22.10.2026, Paket W, bug-621): der KI-Zustand (sec61, sec106,
+    /// sec69, sec68, sec108, CPU0/CPU1) — siehe Simulation/KiMarschwege.cs.</para>
+    public const int Format = 3;
 
     /// <summary>bug-506: ein Stand im Format 1 wird weiter gelesen — was ihm
     /// fehlt, kommt aus der Kartenvorlage (siehe ApplySaveState).</summary>

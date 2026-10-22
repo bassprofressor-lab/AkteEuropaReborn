@@ -32,7 +32,8 @@ public partial class MapEntityLayer
     {
         var w = new Core.SaveGame.Writer();
         w.Open();
-        w.Num("format", Core.SaveGame.Format);
+        // Paket W (bug-621): Format 3 traegt den KI-Zustand; --ki-spielstand-alt schreibt Format 2.
+        w.Num("format", KiSpielstandAlt ? 2 : Core.SaveGame.Format);
         w.Str("label", label);
         // bug-522: der Kopf des Originals (Schreiber 0x41D210) — +5 Name, +26
         // Mission, +55 Spielername; bei uns als JSON-Felder (Format bleibt UNSERES).
@@ -94,6 +95,8 @@ public partial class MapEntityLayer
             w.Num("infantry", e.Infantry).Num("chassis", e.Chassis).Num("subclass", e.GameUnitType);
             w.Num("pose", e.Pose).Num("condition", e.Condition).Num("state", e.State);
             w.Num("faze", e.Faze);   // 02.10.2026, bug-400 (+0x09)
+            // Paket W (bug-621): CPU0/CPU1 (0xB400F0, 3 B je Platz) — Modus und Sektor/Gruppe.
+            if (!KiSpielstandAlt) w.Num("ai_cpu0", e.AiCpu0).Num("ai_cpu1", e.AiCpu1);
             w.Bool("building", e.IsBuilding).Bool("dead", e.Dead).Bool("dug_in", e.DugIn);
             w.Num("dead_time", e.DeadTime);
             w.Num("doors", e.Doors).Num("built", e.Built);
@@ -303,6 +306,12 @@ public partial class MapEntityLayer
         // ---- der Zustand des MISSIONSSKRIPTS (bug-508) ------------------------
         if (_mscript != null) w.Raw("script", _mscript.ZustandJson());
 
+        // ---- der KI-ZUSTAND (Paket W, bug-621): sec61/106/69/68/108 -----------
+        // Simulation/KiMarschwege.cs. Die Gruppenmitglieder gehen wie die
+        // Spielergruppen ueber die Stelle im Spielstand.
+        if (!KiSpielstandAlt)
+            KiZustandSchreiben(w, i => i >= 0 && i < stelleImStand.Length ? stelleImStand[i] : -1);
+
         w.Raw("fog", FogRle());
         w.Close();
         return w.ToString();
@@ -425,6 +434,9 @@ public partial class MapEntityLayer
             e.Infantry = GetI(d, "infantry", -1); e.Chassis = GetI(d, "chassis", -1);
             e.GameUnitType = GetI(d, "subclass", -1); e.Pose = GetI(d, "pose");
             e.Faze = GetI(d, "faze");
+            // Paket W (bug-621): ohne KI-Teil (Format 1..2) bleibt der Kartenwert.
+            if (!KiSpielstandAlt && d.ContainsKey("ai_cpu0"))
+            { e.AiCpu0 = GetI(d, "ai_cpu0"); e.AiCpu1 = GetI(d, "ai_cpu1"); }
             e.Condition = GetI(d, "condition", 100); e.State = GetI(d, "state");
             e.IsBuilding = bau; e.Dead = GetB(d, "dead");
             e.DugIn = GetB(d, "dug_in");
@@ -591,6 +603,9 @@ public partial class MapEntityLayer
                     if (gn.Length > 0) _groupNames[n] = gn;
                 }
             }
+
+        // ---- der KI-Zustand (Paket W, bug-621) --------------------------------
+        KiZustandLesen(root, listenstelle);
 
         Campaign.CampaignHints.Vergiss();
         if (root.TryGetValue("hints_shown", out var hsv) && hsv.VariantType == Variant.Type.Array)

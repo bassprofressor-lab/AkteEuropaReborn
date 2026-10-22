@@ -539,6 +539,12 @@ public partial class MapEntityLayer : Node2D
                      : "; OHNE campaign_diplomacy.json — es gilt die zurueckgezogene " +
                        "Basis-Regel"));
         UnarmedProbeSetup(human);
+        // ⭐ Paket W (22.10.2026): die Sektoranker und -verbindungen (0x41BD60 /
+        // 0x41C6C0) — im Original beim Kartenladen (0x41CB00 -> 0x41C850), hier nach
+        // dem Aufstellen, auf allen Maschinen am selben Punkt. Simulation/KiMarschwege.cs.
+        KiSektorTafelnBauen();
+        GD.Print($"KI-Sektortafeln: {KiTafelSuchen} Suchen in {KiTafelMs} ms" +
+                 (KiSektorankerAlt ? "  (--ki-sektoranker-alt: Sektormitte, alles verbunden)" : ""));
         return human;
     }
 
@@ -1681,22 +1687,49 @@ public partial class MapEntityLayer : Node2D
         // passieren — sec69 ist eine feste 100er-Tafel, in der ein erledigter
         // Auftrag AN ORT UND STELLE geleert wird.
         int g = AiGruppeBilden(a.Player, auftrag, po);
-        if (g < 0) { AmGrund(a.Player, "keine Gruppe"); return; }   // »Attack group not available«
+        // ⭐ Paket W (22.10.2026): 0x4BC920 schreibt den Marschweg HINTER der
+        // Aufnahmeschleife — auch fuer eine leer gebliebene Gruppe (deren Satz
+        // bleibt danach unbenutzt). Siehe Simulation/KiMarschwege.cs.
+        if (g < 0)
+        {
+            if (_kiLetzterPlatz >= 0) KiNachGruppeBilden(a.Player, _kiLetzterPlatz, sx, sy);
+            if (KiPruefAn && _kiLetzterPlatz >= 0 && _kiDiagnoseGedruckt.Add(a.Player))
+                GD.Print("ki-wegpunkte-check Diagnose: " + KiDiagnoseKeineGruppe(a.Player));
+            AmGrund(a.Player, "keine Gruppe");   // »Attack group not available«
+            return;
+        }
         AmGrund(a.Player, "losgeschickt");
+        if (IstTuergriff(auftrag)) TuergriffGruppen++;
 
-        // ⚠ UNSER Anteil bleibt das FAHREN. `0x4BCF30` (671 Befehle) und die
-        // sec108-Wegpunkte sind noch nicht gelesen; bis dahin schicken wir die
-        // Gruppe wie bisher mit `AiSend` los.
+        // ⭐⭐ Paket W (22.10.2026, bug-621) — DER MARSCHWEG (sec108). Hat die Gruppe
+        // einen Weg (Ende != 0), faehrt sie ihn im Gruppenlauf ab und greift erst
+        // DANACH an; bis 0.6.10 ging sie hier sofort los (--ki-wegpunkte-aus).
+        if (KiNachGruppeBilden(a.Player, g, sx, sy))
+        {
+            a.Wave.Clear();
+            foreach (int i in _aiGruppen[a.Player][g].Einheiten) a.Wave.Add(i);
+            a.TargetIdx = ziel;
+            GD.Print($"KI P{a.Player}: Gruppe {g} mit {a.Wave.Count} Einheiten MARSCHIERT " +
+                     $"(Index {KiIndex(a.Player, g)}, Ende {KiEnde(a.Player, g)}) Richtung " +
+                     $"{_entities[ziel].Name} bei ({_entities[ziel].Col},{_entities[ziel].Row}) " +
+                     $"— po={po}, freie={freie}, Start-Sektor ({sx},{sy})");
+            return;
+        }
+
+        // Ohne Marschweg (Ende == 0, oder --ki-wegpunkte-aus): sofort los, wie bis 0.6.10.
+        // ⚠ UNSER Anteil bleibt das FAHREN mit `AiSend` (der Angriffsarm des
+        // Gruppenlaufs 0x4BD1FF ist nicht Zeile fuer Zeile nachgebaut).
         // ⭐ 02.10.2026 (bug-384) — der Gruppenlauf 0x4BCF30 verzweigt an `c`:
         // ein Türgriff FAEHRT auf die Einnahmezelle (`fahre` @0x4BD380), alles
         // andere greift an. AiWalkTo nimmt auch Unbewaffnete, wie das Original.
         bool tuer = IstTuergriff(auftrag);
         var front = tuer ? CaptureCells(_entities[ziel]).Front : default;
-        if (tuer) TuergriffGruppen++;
         a.Wave.Clear();
+        _aiGruppen[a.Player][g].Losgeschickt = true;
         foreach (int i in _aiGruppen[a.Player][g].Einheiten)
         {
             a.Wave.Add(i);
+            if (KiPruefAn) KiPruefAngriff(a.Player, g, i);
             if (!tuer) AiSend(i, ziel);
             else if (AiWalkTo(i, front)) TuergriffFahrten++;
         }
@@ -3310,6 +3343,7 @@ public partial class MapEntityLayer : Node2D
         var t = _entities[target];
         if (e.Dead || !e.Mobile || e.DugIn) return;
         if (e.FuelMax > 0 && e.Fuel <= 0) return;       // dry, same as for the player
+        if (KiPruefAn) KiPruefSend(idx);                // --ki-wegpunkte-check, P2
         // Zweiter Riegel, unabhaengig von <see cref="ArmyOf"/>: ein
         // Ausruestungstraeger bekommt ueberhaupt kein Angriffsziel. `AiSend`
         // wird auch aus <see cref="AiMissionAttack"/> und <see cref="AiFight"/>

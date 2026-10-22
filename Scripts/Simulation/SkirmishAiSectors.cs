@@ -600,7 +600,7 @@ public partial class MapEntityLayer : Node2D
 
     private void AiWegekarte(int sx, int sy)
     {
-        for (int s = 0; s < SektorZahl; s++) _aiWege[s] = int.MaxValue;
+        for (int s = 0; s < SektorZahl; s++) { _aiWege[s] = int.MaxValue; _kiAltVorg[s] = -1; }
         _aiWege[SektorIndex(sx, sy)] = 0;
 
         var schlange = new Queue<(int x, int y)>();
@@ -616,6 +616,7 @@ public partial class MapEntityLayer : Node2D
                 int j = SektorIndex(nx, ny);
                 if (_aiWege[j] <= hier + 1) continue;
                 _aiWege[j] = hier + 1;
+                _kiAltVorg[j] = SektorIndex(x, y);   // Paket W: Vorgaenger fuer das Nullmodell
                 schlange.Enqueue((nx, ny));
             }
         }
@@ -625,82 +626,33 @@ public partial class MapEntityLayer : Node2D
     /// <see cref="AiWegekarte"/>-Lauf. Unerreichbar → <c>int.MaxValue</c>.</summary>
     private int AiWegewert(int sx, int sy) => _aiWege[SektorIndex(sx, sy)];
 
-    /// <summary>
-    /// <b><c>target:</c> — C <c>0x4BECF0</c> / F <c>0x4BE7A0</c>. Die
-    /// Auftragswahl, und sie ist eine DIVISION.</b>
-    ///
-    /// <para>Das Original protokolliert je Kandidat <c>target:</c> <c>cx:</c>
-    /// <c>cy:</c> <c>imp:</c> <c>pway:</c> <c>po:</c> <c>min:</c> und wählt
-    /// am Ende <c>r_best:</c> mit dem kleinsten</para>
-    ///
-    /// <code>po = pway / imp</code>
-    ///
-    /// <para>— also <b>Wegkosten geteilt durch Wichtigkeit</b>. Ein doppelt so
-    /// wichtiges Ziel darf doppelt so weit weg liegen. Das ist etwas anderes als
-    /// »nimm das wichtigste« und etwas anderes als »nimm das nächste«.</para>
-    ///
-    /// <para>⚠ Bis zum 21.08.2026 nahm <c>AiMissionAttack</c> hier schlicht das
-    /// Maximum von <c>Priority</c> und kannte gar keinen Wegewert. Das war der
-    /// grösste einzelne Abstand unseres Gegners zum Original.</para>
-    ///
-    /// <para>Losgeschickt wird nur, wenn ein Auftrag gefunden ist <b>und</b>
-    /// (<c>freie &gt; po</c> <b>oder</b> <c>sec61 == 5</c>). Ein weit entferntes
-    /// oder unwichtiges Ziel verlangt also mehr Überschuss.</para>
-    /// </summary>
-    /// <returns>Der Listenplatz des gewählten Auftrags und sein <c>po</c>, oder
-    /// (-1, 0), wenn keiner in Frage kommt.</returns>
-    private (int platz, int po) AiZielwahl(int p, List<MissionTarget> liste,
-                                           int startX, int startY)
-    {
-        AiWegekarte(startX, startY);
-
-        int best = -1, min = int.MaxValue;
-        for (int k = liste.Count - 1; k >= 0; k--)
-        {
-            // ⭐ 02.10.2026 (bug-405, A3) — die MARKEN, C 0x4BED60…0x4BEDA5: fuer
-            // g = 0..3 gilt `sec68[202(4p+g)] != 0 (Gruppe belegt) UND sec110[p] != 0
-            // -> Marke[sec68+1 (Auftrag)] := 1`, und 0x4BEDAC uebergeht jeden
-            // markierten Auftrag (VOR der Gueltigkeitspruefung, er wird also auch
-            // nicht geloescht). Ein Ziel bekommt so hoechstens EINE Gruppe; ohne
-            // Gebaeude (sec110 == 0) gilt die Marke nicht. Gegenschalter
-            // --ki-zielgruppe-alt.
-            if (!ZielgruppeAlt && _aiSec110[p] != 0 && AiAuftragHatGruppe(p, liste[k]))
-            {
-                ZielMitGruppeUebersprungen++;
-                continue;
-            }
-
-            int idx = ResolveTarget(p, liste[k]);
-            if (idx < 0) { liste.RemoveAt(k); continue; }   // erledigt — streichen
-
-            // »IMP is 0!!!« — im Original ein Abbruchfenster. Ein Auftrag mit
-            // Wichtigkeit 0 kann nicht geteilt werden und darf gar nicht
-            // entstehen; wir uebergehen ihn, statt zu teilen.
-            int imp = liste[k].Priority;
-            if (imp <= 0) continue;
-
-            var e = _entities[idx];
-            // ⭐ 02.10.2026 (bug-384) — @0x4BEDF8/@0x4BEE30: ein Art-1-Ziel, dessen
-            // Besitzer laut Buendnistafel `byte[0x87B155 + 40p + besitzer]` eigen
-            // oder verbuendet ist, wird UEBERSPRUNGEN, nicht geloescht. Ohne das
-            // waehlte die KI ein schon eingenommenes Gebaeude immer wieder.
-            // Gehoert zum Tuergriff, darum derselbe Gegenschalter.
-            if (!TuergriffAus && liste[k].Kind == 1 && Allied(p, e.Owner))
-            {
-                ZielwahlVerbuendetUebersprungen++;
-                continue;
-            }
-            var (tx, ty) = AiSektorVon(e.Col, e.Row);
-            int pway = AiWegewert(tx, ty);
-            if (pway == int.MaxValue) continue;             // unerreichbar
-
-            int po = pway / imp;
-            if (po >= min) continue;
-            min = po;
-            best = k;
-        }
-        return best < 0 ? (-1, 0) : (best, min);
-    }
+    // <summary>
+    // <b><c>target:</c> — C <c>0x4BECF0</c> / F <c>0x4BE7A0</c>. Die
+    // Auftragswahl, und sie ist eine DIVISION.</b>
+    //
+    // <para>Das Original protokolliert je Kandidat <c>target:</c> <c>cx:</c>
+    // <c>cy:</c> <c>imp:</c> <c>pway:</c> <c>po:</c> <c>min:</c> und wählt
+    // am Ende <c>r_best:</c> mit dem kleinsten</para>
+    //
+    // <code>po = pway / imp</code>
+    //
+    // <para>— also <b>Wegkosten geteilt durch Wichtigkeit</b>. Ein doppelt so
+    // wichtiges Ziel darf doppelt so weit weg liegen. Das ist etwas anderes als
+    // »nimm das wichtigste« und etwas anderes als »nimm das nächste«.</para>
+    //
+    // <para>⚠ Bis zum 21.08.2026 nahm <c>AiMissionAttack</c> hier schlicht das
+    // Maximum von <c>Priority</c> und kannte gar keinen Wegewert. Das war der
+    // grösste einzelne Abstand unseres Gegners zum Original.</para>
+    //
+    // <para>Losgeschickt wird nur, wenn ein Auftrag gefunden ist <b>und</b>
+    // (<c>freie &gt; po</c> <b>oder</b> <c>sec61 == 5</c>). Ein weit entferntes
+    // oder unwichtiges Ziel verlangt also mehr Überschuss.</para>
+    // </summary>
+    // <returns>Der Listenplatz des gewählten Auftrags und sein <c>po</c>, oder
+    // (-1, 0), wenn keiner in Frage kommt.</returns>
+    // ⭐ 22.10.2026 (Paket W): AiZielwahl steht jetzt in Simulation/KiMarschwege.cs
+    // (0x4BECF0 wörtlich: aufwärts, min 30000, letzter gültiger Kandidat); die
+    // Fassung bis 0.6.10 dort als AiZielwahlAlt (--ki-sektorweg-alt).
 
     /// <summary>Hat einer der vier Gruppenplätze von <paramref name="p"/> diesen
     /// Auftrag? (<c>sec68 +0 != 0</c> und <c>+1 == Auftrag</c>, 0x4BED78/0x4BED96.)
@@ -757,6 +709,12 @@ public partial class MapEntityLayer : Node2D
         /// </summary>
         public MissionTarget? Auftrag;
         public readonly List<int> Einheiten = new();
+
+        /// <summary>⭐ Paket W (22.10.2026): hat die Gruppe ihren Angriff schon
+        /// bekommen? Mit Marschweg (sec108 Ende != 0) erst nach dem Marsch —
+        /// siehe Simulation/KiMarschwege.cs. UNSERE Buchführung: das Original
+        /// befiehlt in jedem Gruppenlauf neu (Sprungtafel 0x4BD7CC), wir einmal.</summary>
+        public bool Losgeschickt = true;
     }
 
     private readonly AiGruppe[][] _aiGruppen = ErzeugeGruppen();
@@ -793,6 +751,7 @@ public partial class MapEntityLayer : Node2D
     private int AiGruppeBilden(int p, MissionTarget auftrag, int po)
     {
         int frei = -1;
+        _kiLetzterPlatz = -1;
         for (int g = 0; g < 4; g++)
             if (_aiGruppen[p][g].Einheiten.Count == 0) { frei = g; break; }
         if (frei < 0)
@@ -862,6 +821,7 @@ public partial class MapEntityLayer : Node2D
             if (s >= 0) r[s].Belegt--;
         }
 
+        _kiLetzterPlatz = frei;            // Paket W: der Weg wird auch fuer eine leere Gruppe geschrieben
         if (gruppe.Einheiten.Count > 0)
             GruppenProtokoll.Add($"P{p} g{frei} po={po} soll={groesse} ist={gruppe.Einheiten.Count}");
         if (gruppe.Einheiten.Count == 0) { AiGruppeAufloesen(p, frei); return -1; }
@@ -900,15 +860,24 @@ public partial class MapEntityLayer : Node2D
             }
             if (gruppe.Einheiten.Count == 0) { AiGruppeAufloesen(p, g); continue; }
 
+            // ⭐⭐ 22.10.2026 (Paket W, bug-621) — DAS WEGPUNKT-TOR C 0x4BD18B:
+            // `byte[sec108 + 62*(4p+g) + 1] != 0 -> 0x4BD5FC` (Wegpunktfahrt), und
+            // in diesem Lauf entfallen Klang 122 und der Angriff. Siehe
+            // Simulation/KiMarschwege.cs. --ki-wegpunkte-aus = der Stand davor.
+            if (KiGruppenlaufWegpunkte(p, g, gruppe, zi)) continue;
+
             // ⭐⭐ 16.10.2026 (bug-575) — Klang 122 @0x4BD1C5: nach der
             // Gueltigkeit, wenn die Gruppe keine Wegpunkte mehr hat
-            // (byte[sec108 + 62*(4p+g) + 1] == 0). Unsere Gruppen haben KEINE
-            // Wegpunktphase (sec108 ungebaut, siehe AiMissionAttack) — sie
-            // stehen also immer im Angriff. Siehe FeindNaht.cs.
+            // (byte[sec108 + 62*(4p+g) + 1] == 0). Seit Paket W (22.10.2026) hat
+            // eine Gruppe ihre Wegpunktphase; der Klang kommt erst nach dem Marsch.
+            // Siehe FeindNaht.cs.
             // ⚠ Ein erledigter Tuergriff loest sich unten erst auf; im Original
             // faellt er schon an der Gueltigkeit (@0x4BD095) heraus -> vorher pruefen.
             if (!(IstTuergriff(gruppe.Auftrag) && _entities[zi].Owner == p))
                 FeindNahtMelden(p, 2);
+
+            // Paket W: nach dem Marsch greift die Gruppe an (vorher sofort beim Bilden).
+            KiGruppeNachMarsch(p, g, gruppe, zi);
 
             // ⭐⭐ 02.10.2026 (bug-384) — DER TUERGRIFF IM GRUPPENLAUF 0x4BCF30.
             // Gueltigkeit Art 1 `c == 0` @0x4BD095: ERLEDIGT, sobald das Gebaeude
@@ -960,6 +929,7 @@ public partial class MapEntityLayer : Node2D
             if (i < _entities.Count) AiFreigeben(_entities[i]);
         gruppe.Einheiten.Clear();
         gruppe.Auftrag = null;
+        gruppe.Losgeschickt = true;   // Paket W; sec108 bleibt stehen wie im Original
     }
 
     /// <summary>Eine Einheit aus ihrer Gruppe entlassen: <c>CPU0 = 0</c>,

@@ -1685,6 +1685,111 @@ public sealed class NavGrid
         return rueck;
     }
 
+    /// <summary>
+    /// ⭐ 22.10.2026 (Paket W, bug-621) — <b>die Suchkarte von <see cref="FindPathUr"/>
+    /// EINMAL bauen</b>, für viele Suchen hintereinander (die Sektoranker
+    /// <c>0x41BD60</c> und Sektorverbindungen <c>0x41C6C0</c> rufen die 1×1-Suche
+    /// <c>0x401960 → 0x4D2580</c> bis zu 4 500 Mal je Karte). Dieselbe Zeile wie in
+    /// <see cref="FindPathUr"/> (Landweg, ohne Bertha, ohne Nahsperre, Beweger −1),
+    /// samt versiegeltem Rand. Nur für <see cref="UrWellenBis"/>.
+    /// </summary>
+    public byte[] UrBasisKarte(MoveClass mc)
+    {
+        int w = Width, h = Height;
+        var karte = new byte[w * h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                bool offen = NeuePfadkarte ? PfadOffen(x, y, mc, -1) : IsFree(x, y, mc, -1);
+                karte[y * w + x] = offen ? (byte)0
+                                 : !RauIstHart && mc != MoveClass.Ship
+                                   && (Ground)_ground[Idx(x, y)] == Ground.Rough ? (byte)1
+                                 : (byte)2;
+            }
+        for (int x = 0; x < w; x++) { karte[x] = 2; karte[(h - 1) * w + x] = 2; }
+        for (int y = 0; y < h; y++) { karte[y * w] = 2; karte[y * w + w - 1] = 2; }
+        return karte;
+    }
+
+    private byte[]? _urArbeitsKarte;
+    private int[]? _urArbeitsRing;
+
+    /// <summary>
+    /// ⭐ 22.10.2026 (Paket W, bug-621) — <b>die Wellenzahl der 1×1-Suche
+    /// <c>0x4D2580</c></b>, also der Wert, den das Original nach <c>word[0xBCA0E0]</c>
+    /// schreibt (@0x4D2869) und den die Sektortafeln mit <c>&lt; 50</c> (Anker,
+    /// C @0x41BF22) bzw. <c>&lt; 80</c> (Verbindungen, C @0x41C77F/0x41C7C0) prüfen.
+    ///
+    /// <para>Die Schleife ist WÖRTLICH die von <see cref="FindPathUr"/> — dieselbe
+    /// Ringgrösse, dieselbe Erweiterungsreihenfolge, dieselbe Eckenregel gegen die
+    /// schon GESCHRIEBENEN Wellenmarken (die Marken stehen im Original in der
+    /// Suchkarte, eine schon erreichte Gerade sperrt darum die Diagonale daneben).
+    /// Nur: sie bricht ab, sobald <paramref name="grenze"/> Wellen erreicht sind —
+    /// mehr braucht kein Rufer, weil jeder nur »&lt; grenze« fragt.</para>
+    ///
+    /// <para>Rückgabe: die Wellenzahl, oder −1 (kein Weg oder nicht unter der
+    /// Grenze). ⚠ UNSERE Setzung: Start und Ziel sind hier schon zulässige Zellen
+    /// (die Anker sind <c>imap == 0xFFFE</c>), die Ersatzzielsuche von
+    /// <c>Search:</c> entfällt.</para>
+    /// </summary>
+    public int UrWellenBis(Vector2I start, Vector2I goal, int grenze, byte[] basis)
+    {
+        int w = Width, h = Height;
+        if (!InBounds(start.X, start.Y) || !InBounds(goal.X, goal.Y)) return -1;
+        if (basis.Length != w * h) return -1;
+        int si = start.Y * w + start.X, zi = goal.Y * w + goal.X;
+        if (si == zi) return 0;
+        if (_urArbeitsKarte == null || _urArbeitsKarte.Length != basis.Length)
+            _urArbeitsKarte = new byte[basis.Length];
+        var karte = _urArbeitsKarte;
+        Buffer.BlockCopy(basis, 0, karte, 0, basis.Length);
+        if (karte[zi] == 2) return -1;
+        karte[si] = 8;
+
+        var ring = _urArbeitsRing ??= new int[UrRing1x1];
+        int kopf = 0, schwanz = 0, drin = 0;
+        ring[schwanz++] = si; drin++;
+        int marke = 9, welleRest = 1, naechsteWelle = 0, schritte = 0;
+        bool voll = false;
+        while (drin > 0)
+        {
+            if (welleRest == 0)
+            {
+                marke = marke >= 255 ? 8 : marke + 1;
+                schritte++;
+                if (schritte >= grenze) return -1;          // die Rufer fragen nur »< grenze«
+                welleRest = naechsteWelle;
+                naechsteWelle = 0;
+                if (welleRest == 0) break;
+            }
+            int c = ring[kopf]; kopf = (kopf + 1) % UrRing1x1; drin--; welleRest--;
+            if (c == zi) return schritte;
+            int cx = c % w, cy = c / w;
+            bool amRand = cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1;
+            foreach (int i in UrErweitern)
+            {
+                var d = UrDirs[i];
+                int nx = cx + d.X, ny = cy + d.Y;
+                if (amRand && (nx < 0 || ny < 0 || nx >= w || ny >= h)) continue;
+                int n = ny * w + nx;
+                if (karte[n] != 0) continue;
+                if ((i & 1) != 0)
+                {
+                    var a = UrDirs[(i + 7) & 7];
+                    var b = UrDirs[(i + 1) & 7];
+                    if (karte[(cy + a.Y) * w + cx + a.X] > 1) continue;
+                    if (karte[(cy + b.Y) * w + cx + b.X] > 1) continue;
+                }
+                karte[n] = (byte)marke;
+                if (drin >= UrRing1x1) { voll = true; break; }
+                ring[schwanz] = n; schwanz = (schwanz + 1) % UrRing1x1;
+                drin++; naechsteWelle++;
+            }
+            if (voll) break;
+        }
+        return -1;
+    }
+
     /// <summary>Wie oft ein Weg am 50-Schritte-Puffer abgeschnitten wurde.
     /// ⚠ Ohne diese Zahl ist »die Neuplanung laeuft« nicht von »sie kam nie
     /// dran« zu unterscheiden (Arbeitsweise 33).</summary>

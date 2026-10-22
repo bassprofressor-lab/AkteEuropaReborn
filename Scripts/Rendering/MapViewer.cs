@@ -1412,6 +1412,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_kiWegpunkteCheck > 0)
+        {
+            GD.Print(_entities.KiWegpunkteCheck(_kiWegpunkteCheck));
+            GetTree().Quit(0);
+            return;
+        }
         if (_kiEinnahmeCheck > 0)
         {
             GD.Print(_entities.KiEinnahmeCheck(_kiEinnahmeCheck));
@@ -1712,6 +1718,8 @@ public partial class MapViewer : Node2D
     /// <summary><c>--ki-einnahme-check[=sekunden]</c> — siehe Simulation/KiEinnahmeCheck.cs
     /// (02.10.2026, bug-384). 0 = aus.</summary>
     private int _kiEinnahmeCheck;
+    /// <summary><c>--ki-wegpunkte-check[=takte]</c> — Paket W, Simulation/KiWegpunkteCheck.cs.</summary>
+    private int _kiWegpunkteCheck;
     /// <summary><c>--untermission-check=N</c> — siehe Simulation/Skriptvariablen.cs
     /// (02.10.2026, bug-392). 0 = aus.</summary>
     private int _untermissionCheck;
@@ -5246,6 +5254,17 @@ _mausProbePunkt = karte;
             else if (a == "--raketenklang-aus") Audio.GameSounds.RaketenklangAus = true;
             else if (a == "--gebaeudezerstoert-klang-aus") Audio.GameSounds.GebaeudeZerstoertKlangAus = true;
             else if (a == "--ki-wegtor-alt") MapEntityLayer.KiWegtorAlt = true;
+            // ⭐ Paket W (22.10.2026, bug-621): die Marschwege der KI, Simulation/KiMarschwege.cs.
+            else if (a == "--ki-sektoranker-alt") MapEntityLayer.KiSektorankerAlt = true;
+            else if (a == "--ki-sektorweg-alt") MapEntityLayer.KiSektorwegAlt = true;
+            else if (a == "--ki-wegpunkte-aus") MapEntityLayer.KiWegpunkteAus = true;
+            else if (a == "--ki-wegziel-bester") MapEntityLayer.KiWegzielBester = true;
+            else if (a == "--ki-spielstand-alt") MapEntityLayer.KiSpielstandAlt = true;
+            else if (a == "--ki-wegkasten-berichtigt") MapEntityLayer.KiWegkastenBerichtigt = true;
+            else if (a == "--ki-wegende-berichtigt") MapEntityLayer.KiWegendeBerichtigt = true;
+            else if (a == "--ki-wegpunkte-check") _kiWegpunkteCheck = 6000;
+            else if (a.StartsWith("--ki-wegpunkte-check=") &&
+                     int.TryParse(a["--ki-wegpunkte-check=".Length..], out int kwp)) _kiWegpunkteCheck = kwp;
             else if (a.StartsWith("--feind-naht-check=")) MapEntityLayer.FeindNahtCheckSzenario = a[19..];
             // Die drei Gegenproben zur Sektormaschine vom 01.09.2026, siehe
             // Simulation/SkirmishAiSectors.cs.

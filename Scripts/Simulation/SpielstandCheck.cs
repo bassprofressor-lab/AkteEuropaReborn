@@ -128,6 +128,8 @@ public partial class MapEntityLayer
         // Mission, saehe ein ueberschriebener Kontostand wie ein richtiger aus
         _money[me] += 77;
         sb.Append($"; Kontostand +77 = {_money[me]}");
+        // Paket W (bug-621): mitten in einer Wegpunktphase speichern.
+        sb.Append("; " + KiProbeMarschLegen());
         // eine Garage: das naechste Gebaeude mit Tuer bekommt den Spieler als
         // Besitzer und nimmt eine Einheit auf — Einfahren, der Weg des Spiels
         if (garagengast != null)
@@ -188,6 +190,7 @@ public partial class MapEntityLayer
                $" | Marken {marke}, Siegziele {ziele}, ohne Bauwerk {kein}, Ruinen {ruinen}" +
                $" | Lager {lager}" +
                $" | Garage {garage}, Ukol {ukol}, Depot {depot}" +
-               $" | Flugzeuge {luft}, Sprit {lfuel}, Munition {lammo}, Arten {lart}, Hoehe {lalt}";
+               $" | Flugzeuge {luft}, Sprit {lfuel}, Munition {lammo}, Arten {lart}, Hoehe {lalt}" +
+               $" | {KiZustandFingerabdruck()}";
     }
 }
