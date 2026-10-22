@@ -427,6 +427,10 @@ public sealed partial class DesignWindow : PanelContainer
     /// <summary>Trägt das gerade gewählte Paar? — für den Prüflauf.</summary>
     public bool PaarTraegt => _traegt;
 
+    /// <summary>bug-601: der Wertetext, den das Fenster gerade ausgibt (Energie, A/V …) —
+    /// für <c>--aufwertung-zuwachs-check</c>, der die ANKUNFT misst, nicht nur die Quelle.</summary>
+    public string ProbeWerte => _stats.Text;
+
     /// <summary>Der lange Bauteilname mit der Klammer des Originals; ist er
     /// nicht in der Bauteiltabelle zu finden, bleibt der Name, unter dem die
     /// Entwurfsstelle das Teil führt.</summary>

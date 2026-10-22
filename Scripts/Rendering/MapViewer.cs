@@ -3945,6 +3945,7 @@ _mausProbePunkt = karte;
             if (SpritWeiterSchalter(a)) continue;   // bug-585
             if (WertelisteEigenSchalter(a)) continue;   // bug-586
             if (BauteilstufeSchalter(a)) continue;      // bug-589
+            if (AufwertungZuwachsSchalter(a)) continue; // bug-601, Simulation/AufwertungZuwachsCheck.cs
             if (AuswahlwinkelSchalter(a)) continue;     // bug-590
             if (FussvolkSchalter(a)) continue;          // bug-596/602, Simulation/FussvolkCheck.cs
             if (EntwuerfeSchalter(a)) continue;         // bug-592/593/594
@@ -4330,6 +4331,8 @@ _mausProbePunkt = karte;
             else if (a == "--gebaeudeangriff-ankunft-alt") MapEntityLayer.GebaeudeangriffAnkunftAlt = true; // bug-597 Arm 0x407D1D
             else if (a.StartsWith("--gebaeudeangriff-check")) _gebaeudeangriffCheck = a.Length > 24 ? a[24..] : "";
             else if (a == "--auslass-rueckfall-alt") MapEntityLayer.AuslassRueckfallAlt = true;     // bug-591 B2
+            else if (a == "--depotzeile-absage") MapEntityLayer.DepotzeileAbsage = true;           // bug-603 B4
+            else if (a == "--ausgesandt-alt") MapEntityLayer.AusgesandtAlt = true;                 // bug-603 B5
             else if (a.StartsWith("--basis-aussenden-check")) _basisAussendenCheck = a.Length > 24 ? a[24..] : "a";
             else if (a == "--unbewaffnet-angriff-alt") MapEntityLayer.UnbewaffnetAngriffAlt = true; // bug-598 A
             else if (a == "--sprit-absturz-aus") MapEntityLayer.SpritAbsturzAus = true;             // bug-598 B
@@ -8958,6 +8961,7 @@ _mausProbePunkt = karte;
         }
 
         if (BasisAussendenCheckLauf()) return;   // bug-591
+        if (AufwertungZuwachsCheckLauf()) return;   // bug-601
         if (FussvolkPruefstand()) return;        // bug-596/602
         if (GebaeudeangriffCheckLauf()) return;  // bug-597
         if (FliegerStehtProbeLauf()) return;     // bug-598 Faelle spion/hand

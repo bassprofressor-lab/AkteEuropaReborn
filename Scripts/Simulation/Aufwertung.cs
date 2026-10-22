@@ -29,14 +29,26 @@ namespace AkteEuropaReborn.Rendering;
 ///
 ///   0x4AAA80:                                   anwenden
 ///       Bauteil+0x0E += d0        (Angebot +0x1A)      0x4AAAD9  add
-///       Bauteil+0x13 := a         (Angebot +0x1F)      0x4AAB43  mov
+///       Bauteil+0x13 += a  (8 Bit) (Angebot +0x1F)     0x4AAB33 lesen, 0x4AAB3D add cl,al, 0x4AAB43 schreiben
 ///       Bauteil+0x10 += b         (Angebot +0x1C)      0x4AAB49  add
-///       Bauteil+0x11 := c         (Angebot +0x1D)      0x4AAB60  mov
+///       Bauteil+0x11 += c  (8 Bit) (Angebot +0x1D)     0x4AAB4F lesen, 0x4AAB55 add cl,al, 0x4AAB60 schreiben
 ///       Bauteil+0x1A += d         (Angebot +0x26)      0x4AAB66  add   ⭐ TANK
 ///       Bauteil+0x21 += e         (Angebot +0x2C)      0x4AAB71  add
+///       Waffe: +0x12 += a (8 Bit)                      0x4AAAE9 lesen, 0x4AAAEF add cl,al, 0x4AAAFA schreiben
 ///       Bauteil+0x01 := Stufe+1                        0x4AAACA  mov
 ///       dann 0x4B24B0 (Entwürfe neu) und 0x4B3CD0 (8000 Einheiten nachziehen)
+///       (F: 0x4AA3B0; +0x13 bei 0x4AA463/0x4AA46D/0x4AA473, +0x11 bei
+///        0x4AA47F/0x4AA485/0x4AA490, +0x12 bei 0x4AA419/0x4AA41F/0x4AA42A)
 /// </code>
+///
+/// <para>⚠⚠ <b>22.10.2026, bug-601 (Reaper, Testerrunde 0.6.11):</b> hier stand bis
+/// 0.6.10 »+0x13 := a … mov«, ebenso für +0x11 und +0x12. Gelesen war nur der
+/// Speicherbefehl <c>mov [..],cl</c>; das <c>mov cl,[..]</c> und das <c>add cl,al</c>
+/// davor waren übersehen. Folge: die erste Forschung »6x6 Reifen« warf die Panzerung
+/// des Mobilen Radars von 7 auf 3 (+0x13 von 4 auf 0). Das Original ADDIERT, und die
+/// Reihe endet auf Stufe 9 genau auf dem Tafelendwert (Zeile +0x09 bzw. +0x08).
+/// Gegenschalter <c>--aufwertung-setzen-alt</c>, Prüfstand
+/// <c>--aufwertung-zuwachs-check</c>, Bericht <c>berichte/radar-panzerung-6x6-opus.md</c>.</para>
 ///
 /// <para>⚠⚠ <b>DER TANK WÄCHST NUR BEI WURF 2 — in einem von vier Fällen.</b>
 /// Das ist die Stelle, an der <c>berichte/sprit-fable.md</c> Abschnitt 4 zu
@@ -102,6 +114,12 @@ public partial class MapEntityLayer : Node2D
     /// überhaupt trägt, ohne auf ein Viertel Wahrscheinlichkeit zu warten.
     /// ⚠ Das ist KEINE Nachbildung des Originals.</summary>
     public static bool AufwertungImmerTank;
+
+    /// <summary><c>--aufwertung-setzen-alt</c> — Nullmodell zu bug-601: der Stand
+    /// bis 0.6.10, in dem <see cref="AufwertungSchreiben"/> Fahrwerk +0x13, Arm 1
+    /// +0x11 und Waffe +0x12 auf den Zuwachs SETZTE (geklemmt 0…255) statt ihn zu
+    /// addieren. Damit kommt Reapers Bild wieder: Mobiles Radar V 7 → 3.</summary>
+    public static bool AufwertungSetzenAlt;
 
     /// <summary>Legt die acht Spielerblöcke an, jeder eine Kopie des
     /// Grundstands. Ruhig mehrfach aufrufbar; tut nur beim ersten Mal etwas.
@@ -325,7 +343,12 @@ public partial class MapEntityLayer : Node2D
 
         // Immer: +0x0E waechst um seinen Anteil am Rest bis zum Endwert.
         int d0 = (W(z, 0x04) - W(c, 0x0E)) / rest;
-        // Immer, aber SETZEND (mov): Fahrwerk +0x13, Waffe +0x12.
+        // Immer, und ADDIEREND (bug-601): Fahrwerk +0x13, Waffe +0x12 wachsen um
+        // ihren Anteil am Rest bis zum Endwert Zeile+0x09 bzw. +0x08. Das Angebot
+        // liest das Bauteilfeld VORZEICHENBEHAFTET (movsx @0x4AA4E0 / @0x4AA574)
+        // und die Zeile vorzeichenlos (xor eax,eax; mov al,…), teilt mit idiv
+        // (schneidet zur Null) und legt das Ergebnis als BYTE ab (@0x4AA4F2 /
+        // @0x4AA586) — darum unten (sbyte) und (int)-Division.
         int a = fahrwerk ? (z[0x09] - (sbyte)c[0x13]) / rest
                          : (z[0x08] - (sbyte)c[0x12]) / rest;
         int b = 0, cc = 0, d = 0, e = 0;
@@ -333,7 +356,7 @@ public partial class MapEntityLayer : Node2D
             switch (wurf)
             {
                 case 0: b = z[0x06]; break;              // add @0x4AAB49
-                case 1: cc = z[0x07]; break;             // mov @0x4AAB60
+                case 1: cc = z[0x07]; break;             // add @0x4AAB55 (bug-601: nicht mov)
                 case 2: d = W(z, 0x0E); break;           // ⭐ DER TANK, add @0x4AAB66
                 case 3: e = -W(z, 0x14); break;
             }
@@ -376,19 +399,37 @@ public partial class MapEntityLayer : Node2D
         Add16(c, 0x0E, w.D0);
         if (w.Fahrwerk)
         {
-            c[0x13] = (byte)Clamp8(w.A);               // mov @0x4AAB43
+            // ⭐ bug-601: das Original ADDIERT — C 0x4AAB33 mov cl,[+0x13] ·
+            // 0x4AAB3D add cl,al · 0x4AAB43 mov [+0x13],cl (F 0x4AA463/46D/473).
+            // 8-Bit-Addition wie `add cl,al`: Überlauf nach Bytesemantik, KEIN
+            // Clamp8. Bei den Fahrwerken läuft nichts über (alle 16 Reihen enden
+            // auf Zeile+0x09 <= 20); siehe Waffe unten für den einen Fall, wo es zählt.
+            if (AufwertungSetzenAlt) c[0x13] = (byte)Clamp8(w.A);   // Stand bis 0.6.10
+            else c[0x13] = (byte)(c[0x13] + w.A);
             c[0x10] = (byte)Clamp8(c[0x10] + w.B);     // add @0x4AAB49
-            // ⚠ Arm 1 SETZT (mov @0x4AAB60) — auch auf 0. Darum am Wurf
-            // entschieden und nicht daran, ob der Wert 0 ist: eine Zeile mit
-            // `+0x07 == 0` würde das Feld sonst stehen lassen statt es zu
-            // nullen, und das wäre eine andere Zahl als im Original.
-            if (w.Wurf == 1) c[0x11] = (byte)Clamp8(w.C);
+            // ⭐ bug-601: Arm 1 ADDIERT ebenso — 0x4AAB4F mov cl,[+0x11] ·
+            // 0x4AAB55 add cl,al · 0x4AAB60 mov [+0x11],cl (F 0x4AA47F/485/490),
+            // OHNE Bedingung am Wurf: bei anderem Arm ist c im Angebot 0
+            // (AngebotRechnen setzt cc nur bei Wurf 1), die Addition ändert dann
+            // nichts. Das alte »SETZT, auch auf 0« war dieselbe Fehllesung.
+            if (AufwertungSetzenAlt) { if (w.Wurf == 1) c[0x11] = (byte)Clamp8(w.C); }
+            else c[0x11] = (byte)(c[0x11] + w.C);
             Add16(c, 0x1A, w.D);                       // add @0x4AAB66 ⭐ TANK
             c[0x21] = (byte)Clamp8(c[0x21] + w.E);
         }
         else
         {
-            c[0x12] = (byte)Clamp8(w.A);               // mov @0x4AAAFA
+            // ⭐ bug-601: Waffe +0x12 ADDIERT — 0x4AAAE9 mov cl,[+0x12] ·
+            // 0x4AAAEF add cl,al · 0x4AAAFA mov [+0x12],cl (F 0x4AA419/41F/42A).
+            // ⚠ Hier zählt die Bytesemantik WIRKLICH, an genau einer Zeile:
+            // Waffe 8 (MS-Rakete, +0x12 = 100, Endwert 150). Ab 132 liest das
+            // Angebot das Feld als NEGATIV (movsx @0x4AA574), der Zuwachs wird
+            // gross (91), und die Reihe läuft 105,110,115,120,126,132,223,58,150 —
+            // mit Umlauf 314 → 58 auf Stufe 8. Mit Clamp8 käme 255,255 heraus.
+            // Das ist die Arithmetik des Originals, nachgerechnet, nicht gemessen
+            // (das Original läuft unter Windows 11 nicht).
+            if (AufwertungSetzenAlt) c[0x12] = (byte)Clamp8(w.A);   // Stand bis 0.6.10
+            else c[0x12] = (byte)(c[0x12] + w.A);
             Add16(c, 0x14, w.B);
             Add16(c, 0x18, w.C);
             Add16(c, 0x1E, w.D);

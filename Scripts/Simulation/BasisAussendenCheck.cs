@@ -28,9 +28,18 @@ using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 ///   <item><b>C</b> (B2) — Fussvolk in der Basis, ein unbewegliches Fahrzeug AUF
 ///   der Tür. Soll: der Soldat wartet. Nullmodell <c>--auslass-rueckfall-alt</c>:
 ///   er steht neben der Tür.</item>
-///   <item><b>D</b> (B2) — eine PRODUZIERTE Zeile (Entwurfsnummer) bei belegter
-///   Tür. Soll: Absage, keine Einheit daneben. Nullmodell
-///   <c>--auslass-rueckfall-alt</c>: eine neue Einheit neben der Tür.</item>
+///   <item><b>D</b> (bug-603 B4/B5, berichte/basis-zeile-tuer-opus.md §4) — eine
+///   PRODUZIERTE Zeile (Entwurfsnummer, ⚠ angesagter Eingriff: ein Altzustand) bei
+///   belegter Tür. D1 Soll: sie wird zum Satz (Depot −1, Garage +1, UKOL 51), keine
+///   sichtbare Einheit, keine Absage. D5: die Zeile heisst »Name (ausgesandt)« mit
+///   leerer zweiter Spalte (0x4681BB, 0x501A20). D4: kein zweiter Produktionsmerker.
+///   D3: übersteht den Spielstand. D2: Blockierer weg, OHNE zweiten Klick erscheint
+///   sie auf der Tür. D0: der Spielerweg (503) legt keine Entwurfszeile mehr an.
+///   Nullmodelle <c>--depotzeile-absage</c> (Absage, Zeile bleibt, NIE erschienen),
+///   <c>--ausgesandt-alt</c> (» (Ausgesandt)« + Hp/HpMax), <c>--auslass-rueckfall-alt</c>
+///   (neue Einheit neben der Tür).</item>
+///   <item><b>E</b> — NUR MESSUNG, kein Urteil: ein Soldat auf der Tür, ein
+///   Fahrzeug wird ausgesandt. Original @0x43DD5A: das Fahrzeug wartet.</item>
 /// </list>
 /// <para>⚠ EINGRIFFE (angesagt): die Probanden werden über die echte
 /// <c>Einfahren</c> in die Basis gestellt (<c>DepotProbeBefuellen</c>);
@@ -39,6 +48,19 @@ using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 /// </summary>
 public partial class MapEntityLayer
 {
+    /// <summary><c>--depotzeile-absage</c> — Nullmodell zu bug-603 B4: eine produzierte
+    /// Entwurfszeile der Basis wird bei belegter Tür abgewiesen (»kann nicht heraus«,
+    /// die Zeile bleibt) wie in Paket C (40d5136), statt zum wartenden Satz zu werden.</summary>
+    public static bool DepotzeileAbsage;
+
+    /// <summary><c>--ausgesandt-alt</c> — Nullmodell zu bug-603 B5: die wartende Zeile
+    /// der Basis heisst » (Ausgesandt)« (grosses A, Wortlaut Art 23) und zeigt weiter
+    /// Hp/HpMax, wie in Paket C.</summary>
+    public static bool AusgesandtAlt;
+
+    /// <summary>bug-603 B4: wie viele Entwurfszeilen beim Aussenden zum Satz wurden.</summary>
+    public int DepotzeileZuSatz;
+
     private bool BaSichtbar(Entity b, Entity u)
         => !u.Dead && !b.Garage.Contains(u) && !Untergestellt(u);
 
@@ -300,32 +322,193 @@ public partial class MapEntityLayer
                     + $", wartet in der Liste {wartet} (Soll: wartet){(cOk ? "" : "   ⚠")}\n");
         }
 
-        // ================= D: produzierte Zeile, Tuer belegt (B2) ==============
+        // ================= D: produzierte Zeile, Tuer belegt (bug-603 B4/B5) ===
+        // ⚠ Fall D stellt seinen Zustand SELBST her (b.Depot.Add) — im Spiel ab
+        // 0.6.7 entsteht eine Entwurfszeile nur noch auf Altwegen (D0 unten
+        // belegt das). Er prüft also einen Altzustand (Regel AA/EE).
         {
+            string nullD = DepotzeileAbsage ? " [Nullmodell --depotzeile-absage]" : AusgesandtAlt ? " [Nullmodell --ausgesandt-alt]" : "";
             ausser.Clear(); ausser.Add(blocker);
             if (_nav.OccupantAt(tx, ty) != blocker) { BaTuerRaeumen(tx, ty, ausser); AwStelle(blocker, new Vector2I(tx, ty)); }
+            bl.Mobile = false;
             var menu = BuildableFor(b.BType, b.Owner);
             if (menu.Count == 0 || _designs == null) sb.Append("  D produzierte Zeile: kein Entwurf baubar — NICHT GEMESSEN\n");
+            else if (GarageBelegt(b) >= DepotSlots) sb.Append($"  D produzierte Zeile: Liste voll ({GarageBelegt(b)}) — NICHT GEMESSEN\n");
             else
             {
-                b.Depot.Add(menu[0]);
-                int depotVor = b.Depot.Count;
-                int einheitenVor = 0;
-                foreach (var e in _entities) if (!e.IsBuilding && !e.IsProp && !e.Dead) einheitenVor++;
+                // D1: Entwurfszeile anlegen (⚠ EINGRIFF, angesagt), Tür belegt, »Aussenden« über den Ring.
+                // Ein FAHRZEUG-Entwurf, wenn es einen gibt (Fahrzeugtür @0x43DD5A), sonst der erste.
+                int fzi = menu.FindIndex(di => _designs[di % _designs.Count].Weapon < UI.PortraitBank.InfWeaponFrom);
+                int dEntwurf = menu[fzi >= 0 ? fzi : 0];
+                b.Depot.Add(dEntwurf);
+                int depotVor = b.Depot.Count, garageVorD = b.Garage.Count;
+                var garageAlt = new HashSet<Entity>(b.Garage);
+                int sichtbarVor = 0;
+                foreach (var e in _entities) if (!e.IsBuilding && !e.IsProp && !e.Dead && !Untergestellt(e) && e.InGebaeude == null) sichtbarVor++;
+                int anzahlVor = _entities.Count;
+                ProduktionsmerkerHolen(b.Owner);          // leeren, damit D4 nur dieses Aussenden misst
+                int zuSatzVor = DepotzeileZuSatz;
+                _order = "";
                 int zeile = b.Garage.Count + b.Depot.Count - 1;
                 int mk = BaAussendenKlicken(w, new[] { zeile });
-                int einheitenNach = 0;
-                Entity? neu = null;
+                int merkerD = ProduktionsmerkerHolen(b.Owner);
+                Entity? satz = null;
+                foreach (var u in b.Garage) if (!garageAlt.Contains(u)) satz = u;
+                int sichtbarNach = 0;
+                Entity? neuSichtbar = null;
                 foreach (var e in _entities)
-                    if (!e.IsBuilding && !e.IsProp && !e.Dead) { einheitenNach++; neu = e; }
-                bool dOk = mk == 1 && b.Depot.Count == depotVor && einheitenNach == einheitenVor;
-                ok &= dOk;
-                string wo = einheitenNach > einheitenVor && neu != null
-                    ? $"neue Einheit auf ({neu.Col},{neu.Row}) {(neu.Col == tx && neu.Row == ty ? "Tuer" : "DANEBEN")}"
-                    : "keine neue Einheit";
-                sb.Append($"  D produzierte Zeile, Tuer belegt: markiert {mk}, Depot {depotVor} -> {b.Depot.Count}, {wo}, "
-                        + $"Meldung »{_order}« (Soll: Absage, Zeile bleibt){(dOk ? "" : "   ⚠")}\n");
-                if (b.Depot.Count == depotVor) b.Depot.RemoveAt(b.Depot.Count - 1);
+                    if (!e.IsBuilding && !e.IsProp && !e.Dead && !Untergestellt(e) && e.InGebaeude == null) { sichtbarNach++; neuSichtbar = e; }
+                // ein neu angelegter Satz AUSSERHALB der Liste (Rueckfall: auf der Karte)
+                for (int i = anzahlVor; i < _entities.Count; i++)
+                    if (!_entities[i].Dead && !b.Garage.Contains(_entities[i])) { neuSichtbar = _entities[i]; sichtbarNach = System.Math.Max(sichtbarNach, sichtbarVor + 1); }
+                bool absage = _order.Contains("kann nicht heraus");
+                string wo = sichtbarNach > sichtbarVor && neuSichtbar != null
+                    ? $"neue Einheit auf ({neuSichtbar.Col},{neuSichtbar.Row}) {(neuSichtbar.Col == tx && neuSichtbar.Row == ty ? "Tuer" : "DANEBEN")}"
+                    : "keine neue sichtbare Einheit";
+                bool d1Ok = mk == 1 && b.Depot.Count == depotVor - 1 && b.Garage.Count == garageVorD + 1
+                         && satz != null && satz.Ukol == UkolVerlaesst && sichtbarNach == sichtbarVor && !absage
+                         && DepotzeileZuSatz == zuSatzVor + 1;
+                ok &= d1Ok;
+                sb.Append($"  D1 Entwurfszeile, Tuer belegt{nullD}: markiert {mk}, Depot {depotVor} -> {b.Depot.Count}, Garage {garageVorD} -> {b.Garage.Count}, "
+                        + $"neuer Satz {(satz != null ? $"»{satz.Name}« UKOL {satz.Ukol}" : "KEINER")}, {wo}, Meldung »{_order}« "
+                        + $"(Soll: Depot -1, Garage +1, Satz UKOL 51, keine sichtbare, keine Absage){(d1Ok ? "" : "   ⚠")}\n");
+
+                // D5: Beschriftung der wartenden Zeile (B5), aus DepotRows — demselben Text, den das Fenster zeigt
+                _selected = gb;
+                string beschr = "-", spalte = "-";
+                Entity? zeilenEinheit = satz;
+                if (zeilenEinheit == null)
+                    // Nullmodell --depotzeile-absage: keine umgewandelte Zeile — eine
+                    // eingefahrene, ausgesandte Einheit beschriften (dieselbe Zeichenregel)
+                    foreach (var u in b.Garage) if (u.Ukol == UkolVerlaesst) zeilenEinheit = u;
+                if (zeilenEinheit != null)
+                {
+                    int ri = b.Garage.IndexOf(zeilenEinheit);
+                    var rows = DepotRows();
+                    if (ri >= 0 && ri < rows.Count) { beschr = rows[ri].Name; spalte = rows[ri].Cost; }
+                }
+                bool d5Ok = zeilenEinheit != null && beschr.EndsWith(" (ausgesandt)") && spalte.Length == 0;
+                ok &= d5Ok;
+                sb.Append($"  D5 Beschriftung der wartenden Zeile{nullD}: »{beschr}« | zweite Spalte »{spalte}« "
+                        + $"(Soll: endet auf » (ausgesandt)« mit kleinem a, 0x501A20 @0x4681BB; Spalte leer){(d5Ok ? "" : "   ⚠")}\n");
+
+                // D4: der Produktionsmerker fällt beim Aussenden NICHT ein zweites Mal
+                bool d4Ok = merkerD == 0;
+                ok &= d4Ok;
+                sb.Append($"  D4 Produktionsmerker nach dem Aussenden: {merkerD} (Soll 0 — er fiel schon beim Fertigstellen; Mission 8 zaehlt sonst doppelt){(d4Ok ? "" : "   ⚠")}\n");
+
+                // D3: Spielstand im Speicher (keine Datei, bug-548), danach D2: Blockierer weg, KEIN zweiter Klick
+                int satzSchluessel = satz != null ? satz.Slot * 16 + satz.Owner : -1;
+                string json = SaveStateJson("basis-aussenden-check", "probe-d");
+                var jd = new Json();
+                bool gelesenD = jd.Parse(json) == Error.Ok && jd.Data.VariantType == Variant.Type.Dictionary;
+                if (gelesenD) ApplySaveState(jd.Data.AsGodotDictionary<string, Variant>());
+                gb = _entities.FindIndex(x => x.IsBuilding && !x.Dead && x.Slot == bslot && x.BType == 1);
+                if (gb < 0) return sb.Append("  Basis nach dem Laden (D) verloren\nbasis-aussenden-check: DURCHGEFALLEN").ToString();
+                b = _entities[gb];
+                _selected = gb;
+                blocker = _entities.FindIndex(x => !x.IsBuilding && !x.Dead && x.Slot == blSlot && x.Owner == ViewPlayer);
+                Entity? satz2 = null;
+                foreach (var u in b.Garage) if (u.Slot * 16 + u.Owner == satzSchluessel) satz2 = u;
+                bool d3Ok = gelesenD && satz2 != null && satz2.Ukol == UkolVerlaesst;
+                ok &= d3Ok;
+                sb.Append($"  D3 Spielstand (im Speicher): gelesen {gelesenD}, Satz nach dem Laden {(satz2 != null ? $"in der Liste, UKOL {satz2.Ukol}" : $"NICHT in der Liste (Depot {b.Depot.Count})")} "
+                        + $"(Soll: in der Liste, UKOL 51){(d3Ok ? "" : "   ⚠")}\n");
+
+                int listeVor = b.Garage.Count + b.Depot.Count;
+                Vector2I? ersteZelle = null;
+                int takt = -1;
+                int besideVor2 = SpawnedBesideDoor;
+                if (blocker >= 0)
+                {
+                    bl = _entities[blocker];
+                    var weg = _nav.NearestFree(new Vector2I(tx + 10, ty + 8), bl.Move);
+                    if (weg != null) AwStelle(blocker, weg.Value);
+                    for (int t = 0; t < 200 && ersteZelle == null; t++)
+                    {
+                        SimTickFuerProbe();
+                        if (satz2 != null && BaSichtbar(b, satz2)) { ersteZelle = new Vector2I(satz2.Col, satz2.Row); takt = t + 1; }
+                    }
+                }
+                int listeNach = b.Garage.Count + b.Depot.Count;
+                bool d2Ok = ersteZelle is { } ez && ez.X == tx && ez.Y == ty && SpawnedBesideDoor == besideVor2 && listeNach == listeVor - 1;
+                ok &= d2Ok;
+                sb.Append($"  D2 Blockierer weg, KEIN zweiter Klick: "
+                        + (ersteZelle is { } z2 ? $"erste sichtbare Zelle ({z2.X},{z2.Y}) {(z2.X == tx && z2.Y == ty ? "Tuer" : "DANEBEN")} nach {takt} Takten" : "NIE erschienen")
+                        + $", Liste {listeVor} -> {listeNach}, SpawnedBesideDoor +{SpawnedBesideDoor - besideVor2} "
+                        + $"(Soll: 1 auf der Tuer ohne zweiten Klick, Liste -1, +0){(d2Ok ? "" : "   ⚠")}\n");
+                // Aufräumen: eine Entwurfszeile, die (Nullmodell) liegen blieb, wieder weg
+                if (DepotzeileAbsage && b.Depot.Count > 0 && b.Depot[^1] == dEntwurf) b.Depot.RemoveAt(b.Depot.Count - 1);
+                sb.Append("  (D: die tragende Zahl ist 1 gegen 0 Einheiten auf der Tuer ohne zweiten Klick)\n");
+
+                // D0: Vorfrage — erzeugt der Spielerweg überhaupt noch Entwurfszeilen?
+                if (blocker >= 0) bl = _entities[blocker];
+                int depot0 = b.Depot.Count, garage0 = b.Garage.Count;
+                int frei = DepotSlots - GarageBelegt(b);
+                int bestellt = 0;
+                var menu0 = BuildableFor(b.BType, b.Owner);
+                int sp = Mathf.Clamp(b.Owner, 0, 7);
+                ProduktionsmerkerHolen(b.Owner);
+                for (int i = 0; i < System.Math.Min(3, frei) && menu0.Count > 0; i++)
+                {
+                    _money[sp] = System.Math.Max(_money[sp], 100000);   // Messwerkzeug
+                    _selected = gb;
+                    PostBuildPanelPick(0);
+                    RingLeeren();
+                    bestellt++;
+                }
+                int merker0 = ProduktionsmerkerHolen(b.Owner);
+                int depotSofort = b.Depot.Count, garageSofort = b.Garage.Count;
+                for (int t = 0; t < 420; t++) SimTickFuerProbe();   // > 6 s fuer --bauzeit-alt
+                sb.Append($"  D0 Vorfrage (Spielerweg Basisfenster/503, {bestellt}x bestellt{(BauzeitAlt ? ", --bauzeit-alt" : "")}): Entwurfszeilen {depot0} -> {depotSofort} sofort -> {b.Depot.Count} nach 420 Takten, "
+                        + $"Saetze in der Liste {garage0} -> {garageSofort}, Produktionsmerker {merker0} (Gegenprobe zu D4: ein Neubau setzt ihn) — "
+                        + $"{(b.Depot.Count == depot0 ? "keine neue Entwurfszeile: Fall D prueft einen ALTZUSTAND" : "es entstehen Entwurfszeilen")}\n");
+            }
+        }
+
+        // ================= E: Nebenbefund — Fussvolk auf der Tuer, Fahrzeug wartet? ==
+        // NUR MESSUNG, kein Urteil (berichte/basis-zeile-tuer-opus.md, Abweichung 4):
+        // im Original verlangt die Fahrzeugtuer imap[Tuer] >= 0xFFFE (@0x43DD5A), ein
+        // nicht voller Trupp auf der Tuer haelt das Fahrzeug fest. Unser DepotAuslass
+        // fragt IsFree(..., Vehicle), und dort ist Fussvolk ueberfahrbar.
+        {
+            int si = fi >= 0 && fi < _entities.Count && !_entities[fi].Dead && _entities[fi].Infantry >= 0 ? fi : -1;
+            if (si >= 0 && b.Garage.Contains(_entities[si])) si = -1;
+            if (si < 0 || blocker < 0) sb.Append("  E (Messung) Fussvolk auf der Tuer: kein freier Soldat — NICHT GEMESSEN\n");
+            else
+            {
+                var soldat = _entities[si];
+                bl = _entities[blocker];
+                bl.Mobile = false; soldat.Mobile = false;
+                // die Liste leerlaufen lassen (D0 hat Neubauten hineingelegt)
+                for (int t = 0; t < 600 && b.Garage.Exists(u => u.Ukol == UkolVerlaesst); t++) SimTickFuerProbe();
+                int drinE = DepotProbeBefuellen(gb, 1);
+                Entity? fz = drinE > 0 ? b.Garage[^1] : null;
+                ausser.Clear(); ausser.Add(si); ausser.Add(blocker);
+                if (_nav.OccupantAt(tx, ty) == blocker || _nav.OccupantAt(tx, ty + 1) == blocker)
+                {
+                    var weg = _nav.NearestFree(new Vector2I(tx + 10, ty + 8), bl.Move);
+                    if (weg != null) AwStelle(blocker, weg.Value);
+                }
+                BaTuerRaeumen(tx, ty, ausser);
+                AwStelle(si, new Vector2I(tx, ty));
+                int belegt = _nav.OccupantAt(tx, ty);
+                bool freiFuerFz = _nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle);
+                Vector2I? zelleE = null;
+                if (fz != null)
+                {
+                    BaAussendenKlicken(w, new[] { b.Garage.IndexOf(fz) });
+                    for (int t = 0; t < 120 && zelleE == null; t++)
+                    {
+                        SimTickFuerProbe();
+                        if (BaSichtbar(b, fz)) zelleE = new Vector2I(fz.Col, fz.Row);
+                    }
+                }
+                sb.Append($"  E (Messung, kein Urteil) 1 Soldat auf der Tuer (Belegung {belegt}, IsFree(Fahrzeug) {freiFuerFz}), Fahrzeug {(fz != null ? $"»{fz.Name}«" : "KEINES eingefahren")} ausgesandt: "
+                        + (zelleE is { } ze ? $"heraus auf ({ze.X},{ze.Y}) {(ze.X == tx && ze.Y == ty ? "AUF DER TUER, wo der Soldat steht" : "daneben")}, Soldat jetzt ({soldat.Col},{soldat.Row})"
+                                            : "wartet (nicht heraus in 120 Takten)")
+                        + " — Original @0x43DD5A: Fahrzeug WARTET\n");
+                soldat.Mobile = true;
             }
         }
         bl.Mobile = true;

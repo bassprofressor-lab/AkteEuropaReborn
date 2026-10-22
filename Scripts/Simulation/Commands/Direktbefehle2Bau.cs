@@ -270,16 +270,34 @@ public partial class MapEntityLayer
         if (!BedienbaresGebaeude(c, geb)) return false;
         var e = _entities[geb];
         var (art, kenn) = PanelzeileKennung(e, k);
+        if ((art != 1 || kenn != c.P4) && handlung == 0 && e.BType == 1 && e.Hangar is not { Count: > 0 }
+            && !DepotzeileAbsage && !AuslassRueckfallAlt)
+        {
+            // ⭐ bug-603 B4: ein 2007-Aussenden ist IMMER eine Entwurfszeile (eine
+            // Garage-Zeile geht als 504). Mehrere markierte Entwurfszeilen kommen
+            // absteigend (BaseWindow.DepotWahl); die erste wird zum Satz und rückt
+            // an das Ende des Garage-Teils, damit stehen die tieferen Zeilen eine
+            // Stelle weiter hinten (art != 1 fängt auch den Fall, dass dort jetzt ein
+            // Satz steht, dessen Index zufällig der Entwurfsnummer gleicht). Gleiche
+            // Entwurfsnummern sind gleichwertig —
+            // die erste passende Zeile ist dieselbe Einheit. UNSERE SETZUNG.
+            int d = e.Depot.IndexOf(c.P4);
+            if (d < 0) return false;
+            k = e.Garage.Count + d;
+            (art, kenn) = (1, c.P4);
+        }
         if (art < 0 || kenn != c.P4) return false;
         int ziel = c.P5;
         int vorher = e.Garage.Count + e.Depot.Count + (e.Hangar?.Count ?? 0);
+        int depotVor = e.Depot.Count;
         ImSatz(c, geb, -1, () =>
         {
             if (handlung == 0) SendOutFromPanel(k);
             else if (handlung == 1) RecycleFromPanel(k);
             else TransportFromPanel(k, ziel);
         });
-        return e.Garage.Count + e.Depot.Count + (e.Hangar?.Count ?? 0) != vorher;
+        // bug-603 B4: Entwurfszeile -> Satz ändert die Summe nicht, wohl aber das Depot.
+        return e.Garage.Count + e.Depot.Count + (e.Hangar?.Count ?? 0) != vorher || e.Depot.Count != depotVor;
     }
 
     /// <summary>504 — Aussenden. P1 Einheit, P2 Gebäude. Depot/Bahnhof: UKOL

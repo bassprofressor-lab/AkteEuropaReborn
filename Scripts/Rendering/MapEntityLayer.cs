@@ -18808,7 +18808,11 @@ public partial class MapEntityLayer : Node2D
     /// an der freien Tuer heraus (Tuer UND Zelle darunter, bug-456). Dieselben
     /// Felder wie SendOutOfDepot.
     /// </summary>
-    private Entity? NeubauInListe(Entity e, int designIdx)
+    /// <param name="merker">bug-603 B4: false, wenn eine schon PRODUZIERTE
+    /// Entwurfszeile beim Aussenden zum Satz wird — ihr Produktionsmerker
+    /// (0xA9A208) fiel schon beim Fertigstellen, ein zweiter zählte in Mission 8
+    /// doppelt.</param>
+    private Entity? NeubauInListe(Entity e, int designIdx, bool merker = true)
     {
         if (_nav == null || _designs == null) return null;
         var d = EntwurfFuer(e.Owner, _designs[designIdx % _designs.Count]);
@@ -18847,8 +18851,12 @@ public partial class MapEntityLayer : Node2D
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         e.Garage.Add(u);
         NeubauInListeGelegt++;
-        ProduktionsmerkerSetzen(e.Owner, d.Propulsion);
-        NoteEvent(e, $"{d.Name} gebaut und ausgesandt");
+        if (merker)
+        {
+            ProduktionsmerkerSetzen(e.Owner, d.Propulsion);
+            NoteEvent(e, $"{d.Name} gebaut und ausgesandt");
+        }
+        else NoteEvent(e, $"{d.Name} ausgesandt");
         return u;
     }
 
@@ -22755,16 +22763,23 @@ public partial class MapEntityLayer : Node2D
         // Entwurfsnummer. Die zweite Spalte trägt hier das LEBEN und keinen
         // Preis — eine untergestellte Einheit ist nicht gekauft, sie ist
         // hereingefahren, und was man von ihr wissen will, ist ihr Zustand.
-        // ⭐ bug-591 B1: eine ausgesandte, noch wartende Einheit (UKOL 0x33)
-        // heisst » (Ausgesandt)«. ⚠ UNSERE SETZUNG: übernommen von Fensterart 23
-        // (Depot, 0x479553 / 0x502108); ob der Zeichner der Basis 0x467C60 das
-        // ebenso schreibt, ist ungelesen.
+        // ⭐ bug-603 B5 (gelesen, berichte/basis-zeile-tuer-opus.md §1.6): der
+        // Zeichner der Basis 0x467C60 fragt @0x4681B1 UKOL == 0x33 und schreibt
+        // dann @0x4681BB Name + » (ausgesandt)« mit KLEINEM a (0x501A20; F 0x500A60
+        // @0x466AAC) STATT der Lebensanzeige — `jmp 0x468262` überspringt den Teil
+        // "   " + 100·HP/HPmax + "%". Die zweite Spalte bleibt darum leer.
+        // » (Ausgesandt)« mit grossem A (0x502108) gehört nur dem Depotfenster
+        // Art 23 (0x479468). --ausgesandt-alt: Stand Paket C (grosses A + Hp/HpMax).
+        // ⚠ Offen, nicht Teil dieses Baus: die Lebensanzeige nicht wartender Zeilen
+        // ist im Original "   NN%", bei uns Hp/HpMax.
         foreach (var u in e.Garage)
+        {
+            bool wartet = e.BType == 1 && u.Ukol == UkolVerlaesst && !BasisAussendenSofort;
             rows.Add(new UI.BuildPanel.Row(
-                EinheitenWort(u) + (e.BType == 1 && u.Ukol == UkolVerlaesst && !BasisAussendenSofort
-                                    ? " (Ausgesandt)" : ""),
-                $"{u.Hp}/{u.HpMax}", true, false,
+                EinheitenWort(u) + (wartet ? (AusgesandtAlt ? " (Ausgesandt)" : " (ausgesandt)") : ""),
+                wartet && !AusgesandtAlt ? "" : $"{u.Hp}/{u.HpMax}", true, false,
                 u.Infantry >= 0 ? UI.PortraitBank.PictureOfInfantry(u.Infantry) : 0));
+        }
 
         if (_designs == null) return rows;
         for (int k = 0; k < e.Depot.Count; k++)
@@ -22835,6 +22850,29 @@ public partial class MapEntityLayer : Node2D
         }
         k -= e.Garage.Count;
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
+        // ⭐ bug-603 B4: eine PRODUZIERTE Zeile (Entwurfsnummer) der Basis wird beim
+        // Aussenden zum SATZ und wartet wie ein Neubau in der Liste (UKOL 0x33),
+        // bis DepotAuslass sie an der freien Tür herauslässt. Keine Absage, keine
+        // Meldung: das Original sagt nie ab (0x410420 ohne Sprung und ohne Aufruf,
+        // Busarm 0x4C37A5 wertet nichts aus), und ein Neubau ist dort sofort
+        // angedockt und ausgesandt (0x4B1E0B -> 0x43BFC0, 0x4B1E1C -> 0x410420).
+        // ⚠ UNSERE SETZUNG: den Übergang Entwurfsnummer -> Satz kennt das Original
+        // nicht (dort gibt es keine produzierte, noch nicht entstandene Zeile); wir
+        // legen ihn auf den Augenblick des Aussendens, weil er dem Neubau am
+        // nächsten kommt. Die Zeile wandert dabei ans Ende des Garage-Teils.
+        // Entwurfszeilen gibt es ab 0.6.7 nur noch auf Altwegen (--bauzeit-alt,
+        // Basis ohne Tür, Bahntransport, ältere Spielstände).
+        // --depotzeile-absage: Stand Paket C (Absage, die Zeile bleibt).
+        if (e.BType == 1 && !DepotzeileAbsage && !AuslassRueckfallAlt && !BasisAussendenSofort
+            && !AussendenSofort && e.DoorCells.Count > 0)
+        {
+            if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
+            var nu = NeubauInListe(e, e.Depot[k], merker: false);
+            if (nu != null) { e.Depot.RemoveAt(k); DepotzeileZuSatz++; }
+            UpdatePanel();
+            QueueRedraw();
+            return;
+        }
         // bug-591 B2: auch die PRODUZIERTE Zeile nur über die Tür.
         SendOutOfDepot(e, k, nurTuer: !AuslassRueckfallAlt);
         UpdatePanel();
@@ -33065,11 +33103,12 @@ public partial class MapEntityLayer : Node2D
         var d = EntwurfFuer(e.Owner, _designs[e.Depot[k] % _designs.Count]);
         // ⭐ bug-591 B2 (nur der Spielerweg über das Basisfenster setzt nurTuer):
         // keine Einheit neben der Tür. Belegt -> Absage, die Zeile bleibt.
-        // ⚠ UNSERE SETZUNG: das Original dockt einen Neubau an (0x4B1E0B ->
-        // 0x43BFC0) und sendet ihn aus (0x4B1E1C -> 0x410420), er WARTET also in
-        // der Liste; unsere Depotzeile ist eine Entwurfsnummer ohne Satz und kann
-        // nicht warten — darum Absage statt Warten (ungelesen, eigene Lesung).
-        // Die KI (SkirmishAi) behält den alten Weg. --auslass-rueckfall-alt.
+        // ⭐ bug-603 B4: für die BASIS kommt dieser Zweig nur noch mit
+        // --depotzeile-absage hierher — sonst wird die Zeile in SendOutFromPanel
+        // zum Satz und wartet (gelesen: das Original sagt nie ab, 0x410420; ein
+        // Neubau wartet angedockt, 0x4B1E0B/0x4B1E1C). Die Absage bleibt für andere
+        // Gebäudearten und als Nullmodell. Die KI (SkirmishAi) behält den alten
+        // Weg. --auslass-rueckfall-alt.
         var cell = nurTuer ? TuerFrei(e) : SpawnCellFor(e);
         if (cell == null)
         {
