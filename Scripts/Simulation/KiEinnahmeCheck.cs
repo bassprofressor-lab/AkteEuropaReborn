@@ -73,6 +73,18 @@ public partial class MapEntityLayer
         int schutzEntfernt = 0;
         bool k13Ki = false;
         int ba5Soll = m == 20 ? 6 : -1;
+        // ⭐ Paket W4 (bug-640): die Einnahmeversuche je Ziel, JEDEN Takt — ein Versuch
+        // beginnt, wenn der Fortschritt steigt, er bricht ab, wenn er wieder faellt
+        // (-1 je Takt @0x43D29E, niemand an der Tuer), er gelingt beim Besitzwechsel.
+        // Soll (berichte/ki-eingaben-k25-k26-opus.md §4.1): Dauer des gelungenen
+        // Versuchs = TP beim Beginn (+1 je Takt, C 0x43CD57), ±1 Takt.
+        var vAktiv = new Dictionary<(int, int), (int T0, int Tp, int Tote, int Letzt)>();
+        var vZahl = new Dictionary<(int, int), int>();
+        var vLetzt = new Dictionary<(int, int), int>();
+        var vAbbruch = new Dictionary<(int, int), int>();
+        var vAbbruchTod = new Dictionary<(int, int), int>();
+        var vGelungen = new Dictionary<(int, int), (int Dauer, int Tp, int Beginn)>();
+        var vZeilen = new List<string>();
 
         for (int t = 0; t < takte; t++)
         {
@@ -163,6 +175,41 @@ public partial class MapEntityLayer
             if (_mscript != null && tSieg < 0 && (_mscript.Grace >= 0 || (_mscript.Ended && _mscript.Success)))
                 tSieg = s;
 
+            foreach (var key in gesehen)
+            {
+                var vb = _entities[key.Item2];
+                int prog = vb.CaptureProgress;
+                if (vAktiv.TryGetValue(key, out var va))
+                {
+                    if (vb.Owner == key.Item1)
+                    {
+                        vGelungen[key] = (t - va.T0, va.Tp, va.T0);
+                        vZeilen.Add($"    Versuch {vZahl[key]} P{key.Item1}->Platz {vb.Slot}: gelungen nach {t - va.T0} Takten, TP beim Beginn {va.Tp} (Takt {va.T0}..{t})");
+                        vAktiv.Remove(key);
+                    }
+                    else if (prog < va.Letzt)
+                    {
+                        int tote = _entities.Count(e => e.Dead && e.Owner == key.Item1 && !e.IsBuilding);
+                        vAbbruch[key] = vAbbruch.GetValueOrDefault(key) + 1;
+                        bool tod = tote > va.Tote;
+                        if (tod) vAbbruchTod[key] = vAbbruchTod.GetValueOrDefault(key) + 1;
+                        vZeilen.Add($"    Versuch {vZahl[key]} P{key.Item1}->Platz {vb.Slot}: abgebrochen bei Fortschritt {va.Letzt}/{va.Tp} " +
+                                    $"nach {t - va.T0} Takten (Takt {va.T0}..{t}), {tote - va.Tote} eigene Einheiten tot{(tod ? " — TOD DER GRUPPE" : "")}");
+                        vAktiv.Remove(key);
+                    }
+                    else vAktiv[key] = va with { Letzt = prog };
+                }
+                else if (prog > 0 && vb.Intruder == key.Item1 && vb.Owner != key.Item1 &&
+                         (!vLetzt.TryGetValue(key, out int lp) || prog > lp))
+                {
+                    vZahl[key] = vZahl.GetValueOrDefault(key) + 1;
+                    int tote = _entities.Count(e => e.Dead && e.Owner == key.Item1 && !e.IsBuilding);
+                    // TP beim Beginn: der Zaehler beginnt bei 1 nach einem Takt, also ein Takt frueher
+                    vAktiv[key] = (t - prog + 1, vb.CaptureTotal > 0 ? vb.CaptureTotal : vb.Hp, tote, prog);
+                }
+                vLetzt[key] = prog;
+            }
+
             if (t % 25 != 0) continue;
             if (m == 13 && t % (20 * SimHz) == 0 && _mscript != null)
                 GD.Print($"k13-spur {s:0} s: v8={_mscript.Var(8)} obj_owner(0)={_mscript.ObjOwner?.Invoke(0)} " +
@@ -251,6 +298,14 @@ public partial class MapEntityLayer
                           $"Angreifer hoechstens {angriffe.GetValueOrDefault(key)}");
         }
         if (keys.Count == 0) sb.AppendLine("  kein Tuergriff-Ziel (Art 1, c == 0) auf der Karte");
+        foreach (var z in vZeilen) sb.AppendLine(z);
+        foreach (var key in keys.Where(k => vZahl.ContainsKey(k)))
+        {
+            string g = vGelungen.TryGetValue(key, out var vg)
+                ? $"gelungen nach {vg.Dauer} Takten bei TP {vg.Tp} (Abweichung {vg.Dauer - vg.Tp} Takte)" : "keiner gelungen";
+            sb.AppendLine($"  Einnahmeversuche P{key.Item1}->Platz {_entities[key.Item2].Slot}: {vZahl[key]}, " +
+                          $"abgebrochen {vAbbruch.GetValueOrDefault(key)}, davon durch Tod der Gruppe {vAbbruchTod.GetValueOrDefault(key)}; {g}");
+        }
 
         sb.AppendLine($"  Zaehler: Tuergriff-Gruppen {TuergriffGruppen}, Fahrten {TuergriffFahrten}, " +
                       $"erledigt {TuergriffErledigt}, Zielwahl eigen/verbuendet uebersprungen {ZielwahlVerbuendetUebersprungen}");
@@ -288,6 +343,15 @@ public partial class MapEntityLayer
                 bool be = an && tBesitz.TryGetValue(k, out var tb) && tb - tAnkunft[k] <= 60;
                 bool si = tSieg >= 0 && be && tSieg >= tBesitz[k];
                 ok = f && an && la && be && si;
+                // ⭐ Paket W4: die Dauer des GELUNGENEN Versuchs gegen die TP beim Beginn
+                if (da && vGelungen.TryGetValue(k, out var vk))
+                {
+                    bool dauerOk = System.Math.Abs(vk.Dauer - vk.Tp) <= 1;
+                    sb.AppendLine($"  K26-Versuche: {vZahl.GetValueOrDefault(k)} begonnen, {vAbbruch.GetValueOrDefault(k)} abgebrochen " +
+                                  $"({vAbbruchTod.GetValueOrDefault(k)} durch Tod), gelungen {vk.Dauer} Takte bei TP {vk.Tp} — " +
+                                  $"Dauer = TP ±1: {dauerOk}");
+                    ok = ok && dauerOk;
+                }
                 // ⭐ bug-405: gehalten = Myre gehoert am Ende des Laufs noch P3 (die
                 // 3×17-Verstaerkung R8/R9 kommt mit der Einnahme). Nur Anzeige.
                 if (da)

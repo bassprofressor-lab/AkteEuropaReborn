@@ -726,11 +726,15 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary><c>--ki-produktionsfreigabe-aus</c>: der Stand bis Paket W — das
     /// Missionsprogramm laeuft immer, die Bausperre prueft nur der Bau selbst.
-    /// ⚠ Spielerentscheidung 22.10.2026: vorerst STANDARD AUS (= true), bis die
-    /// Eingaben geklaert sind (Lagerverbrauch K25, fehlende Auftraege im
-    /// M25-Skript, zu wenige P3-Wagen K26 — mit Sperre erobert P3 Myre nicht
-    /// mehr in 450 s). Einschalten mit <c>--ki-produktionsfreigabe</c>.</summary>
-    public static bool KiProduktionsfreigabeAus = true;
+    /// ⭐ BERICHTIGT 22.10.2026 (Paket W4): bis Paket W3 stand hier »vorerst STANDARD
+    /// AUS«, bis die Eingaben geklaert sind (Lagerverbrauch K25, fehlende Auftraege im
+    /// M25-Skript, zu wenige P3-Wagen K26). Geklaert in berichte/ki-eingaben-k25-k26-opus.md:
+    /// Lager und Wagenzahl sind bei uns originaltreu (die Sollwerte kamen aus
+    /// Entwicklerstaenden mit Kartenschaltern), die fehlenden Auftraege waren die
+    /// Setup-Ziele (jetzt gebaut, Simulation/SetupZiele.cs). Spielerentscheidung: an,
+    /// sobald die Eingaben stimmen — also seit W4 STANDARD AN (= false).
+    /// <c>--ki-produktionsfreigabe</c> bleibt als (wirkungsloser) Einschalter.</summary>
+    public static bool KiProduktionsfreigabeAus = false;
 
     /// <summary><c>--ki-routenfilter-aus</c>: der Filter <c>0x4BAD20</c> vor den
     /// Routen entfaellt (Stand bis Paket W: UNSERE Setzung »immer wahr«).</summary>

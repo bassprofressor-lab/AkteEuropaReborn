@@ -606,6 +606,7 @@ public partial class MapEntityLayer
 
         // ---- der KI-Zustand (Paket W, bug-621) --------------------------------
         KiZustandLesen(root, listenstelle);
+        _standGeladen = true;       // Paket W4: das Setup legt keine Ziele mehr darueber
 
         Campaign.CampaignHints.Vergiss();
         if (root.TryGetValue("hints_shown", out var hsv) && hsv.VariantType == Variant.Type.Array)

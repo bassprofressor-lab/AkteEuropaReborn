@@ -1447,6 +1447,18 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_setupZieleCheck)
+        {
+            GD.Print(_entities.SetupZieleCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_bahnhofleerungCheck > 0)
+        {
+            GD.Print(_entities.BahnhofleerungCheck(_bahnhofleerungCheck));
+            GetTree().Quit(0);
+            return;
+        }
         if (_kiEinnahmeCheck > 0)
         {
             GD.Print(_entities.KiEinnahmeCheck(_kiEinnahmeCheck));
@@ -1756,6 +1768,10 @@ public partial class MapViewer : Node2D
     private bool _kiTafelnCheck;
     /// <summary><c>--k25-ki-check</c> — Paket W2, Simulation/K25KiCheck.cs.</summary>
     private bool _k25KiCheck;
+    /// <summary><c>--setup-ziele-check</c> — Paket W4, Simulation/SetupZiele.cs.</summary>
+    private bool _setupZieleCheck;
+    /// <summary><c>--bahnhofleerung-check[=takte]</c> — Paket W4, Simulation/Bahnhofleerung.cs.</summary>
+    private int _bahnhofleerungCheck;
     /// <summary><c>--untermission-check=N</c> — siehe Simulation/Skriptvariablen.cs
     /// (02.10.2026, bug-392). 0 = aus.</summary>
     private int _untermissionCheck;
@@ -5304,13 +5320,23 @@ _mausProbePunkt = karte;
             else if (a == "--ki-brueckennachfuehrung-aus") MapEntityLayer.KiBrueckennachfuehrungAus = true;
             else if (a == "--ki-tafeln-check") _kiTafelnCheck = true;
             else if (a == "--ki-produktionsfreigabe-aus") MapEntityLayer.KiProduktionsfreigabeAus = true;
-            else if (a == "--ki-produktionsfreigabe") MapEntityLayer.KiProduktionsfreigabeAus = false;   // W2: vorerst Standard aus
+            else if (a == "--ki-produktionsfreigabe") MapEntityLayer.KiProduktionsfreigabeAus = false;   // seit W4 Standard an
             else if (a == "--ki-routenfilter-aus") MapEntityLayer.KiRoutenfilterAus = true;
             else if (a == "--ki-modus20-aus") MapEntityLayer.KiModus20Aus = true;
-            else if (a == "--ki-modus20") MapEntityLayer.KiModus20Aus = false;   // W2: vorerst Standard aus
+            else if (a == "--ki-modus20") MapEntityLayer.KiModus20Aus = false;   // seit W4 Standard an
             else if (a == "--ki-aufnahme-standort") MapEntityLayer.KiAufnahmeStandort = true;
             else if (a == "--ki-cpu1-nullen-alt") MapEntityLayer.KiCpu1NullenAlt = true;
             else if (a == "--k25-ki-check") _k25KiCheck = true;
+            // ⭐ Paket W4 (22.10.2026, bug-636..): Setup-Ziele, Takt 14, Bahnschalter-Gegenprobe.
+            else if (a == "--setup-ziele-aus") MapEntityLayer.SetupZieleAus = true;
+            else if (a == "--setup-ziele-check") _setupZieleCheck = true;
+            else if (a.StartsWith("--setup-ziele-soll=")) MapEntityLayer.SetupZieleSoll = a["--setup-ziele-soll=".Length..];
+            else if (a == "--bahnhofleerung-aus") MapEntityLayer.BahnhofleerungAus = true;
+            else if (a == "--bahnhofleerung") MapEntityLayer.BahnhofleerungAus = false;   // W4: vorerst Standard aus
+            else if (a == "--bahnhofleerung-check") _bahnhofleerungCheck = 13300;
+            else if (a.StartsWith("--bahnhofleerung-check=") &&
+                     int.TryParse(a["--bahnhofleerung-check=".Length..], out int bhl)) _bahnhofleerungCheck = bhl;
+            else if (a == "--bahnschalter-aus-datei") MapEntityLayer.BahnschalterAusDatei = true;
             else if (a == "--ki-freigabe-protokoll") MapEntityLayer.KiFreigabeProtokoll = true;
             else if (a == "--ki-wegpunkte-check") _kiWegpunkteCheck = 6000;
             // ⭐ Paket W3 (23.10.2026, bug-631..634): Gruppen und Marsch der Gefechts-KI,

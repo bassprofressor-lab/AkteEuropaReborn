@@ -208,6 +208,23 @@ public sealed class MissionScript
         /// </summary>
         public readonly List<(int Spieler, int Wert)> Betriebsart = new();
 
+        /// <summary>
+        /// ⭐⭐ 22.10.2026 (Paket W4, bug-636) — <b>DIE SETUP-ZIELE</b>: die
+        /// <c>add_target</c>-Rufe des Missions-SETUPS (Weiche C <c>0x4884BE</c>,
+        /// F <c>0x487110</c>), in Rufreihenfolge. Ausgelesen von
+        /// <c>aekernel-tools/mission_setupziele.py</c> (336 Rufe in 30 Missionen,
+        /// C und F gleich, 16 davon Schleifen). Sie fuellen sec69, die Zieltafel des
+        /// Rechnerspielers, VOR dem ersten Skripttakt (sec69 wird @0x48843F geleert,
+        /// dann kommt das Setup). Bis heute las sie niemand. Angewandt von
+        /// <c>MapEntityLayer.SetupZieleAnwenden</c>, Gegenschalter
+        /// <c>--setup-ziele-aus</c>.
+        /// </summary>
+        public readonly List<SetupZiel> SetupZiele = new();
+
+        /// <summary>Die <c>set_ai</c>-Rufe (0x4D0EE0, sec131) und 0x4D0970 (sec77)
+        /// desselben Setup-Blocks — nur zum Protokoll, siehe SetupZieleAnwenden.</summary>
+        public readonly List<(string Kind, int A, int B, string At)> SetupSetAi = new();
+
         /// <summary>Die Tore des Blocks, in Adressreihenfolge.</summary>
         public readonly List<Gate> Gates = new();
 
@@ -1357,6 +1374,25 @@ public sealed class MissionScript
     /// Gesetzt von MapEntityLayer, sobald die Haken verdrahtet sind.</summary>
     public IReadOnlyList<(int Spieler, int Wert)> Betriebsarten => _script.Betriebsart;
 
+    /// <summary>Ein <c>add_target</c>-Ruf des Setup-Blocks (Paket W4, bug-636). Fest:
+    /// <c>(A, B, C, D, E)</c> = (spieler, art, vorrang, wort, c) wie im Skript.
+    /// <c>Schleife == "gebaeude"</c>: fuer Spieler <c>SpielerVon..SpielerBis</c>, je
+    /// Gebaeudeplatz 0..254 mit Typ != 0 und passendem Besitzer (der Spieler selbst
+    /// oder einer aus <c>Besitzer</c>), bei <c>Gebaut</c> zusaetzlich +0x18 != 0.
+    /// <c>Schleife == "einheiten"</c>: Wort <c>Von..Bis</c>.</summary>
+    public sealed class SetupZiel
+    {
+        public string At = "", Schleife = "";
+        public int A, B, C, D, E, SpielerVon, SpielerBis = -1, Von, Bis = -1;
+        public bool BesitzerIstSpieler, Gebaut;
+        public readonly List<int> Besitzer = new();
+    }
+
+    /// <summary>Die Setup-Ziele dieser Mission, siehe Script.SetupZiele.</summary>
+    public IReadOnlyList<SetupZiel> SetupZiele => _script.SetupZiele;
+    /// <summary>set_ai/0x4D0970 des Setup-Blocks, siehe Script.SetupSetAi.</summary>
+    public IReadOnlyList<(string Kind, int A, int B, string At)> SetupSetAi => _script.SetupSetAi;
+
     /// <summary>⭐ 02.10.2026 — die Gegenschalter der Setzungsregeln in der JSON
     /// (Feld <c>_schalter</c>). Steht ein Schalter hier, wird seine Regel beim
     /// Laden ausgelassen. Gefüllt von MapViewer aus der Befehlszeile, VOR dem
@@ -1736,6 +1772,55 @@ public sealed class MissionScript
                     if (!bd.TryGetValue("a", out var bsp) || !bd.TryGetValue("b", out var bwe))
                         continue;
                     s.Betriebsart.Add((bsp.AsInt32(), bwe.AsInt32()));
+                }
+            // ⭐⭐ 22.10.2026 (Paket W4, bug-636) — die Setup-Ziele, siehe Script.SetupZiele.
+            if (body.TryGetValue("setup_ziele", out var szv) &&
+                szv.VariantType == Variant.Type.Array)
+                foreach (var e in szv.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Dictionary) continue;
+                    var zd = e.AsGodotDictionary<string, Variant>();
+                    int Z(string k) => zd.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Array ? v.AsInt32() : 0;
+                    (int, int) Paar(string k)
+                    {
+                        if (zd.TryGetValue(k, out var v) && v.VariantType == Variant.Type.Array)
+                        {
+                            var q = v.AsGodotArray();
+                            if (q.Count >= 2) return (q[0].AsInt32(), q[1].AsInt32());
+                        }
+                        return (0, -1);
+                    }
+                    var z = new SetupZiel
+                    {
+                        At = zd.TryGetValue("_at", out var atv) ? atv.AsString() : "",
+                        Schleife = zd.TryGetValue("schleife", out var slv) ? slv.AsString() : "",
+                        A = Z("a"), B = Z("b"), C = Z("c"), E = Z("e"),
+                        Gebaut = zd.TryGetValue("gebaut", out var gbv) && gbv.AsBool(),
+                    };
+                    if (z.Schleife == "einheiten") { (z.Von, z.Bis) = Paar("d"); }
+                    else z.D = Z("d");
+                    if (z.Schleife == "gebaeude")
+                    {
+                        (z.SpielerVon, z.SpielerBis) = Paar("spieler");
+                        if (zd.TryGetValue("besitzer", out var bsv))
+                        {
+                            if (bsv.VariantType == Variant.Type.Array)
+                                foreach (var q in bsv.AsGodotArray()) z.Besitzer.Add(q.AsInt32());
+                            else z.BesitzerIstSpieler = bsv.AsString() == "spieler";
+                        }
+                    }
+                    s.SetupZiele.Add(z);
+                }
+            if (body.TryGetValue("setup_set_ai", out var sav) &&
+                sav.VariantType == Variant.Type.Array)
+                foreach (var e in sav.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Dictionary) continue;
+                    var sd = e.AsGodotDictionary<string, Variant>();
+                    int Zahl(string k) => sd.TryGetValue(k, out var v) && v.VariantType is Variant.Type.Int or Variant.Type.Float ? v.AsInt32() : -1;
+                    s.SetupSetAi.Add((sd.TryGetValue("kind", out var kv2) ? kv2.AsString() : "",
+                                      Zahl("a"), Zahl("b"),
+                                      sd.TryGetValue("_at", out var at2) ? at2.AsString() : ""));
                 }
             if (!body.TryGetValue("rules", out var rv) ||
                 rv.VariantType != Variant.Type.Array) continue;

@@ -15520,9 +15520,11 @@ public partial class MapEntityLayer : Node2D
                 // die ganze Regel blockiert, und M28 verloere auch ihr
                 // `add_target`. Beide Aufrufstellen der Kampagne setzen den
                 // Wert 1 (M26 Spieler 5, M28 Spieler 1).
-                _mscript.SetAi = (spieler, wert) =>
-                    GD.Print($"Missionsskript: KI-Modus Spieler {spieler} = {wert} " +
-                             "— die Kampagne hat keine KI, es geschieht nichts");
+                // ⭐ 22.10.2026 (Paket W4): set_ai @0x4D0EE0 schreibt sec131
+                // (byte[0x538BB8+p]); einziger Spielleser ist die KI-Runde Takt 10
+                // (0x4BFD59 -> Helikauf 0x4BE330), den wir nicht gebaut haben. Der Wert
+                // wird mitgeschrieben, wirkt aber nicht — Simulation/SetupZiele.cs.
+                _mscript.SetAi = (spieler, wert) => SetAiSec131(spieler, wert, "Missionsskript");
                 // ⭐ 02.10.2026 (bug-384) — die BETRIEBSART sec61 @0x4D1050, der
                 // erste Rufer von SetAiBetriebsart. Siehe MissionBetriebsart.
                 _mscript.AiMode = MissionBetriebsart;
@@ -15602,6 +15604,10 @@ public partial class MapEntityLayer : Node2D
                 // erst der Vorspann (alle acht := 2, @0x48843F), dann die Rufe
                 // der Mission. Simulation/SkirmishAiSectors.cs, --ki-betriebsart5-aus.
                 BetriebsartMissionsstart(_mscript.Betriebsarten);
+                // ⭐⭐ 22.10.2026 (Paket W4, bug-636) — die SETUP-ZIELE: add_target aus dem
+                // Setup-Block (336 Rufe in 30 Missionen), vor dem ersten Skripttakt.
+                // Simulation/SetupZiele.cs, Gegenschalter --setup-ziele-aus.
+                SetupZieleAnwenden(_mscript, UI.SkirmishSetup.CampaignMission);
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
                 {

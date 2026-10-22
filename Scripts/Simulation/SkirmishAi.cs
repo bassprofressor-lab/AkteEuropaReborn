@@ -1334,6 +1334,9 @@ public partial class MapEntityLayer : Node2D
             // Sie haengt am Takt, nicht am Denk-Zeitgeber darunter, und hinter
             // derselben Sperre wie der ganze KI-Zug (@0x4BFBFA).
             if (spendeFaellig && !AiGesperrt(a.Player)) Teilespende(a.Player);
+            // ⭐ 22.10.2026 (Paket W4, bug-637) — TAKT 14, die BAHNHOFLEERUNG 0x4BFA30
+            // (Simulation/Bahnhofleerung.cs): hinter derselben Sperre, ohne sec61-Tor.
+            if (_taktNr % 50 == 14 && !AiGesperrt(a.Player)) Bahnhofleerung(a.Player);
 
             // Der Einheitendurchlauf haengt NICHT am Denk-Takt. Im Original ist
             // er ein eigener Eintrag der KI-Runde (Takte 16,20,…,44) und laeuft
@@ -2321,11 +2324,13 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary><c>--ki-modus20-aus</c> (Paket W2, bug-629): ein KI-Transporter aus der
     /// Basis bleibt Modus 0 (Stand bis Paket W).
-    /// ⚠ 22.10.2026: vorerst STANDARD AUS (= true) wie die Produktionsfreigabe —
-    /// mit Modus 20 faehrt P3 auf K26 schon bei 143 s mit 3 Einheiten los, die
-    /// Einnahme von Myre dauert dann 266 s statt 23 s (--ki-einnahme-check=450
-    /// DURCHGEFALLEN). Erst klaeren, dann einschalten mit <c>--ki-modus20</c>.</summary>
-    public static bool KiModus20Aus = true;
+    /// ⭐ BERICHTIGT 22.10.2026 (Paket W4): hier stand »vorerst STANDARD AUS«, weil
+    /// mit Modus 20 die Einnahme von Myre auf K26 266 s statt 23 s dauerte. Geklaert
+    /// (berichte/ki-eingaben-k25-k26-opus.md §4): das waren zwei Versuche, der erste
+    /// von P1 zusammengeschossen; die Einnahmedauer selbst folgt nur den TP. Modus 20
+    /// ist originaltreu (C 0x4BB32B, 16/16 P2-Transporter in 3/5/7/10.DM). Seit W4
+    /// STANDARD AN (= false); <c>--ki-modus20</c> bleibt als Einschalter.</summary>
+    public static bool KiModus20Aus = false;
 
     /// <summary><c>--ki-freigabe-protokoll</c> (Paket W2): Messzeile je KI-Spieler und 1000 Takte.</summary>
     public static bool KiFreigabeProtokoll;

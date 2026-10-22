@@ -682,6 +682,52 @@ public partial class MapEntityLayer : Node2D
     public long RailMoved;
     private readonly long[] _railMovedGood = new long[4];
 
+    /// <summary>
+    /// ⚠ <b>NUR PRÜFSCHALTER</b> <c>--bahnschalter-aus-datei</c> (22.10.2026, Paket W4,
+    /// bug-638) — ABSICHTLICH FALSCH: die vier Warenschalter jeder Linie beim ersten
+    /// Takt aus der ORIGINALKARTE (sec34 +0x08..+0x0B, D:/LEVELS oder E:/LEVELS, NN.CWM)
+    /// statt aus der Matrix. So laufen die Entwicklerstände 3/5/6/7/10.DM: ihr Kopfbyte
+    /// ist 2 (»Developers Savefile«), und nur bei Art != 2 schreibt der Lader die Matrix
+    /// (C <c>0x41E6A5 cmp cl,2 / jne</c>, Neustart-Zweig <c>0x41F2A2</c>). Der Schalter
+    /// bildet diese Stände nach, um die Erklärung von berichte/ki-eingaben-k25-k26-opus.md
+    /// §1/§3 durch einen eigenen Lauf zu prüfen. Besitzerwechsel schreiben weiter die
+    /// Matrix (<c>0x43CEA2</c>).
+    /// </summary>
+    public static bool BahnschalterAusDatei;
+    private Dictionary<int, byte[]>? _bahnschalterDatei;
+    public int BahnschalterAusDateiGesetzt;
+
+    private bool BahnschalterDatei(RailLine l)
+    {
+        if (_bahnschalterDatei == null)
+        {
+            _bahnschalterDatei = new();
+            int m = UI.SkirmishSetup.CampaignMission;
+            string name = $"{m:D2}.CWM";
+            foreach (string dir in new[] { "D:/LEVELS/", "E:/LEVELS/", "F:/Akte Europa/LEVELS/" })
+            {
+                if (m <= 0 || !System.IO.File.Exists(dir + name)) continue;
+                try
+                {
+                    var f = Import.CwmFile.Load(dir + name);
+                    var s34 = f.Sec(34);
+                    if (s34 == null) continue;
+                    for (int i = 0; i + Import.CwmExtra.SpojStride <= s34.Length; i += Import.CwmExtra.SpojStride)
+                        _bahnschalterDatei[i / Import.CwmExtra.SpojStride] =
+                            new[] { s34[i + 8], s34[i + 9], s34[i + 10], s34[i + 11] };
+                    GD.Print($"--bahnschalter-aus-datei: Schalter aus {dir + name} ({_bahnschalterDatei.Count} Saetze)");
+                    break;
+                }
+                catch (System.Exception ex) { GD.PrintErr($"--bahnschalter-aus-datei: {dir + name}: {ex.Message}"); }
+            }
+            if (_bahnschalterDatei.Count == 0) GD.PrintErr("--bahnschalter-aus-datei: keine Originalkarte gefunden");
+        }
+        if (!_bahnschalterDatei.TryGetValue(l.Slot, out var mode)) return false;
+        for (int k = 0; k < 4; k++) l.Mode[k] = mode[k];
+        BahnschalterAusDateiGesetzt++;
+        return true;
+    }
+
     /// <summary>Aus dem `links`-Feld der Karte: eine Linie mit ihren beiden
     /// Endgebäuden. Die Schalter kommen NICHT aus der Datei — siehe Klassenkopf.</summary>
     private void AddRailLine(int slot, int bud1, int bud2, int steps)
@@ -844,7 +890,11 @@ public partial class MapEntityLayer : Node2D
             // fable.md §1). Das Original setzt die Matrix nur beim Laden
             // (0x41F2A2) und beim BESITZERWECHSEL eines Endes (0x43CEA2).
             // Gegenschalter --bahnschalter-matrix-alt.
-            if (BahnschalterMatrixAlt || a.Owner != l.OwnA || b.Owner != l.OwnB)
+            if (BahnschalterAusDatei && l.OwnA == -99 && BahnschalterDatei(l))
+            {
+                l.OwnA = a.Owner; l.OwnB = b.Owner;
+            }
+            else if (BahnschalterMatrixAlt || a.Owner != l.OwnA || b.Owner != l.OwnB)
             {
                 SpojModeFor(a.BType, b.BType, l.Mode);
                 l.OwnA = a.Owner; l.OwnB = b.Owner;

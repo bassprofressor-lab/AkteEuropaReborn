@@ -151,6 +151,7 @@ public partial class MapEntityLayer
                           : $"gerechnet (keine AI{Math.Max(0, KiTafelNummer):00}.CWI)";
         }
         KiBrueckenNachfuehren();                                           // @0x41CD17
+        GD.Print($"KI-Sektortafeln: {KiTafelQuelle}, Pruefzahl {KiTafelPruefzahl():X16} ({KiTafelTeilzahlen()})");   // Paket W4
     }
 
     /// <summary>Die Datei lesen — die drei <c>fread</c> von <c>0x41CB00</c>.</summary>

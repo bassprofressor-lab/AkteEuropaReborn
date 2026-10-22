@@ -18,6 +18,18 @@ using Godot;
 /// (3,3), sobald Bertha in Modus 2 auf (3,3) stand, und kein KI-Transporter je in
 /// Modus 1/2.</para>
 ///
+/// <para>⭐⭐ <b>NEUE SOLLWERTE seit Paket W4 (22.10.2026, bug-638)</b> — die alten
+/// (Freigabe 0 in 4/4, pc 0, Programm 0, 2..6 Wagen) stammten aus ENTWICKLERSTÄNDEN,
+/// deren Bahnschalter aus der Kartendatei kommen (Kopfbyte 2, kein Matrix-Neustart
+/// C 0x41E6A5/0x41F2A2), und gelten nicht (berichte/ki-eingaben-k25-k26-opus.md §1, §3,
+/// §5 Bau C). Jetzt: (i) jede Linie fährt mit den Matrixschaltern, Linie
+/// Feldbahnhof 67 → Basis 11 = [1,1,1,2]; (ii) Freigabe gegen die Mechanik 4/4;
+/// (iii) Basis-S bei Takt 1475 &gt; 0; dazu bleibt P6 (kein KI-Transporter in Modus
+/// 1/2). Der Eingriff »20 Aufträge von Hand« entfällt: sie kommen aus dem Setup.</para>
+/// <para><b>Gegenprobe</b> <c>--bahnschalter-aus-datei</c> (Prüfschalter, absichtlich
+/// falsch): muss die Entwicklerstände nachbilden — Basis-S ≈ 0, Feldbahnhof 67 ≈ 285,
+/// 3..5 Wagen, Freigabe 0. Trifft das nicht ein, ist die Erklärung falsch.</para>
+///
 /// <para>Nullmodelle (müssen ROT werden): <c>--ki-produktionsfreigabe-aus</c> (der
 /// Zähler läuft), <c>--ki-modus20-aus</c> (ein stehender Transporter wird Kandidat →
 /// Modus 1/2; tritt das nicht ein: KEIN URTEIL P6), und der Prüfschalter
@@ -47,24 +59,19 @@ public partial class MapEntityLayer
         if (!InCampaign || m != 25)
             return sb.Append("k25-ki-check: KEIN URTEIL (nur fuer -- --campaign=25)").ToString();
 
-        // ⚠ EINGRIFF DES PRUEFSTANDS, aus dem Original: unser M25-Skript traegt KEIN
-        // add_target (Data/mission_scripts.json, 0 Treffer), im Original stehen fuer P2
-        // in 5/10/3/7.DM dieselben 20 Auftraege (sec69: Art 1, Vorrang 6, Plaetze
-        // 11..17, 19..23, 38, 65..67, 1, 2, 3, 35; Herkunft ungelesen). Ohne sie gibt es
-        // keine Auftragswahl, keinen (leeren) Weg und keine Gruppe — P5 und die
-        // Gegenprobe --ki-aufnahme-standort waeren blind. Darum legt der Pruefstand
-        // genau diese Liste an, wenn P2 keine hat.
-        string eingriff = "";
-        if (MissionTargetsOf(p) == 0)
-        {
-            int[] orig = { 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 38, 65, 66, 67, 1, 2, 3, 35 };
-            foreach (int w in orig) AddMissionTarget(p, 1, 6, w, 0);
-            eingriff = $"EINGRIFF: P2 hatte keine Auftraege — die {orig.Length} aus sec69 der Originalstaende angelegt";
-        }
+        // ⭐ Paket W4: der fruehere EINGRIFF (die 20 P2-Auftraege von Hand) entfaellt —
+        // sie kommen jetzt aus dem Missions-Setup (Simulation/SetupZiele.cs, C 0x48EE58..).
         KiPruefAn = true;
         KiLeereWege.Clear();
         _kiPruefGruppen.Clear(); _kiPruefLeer = 0;
         MissionScriptTick(0.001f);
+        string eingriff = $"Setup-Ziele P2: {MissionTargetsOf(p)} (Soll 20 aus 5/3/6/7/10.DM){(SetupZieleAus ? " — --setup-ziele-aus" : "")}";
+        // (i) die Bahnschalter: gesetzt im Bahntakt (beim ersten Durchlauf je Linie) —
+        // darum gemessen bei der ersten Momentaufnahme (Takt 1475), nicht am Anfang.
+        int linien = 0, matrixGleich = 0, fremdLinien = 0;
+        string linie67 = "—";
+        var probe = new byte[4];
+        int basisS1475 = -1, fb67S1475 = -1;
 
         int abwehr0 = 0, bertha0 = 0;
         // Transporter, die schon auf der Karte stehen, sind NICHT aus build_in_base
@@ -145,6 +152,27 @@ public partial class MapEntityLayer
             if (pc == 0) pcNull++;
             programmMax = Math.Max(programmMax, prog);
             transporter.Add(tr);
+            if (snap == 0)
+                foreach (var l in _railLines)
+                {
+                    var la = RailBuilding(l.Bud1); var lb = RailBuilding(l.Bud2);
+                    if (la == null || lb == null) continue;
+                    // Linien zwischen zwei Besitzern faehrt niemand (faze 4); ihre Schalter
+                    // setzt bei uns erst der Besitzerausgleich — gezaehlt, nicht gewertet.
+                    if (la.Owner != lb.Owner) { fremdLinien++; continue; }
+                    linien++;
+                    SpojModeFor(la.BType, lb.BType, probe);
+                    if (probe.SequenceEqual(l.Mode)) matrixGleich++;
+                    if ((l.Bud1 == 67 && l.Bud2 == 11) || (l.Bud1 == 11 && l.Bud2 == 67))
+                        linie67 = $"{l.Bud1}->{l.Bud2} [{string.Join(",", l.Mode)}]";
+                }
+            if (snap == 0)
+                foreach (var b in _entities)
+                    if (b.IsBuilding && !b.Dead && b.Owner == p)
+                    {
+                        if (b.Slot == 11) basisS1475 = b.StockS;
+                        if (b.Slot == 67) fb67S1475 = b.StockS;
+                    }
             int trModus20 = _entities.Count(e => !e.Dead && e.Owner == p && IstTransporter(e) && e.AiCpu0 == 20);
             string lager = string.Join(" ", _entities.Where(b => b.IsBuilding && !b.Dead && b.Owner == p && b.BType is 1 or 9)
                                                     .Select(b => $"Platz {b.Slot} Art {b.BType} {b.StockW}/{b.StockF}/{b.StockS}"));
@@ -176,7 +204,7 @@ public partial class MapEntityLayer
         var leer2 = KiLeereWege.Where(w => w.p == p).ToList();
         int ab33 = leer2.Count(w => w.sx == 3 && w.sy == 3);
         var beispiel = leer2.FirstOrDefault(w => w.sx == 3 && w.sy == 3);
-        if (eingriff.Length > 0) sb.AppendLine($"  {eingriff}");
+        sb.AppendLine($"  {eingriff}");
         sb.AppendLine($"  Lauf: {uhr.ElapsedMilliseconds / 1000} s, Takt {_origTicks}; Abwehr/Bertha am Anfang {abwehr0}/{bertha0}");
         sb.AppendLine($"  Transportlogik: Freigabe ohne Ziel {KiFreigabeOhneZiel}, Rueckkehr wegen Bausperre {KiFreigabeSperrzeit}, " +
                       $"gesperrt mangels Wagen {KiFreigabeGesperrt}, Filter abgelehnt {KiRoutenfilterAbgelehnt}; " +
@@ -190,25 +218,36 @@ public partial class MapEntityLayer
         sb.AppendLine($"  Kartentransporter (nicht aus build_in_base) {kartenWagen.Count}, davon je in Modus 1/2 {qKarte.Count} (nicht gewertet)");
 
         int n = transporter.Count;
-        bool p2 = freiNull == 4 && pcNull == 4;
-        bool p3 = programmMax == 0;
-        bool p4 = transporter.All(t => t is >= 2 and <= 6);
         bool p5mit = mitglied == 0;
         bool? p5weg = berthaAuf33Modus2 ? ab33 > 0 : null;
         int q = qEinheiten.Count;
         bool p6 = q == 0;
+        bool bahnOk = linien > 0 && matrixGleich == linien && linie67.EndsWith("[1,1,1,2]");
+        bool mechOk = mechanikFehler == 0;
+        bool sOk = basisS1475 > 0;
         string urteil;
         if (n < 4) urteil = $"KEIN URTEIL (nur {n}/4 Momentaufnahmen)";
-        else if (!p2 || !p3 || !p5mit || p5weg == false || !p6)
-            urteil = "DURCHGEFALLEN" + (mechanikFehler == 0 && p5mit && p5weg != false && p6 && transporter.Any(t => t > 6)
-                ? " (P2/P3: Freigabe folgt der Mechanik in 4/4, aber P2 hat mehr Wagen als im Original)" : "");
-        else if (p5weg == null) urteil = "KEIN URTEIL P5 (Bertha stand nie in Modus 2 auf (3,3))";
-        else urteil = "BESTANDEN";
+        else if (BahnschalterAusDatei)
+        {
+            // die Gegenprobe: muss die Entwicklerstaende nachbilden
+            bool sNull = basisS1475 is >= 0 and <= 20;
+            bool fb = fb67S1475 is >= 250 and <= 320;
+            bool wagen = transporter.All(t => t is >= 3 and <= 5);
+            bool frei0 = freiNull == 4;
+            urteil = sNull && fb && wagen && frei0
+                ? "GEGENPROBE BESTAETIGT (Entwicklerstaende nachgebildet)"
+                : $"GEGENPROBE WIDERLEGT (S~0 {sNull}, FB67~285 {fb}, Wagen 3..5 {wagen}, Freigabe 0 in 4/4 {frei0})";
+        }
+        else if (bahnOk && mechOk && sOk && p6) urteil = "BESTANDEN";
+        else urteil = $"DURCHGEFALLEN (Bahn {bahnOk}, Mechanik {mechOk}, Basis-S>0 {sOk}, P6 {p6})";
         if (KiModus20Aus && p6 && urteil == "BESTANDEN") urteil = "KEIN URTEIL P6 (kein KI-Transporter wurde Kandidat)";
-        sb.Append($"k25-ki-check: P2 Abwehr {abwehr0}/14 Bertha {bertha0}/1, frei 0 in {freiNull}/4, pc0 in {pcNull}/4, " +
-                  $"Programm {programmMax}, Transporter [{string.Join(",", transporter)}]{(p4 ? "" : " (ausserhalb 2..6, nur gemeldet)")}, " +
-                  $"Gruppen mit Mitglied {mitglied}{(mitgliedTakt >= 0 ? $" (ab Takt {mitgliedTakt})" : "")}, " +
-                  $"leere Wege {leer2.Count} (Start (3,3) {ab33}), Freigabe gegen Mechanik {4 - mechanikFehler}/4, Transporter in Modus 1/2 {q}{(qTakt >= 0 ? $" (ab Takt {qTakt})" : "")} — {urteil}");
+        sb.Append($"k25-ki-check: P2 Abwehr {abwehr0}/14 Bertha {bertha0}/1, Bahnschalter = Matrix {matrixGleich}/{linien} (+{fremdLinien} zwischen zwei Besitzern) " +
+                  $"(Linie {linie67}{(BahnschalterAusDatei ? $", aus Datei gesetzt {BahnschalterAusDateiGesetzt}" : "")}), " +
+                  $"Basis-S bei 1475 {basisS1475}, Feldbahnhof 67 S {fb67S1475}, frei 0 in {freiNull}/4, pc0 in {pcNull}/4, " +
+                  $"Programm {programmMax}, Transporter [{string.Join(",", transporter)}], " +
+                  $"Gruppen mit Mitglied {mitglied}{(mitgliedTakt >= 0 ? $" (ab Takt {mitgliedTakt})" : "")} (nur gemeldet), " +
+                  $"leere Wege {leer2.Count} (Start (3,3) {ab33}){(p5weg == false ? " ⚠ P5" : "")}, Freigabe gegen Mechanik {4 - mechanikFehler}/4, " +
+                  $"Transporter in Modus 1/2 {q}{(qTakt >= 0 ? $" (ab Takt {qTakt})" : "")} — {urteil}");
         return sb.ToString();
     }
 }

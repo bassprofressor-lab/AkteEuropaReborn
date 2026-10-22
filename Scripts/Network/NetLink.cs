@@ -220,8 +220,12 @@ public sealed class NetLink
     /// zwei Wege baut — einen für sich, einen für die anderen — hat zwei Orte,
     /// an denen die Form auseinanderlaufen kann, und der Prüfstand sieht davon
     /// nichts.</summary>
-    public static byte[] HeadStartPacket(int player, int ticks)
-        => new NetWriter(NetPacket.Anfang).U8((byte)player).I32(ticks).Done();
+    public static byte[] HeadStartPacket(int player, int ticks, ulong tafeln = 0)
+        => new NetWriter(NetPacket.Anfang).U8((byte)player).I32(ticks).U64(tafeln).Done();
+
+    /// <summary>Paket W4 (bug-641): die Prüfzahl der KI-Sektortafeln je Spieler, aus dem
+    /// Vorlaufpaket (MapEntityLayer.KiTafelPruefzahl).</summary>
+    public readonly Dictionary<int, ulong> TafelPruefzahl = new();
 
     /// <summary>
     /// DAS TAKTPAKET. »Ich bin für Takt <paramref name="tick"/> bereit, und das
@@ -309,7 +313,8 @@ public sealed class NetLink
             case NetPacket.Anfang:
             {
                 int p = r.U8(), n = r.I32();
-                if (!r.Bad) _headStart[p] = n;
+                ulong tz = r.U64();
+                if (!r.Bad) { _headStart[p] = n; TafelPruefzahl[p] = tz; }
                 break;
             }
             case NetPacket.Bereit:

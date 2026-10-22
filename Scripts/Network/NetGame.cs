@@ -158,6 +158,9 @@ public sealed partial class NetGameRunner : Node
     private readonly Random _senderDice = new();
 
     private int _ticksSinceOrder;
+    /// <summary>Paket W4 (bug-641): <c>--net-tafelpruefung-aus</c> (Stand davor) und die
+    /// Gegenprobe <c>--net-tafelpruefung-falsch</c> (eigene Pruefzahl verfaelscht -> Abbruch).</summary>
+    public static bool TafelpruefungAus, TafelpruefungFalsch;
 
     // ================= Anwerfen =============================================
 
@@ -170,7 +173,9 @@ public sealed partial class NetGameRunner : Node
         string outPath = "";
         foreach (string a in Core.CommandLine.Args)
         {
-            if (a.StartsWith("--net-check=")) int.TryParse(a["--net-check=".Length..], out r._limit);
+            if (a == "--net-tafelpruefung-aus") TafelpruefungAus = true;
+            else if (a == "--net-tafelpruefung-falsch") TafelpruefungFalsch = true;
+            else if (a.StartsWith("--net-check=")) int.TryParse(a["--net-check=".Length..], out r._limit);
             else if (a.StartsWith("--net-abdruck=")) int.TryParse(a["--net-abdruck=".Length..], out r._every);
             else if (a.StartsWith("--net-befehl=")) int.TryParse(a["--net-befehl=".Length..], out r._order);
             else if (a.StartsWith("--net-schluck=")) int.TryParse(a["--net-schluck=".Length..], out r._swallow);
@@ -271,7 +276,11 @@ public sealed partial class NetGameRunner : Node
         // Also: jeder sagt, wie weit er ist, alle nehmen das MAXIMUM, und die
         // Zurückgebliebenen holen auf. Aufholen ist erlaubt, weil in diesen
         // Takten keine Befehle liegen KÖNNEN — es gab noch keine Leitung.
-        byte[] hs = NetLink.HeadStartPacket(_s.Me, _sim.CommandTicks);
+        // ⭐ Paket W4 (bug-641): die Pruefzahl der KI-Sektortafeln reist im Vorlauf mit.
+        ulong tafeln = _sim.KiTafelPruefzahl() ^ (TafelpruefungFalsch ? 1UL : 0UL);
+        Say($"#   KI-Sektortafeln: {_sim.KiTafelQuelle}, Pruefzahl {tafeln:X16}" +
+            (TafelpruefungFalsch ? " (⚠ --net-tafelpruefung-falsch: absichtlich verfaelscht)" : ""));
+        byte[] hs = NetLink.HeadStartPacket(_s.Me, _sim.CommandTicks, tafeln);
         _link.SendAll(hs);
         _link.Take(hs);
         Say($"Vorlauf: meine Simulation ist bei Takt {_sim.CommandTicks}, warte auf die anderen");
@@ -334,6 +343,28 @@ public sealed partial class NetGameRunner : Node
             return;
         }
 
+        // ⭐ Paket W4 (bug-641): stimmen die KI-Sektortafeln ueberein? Sonst Abbruch.
+        if (!TafelpruefungAus)
+        {
+            var z = new List<string>();
+            bool gleich = true;
+            ulong erste = 0;
+            for (int p = 0; p < _s.Players; p++)
+            {
+                ulong v = _link.TafelPruefzahl.GetValueOrDefault(p);
+                if (p == 0) erste = v; else if (v != erste) gleich = false;
+                z.Add($"{p}:{v:X16}");
+            }
+            if (!gleich)
+            {
+                Say($"NETZ-ABBRUCH: die KI-Sektortafeln der Teilnehmer sind verschieden ({string.Join(" ", z)}). " +
+                    "Einer hat AIxx.CWI eingelesen, der andere rechnet sie — die Partie liefe auseinander. " +
+                    "Abhilfe: auf beiden Rechnern den Inhalt neu einlesen (CD 1, DATA/AI*.CWI).");
+                Finish(false);
+                return;
+            }
+            Say($"Vorlauf: KI-Sektortafeln gleich ({string.Join(" ", z)})");
+        }
         int mine = _sim.CommandTicks;
         Say($"Vorlauf: {_link.HeadStartLine(_s.Players)} -> gemeinsamer Anfang Takt {common}" +
             (mine < common ? $"; ich hole {common - mine} Takt(e) auf" : "; ich bin schon da"));

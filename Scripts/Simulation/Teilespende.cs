@@ -39,8 +39,16 @@ using Godot;
 ///
 /// <para>⚠ Nicht gebaut: <c>byte[0x538BA8]</c> (»KI uebernimmt leere Plaetze«,
 /// dann auch fuer Menschenplaetze) — wann es gesetzt ist, ist ungelesen; bei uns
-/// spendet nur, wer in der KI-Liste steht. Und Takt 14 (<c>0x4BFA30</c>,
-/// Bahnhof → Basis) — auf den Kampagnenkarten 1–15 hat niemand einen Bahnhof.</para>
+/// spendet nur, wer in der KI-Liste steht.</para>
+///
+/// <para>⚠ BERICHTIGT 22.10.2026 (Paket W4, bug-637): hier stand »Und Takt 14
+/// (<c>0x4BFA30</c>, Bahnhof → Basis) — auf den Kampagnenkarten 1–15 hat niemand
+/// einen Bahnhof« als Begründung, ihn nicht zu bauen. Das galt nur für 1–15: K25 hat
+/// vier P2-Feldbahnhöfe, P4 vier, P1 einen (berichte/ki-eingaben-k25-k26-opus.md
+/// §1.4), und das Gefecht ist ohnehin nicht ausgenommen. Takt 14 bucht W/F/S aller
+/// eigenen Bahnhöfe (Art 6/12) in die erste Basis (sonst den letzten Flughafen) um —
+/// jetzt gebaut in Simulation/Bahnhofleerung.cs, Gegenschalter
+/// <c>--bahnhofleerung-aus</c>.</para>
 /// </summary>
 public partial class MapEntityLayer : Node2D
 {
