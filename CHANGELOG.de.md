@@ -14,6 +14,347 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.11 — in Arbeit · KayelGees siebte Runde, Reapers erste, und ein Computergegner, der marschiert
+
+> ⚠ **Noch nicht veröffentlicht.** Dieser Abschnitt beschreibt die Arbeit auf
+> 0.6.11 hin; einen Download dafür gibt es noch nicht.
+>
+> **KayelGees siebte Runde und die erste Runde des neuen Testers Reaper [BFTB]
+> sind abgearbeitet.** Behoben ist jeder Punkt bis auf einen: Der Qualm an der
+> Garagentür bleibt, weil das Original genau dasselbe tut. Der Wissenschaftler
+> in Mission 6 ist auf Wunsch **gegen** das Original behoben. Unterwegs zeigte
+> sich, dass der Umzug aller Eingaben auf den gemeinsamen Befehlsring in 0.6.10
+> **Fenster hinterlassen hatte, die nach einem Klick nicht mehr neu malten**,
+> und dass eine abgeschlossene Forschung Werte **überschrieb, statt etwas
+> aufzuschlagen**. Neu in dieser Runde sind der **Neustart mit Abfrage** des
+> Originals (jetzt auch im Netz, für alle Rechner zugleich), das
+> **Pausenfenster**, **P für Pause**, das **Hauptmenü im Netz**, **Pause bei
+> Hilfe**, ein Klangabgleich mit dem Original und vor allem ein
+> **Computergegner, der Gruppen bildet, über Sektoren marschiert und sich vor
+> dem Angriff sammelt** — in der Kampagne mit den Sektortafeln des Originals, im
+> Gefecht als bewusste Wettkampf-Spielart. Wie immer hat jede Änderung einen
+> Gegenschalter, der den alten Stand zurückholt, und einen Prüfstand.
+>
+> ⚠ **Das Spiel verlangt einmal ein Neueinlesen.** Die Karteninhalte haben sich
+> geändert: Die Sektortafeln `AIxx.CWI` werden jetzt von den CDs übernommen
+> (Inhaltsstand `karten=2`). Legen Sie die CDs bereit oder die Installation, die
+> das Spiel zuletzt benutzt hat.
+
+### Gemeldet von KayelGee — Runde 7
+
+**KayelGee** hat seine siebte Runde am 18. und 20.10. geschickt, mit
+Bildschirmfoto. Jeder Punkt wurde erst im Programm des Originals nachgelesen,
+bevor etwas geändert wurde. Danke!
+
+Ein Punkt bleibt, wie er ist: der **Qualm an der Garagentür** (sein Punkt 3.1).
+Ein schwer beschädigtes Fahrzeug, das in ein Depot oder eine Basis gefahren
+ist, qualmt an der Tür weiter, bis es über ein Drittel seines Lebens repariert
+ist. Das sieht nach einem Überbleibsel aus, aber das Original tut dasselbe: Sein
+Einheitentakt (`0x406CD0`) läuft über alle Einheiten, auch über die
+untergestellten (Zustand 50), würfelt auch für sie den Schadensqualm, und das
+Einfahren nimmt die Einheit nicht von der Türzelle. Darum steigt dort, wo die
+Einheit eingefahren ist, weiter neuer Qualm auf, bis die Reparatur
+(`0x43E9B2`, ein Punkt alle 40 Takte) sie über ein Drittel gehoben hat — bei 20
+von 100 Punkten sind das gut zehn Sekunden. Gelesen haben wir das im Programm,
+zusehen konnten wir nicht, denn das Original läuft unter Windows 11 nicht.
+Sollte es bei Ihnen deutlich länger dauern, sagen Sie bitte Bescheid.
+
+Sein Punkt 6, der Wissenschaftler in Mission 6, ist **ein Fehler des
+Originals** — das hat er selbst so gesagt und um Behebung gebeten. Das ist
+geschehen, siehe unten. Es ist die erste Stelle in der Kampagne, an der wir
+bewusst anders spielen als das Spiel von 1997; ein Gegenschalter holt das
+Original zurück.
+
+### Gemeldet von Reaper [BFTB]
+
+Willkommen, **Reaper [BFTB]**, unser neuer Tester! Seine erste Runde vom 19.10.
+kam mit sechs Bildschirmfotos und ging gleich an die Forschungs- und
+Entwurfsfenster, die bisher niemand so genau angesehen hatte. Alle seine Punkte
+sind unten behoben, und einer davon (die Panzerung des Radars) deckte einen
+Fehler auf, der **jede** Aufwertung im Spiel betraf. Danke, und herzlich
+willkommen!
+
+### KayelGees Runde 7 — behoben
+
+- **Alle markierten Einheiten tragen dieselben Auswahlwinkel** (Punkt 1, mit
+  seinem Bildschirmfoto). In einer markierten Gruppe hatte eine Einheit dicke
+  weiße Winkel, die anderen dünne graue. Im Original ist die Marke ein Byte mit
+  nur zwei Werten (Einheitensatz `+0x1B`, gesetzt bei `0x433247`/`0x434525`),
+  und alle sieben Zeichenstellen blitten **dasselbe** Bild, sobald es nicht null
+  ist; der Zeichner liest die Hauptauswahl (`0x4FA0C8`) nie. Die dickeren Winkel
+  für die Haupteinheit waren unsere eigene Erfindung. Gegenschalter
+  `--auswahlwinkel-haupt-alt`, Prüfstand `--auswahlwinkel-check`.
+- **Das Fenster des Nachschubpostens zeigt nach dem Kauf den neuen
+  Kontostand** (seine Meldung vom 18.10.). Seit 0.6.10 geht jeder Kauf über den
+  Befehlsring und wird einen Takt später gebucht. Das Fenster las den
+  Kontostand aber gleich beim Klick — vor der Buchung — und danach nie wieder.
+  Das Original malt die offenen Gebäudefenster alle 30 Bilder neu (`0x4505F0`,
+  Fensterarten 2, 5, 8, 9, 11, 18–25, 27–29, 31, 33, 38). Dieser Takt ist jetzt
+  gebaut, mit einem behutsamen Neumalen, das nicht wegwirft, was man gerade im
+  Fenster tut, dazu eine Nacharbeit nach jedem Ringbefehl. Das hat weit mehr
+  geheilt als den Kontostand: Heli- und Flugzeugkauf am Flughafen, »Alle
+  starten«, die Umschalter an Mine und Flughafen (wo ein zweiter Klick den
+  ersten rückgängig machte), Patrouille, Bombe, Staffelmarke, Verwerten,
+  Aussenden »(Ausgesandt)« und die Geisterzeile nach einer Bahnverlegung.
+  Gegenschalter `--fensterneumalen-alt` und
+  `--satznacharbeit-alt[=fenster,katalog,meldung]`, Prüfstand
+  `--ring-nacharbeit-check`.
+- **Eine Basis schickt Einheiten durch ihre Tür hinaus, eine nach der
+  anderen** (Punkt 3). Bei uns setzte die Basis eine ausgesandte Einheit
+  **sofort** auf die nächste freie Zelle im Umkreis von 12 Zellen, wenn die Tür
+  belegt war — am deutlichsten mit mehreren markierten Zeilen, wo alle bis auf
+  die erste neben der Basis standen, ohne je herausgefahren zu sein. Im
+  Original setzt Befehl 504 die Einheit nur in den Zustand »wartet auf
+  Auslass« (`0x33`); der Gebäudetakt (`0x43DCA6`..`0x43DE58`) lässt höchstens
+  eine je Takt hinaus und nur, wenn Tür **und** Folgezelle frei sind. Sonst
+  wartet die Einheit unsichtbar in der Liste. Die Basis sagt auch nie ab
+  (`0x410420` hat dafür keinen Zweig): Eine ausgesandte Entwurfszeile wird zur
+  Einheit und wartet an der Tür, und eine wartende Zeile heißt » (ausgesandt)«
+  mit kleinem »a« und ohne Lebensanzeige (`0x4681BB`). Gegenschalter
+  `--basis-aussenden-sofort`, `--auslass-rueckfall-alt`, `--depotzeile-absage`,
+  `--ausgesandt-alt`, Prüfstand `--basis-aussenden-check` (Fälle D0–D5,
+  Mission 21).
+- **Fußvolk steht locker statt in einer perfekten Linie** (Punkt 4). Im
+  Original trägt jeder Soldat einen eigenen Versatz, `dx = 18 − rand%37`,
+  `dy = 7 − rand%15` (`0x4B1D37`/`0x4B38BA`), bis zu **neun** Soldaten teilen
+  sich eine Zelle (`0x433E3E`), und der Fußanker liegt bei `Zeile·20 − H − 24`.
+  Wir zeichneten sie im Raster ohne Versatz. Auf der Karte gesetzte Soldaten
+  nehmen ihren Versatz aus den Kartendaten (`+0x1D`/`+0x1E`); neu gebaute
+  bekommen ihn aus einer Prüfsumme, die nichts aus dem gemeinsamen Zufallsstrom
+  zieht (**unsere Setzung**, damit das Netzspiel nicht auseinanderläuft), und
+  er wird gespeichert. ⚠ Der Anker sitzt jetzt **15 px höher** als bisher — das
+  kehrt eine Setzung vom 06.09. um; bitte einmal ansehen. Gegenschalter
+  `--fussstreuung-aus`, `--neunerzelle-aus`, `--fussanker-tief-alt`, Prüfstand
+  `--fussstreuung-check` (Mission 4).
+- **Ein Klick auf Fußvolk trifft dort, wo es gezeichnet ist** (Nachtrag zu
+  Punkt 4). Der Klickkasten eines Soldaten ist im Original 14×25 px am
+  Zeichenpunkt **mit** seinem Versatz (`0x431DD9`); unserer saß ohne Versatz
+  und 10 px zu tief. Das Gummiband (`0x434700`) wählt Fußvolk per Punkttest,
+  nimmt Transporter nur, wenn sonst nichts darin ist, und gilt erst als
+  Rechteck, wenn es in jeder Richtung mehr als 10 px misst. Gegenschalter
+  `--fussvolk-klickkasten-alt`, `--gummiband-kasten-alt`,
+  `--gummiband-transporter-alt`, `--gummiband-schwelle-alt`, Prüfstand
+  `--fussvolk-klickkasten-check` (Mission 4).
+- **Ein frischer Entwurf zeigt seine Werte sofort** (Punkt 5). Die Behebung aus
+  0.6.10 (seine Runde 6, Punkt 8) trug einen neuen Entwurf nur auf dem alten
+  Direktweg ins Wertebuch ein; seit »Erstellen« (Befehl 505) über den Ring
+  geht, blieben die Werte wieder bis zum nächsten Start leer. Jetzt trägt auch
+  der Ringweg ein. Abgedeckt von `--satznacharbeit-alt=katalog` und
+  `--werteliste-eigen-check`.
+- **Mission 6: Die Wissenschaftler-Untermission scheitert nicht mehr sofort**
+  (Punkt 6) — **eine bewusste Abweichung vom Original.** Wenn man die Mine im
+  Norden einnimmt, soll man einen Wissenschaftler dorthin bringen. Im Original
+  fragt die Scheiterregel (`0x49A9FF`) mit `je` statt `jne`: Sie lässt die
+  Untermission scheitern, solange der Wissenschaftler **lebt**, statt wenn er
+  tot ist — im selben Durchlauf, in dem er zum ersten Mal erfasst wird. Beide
+  Fassungen der GAME.EXE haben dieselben Bytes, und die Zwillings-Untermission
+  derselben Mission (Hadgi Ibn Mustaffa, `0x49A96D`) fragt richtig herum.
+  KayelGee bat um Behebung; jetzt scheitert die Untermission nur noch, wenn der
+  Wissenschaftler stirbt, und bringt man ihn zur Mine, gibt es 200 $.
+  Gegenschalter `--m6-wissenschaftler-original` stellt den Originalfehler
+  wieder her, Prüfstand `--untermission-check=6`.
+- **Angreifer verteilen sich um ein Gebäude** (Punkt 7). Bei uns schossen alle
+  auf dieselbe Stelle. Das Original gibt jeder Einheit eine eigene Schusszelle
+  aus der Ringspirale (`0x79A008`) — ein Fahrzeug nimmt die **letzte**
+  passende Zelle (`0x40E211`), Fußvolk die erste (Tafel `0x4F5B38`) —, misst
+  die Reichweite zur nächsten Zelle des Gebäude-Fußabdrucks und fährt auf eine
+  Zufallszelle um den Anker
+  (`Anker + (rnd%(2·sx+8)−4, rnd%(2·sy+6)−4)`, `0x40FC90`). Eine Einheit, die
+  ankommt, ohne das Ziel aufgenommen zu haben, beendet ihren Auftrag
+  (`0x407D1D`). Gebaut erst nach einer zweiten, unabhängigen Lesung des
+  Originals (Fable gegen Opus). Gegenschalter `--gebaeudeziel-alt`,
+  `--gebaeudeangriff-ankunft-alt`, Prüfstand `--gebaeudeangriff-check`
+  (Missionen 6 und 4: sieben von acht schießen, eine endet bei der Ankunft,
+  sechs verschiedene Zielzellen).
+
+### KayelGees Runde 7 — wie im Original, unverändert
+
+- **Qualm an der Garagentür** (Punkt 3.1) — siehe oben. Im Original gelesen
+  (`0x406CD0`), darum bleibt er.
+
+### Reapers Runde 1 — behoben
+
+- **Die Forschungsstufe in Klammern zählt hoch** (Reaper 1). Nach dem Forschen
+  zeigte das Erstellungsfenster in der Basis hinter jedem Bauteil weiter
+  »(0)«. Im Original lesen der Forschungsreiter, die drei Bauteillisten des
+  Erstellungsfensters und die Produktions-Werteliste **dasselbe** Byte — die
+  erreichte Stufe, `+0x01` im **Spielerblock** der Bauteiltafel
+  (`0x5045A0 + 58·(Bauteil + 200·Spieler)`, geschrieben bei `0x4AAACA`). Bei
+  uns las nur der Forschungsreiter dieses Byte; Erstellungsfenster, Werteliste
+  und Infofenster lasen die Tafel aus der EXE, in die niemand schreibt. Jetzt
+  lesen alle den Spielerblock, die Werteliste rechnet mit den Werten des
+  Spielers, und die Klammern stehen wie im Original. Gegenschalter
+  `--bauteilstufe-global-alt`, `--werteliste-global-alt`,
+  `--klammerschreibweise-alt`, Prüfstand `--bauteilstufe-check`.
+- **Eigene Entwürfe lassen sich umbenennen und entfernen** (Reaper 2). Beide
+  Knöpfe waren grau. Umbenennen öffnet das Eingabefenster des Originals (Art 36,
+  19 Zeichen, Befehl 533); Entfernen fragt »Einheitentyp löschen?« (Art 10,
+  Befehl 507) und wird abgewiesen, solange eine lebende Einheit dieses Typs
+  existiert. Beides geht über den Befehlsring. Ein entfernter Entwurf bleibt als
+  leerer Platz stehen, damit Nummern und Spielstände gültig bleiben.
+  Gegenschalter `--entwurf-knoepfe-alt`, Prüfstand `--entwurf-verwalten-check`.
+- **Eigene Entwürfe erscheinen ockerfarben** (Reaper 2b). Das Original schreibt
+  eigene Zeilen zweifarbig (Palette 80/84); die Marke »eigener Entwurf« wurde
+  bei uns nie gesetzt. Gegenschalter `--eigene-zeile-alt`,
+  `--schrift-zweitfarbe-alt`, Prüfstand `--eigene-zeile-check`.
+- **Entwürfe gehören zur Kampagne, das Gefecht hat seine eigene Bibliothek**
+  (Reaper 3). Bisher gab es eine Entwurfsliste für alles. Wie im Original
+  liegen Kampagnenentwürfe jetzt in der Kampagne (`campaign.cfg`, Abschnitt
+  `[entwuerfe]`) und in ihren Spielständen, und ein Kampagnen-Reset leert sie.
+  Für das Gefecht gibt es eine **eigene bleibende Bibliothek**,
+  `designs-gefecht.cfg` — dieser Teil ist Spielerwunsch, nicht Original. Die
+  alte `designs.cfg` wird **einmal** in die Gefechtsbibliothek **übernommen**;
+  sie wird nie beschrieben oder gelöscht. In eine laufende Kampagne wandern alte
+  Entwürfe nicht. Gegenschalter `--entwuerfe-global`, Prüfstand
+  `--entwurf-lebensdauer-check` (T1–T7).
+- **Ein Aufklärungsflieger steht nicht mehr in der Luft** (Reaper 4). Drei
+  Ursachen. Ein unbewaffneter Flieger mit Ziel hing über dem Zielpunkt; das
+  Original schickt ihn heim (`0x4236AE`: keine Munition → zurück zum
+  Flughafen). Ein Flieger mit leerem Tank und ohne Flugziel trieb und stand
+  dann für immer (gemessen: vier Maschinen 600 s lang auf NET02); im Original
+  heißt leerer Tank **Absturz** (`0x422F40` → `0x425EA0`). Und gebaute Flieger
+  starteten mit einer Mindestgeschwindigkeit von 0 statt dem Wert der Vorlage
+  (`+0x2A`, 4 für Jäger, Bomber und Spion; `0x51B020`). Gegenschalter
+  `--unbewaffnet-angriff-alt`, `--sprit-absturz-aus`, `--sp-unten-alt`,
+  Prüfstand `--flieger-steht-check` (NET02 Seed 7, Mission 20).
+- **Forschung schlägt den Zuwachs auf, statt die Werte zu überschreiben**
+  (Reaper: Panzerung des mobilen Radars 0/7 → 0/3 nach »6x6 Reifen«). Der
+  Abschluss einer Aufwertung **setzte** Tempo, Angriff und Verteidigung des
+  Bauteils (`+0x11`/`+0x12`/`+0x13`) auf den Zuwachs; das Original **addiert**
+  den Zuwachs als Byte (C `0x4AAB33`/`3D`/`43`, `0x4AAB4F`/`55`/`60`,
+  `0x4AAAE9`/`EF`/`FA`; F `0x4AA463` `mov cl,…` · `0x4AA46D` `add cl,al` ·
+  `0x4AA473` `mov …,cl`, von Hand nachgeprüft). Nach der ersten 6x6-Stufe hat
+  das Radar 3 + 4, nicht 3 + 0. Betroffen waren **alle** Fahrwerke (die
+  Verteidigung fiel auf 0) und der Angriff aller Waffen. Byterechnung ist
+  nötig, weil die MS-Rakete über 127 läuft. Gegenschalter
+  `--aufwertung-setzen-alt`, Prüfstand `--aufwertung-zuwachs-check` (Mission
+  21; sein Nullmodell trifft Reapers Bildschirmfotos, 8/2 und 0/3).
+  ⚠ **Alte Spielstände:** Einheiten, die in einer älteren Fassung **nach einer
+  Forschung gebaut** wurden, tragen ihre zu niedrigen Angriffs- und
+  Verteidigungswerte weiter. Sie lassen sich nicht zuverlässig reparieren, weil
+  der Spielstand nicht festhält, auf welcher Stufe sie gebaut wurden. Neue
+  Einheiten und jedes mit 0.6.11 begonnene Spiel sind richtig.
+
+### Behoben
+
+- **Weitere Rückfälle aus dem Umzug auf den Befehlsring** (0.6.10, Commit
+  `7e6e4a7`). Neben dem Fensterneumalen oben: Ein Marktkauf ohne Geld meldet
+  das wieder, mit Absageklang; die Zielwahl zählt die tatsächlich gestarteten
+  Maschinen statt der erteilten Befehle; eine abgewiesene Forschung meldet den
+  Grund.
+- **Prüfstände messen auf dem Befehlsring.** Rund dreißig Prüfstände
+  (Depotreiter, Posten, Reparatur und Reparaturklick, Knöpfe, Flüge,
+  Flughafenwache, Routenfenster, Lieferung, Zielwahl und weitere) nahmen noch
+  den Direktweg oder urteilten, bevor der Ring geleert war — einige waren seit
+  `7e6e4a7` still rot. Jetzt gehen sie über den Ring und lesen den
+  **angezeigten** Wert. Nullmodell des Umbaus ist `--direktbefehle2-alt` /
+  `--direktbefehle-alt`. Prüfstände, die Einheiten bewegen (`IssueMove`),
+  bleiben bewusst, wie sie sind.
+- **Ein Fahrzeug wartet hinter Fußvolk auf der Tür.** Ein Fahrzeug fährt nicht
+  mehr auf eine Türzelle hinaus, auf der ein Soldat steht; wie im Original hält
+  jeder Trupp die Tür fest (roher Zellvergleich gegen `0xFFFE`: Basis
+  `0x43DD5A`, Depot `0x43E254`, Bahnhof `0x43E38C`). Gegenschalter
+  `--tuer-fussvolk-frei-alt`.
+- **Ein Gebäudeklick trifft das Gebäude, dem die Zelle gehört.** Ein Gebäude
+  ohne eigene Griffzelle holte sich über unseren Rechteck-Rückfall Klicks, die
+  dem Nachbarn galten (Mission 23, Platz 190/191). Jetzt geht die Zelle eines
+  anderen Gebäudes vor, wie in der Zellkarte des Originals. Gegenschalter
+  `--griffvorrang-alt`.
+- **Klänge mit dem Original abgeglichen.** Absagen sind stumm wie im Original
+  (wir spielten 140, das eigentlich »Wählen Sie Zielpunkt« ist), Gegenschalter
+  `--ablehnklang-alt`. Das Routenfenster spielt 139 bei »Von« (`0x44A657`), 140
+  bei Öffnen/Nach/Leeren und 141 nur bei erfolgreichem Start, vor Befehl 513
+  (`0x44A893`), Gegenschalter `--routenklang-aus`. 128 »Minenlager voll«
+  (`0x43D6E5`), Gegenschalter `--minenlager-klang-aus`. Die Mine spielt 129/130
+  erst, wenn der Ausbau **abgeschlossen** ist (`0x43D7AC`/`0x43D84F`),
+  Gegenschalter `--minenausbau-klang-alt`. 120 »Rakete gestartet« zwischen
+  Munitions- und Nachladetor (`0x40BA35`), Gegenschalter `--raketenklang-aus`.
+  135 »Gebäude zerstört« über den Trefferweg (`0x40D1DA` → `0x4D58F0`),
+  Gegenschalter `--gebaeudezerstoert-klang-aus`. Die Klänge 121, 126, 137 und
+  142 spielt das Original nie. Prüfstand `--klang-abgleich-check` (DM_5,
+  Mission 8 fürs Beladen).
+- Kleinere Prüfstandsfehler nebenbei behoben (Gebäudeklick, Auswahl,
+  Doppelklick in Mission 8, Ankerprobe, Knopf, Lieferung, Posten, Zielwahl);
+  Netzprüfstände geben jetzt jedem Spielerplatz einen eigenen Speicherordner.
+
+### Neu
+
+- **Der Neustart fragt erst nach und funktioniert im Netz.** Wie im Original
+  fragt der Neustart-Knopf »Möchten Sie die Mission erneut starten?«
+  (Fensterart 10); »Ja« schickt Befehl 980 über den Befehlsring. Im Netz laden
+  **alle Rechner** im selben Takt den festgehaltenen Startstand — **unsere
+  Ergänzung**, das Original kann das im Netz sehr wahrscheinlich nicht.
+  Gegenschalter `--neustart-alt`, `--neustart-oertlich`, Prüfstände
+  `--neustart-check`, `--net-neustart-check`.
+- **Das Pausenfenster** des Originals (Art 40, 180×60, »Pause«/»Weiter«),
+  geöffnet nur über Befehl 993 und im Netz auf allen Rechnern. Die ESC-Falle
+  des Originals (`0x4472F5`, die die Pause nur örtlich aufhebt) ist nicht
+  übernommen. Gegenschalter `--pausenfenster-alt`, `--pause-esc-oertlich`,
+  Prüfstand `--pausenfenster-check`.
+- **P ist Pause**, wie im Original (bisher schaltete P die Navigation).
+  Gegenschalter `--taste-p-navi-alt`.
+- **Der Menüknopf öffnet auch im Netz das Hauptmenü.** Speichern und Laden
+  darin (991/990) würden den Gleichschritt brechen und sind deshalb gesperrt,
+  mit angezeigtem Grund. Gegenschalter `--netz-menue-alt`.
+- **Pause bei Hilfe**, wie im Original: Optionsbyte `0x8B5308`,
+  `OPTIONS.CFG +0x11`, Vorgabe EIN. Das Öffnen eines **neuen** Hilfefensters
+  schickt 993 (`0x442410`/`0x4425B0`); das Pausenfenster bleibt nach dem
+  Schließen der Hilfe stehen, eine laufende Pause wird umgeschaltet, und im
+  Netz gilt es für alle. Knopf »Pause bei Hilfe EIN/AUS« im
+  Einstellungsfenster bei (20,220) wie im Original. Gegenschalter
+  `--pause-bei-hilfe-aus`, Prüfstände `--pause-bei-hilfe-check`,
+  `--net-pause-bei-hilfe-check`.
+
+### Computergegner
+
+- **Kampagne: Marschwege über Sektoren, Sammeln vor dem Angriff.** Die
+  Kampagnen-KI zieht jetzt wie im Original: Sie sucht einen Weg durch die
+  Sektoren (`0x4BEA30`, vier Nachbarn; der Weg wird bei `0x4BC920` rückwärts
+  geschrieben), marschiert erst zum nächsten Wegpunkt weiter, wenn **mehr als
+  zwei Drittel** der Gruppe im Sektorkasten stehen, und greift erst bei
+  Endmarke 0 an (`0x4BD5FC`), danach »Der Feind naht« (Klang 122). Die Zielwahl
+  (`0x4BECF0`) läuft aufwärts und nimmt den **letzten** gültigen Kandidaten —
+  eine Eigenheit des Originals, die wir nachbauen (bei uns lief sie rückwärts).
+  Auch der Originalfehler am Wegende 29/30 ist nachgebaut;
+  `--ki-wegende-berichtigt` berichtigt ihn. Die Wegpunkte (`sec108`, 32×62
+  Byte) stehen im Spielstand (Format 3; alte Stände laden weiter).
+  Gegenschalter `--ki-sektoranker-alt`, `--ki-sektorweg-alt`,
+  `--ki-wegpunkte-aus`, `--ki-wegziel-bester`, `--ki-spielstand-alt`,
+  Prüfstände `--ki-wegpunkte-check` (Mission 26), `--spielstand-check` mit
+  einer Gruppe im Marsch.
+- **Sektortafeln aus den `AIxx.CWI` des Originals.** Statt Sektoranker und
+  Verbindungen zur Laufzeit zu rechnen, übernimmt der Importeur jetzt die
+  Tafeln des Originals (Lader `0x41CB00`), und die **Brückennachführung**
+  (`0x41CAD0`/`0x41CA40`, 400 Sätze) öffnet und schließt Verbindungen, wenn eine
+  Brücke gebaut oder gesprengt wird — beim Laden, beim Abriss (`0x4CB889`) und
+  beim Bau (`0x4CCA8F`). Fehlt die Datei, bleibt die Laufzeitrechnung als
+  Rückfall. Deshalb müssen die Daten neu eingelesen werden. Gegenschalter
+  `--ki-tafeln-gerechnet`, `--ki-brueckennachfuehrung-aus`,
+  `--ki-cpu1-nullen-alt`, Prüfstand `--ki-tafeln-check` (33 von 33 Karten; die
+  Wege des Originals in Mission 25 sind jetzt 20 von 20 offen).
+- **Produktionsfreigabe und Modus 20 für KI-Transporter sind gebaut, aber
+  vorerst aus.** Die Produktionsfreigabe des Originals (`0x4BB7D0`, Sperre
+  `0x4BB615`/`0x4BB744`) und Modus 20 für KI-Transporter (`0x4BB32B`) stehen im
+  Code, wirken aber auf Eingaben, die noch nicht originaltreu sind; deshalb
+  bleiben sie aus, bis diese geklärt sind. `--ki-produktionsfreigabe` und
+  `--ki-modus20` schalten sie ein.
+
+<!-- W4 -->
+
+- **Gefecht: Der Computergegner wird aktiv.** Im Gefecht nutzt die KI jetzt
+  dieselben Bausteine wie die Kampagne — Zielwahl, Gruppen, Wegpunktmarsch mit
+  der Zwei-Drittel-Regel, Gruppenangriff (`0x4BC540`); Netzkarten laden
+  `AI(50+xx).CWI`, DM-Karten rechnen ihre Tafeln. Weil das Gefecht der
+  Wettkampfmodus ist, ist manches davon **unsere Setzung**: Aufträge entstehen
+  aus Zielen, die die KI gesehen hat; drei Stufen leicht/normal/schwer
+  (Betriebsart 3/4/5, Mindestgröße der Gruppe 4/5/6); der Originalfehler des
+  Marschwegs ist berichtigt (`--gefecht-ki-originalfehler` holt ihn zurück);
+  Gruppen werden aufgefüllt; Nachzügler haben 120 s; und eine Gruppe greift nur
+  an, was sie gesehen hat. Eine Vorliebe für menschliche Spieler hat die KI
+  bewusst nicht. Gegenschalter `--gefecht-ki-marsch-aus` (die bisherige
+  Gefechts-KI), Prüfstand `--gefecht-ki-aktiv-check` (NET07, NET02, DM_3,
+  DM_1). Netzspiele mit 0.6.11 laufen deshalb nur gegen 0.6.11.
+
 ## 0.6.10 — 16.10.2026 · KayelGees sechste Runde, Mehrspieler wieder im Gleichschritt
 
 > **KayelGees sechste Meldungsrunde mit fünfzehn Punkten ist vollständig

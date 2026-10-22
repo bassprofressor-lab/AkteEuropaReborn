@@ -12,6 +12,332 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.11 — in progress · KayelGee's seventh round, Reaper's first, and a computer opponent that marches
+
+> ⚠ **Not released yet.** This section describes the work towards 0.6.11; there
+> is no download for it yet.
+>
+> **KayelGee's seventh round and the first round from a new tester, Reaper
+> [BFTB], are worked through.** Every point is fixed except one: the smoke at
+> the garage door stays, because the original does exactly the same. The
+> scientist in mission 6 is fixed **against** the original, on request. On the
+> way we found that moving every input onto the shared command ring in 0.6.10
+> had left **windows that no longer redrew** after a click, and that a finished
+> research upgrade **overwrote values instead of adding to them**. New in this
+> round: the original's **restart with a question** (now also in a network
+> game, for all machines at once), the **pause window**, **P for pause**, the
+> **main menu in a network game**, **pause while help is open**, a sound
+> comparison with the original, and above all a **computer opponent that forms
+> groups, marches across sectors and gathers before it attacks** — in the
+> campaign with the original's own sector tables, in skirmish as a deliberate
+> competitive variant. As always, every change has a switch that brings the old
+> behaviour back, and a test.
+>
+> ⚠ **The game will ask once to read in data again.** The map content changed:
+> the sector tables `AIxx.CWI` are now taken from the CDs (content version
+> `karten=2`). Have your CDs at hand, or the installation the game used last
+> time.
+
+### Thanks to KayelGee
+
+**KayelGee** sent his seventh round on 18 and 20 October, with a screenshot.
+Each point was looked up in the original's program before anything was
+changed. Thank you!
+
+One point stays as it is: the **smoke at the garage door** (his point 3.1). A
+badly damaged vehicle that has driven into a depot or base keeps smoking at the
+door until it is repaired above a third of its life. That looks like a
+leftover, but the original does the same: its unit tick (`0x406CD0`) runs over
+every unit, including those parked inside (state 50), rolls the damage smoke
+for them too, and parking does not move the unit off the door cell. So new
+smoke keeps coming up where the unit drove in, until the repair (`0x43E9B2`,
+one point every 40 ticks) has lifted it above one third — with 20 of 100
+points that is a good ten seconds. We read this in the program; we could not
+watch it, because the original does not run on Windows 11. If you see it last
+much longer, please tell us.
+
+His point 6, the scientist in mission 6, is **a bug in the original** — he said
+so himself and asked for it to be fixed. We did; see below. It is the first
+place in the campaign where we deliberately play differently from the 1997
+game, and a switch brings the original back.
+
+### Reported by Reaper [BFTB]
+
+Welcome to **Reaper [BFTB]**, our new tester! His first round of 19 October
+came with six screenshots and went straight to the research and design screens,
+which nobody had looked at closely before. All of his points are fixed below,
+and one of them (the radar's armour) uncovered a fault that touched **every**
+upgrade in the game. Thank you, and welcome aboard!
+
+### KayelGee's round 7 — fixed
+
+- **All selected units carry the same selection corners** (point 1, with his
+  screenshot). In a selected group one unit had thick white corners, the others
+  thin grey ones. In the original the mark is one byte with only two values
+  (unit record `+0x1B`, set at `0x433247`/`0x434525`), and all seven drawing
+  places blit the **same** picture as soon as it is non-zero; the drawer never
+  reads the main selection (`0x4FA0C8`). Our thicker corners for the main unit
+  were our own invention. Switch `--auswahlwinkel-haupt-alt`, test
+  `--auswahlwinkel-check`.
+- **The supply post window shows the new balance after buying** (his report of
+  18 October). Since 0.6.10 every purchase goes through the command ring and is
+  booked one tick later, but the window read the balance right at the click —
+  before the booking — and never again. The original redraws the open building
+  windows every 30 frames (`0x4505F0`, window kinds 2, 5, 8, 9, 11, 18–25,
+  27–29, 31, 33, 38). That timer is built now, with a careful redraw that does
+  not throw away what you are doing in the window, plus a follow-up step after
+  each ring order. It cured much more than the balance: helicopter and aircraft
+  purchases at the airport, »start all«, the mine and airport toggles (where a
+  second click used to undo the first), patrol, bomb, squadron mark,
+  recycling, sending out »(Ausgesandt)«, and the ghost line after moving rail
+  stock. Switches `--fensterneumalen-alt` and
+  `--satznacharbeit-alt[=fenster,katalog,meldung]`; test
+  `--ring-nacharbeit-check`.
+- **A base sends units out through its door, one at a time** (point 3). Ours
+  put a unit sent out of a base **at once** on the nearest free cell within 12
+  cells when the door was taken — most visibly with several lines selected,
+  where all but the first appeared next to the base without ever driving out.
+  In the original, order 504 only puts the unit into the »waiting to leave«
+  state (`0x33`); the building tick (`0x43DCA6`..`0x43DE58`) lets at most one
+  out per tick, and only when the door **and** the cell in front of it are
+  free. Otherwise the unit waits invisibly in the list. The base also never
+  refuses (`0x410420` has no branch for it): a design line that is sent out
+  becomes a unit and waits at the door, and a waiting line reads
+  » (ausgesandt)« with a small »a« and no health display (`0x4681BB`).
+  Switches `--basis-aussenden-sofort`, `--auslass-rueckfall-alt`,
+  `--depotzeile-absage`, `--ausgesandt-alt`; test `--basis-aussenden-check`
+  (cases D0–D5, mission 21).
+- **Foot soldiers stand loosely instead of in a perfect line** (point 4). In
+  the original every soldier carries his own offset, `dx = 18 − rand%37`,
+  `dy = 7 − rand%15` (`0x4B1D37`/`0x4B38BA`), up to **nine** soldiers share a
+  cell (`0x433E3E`), and the foot anchor sits at `row·20 − H − 24`. We drew
+  them on a grid without offset. Soldiers placed on the map take their offset
+  from the map data (`+0x1D`/`+0x1E`); newly built ones get it from a hash that
+  draws nothing from the shared random stream (**our choice**, so a network
+  game cannot drift), and it is saved. ⚠ The anchor now sits **15 px higher**
+  than before — this reverses a choice of 6 September, so please have a look.
+  Switches `--fussstreuung-aus`, `--neunerzelle-aus`, `--fussanker-tief-alt`;
+  test `--fussstreuung-check` (mission 4).
+- **Clicking foot soldiers hits where they are drawn** (follow-up to point 4).
+  The original's click box for a soldier is 14×25 px at the drawing point
+  **including** his offset (`0x431DD9`); ours sat without the offset and 10 px
+  too low. The rubber band (`0x434700`) picks foot soldiers by a point test,
+  takes transporters only when nothing else is inside, and only counts as a
+  rectangle once it is more than 10 px in each direction. Switches
+  `--fussvolk-klickkasten-alt`, `--gummiband-kasten-alt`,
+  `--gummiband-transporter-alt`, `--gummiband-schwelle-alt`; test
+  `--fussvolk-klickkasten-check` (mission 4).
+- **A freshly made design shows its values at once** (point 5). The fix from
+  0.6.10 (his round 6, point 8) entered a new design into the value table only
+  on the old direct path; since »create« (order 505) goes through the ring, the
+  values stayed empty until the next start again. Now the ring path enters it
+  too. Covered by `--satznacharbeit-alt=katalog` and `--werteliste-eigen-check`.
+- **Mission 6: the scientist's sub-mission no longer fails at once** (point 6)
+  — **a deliberate departure from the original.** When you take the mine in the
+  north, you are asked to bring a scientist there. In the original the failure
+  rule (`0x49A9FF`) tests with `je` instead of `jne`: it fails the sub-mission
+  while the scientist is **alive**, not when he is dead — in the very pass in
+  which he is first seen. Both versions of GAME.EXE have the same bytes, and the
+  twin sub-mission of the same mission (Hadgi Ibn Mustaffa, `0x49A96D`) has the
+  test the right way round. KayelGee asked for it to be fixed, so now the
+  sub-mission fails only if the scientist dies, and bringing him to the mine
+  pays 200 $. Switch
+  `--m6-wissenschaftler-original` restores the original's bug; test
+  `--untermission-check=6`.
+- **Attackers spread around a building** (point 7). Ours all shot at the same
+  spot. The original gives each unit its own firing cell from the ring spiral
+  (`0x79A008`) — a vehicle takes the **last** suitable cell (`0x40E211`), foot
+  soldiers the first (table `0x4F5B38`) — measures range to the nearest cell of
+  the building's footprint, and drives to a random cell around the anchor
+  (`anchor + (rnd%(2·sx+8)−4, rnd%(2·sy+6)−4)`, `0x40FC90`). A unit that
+  arrives without having taken up the target ends its order (`0x407D1D`). This
+  was built only after a second, independent reading of the original (Fable
+  against Opus). Switches `--gebaeudeziel-alt`,
+  `--gebaeudeangriff-ankunft-alt`; test `--gebaeudeangriff-check` (missions 6
+  and 4: seven of eight shoot, one ends on arrival, six different target
+  cells).
+
+### KayelGee's round 7 — as in the original, unchanged
+
+- **Smoke at the garage door** (point 3.1) — see the thanks above. Read in the
+  original (`0x406CD0`), so it stays.
+
+### Reaper's round 1 — fixed
+
+- **The research level in brackets counts up** (Reaper 1). After researching,
+  the creation window in the base kept showing »(0)« behind every part. In the
+  original the research tab, the three part lists of the creation window and
+  the production value list all read the **same** byte — the level reached,
+  `+0x01` in the **player's** block of the parts table
+  (`0x5045A0 + 58·(part + 200·player)`, written at `0x4AAACA`). Only our
+  research tab read it; the creation window, the value list and the info window
+  read the table from the EXE, which nobody ever writes. Now all of them read
+  the player's block, the value list computes with the player's values, and
+  the brackets are written as in the original. Switches
+  `--bauteilstufe-global-alt`, `--werteliste-global-alt`,
+  `--klammerschreibweise-alt`; test `--bauteilstufe-check`.
+- **Own designs can be renamed and removed** (Reaper 2). Both buttons were
+  grey. Renaming opens the original's input window (kind 36, 19 characters,
+  order 533); removing asks »Einheitentyp löschen?« (kind 10, order 507) and is
+  refused as long as a living unit of that type exists. Both go through the
+  command ring. A removed design stays behind as an empty slot, so indices and
+  saves stay valid. Switch `--entwurf-knoepfe-alt`; test
+  `--entwurf-verwalten-check`.
+- **Own designs are drawn in ochre** (Reaper 2b). The original writes your own
+  lines in two colours (palette 80/84); the »own« mark of a design was never
+  set at ours. Switches `--eigene-zeile-alt`, `--schrift-zweitfarbe-alt`; test
+  `--eigene-zeile-check`.
+- **Designs belong to a campaign, skirmish has its own library** (Reaper 3).
+  Until now there was one list of designs for everything. As in the original,
+  campaign designs now live in the campaign (`campaign.cfg`, section
+  `[entwuerfe]`) and in its saves, and a campaign reset empties them. For
+  skirmish there is a **lasting library of your own**, `designs-gefecht.cfg` —
+  that part is a player's wish, not the original. Your old `designs.cfg` is
+  **taken over once** into the skirmish library; it is never written to or
+  deleted. Old designs are not carried into a running campaign. Switch
+  `--entwuerfe-global`; test `--entwurf-lebensdauer-check` (T1–T7).
+- **A reconnaissance plane no longer stands still in the air** (Reaper 4).
+  Three causes. An unarmed plane with a target hung over the target point; the
+  original sends it home (`0x4236AE`: no ammunition → back to the airport). A
+  plane with an empty tank and no flight target drifted and then stood forever
+  (measured: four planes for 600 s on NET02); in the original an empty tank
+  means a **crash** (`0x422F40` → `0x425EA0`). And built planes started with a
+  lower speed limit of 0 instead of the template's value (`+0x2A`, 4 for
+  fighter, bomber and spy plane; `0x51B020`). Switches
+  `--unbewaffnet-angriff-alt`, `--sprit-absturz-aus`, `--sp-unten-alt`; test
+  `--flieger-steht-check` (NET02 seed 7, mission 20).
+- **Research upgrades add to the values instead of overwriting them** (Reaper:
+  mobile radar armour 0/7 → 0/3 after »6x6 Reifen«). Finishing an upgrade
+  **set** the part's speed, attack and defence bytes (`+0x11`/`+0x12`/`+0x13`)
+  to the increment; the original **adds** the increment as a byte
+  (C `0x4AAB33`/`3D`/`43`, `0x4AAB4F`/`55`/`60`, `0x4AAAE9`/`EF`/`FA`;
+  F `0x4AA463` `mov cl,…` · `0x4AA46D` `add cl,al` · `0x4AA473` `mov …,cl`,
+  checked by hand). After the first 6x6 level the radar has 3 + 4, not 3 + 0.
+  This affected **every** running gear (defence fell to 0) and the attack of
+  every weapon. Byte arithmetic is needed, because the MS rocket runs past 127.
+  Switch `--aufwertung-setzen-alt`; test `--aufwertung-zuwachs-check` (mission
+  21; its null model reproduces Reaper's screenshots, 8/2 and 0/3).
+  ⚠ **Old saves:** units that were **built after a research upgrade** in an
+  older version keep their too-low attack and defence. They cannot be repaired
+  reliably, because the save does not record at which level they were built.
+  New units, and every game started with 0.6.11, are correct.
+
+### Fixed
+
+- **More fall-backs from moving inputs onto the ring** (0.6.10, commit
+  `7e6e4a7`). Besides the window redraw above: buying at the market without
+  money says so again, with the refusal sound; target selection counts the
+  machines that actually started rather than the orders given; a refused
+  research reports why.
+- **Tests measure on the command ring.** About thirty tests (depot tab, post,
+  repair and repair click, buttons, flights, airport guard, route window,
+  delivery, target selection and more) still used the direct path or judged
+  before the ring was emptied — several had been silently red since `7e6e4a7`.
+  Now they go through the ring and read the value that is **displayed**. The
+  null model for the change is `--direktbefehle2-alt` / `--direktbefehle-alt`.
+  Tests that move units (`IssueMove`) stay as they are, on purpose.
+- **A vehicle waits behind foot soldiers on the door.** A vehicle no longer
+  drives out onto a door cell on which a soldier stands; as in the original,
+  every squad holds the door (raw cell test against `0xFFFE`: base `0x43DD5A`,
+  depot `0x43E254`, station `0x43E38C`). Switch `--tuer-fussvolk-frei-alt`.
+- **Clicking a building takes the building that owns the cell.** A building
+  without a click cell of its own picked up clicks meant for its neighbour
+  through our rectangle fall-back (mission 23, sites 190/191). Now another
+  building's cell comes first, like the original's cell map. Switch
+  `--griffvorrang-alt`.
+- **Sounds compared with the original.** Refusals are silent, as in the
+  original (we played 140, which is really »Wählen Sie Zielpunkt«), switch
+  `--ablehnklang-alt`. The route window plays 139 for »from« (`0x44A657`), 140
+  for open/to/clear and 141 only on a successful start, before order 513
+  (`0x44A893`), switch `--routenklang-aus`. 128 »mine store full«
+  (`0x43D6E5`), switch `--minenlager-klang-aus`. The mine plays 129/130 only
+  when the upgrade is **finished** (`0x43D7AC`/`0x43D84F`), switch
+  `--minenausbau-klang-alt`. 120 »rocket launched« between the ammunition and
+  the reload gate (`0x40BA35`), switch `--raketenklang-aus`. 135 »building
+  destroyed« via the hit path (`0x40D1DA` → `0x4D58F0`), switch
+  `--gebaeudezerstoert-klang-aus`. Sounds 121, 126, 137 and 142 are never
+  played by the original. Test `--klang-abgleich-check` (DM_5, mission 8 for
+  loading).
+- Smaller test faults fixed along the way (building click, selection, double
+  click in mission 8, anchor probe, button, delivery, post, target selection);
+  network tests now give each player slot its own save folder.
+
+### New
+
+- **Restart asks first, and works in a network game.** As in the original, the
+  restart button asks »Möchten Sie die Mission erneut starten?« (window kind
+  10); »Yes« sends order 980 through the command ring. In a network game **all
+  machines** load the kept start state in the same tick — **our addition**; the
+  original most likely cannot do this in a network game. Switches
+  `--neustart-alt`, `--neustart-oertlich`; tests `--neustart-check`,
+  `--net-neustart-check`.
+- **The pause window** of the original (kind 40, 180×60, »Pause«/»Weiter«),
+  opened only via order 993 and, in a network game, shown on every machine.
+  The original's ESC trap (`0x4472F5`, which lifts the pause only locally) is
+  not taken over. Switches `--pausenfenster-alt`, `--pause-esc-oertlich`; test
+  `--pausenfenster-check`.
+- **P is pause**, as in the original (it used to toggle the navigation).
+  Switch `--taste-p-navi-alt`.
+- **The menu button opens the main menu in a network game too.** Saving and
+  loading there (991/990) would break the lockstep, so they are locked, with
+  the reason shown. Switch `--netz-menue-alt`.
+- **Pause while help is open**, as in the original: option byte `0x8B5308`,
+  `OPTIONS.CFG +0x11`, on by default. Opening a **new** help window sends 993
+  (`0x442410`/`0x4425B0`); the pause window stays after help is closed, a
+  running pause is toggled, and in a network game it affects everybody. Button
+  »Pause bei Hilfe EIN/AUS« in the settings window at (20,220), as in the
+  original. Switch `--pause-bei-hilfe-aus`; tests `--pause-bei-hilfe-check`,
+  `--net-pause-bei-hilfe-check`.
+
+### Computer opponent
+
+- **Campaign: march routes across sectors, gathering before the attack.** The
+  campaign AI now moves as in the original: it finds a path through the
+  sectors (`0x4BEA30`, four neighbours; the path is written backwards at
+  `0x4BC920`), marches on to the next waypoint only when **more than two
+  thirds** of the group stand in the sector box, and only attacks at end mark 0
+  (`0x4BD5FC`), followed by »Der Feind naht« (sound 122). Target selection
+  (`0x4BECF0`) runs upwards and takes the **last** valid candidate — an
+  original quirk we reproduce (we ran it backwards). The original's fault at
+  path end 29/30 is reproduced too; `--ki-wegende-berichtigt` corrects it. The
+  waypoints (`sec108`, 32×62 bytes) are saved (save format 3; old saves still
+  load). Switches `--ki-sektoranker-alt`, `--ki-sektorweg-alt`,
+  `--ki-wegpunkte-aus`, `--ki-wegziel-bester`, `--ki-spielstand-alt`; tests
+  `--ki-wegpunkte-check` (mission 26), `--spielstand-check` with a group on
+  the march.
+- **Sector tables from the original's `AIxx.CWI`.** Instead of computing sector
+  anchors and links at run time, the importer now copies the original's tables
+  (loader `0x41CB00`), and the **bridge follow-up** (`0x41CAD0`/`0x41CA40`, 400
+  records) opens and closes links when a bridge is built or blown up — at load,
+  on destruction (`0x4CB889`) and on construction (`0x4CCA8F`). Without the
+  file, the run-time computation remains as a fall-back. This is why the data
+  has to be read in again. Switches `--ki-tafeln-gerechnet`,
+  `--ki-brueckennachfuehrung-aus`, `--ki-cpu1-nullen-alt`; test
+  `--ki-tafeln-check` (33 of 33 maps; the original's routes in mission 25 are
+  now 20 of 20 open).
+- **Production release and mode 20 for AI transporters are built, but off for
+  now.** The original's production release (`0x4BB7D0`, lock
+  `0x4BB615`/`0x4BB744`) and mode 20 for AI transporters (`0x4BB32B`) are in
+  the code, but they act on inputs that are not yet faithful, so they stay off
+  until those are cleared. Switches `--ki-produktionsfreigabe`, `--ki-modus20`
+  turn them on.
+
+<!-- W4 -->
+
+- **Skirmish: the computer opponent becomes active.** In skirmish the AI now
+  uses the same building blocks as the campaign — target selection, groups,
+  waypoint march with the two-thirds rule, group attack (`0x4BC540`); network
+  maps load `AI(50+xx).CWI`, deathmatch maps compute their tables. Because
+  skirmish is the competitive mode, some of it is **ours**: orders come from
+  targets the AI has seen; three levels easy/normal/hard (mode 3/4/5, minimum
+  group size 4/5/6); the original's march-route fault is corrected
+  (`--gefecht-ki-originalfehler` brings it back); groups are topped up;
+  stragglers get 120 s; and a group only attacks what it has seen. The AI has
+  no preference for human players, on purpose. Switch
+  `--gefecht-ki-marsch-aus` (the previous skirmish AI); test
+  `--gefecht-ki-aktiv-check` (NET07, NET02, DM_3, DM_1). Network games of
+  0.6.11 therefore only run against 0.6.11.
+
 ## 0.6.10 — 2026-10-16 · KayelGee's sixth round, multiplayer in lockstep again
 
 > **KayelGee's sixth round of reports — fifteen points — is worked through
