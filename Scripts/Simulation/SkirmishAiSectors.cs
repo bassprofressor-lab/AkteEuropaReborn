@@ -811,6 +811,16 @@ public partial class MapEntityLayer : Node2D
                 if (e.AiCpu0 is not (1 or 2)) continue;
                 s = SektorIndex(Math.Clamp(e.AiCpu1 & 0x0F, 0, SektorKante - 1),
                                 Math.Clamp((e.AiCpu1 >> 4) & 0x0F, 0, SektorKante - 1));
+                // ⚠ Paket W2 (bug-630): --ki-aufnahme-standort ist ein REINER
+                // PRUEFSCHALTER und absichtlich FALSCH — Aufnahme gegen den
+                // STANDORTsektor statt gegen CPU1 (C @0x4BCACE…0x4BCB3C liest CPU1).
+                // Er beweist in --k25-ki-check, dass »keine Gruppe mit Mitglied«
+                // gesehen wuerde, wenn es eine gaebe (Bertha in Modus 2 auf (3,3)).
+                if (KiAufnahmeStandort)
+                {
+                    var (ox, oy) = AiSektorVon(e.Col, e.Row);
+                    s = SektorIndex(ox, oy);
+                }
                 if (r[s].Def >= r[s].Belegt) continue;   // der Sektor braucht sie
             }
 
@@ -1085,8 +1095,8 @@ public partial class MapEntityLayer : Node2D
                     r[SektorIndex(cx, cy)].Belegt++;
                     if (a.Roll(200) == 111)          // rand() % 200 == 0x6F
                     {
-                        e.AiCpu0 = 0;
-                        e.AiCpu1 = 0;
+                        e.AiCpu0 = 0;                // C @0x4BC020: NUR CPU0
+                        if (KiCpu1NullenAlt) e.AiCpu1 = 0;
                         a.SmAbkuehlung++;
                     }
                     break;
@@ -1095,14 +1105,20 @@ public partial class MapEntityLayer : Node2D
                 // ---- 3: im Angriff ------------------------------- 0x4BC029 --
                 case 3:
                 {
-                    if (AiSteht(e)) { e.AiCpu0 = 0; e.AiCpu1 = 0; a.SmFertig++; break; }
+                    if (AiSteht(e))
+                    {
+                        e.AiCpu0 = 0;                // C @0x4BC037: NUR CPU0
+                        if (KiCpu1NullenAlt) e.AiCpu1 = 0;
+                        a.SmFertig++;
+                        break;
+                    }
                     var (cx, cy) = AiSektorVon(e.Col, e.Row);
                     int ax = e.AiCpu1 & 0x0F, ay = (e.AiCpu1 >> 4) & 0x0F;
                     if (Math.Abs(ax - cx) > 1 || Math.Abs(ay - cy) > 1)
                     {
                         AiAnhalten(i, e);            // UKOL := 0
-                        e.AiCpu0 = 0;
-                        e.AiCpu1 = 0;
+                        e.AiCpu0 = 0;                // C @0x4BC09E: NUR CPU0
+                        if (KiCpu1NullenAlt) e.AiCpu1 = 0;
                         a.SmLeine++;
                     }
                     break;
@@ -1146,6 +1162,18 @@ public partial class MapEntityLayer : Node2D
     }
 
     private readonly List<int> _aiKandidaten = new();
+
+    /// <summary><c>--ki-cpu1-nullen-alt</c> (Paket W2, bug-630, Nebenbefund aus
+    /// berichte/k25-gruppenbildung-opus.md §5): der Stand bis Paket W — beim Rückfall
+    /// von Modus 2/3 auf 0 wird auch CPU1 genullt. Das Original schreibt an allen drei
+    /// Stellen nur CPU0 (C @0x4BC020, @0x4BC037, @0x4BC09E, selbst nachgelesen); CPU1
+    /// bleibt stehen (gemessen: 10.DM Bertha CPU0 0, CPU1 (4,1)). Folgenlos für den
+    /// Ablauf (CPU1 wird nur in den Modi 1..3 und 10 gelesen), sichtbar im Spielstand.</summary>
+    public static bool KiCpu1NullenAlt;
+
+    /// <summary><c>--ki-aufnahme-standort</c> — Prüfschalter, absichtlich falsch
+    /// (siehe <see cref="AiGruppeBilden"/>).</summary>
+    public static bool KiAufnahmeStandort;
 
     /// <summary><c>--ki-faze-alt</c> (bug-400) — der Stand vom 01.09.2026: die
     /// Freiliste fragt <c>faze</c> (+0x09) nicht, aufgebaute Abwehrstellungen

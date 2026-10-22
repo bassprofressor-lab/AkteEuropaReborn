@@ -397,6 +397,9 @@ public partial class MapEntityLayer
         }
 
         BrueckeGebaut++;
+        // ⭐ 22.10.2026 (Paket W2, bug-627) — die KI-Sektorkanten: 0x41CAD0 @0x4CCA8F,
+        // am Ende von 0x4CC280. Simulation/KiMarschwege.cs.
+        KiBrueckeGeaendert($"Bruecke Platz {nr} gebaut");
         BrueckeNote = $"Bruecke ({col},{row}) Richtung {d}, {k} Wasserzellen, "
                     + $"{s.Zellen.Count} Kacheln, TP {s.Tp}"
                     + (erschlagen > 0 ? $", {erschlagen} erschlagen" : "");
@@ -488,6 +491,7 @@ public partial class MapEntityLayer
             _rampen.Remove(z.X * 1024 + z.Y);
         }
         _stege.Remove(s);
+        KiBrueckeGeaendert($"Bruecke ({s.Col},{s.Row}) zerstoert (--bauwerke-unzerstoerbar)");
         GD.Print($"bruecke: Bruecke ({s.Col},{s.Row}) zerstoert — "
                + $"{s.Zellen.Count} Zellen zurueck");
     }

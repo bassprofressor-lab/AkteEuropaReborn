@@ -116,7 +116,8 @@ public static class InhaltsStand
         new("karten", "Karten", Bedarf.AlleKarten, (b, p) => b.ReexportMaps(p),
             new[] { "Maps/map_NET07.json", "Maps/map_NET07.png" },
             T("2026-10-02T07:12:21+02:00"),
-            "MapBaker, MapForest, CwpFile, CwmFile/CwmData/CwmSections/CwmExtra, EntitiesJson, PalFile, ContentBuilder.ExportMap/MapMeta"),
+            "MapBaker, MapForest, CwpFile, CwmFile/CwmData/CwmSections/CwmExtra, EntitiesJson, PalFile, ContentBuilder.ExportMap/MapMeta, " +
+            "ContentBuilder.KiTafelnKopieren (DATA/AIxx.CWI, ab Stand 2)"),
         new("spielstaende", "Spielstaende der Karten", Bedarf.AlleKarten, (b, p) => b.ReexportStates(p),
             new[] { "Maps/map_NET07.entities.json" },
             T("2026-09-22T20:31:25+02:00"),
@@ -166,10 +167,14 @@ public static class InhaltsStand
     /// (<c>d67dfdd</c>). ⭐ Am 16.10.2026 nachgesehen:
     /// <c>git log d67dfdd..a44a957 -- Scripts/Import Scripts/Editor</c> ist LEER —
     /// seit 0.6.9 hat sich an keinem Teil etwas geaendert, also steht alles auf 1.
+    /// <para>⭐ 22.10.2026 (Paket W2, bug-626): <b>karten → 2</b> — der Kartenteil legt
+    /// jetzt die KI-Sektortafeln <c>DATA/AIxx.CWI</c> mit ab
+    /// (<see cref="ContentBuilder"/>.KiTafelnKopieren). Ohne sie rechnet die KI die
+    /// Tafeln zur Laufzeit (Rueckfall, wie das Original ohne Datei).</para>
     /// </summary>
     public static readonly IReadOnlyDictionary<string, int> Noetig = new Dictionary<string, int>
     {
-        ["karten"] = 1,
+        ["karten"] = 2,
         ["spielstaende"] = 1,
         ["gebaeude"] = 1,
         ["kachelsaetze"] = 1,

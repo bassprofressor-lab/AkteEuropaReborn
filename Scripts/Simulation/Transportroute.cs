@@ -659,22 +659,57 @@ public partial class MapEntityLayer : Node2D
     /// Route, die STEHT, zaehlt nicht — dann bekaeme die Fabrik einen zweiten
     /// Wagen.</para>
     ///
-    /// <para>⚠ Nicht gebaut ist der Rueckfall »kein freier Wagen, also einen
-    /// bauen lassen« (<c>0x4BB1E0</c> mit 200 Takten Sperre): das haengt am
-    /// Bauprogramm, und in der Kampagne baut die KI nur aus dem Programm der
-    /// Mission (bug-090). Ohne freien Wagen passiert hier also nichts.</para>
+    /// <para>Kein freier Wagen: einen bauen lassen (<c>0x4BB1E0</c>, 200 Takte
+    /// Sperre, seit 08.09.2026, <see cref="KiTransporterBauen"/>).</para>
+    ///
+    /// <para>⭐ Paket W2 (22.10.2026, bug-628) — die Reihenfolge von C
+    /// <c>0x4BB7D0</c>, selbst nachgelesen: kein Ziel → Freigabe 1 (nur C) und
+    /// zurueck; Bausperre laeuft → zurueck (Freigabe unberuehrt); Freigabe 1; je
+    /// Fabrik (Art 2..4, eigener Besitz) Filter <c>0x4BAD20</c>, dann Route
+    /// Fabrik → Basis (<c>0x4BADB0</c> → <c>0x4BB570</c>) und Mine → Fabrik
+    /// (<c>0x4BAE40</c>, <c>0x4BAFE0</c> → <c>0x4BB6A0</c>); fehlt der Wagen,
+    /// Freigabe 0. Die Freigabe (<see cref="_kiProduktionFrei"/>) liest allein
+    /// <c>ai_production</c> (<see cref="AiProducePlanStep"/>).</para>
     /// </summary>
     private void KiTransportrouten(int spieler)
     {
         if (KeineTransportrouten || _nav == null) return;
+        bool freigabe = !KiProduktionsfreigabeAus && spieler is >= 0 and < 8;
 
         int basis = KiRouteZiel(spieler);
-        if (basis < 0) return;                                // »no target found«
+        if (basis < 0)                                        // »no target found«
+        {
+            // ⭐ Paket W2 (bug-628): C @0x4BB7FC `mov byte [p + 0xB46950], 1` —
+            // NUR in C (22.01.1998). F (16.09.1997) kehrt an derselben Stelle
+            // ohne Schreiben zurueck (F 0x4BB2F9…0x4BB30B, nur das Protokoll
+            // 0x537E3C). Wir folgen C, die spaetere Fassung — wie bei pro_style
+            // (SkirmishAiSectors.cs). Wirkung: ein Spieler ohne Basis/Flughafen
+            // darf sein Programm laufen lassen (in C); in F bliebe die zuletzt
+            // gesetzte Freigabe stehen.
+            if (freigabe) { _kiProduktionFrei[spieler] = true; KiFreigabeOhneZiel++; }
+            return;
+        }
+
+        // ⭐ Paket W2 (bug-628): die Bausperre ZUERST, C @0x4BB825…0x4BB834
+        // (`cmp [0xB461A0 + 4p], Takt / jle`): laeuft sie noch (»no time to make
+        // new one«, 0x538DD4), kehrt die Funktion zurueck, BEVOR die Freigabe
+        // angefasst wird — eine Sperre (0) bleibt also stehen, bis die Bausperre
+        // abgelaufen ist. Unter --ki-produktionsfreigabe-aus der alte Weg (die
+        // Sperre prueft nur KiTransporterBauen selbst).
+        if (freigabe && _routeBausperre.TryGetValue(spieler, out int sperreBis) && sperreBis > _origTicks)
+        { KiFreigabeSperrzeit++; return; }
+        if (freigabe) _kiProduktionFrei[spieler] = true;     // @0x4BB861, VOR der Fabrikschleife
 
         foreach (var g in _entities)
         {
             if (!g.IsBuilding || g.Dead || g.Owner != spieler) continue;
             if (g.BType is not (2 or 3 or 4)) continue;       // nur Fabriken
+            // ⭐ Paket W2 (bug-628): der Filter 0x4BAD20 (C @0x4BB894 → 0x40114A),
+            // selbst nachgelesen: Sektor (x/24, y/24) des Gebaeudes im Satz
+            // 0xB3D390 + 12·(121p + 11sx + sy) — eigen(+0) + verbuendet(+2)/2 + 100
+            // > feindlich(+4) (`setg`). Eine Fabrik in einem vom Feind beherrschten
+            // Sektor bekommt keine Route. Gegenschalter --ki-routenfilter-aus.
+            if (!KiRoutenfilterAus && !KiRoutenFilter(spieler, g)) { KiRoutenfilterAbgelehnt++; continue; }
 
             if (!KiRouteMitQuelle(spieler, g.Slot))           // 0x4BB570
                 KiRouteAnlegen(spieler, ziel: basis, quelle: g.Slot);
@@ -685,6 +720,53 @@ public partial class MapEntityLayer : Node2D
                 if (mine >= 0) KiRouteAnlegen(spieler, ziel: g.Slot, quelle: mine);
             }
         }
+    }
+
+    // ---- Paket W2 (22.10.2026, bug-628): die Produktionsfreigabe sec59 ------
+
+    /// <summary><c>--ki-produktionsfreigabe-aus</c>: der Stand bis Paket W — das
+    /// Missionsprogramm laeuft immer, die Bausperre prueft nur der Bau selbst.
+    /// ⚠ Spielerentscheidung 22.10.2026: vorerst STANDARD AUS (= true), bis die
+    /// Eingaben geklaert sind (Lagerverbrauch K25, fehlende Auftraege im
+    /// M25-Skript, zu wenige P3-Wagen K26 — mit Sperre erobert P3 Myre nicht
+    /// mehr in 450 s). Einschalten mit <c>--ki-produktionsfreigabe</c>.</summary>
+    public static bool KiProduktionsfreigabeAus = true;
+
+    /// <summary><c>--ki-routenfilter-aus</c>: der Filter <c>0x4BAD20</c> vor den
+    /// Routen entfaellt (Stand bis Paket W: UNSERE Setzung »immer wahr«).</summary>
+    public static bool KiRoutenfilterAus;
+
+    /// <summary>
+    /// <b>sec59 — <c>enabled[8]</c>, C <c>0xB46950</c> / F <c>0xB459B0</c></b>: darf
+    /// <c>ai_production</c> (<c>0x4BB9A0</c>) eine Programmzeile ausfuehren?
+    /// Anfang 0 (die Kartendatei endet vor sec59, der Lader nullt: C @0x41EFD5).
+    /// Schreiber (Bytesuche, C 9 Fundstellen): Lader/Speicherer/Nullung und vier in
+    /// der Transportlogik — 1 bei »no target found« (@0x4BB7FC, nur C), 1 vor der
+    /// Fabrikschleife (@0x4BB861), 0 wenn eine Route keinen freien Wagen findet
+    /// (@0x4BB615 in 0x4BB570, @0x4BB744 in 0x4BB6A0). Leser: allein
+    /// <c>0x4BB9BD</c>. Lesung: berichte/k25-gruppenbildung-opus.md §3.2.
+    /// </summary>
+    private readonly bool[] _kiProduktionFrei = new bool[8];
+
+    public bool KiProduktionFrei(int p) => p is >= 0 and < 8 && _kiProduktionFrei[p];
+
+    /// <summary>Zaehler fuer Pruefstaende: Freigabe ohne Ziel, Rueckkehr wegen
+    /// laufender Bausperre, Sperren mangels Wagen, abgelehnte Fabriken (Filter).</summary>
+    public int KiFreigabeOhneZiel, KiFreigabeSperrzeit, KiFreigabeGesperrt, KiRoutenfilterAbgelehnt;
+
+    /// <summary>sec57 — die Bausperre <c>0xB461A0[p]</c> (Takt), fuer Pruefstand und Spielstand.</summary>
+    public int KiBausperre(int p) => _routeBausperre.TryGetValue(p, out int b) ? b : 0;
+
+    /// <summary><c>0x4BAD20(p, x, y)</c>: <c>eigen + verbuendet/2 + 100 &gt; feind</c> im
+    /// Sektor des Gebaeudes (Woerter, vorzeichenlos; <c>shr dx,1</c>).</summary>
+    private bool KiRoutenFilter(int p, Entity g)
+    {
+        if (p is < 0 or > 7) return true;
+        int sx = (g.Col & 0xFF) / 24, sy = (g.Row & 0xFF) / 24;
+        if (sx > 10 || sy > 10) return true;               // UNSERE Setzung: ausserhalb der Tafel
+        var s = _aiRaster[p][SektorIndex(sx, sy)];
+        int eigen = s.Eigen & 0xFFFF, verb = (s.Verbuendet & 0xFFFF) >> 1, feind = s.Feind & 0xFFFF;
+        return eigen + verb + 100 > feind;
     }
 
     /// <summary>Ein eigenes Gebaeude der Art 1 oder 9 — <c>0x4BAF50</c>.
@@ -836,6 +918,11 @@ public partial class MapEntityLayer : Node2D
         int idx = KiRouteWagen(spieler);
         if (idx < 0)
         {
+            // ⭐ Paket W2 (bug-628): kein freier Wagen -> die Produktion SPERREN,
+            // C @0x4BB615 (0x4BB570) / @0x4BB744 (0x4BB6A0), F @0x4BB117 / @0x4BB246,
+            // VOR der Bausperrpruefung — auch wenn danach nichts gebaut wird.
+            if (!KiProduktionsfreigabeAus && spieler is >= 0 and < 8)
+            { _kiProduktionFrei[spieler] = false; KiFreigabeGesperrt++; }
             // ⭐ 08.09.2026 — kein freier Wagen: dann einen BAUEN LASSEN.
             KiTransporterBauen(spieler);
             return;

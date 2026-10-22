@@ -87,9 +87,18 @@ public partial class MapEntityLayer
             var a = r.Weg[0];
             r.IndexNebenStart = Math.Abs(a.x - sx) + Math.Abs(a.y - sy) == 1;
         }
-        if (r.Leer) { _kiPruefLeer++; return; }   // Weg einer leer gebliebenen Gruppe: nur gezaehlt
+        if (r.Leer)                                // Weg einer leer gebliebenen Gruppe: nur gezaehlt
+        {
+            _kiPruefLeer++;
+            if (KiLeereWege.Count < 400) KiLeereWege.Add((p, sx, sy, string.Join(" ", r.Weg.Select(w => $"({w.x},{w.y})"))));
+            return;
+        }
         _kiPruefGruppen.Add(r);
     }
+
+    /// <summary>Paket W2 (<c>--k25-ki-check</c>): die Wege leer gebliebener Gruppen —
+    /// Spieler, Startsektor, Weg in Fahrtrichtung.</summary>
+    public static readonly List<(int p, int sx, int sy, string weg)> KiLeereWege = new();
 
     /// <summary>Protokoll der geschriebenen Wege (alle Läufe, für die Kopfzeile).</summary>
     public static readonly List<string> KiWegLog = new();

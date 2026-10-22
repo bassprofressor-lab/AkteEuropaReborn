@@ -342,6 +342,9 @@ public sealed class ContentBuilder
         // ---- die Kachelsaetze selbst, fuer den Karteneditor ------------------
         CopyTilesets(Say);
         if (TilesetsCopied > 0) _erreicht.Add("kachelsaetze");
+        // ⭐ 22.10.2026 (Paket W2, bug-626) — die KI-Sektortafeln AIxx.CWI, Teil
+        // »karten« (InhaltsStand.Noetig["karten"] = 2).
+        KiTafelnKopieren(Say);
         Schritt = Schritte;
 
         Say($"fertig: {MapsBaked} Karten, {EntitiesWritten} Spielstaende, " +
@@ -953,8 +956,66 @@ public sealed class ContentBuilder
               // gemessen: 578. Steht sie auf 0, ist entweder die
               // Sektion nicht da oder die Regel greift nicht.
               + $"; davon {lagenZellen} nur ueber die Zeichenlage (Sektion 20, Bruecken und Rampen)");
+        // ⭐ 22.10.2026 (Paket W2, bug-626) — die KI-Sektortafeln gehoeren zum
+        // Teil »karten«: eine Datei je Karte, wie das Original sie liest.
+        KiTafelnKopieren(Say);
         Stempeln(ok > 0 && failed == 0, "karten", Say);
         return ok > 0;
+    }
+
+    /// <summary>Laenge einer <c>AIxx.CWI</c>: 0x7D0 Brueckensaetze + 0x1E4 Anker +
+    /// 0x1E4 Verbindungen (C @0x41CCD0…0x41CD06, drei <c>fread</c>).</summary>
+    public const int KiTafelLaenge = 0x7D0 + 0x1E4 + 0x1E4;
+
+    /// <summary>Wie viele <c>AIxx.CWI</c> der letzte Lauf nach <c>DATA/</c> gelegt hat.</summary>
+    public int KiTafelnKopiert;
+
+    /// <summary>
+    /// ⭐ 22.10.2026 (Paket W2, bug-626, Spielerentscheidung »Sektortafeln wie im
+    /// Original«) — <b>die KI-Sektortafeln <c>AIxx.CWI</c></b> nach
+    /// <c>&lt;dst&gt;/DATA</c>, unveraendert, wie die Kachelsaetze.
+    ///
+    /// <para>Gelesen (C <c>0x41CB00</c>): der Lader baut den Namen
+    /// <c>"ai" + [0 wenn NN &lt; 10] + NN + ".cwi"</c> (Zeichenketten <c>0x4F8184</c>,
+    /// <c>0x4F8004</c>, <c>0x4F817C</c>), NN = <c>word[0x539934]</c> = die Nummer der
+    /// Mission; er sucht erst den blossen Namen im Arbeitsordner (Protokoll
+    /// <c>0x41F9F0</c>, Dateiprobe <c>0x428FD0</c> = <c>fopen "rb"</c>), dann auf
+    /// der CD <c>X:\data\</c> (<c>0x4F8188</c>; CD 1 fuer NN &lt; 16, CD 2 fuer NN &lt; 40,
+    /// C @0x41CC1D…0x41CC37). Gefunden: drei Bloecke in der Reihenfolge Brueckensaetze
+    /// <c>0x542330</c> (0x7D0), Anker <c>0x541F60</c> (0x1E4), Verbindungen samt Sicherung
+    /// <c>0x542148</c> (0x1E4); nicht gefunden: <c>0x41C850</c> rechnet sie
+    /// (bei uns <c>KiSektorTafelnRechnen</c>). Danach in beiden Faellen <c>0x41CAD0</c>
+    /// (Sicherung zurueck, Bruecken anwenden).</para>
+    ///
+    /// <para>Gemessen am 22.10.2026: CD 1 traegt 27 (00..15, 21, 25, 26, 51..58),
+    /// CD 2 32 (02..04, 11, 14, 16..34, 51..58), zusammen 43 verschiedene, alle
+    /// 2968 Byte; die doppelten sind byteweise gleich.</para>
+    /// </summary>
+    private void KiTafelnKopieren(Action<string> say)
+    {
+        try
+        {
+            string dir = _dst + "/DATA";
+            Directory.CreateDirectory(dir);
+            int n = 0, schonDa = 0, falsch = 0;
+            for (int nr = 0; nr < 100; nr++)
+            {
+                string name = $"AI{nr:00}.CWI";
+                string? quelle = Find("DATA/" + name);
+                if (quelle == null) continue;
+                var b = File.ReadAllBytes(quelle);
+                if (b.Length != KiTafelLaenge) { falsch++; say($"{name}: {b.Length} Byte statt {KiTafelLaenge} — uebergangen"); continue; }
+                string ziel = dir + "/" + name;
+                if (File.Exists(ziel) && File.ReadAllBytes(ziel).AsSpan().SequenceEqual(b)) schonDa++;
+                else File.WriteAllBytes(ziel, b);
+                n++;
+            }
+            KiTafelnKopiert = n;
+            say($"KI-Sektortafeln: {n} AIxx.CWI nach {dir} ({schonDa} lagen schon gleich da" +
+                (falsch > 0 ? $", {falsch} mit falscher Laenge uebergangen" : "") + ")" +
+                (n == 0 ? " — KEINE gefunden; die KI rechnet die Tafeln dann zur Laufzeit (0x41C850)" : ""));
+        }
+        catch (Exception e) { say("KI-Sektortafeln: " + e.Message); }
     }
 
     /// <summary>

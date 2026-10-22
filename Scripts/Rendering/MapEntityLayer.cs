@@ -33151,7 +33151,8 @@ public partial class MapEntityLayer : Node2D
         {
             // bug-462: auch der KI-Weg legt einen echten Satz in die Liste
             // und sendet ihn aus — keine Entwurfsnummer, die auf den Knopf wartet.
-            NeubauInListe(e, e.BuildIndex);
+            var neubau = NeubauInListe(e, e.BuildIndex);
+            KiModus20Setzen(e, neubau);              // Paket W2, bug-629 (SkirmishAi.cs)
             _order = $"{fertig.Name} gebaut — wird ausgesandt";
             NextFromQueue(e, fertig.Name);
             UpdatePanel();

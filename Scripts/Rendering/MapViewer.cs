@@ -1429,6 +1429,18 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_kiTafelnCheck)
+        {
+            GD.Print(_entities.KiTafelnCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_k25KiCheck)
+        {
+            GD.Print(_entities.K25KiCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_kiEinnahmeCheck > 0)
         {
             GD.Print(_entities.KiEinnahmeCheck(_kiEinnahmeCheck));
@@ -1731,6 +1743,10 @@ public partial class MapViewer : Node2D
     private int _kiEinnahmeCheck;
     /// <summary><c>--ki-wegpunkte-check[=takte]</c> — Paket W, Simulation/KiWegpunkteCheck.cs.</summary>
     private int _kiWegpunkteCheck;
+    /// <summary><c>--ki-tafeln-check</c> — Paket W2, Simulation/KiTafelnCheck.cs.</summary>
+    private bool _kiTafelnCheck;
+    /// <summary><c>--k25-ki-check</c> — Paket W2, Simulation/K25KiCheck.cs.</summary>
+    private bool _k25KiCheck;
     /// <summary><c>--untermission-check=N</c> — siehe Simulation/Skriptvariablen.cs
     /// (02.10.2026, bug-392). 0 = aus.</summary>
     private int _untermissionCheck;
@@ -5273,6 +5289,20 @@ _mausProbePunkt = karte;
             else if (a == "--ki-spielstand-alt") MapEntityLayer.KiSpielstandAlt = true;
             else if (a == "--ki-wegkasten-berichtigt") MapEntityLayer.KiWegkastenBerichtigt = true;
             else if (a == "--ki-wegende-berichtigt") MapEntityLayer.KiWegendeBerichtigt = true;
+            // ⭐ Paket W2 (22.10.2026, bug-626..630): Sektortafeln aus AIxx.CWI samt
+            // Brueckennachfuehrung, Produktionsfreigabe sec59, Modus 20, CPU1.
+            else if (a == "--ki-tafeln-gerechnet") MapEntityLayer.KiTafelnGerechnet = true;
+            else if (a == "--ki-brueckennachfuehrung-aus") MapEntityLayer.KiBrueckennachfuehrungAus = true;
+            else if (a == "--ki-tafeln-check") _kiTafelnCheck = true;
+            else if (a == "--ki-produktionsfreigabe-aus") MapEntityLayer.KiProduktionsfreigabeAus = true;
+            else if (a == "--ki-produktionsfreigabe") MapEntityLayer.KiProduktionsfreigabeAus = false;   // W2: vorerst Standard aus
+            else if (a == "--ki-routenfilter-aus") MapEntityLayer.KiRoutenfilterAus = true;
+            else if (a == "--ki-modus20-aus") MapEntityLayer.KiModus20Aus = true;
+            else if (a == "--ki-modus20") MapEntityLayer.KiModus20Aus = false;   // W2: vorerst Standard aus
+            else if (a == "--ki-aufnahme-standort") MapEntityLayer.KiAufnahmeStandort = true;
+            else if (a == "--ki-cpu1-nullen-alt") MapEntityLayer.KiCpu1NullenAlt = true;
+            else if (a == "--k25-ki-check") _k25KiCheck = true;
+            else if (a == "--ki-freigabe-protokoll") MapEntityLayer.KiFreigabeProtokoll = true;
             else if (a == "--ki-wegpunkte-check") _kiWegpunkteCheck = 6000;
             else if (a.StartsWith("--ki-wegpunkte-check=") &&
                      int.TryParse(a["--ki-wegpunkte-check=".Length..], out int kwp)) _kiWegpunkteCheck = kwp;

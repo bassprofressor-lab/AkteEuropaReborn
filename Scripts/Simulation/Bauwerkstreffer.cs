@@ -43,10 +43,10 @@ using Godot;
 /// <item>Die <b>Trefferzelle</b> ist die Zelle des getroffenen Ziels bzw. des
 ///   Einschlags. Das Original nimmt beim Infanterieschuss auf eine Einheit die
 ///   ZULETZT gesetzte Zelle (Nebenbefund 3.2) — nicht nachgebaut.</item>
-/// <item>Beim Abriss NICHT gebaut: die Lichtquelle (4, 80 Takte), die
-///   Bodenmarken Art 15 und die KI-Sektorkanten (<c>0x41CAD0</c>) — die
-///   Bodenmarken sind ungelesen, Lichtquelle und Sektorkanten haben wir als
-///   Mechanik noch nicht. (Die Zellhöhe der Fahrbahn wird zurückgesetzt.)</item>
+/// <item>Beim Abriss NICHT gebaut: die Bodenmarken Art 15 (ungelesen). Die
+///   Lichtquelle kam am 04.10.2026 dazu (bug-434), die KI-Sektorkanten
+///   (<c>0x41CAD0</c>) am 22.10.2026 (Paket W2, bug-627, Simulation/KiMarschwege.cs).
+///   (Die Zellhöhe der Fahrbahn wird zurückgesetzt.)</item>
 /// <item>Das Geländer einer beschädigten KARTENbrücke zeichnen wir flach im
 ///   Bodendurchgang mit, statt im Zeilenfach — die Kacheln sind dieselben.</item>
 /// </list>
@@ -260,6 +260,9 @@ public partial class MapEntityLayer
         }
         _stege.Remove(st);                                                   // +0x12 := 0
         BrueckenAbgerissen++;
+        // ⭐ 22.10.2026 (Paket W2, bug-627) — die KI-Sektorkanten: 0x41CAD0 @0x4CB889,
+        // nach sec20 := 0. Simulation/KiMarschwege.cs.
+        KiBrueckeGeaendert($"Bruecke Platz {st.Slot} abgerissen");
         GD.Print($"bruecke: Bruecke Platz {st.Slot} ({e.X},{e.Y}) {(senk ? "senkrecht" : "waagerecht")} "
                + $"eingestuerzt — {st.Zellen.Count} Zellen, {weg} Einheiten verschwunden, Truemmer {truemmer}");
         QueueRedraw();

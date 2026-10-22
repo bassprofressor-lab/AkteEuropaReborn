@@ -67,6 +67,7 @@ public partial class MapEntityLayer : Node2D
         public int PlanNoBase;                     // »AI: production base: 255«
         public int PlanBroke;                      // »Sources check« nicht bestanden
         public int PlanBusy;                       // die Basis baut schon (unsere Setzung)
+        public int PlanGesperrt;                   // Paket W2: Freigabe sec59 == 0 (C 0x4BB9BB)
         public int PlanOther;                      // Zeilenart 2 — auch im Original nichts
 
         // und die von build_in_airport @0x4BB3D0, genauso getrennt (11.08.2026)
@@ -543,7 +544,8 @@ public partial class MapEntityLayer : Node2D
         // 0x41C6C0) — im Original beim Kartenladen (0x41CB00 -> 0x41C850), hier nach
         // dem Aufstellen, auf allen Maschinen am selben Punkt. Simulation/KiMarschwege.cs.
         KiSektorTafelnBauen();
-        GD.Print($"KI-Sektortafeln: {KiTafelSuchen} Suchen in {KiTafelMs} ms" +
+        GD.Print($"KI-Sektortafeln: {KiTafelQuelle}; {KiTafelSuchen} Suchen in {KiTafelMs} ms, " +
+                 $"Brueckensaetze geoeffnet {KiBrueckenGeoeffnet}" +
                  (KiSektorankerAlt ? "  (--ki-sektoranker-alt: Sektormitte, alles verbunden)" : ""));
         return human;
     }
@@ -1152,7 +1154,8 @@ public partial class MapEntityLayer : Node2D
                       $"[{string.Join(", ", a.PlanNames)}]" +
                       $"; {AiBaseCount(a.Player)} Basen" +
                       $"; ohne Basis {a.PlanNoBase}x, Lager leer {a.PlanBroke}x, " +
-                      $"Basis baut schon {a.PlanBusy}x, leere Zeilenart {a.PlanOther}x" +
+                      $"Basis baut schon {a.PlanBusy}x, leere Zeilenart {a.PlanOther}x, " +
+                      $"ohne Freigabe {a.PlanGesperrt}x" +
                       (a.PlanUnmatched.Count > 0
                           ? $", Entwurf unbekannt {a.PlanMissed}x: " +
                             string.Join(",", a.PlanUnmatched)
@@ -1384,6 +1387,16 @@ public partial class MapEntityLayer : Node2D
             // Ruf hinter der Sperre und nicht davor.
             // Siehe Simulation/Transportroute.cs.
             KiTransportrouten(a.Player);
+            // Paket W2: --ki-freigabe-protokoll — je KI-Spieler alle 1000 Originaltakte
+            // Freigabe sec59, Zaehler sec58, Wagen (nur Messung).
+            if (KiFreigabeProtokoll && a.Player is >= 0 and < 8 && _origTicks / 1000 != _kiProtokollTakt[a.Player])
+            {
+                _kiProtokollTakt[a.Player] = _origTicks / 1000;
+                int wagen = 0;
+                foreach (var w in _entities) if (!w.Dead && w.Owner == a.Player && IstTransporter(w)) wagen++;
+                GD.Print($"ki-freigabe: Takt {_origTicks} P{a.Player} Freigabe {(KiProduktionFrei(a.Player) ? 1 : 0)} " +
+                         $"Zaehler {KiProgrammZaehler(a.Player)} Wagen {wagen} aus dem Programm {a.FromPlan}");
+            }
 
             if (!InCampaign)
             {
@@ -2148,6 +2161,23 @@ public partial class MapEntityLayer : Node2D
     private void AiProducePlanStep(AiPlayer a)
     {
         if (_designs == null || a.Plan == null || a.Plan.Count == 0) return;
+        if (a.Player is >= 0 and < 8 && _kiPcGeladen[a.Player] >= 0)
+        { a.Pc = _kiPcGeladen[a.Player]; _kiPcGeladen[a.Player] = -1; }   // Spielstand (sec58)
+
+        // ⭐ Paket W2 (22.10.2026, bug-628) — DIE PRODUKTIONSFREIGABE sec59,
+        // C 0x4BB9BB: `mov al,[ebx+0xB46950] / test / jne` — bei 0 »AI: no
+        // production - no transport« und zurueck, VOR dem Zeilenzugriff und VOR
+        // pc++ (0x4BBA4D): der Zaehler bleibt stehen. Die Freigabe schreibt allein
+        // die Transportlogik (Transportroute.cs, KiTransportrouten). Gemessen an
+        // K25 (berichte/k25-gruppenbildung-opus.md §3.2): P2 enabled 0 und pc 0 in
+        // 5/5 Originalstaenden. Gegenschalter --ki-produktionsfreigabe-aus; unter
+        // --keine-transportrouten gibt es niemanden, der freigibt — dann gilt der
+        // alte Weg (UNSERE SETZUNG).
+        if (!KiProduktionsfreigabeAus && !KeineTransportrouten && !KiProduktionFrei(a.Player))
+        {
+            a.PlanGesperrt++;
+            return;
+        }
 
         var (kind, what) = a.Plan[a.Pc % a.Plan.Count];
         a.Pc = (a.Pc + 1) % a.Plan.Count;   // der Zaehler laeuft weiter, egal was folgt
@@ -2229,8 +2259,24 @@ public partial class MapEntityLayer : Node2D
             int wache = 0;
             while (b.Depot.Count > 0 && wache++ < DepotSlots)
             {
+                int neuIdx = _entities.Count;
                 if (!SendOutOfDepot(b, 0)) { AiDepotStuck++; break; }
                 AiDepotSent++;
+                // ⭐ Paket W2 (22.10.2026, bug-629) — MODUS 20 FUER KI-TRANSPORTER.
+                // build_in_base C 0x4BB1E0 (F 0x4BACE0) setzt nach dem Aufstellen
+                // (0x401749) `CPU0 := 0x14` (C @0x4BB32B, F @0x4BAE2B) und gleich
+                // wieder 0, wenn +0x0E != 0x47 (kein Transporter). Die
+                // Zustandsmaschine (0x4BBB80) kennt nur die Arme 0..3: ein Wagen in
+                // Modus 20 wird nie Kandidat und zaehlt nicht in »belegt«. Gemessen:
+                // alle 16 P2-Transporter in 3/5/7/10.DM tragen CPU0 20
+                // (berichte/k25-gruppenbildung-opus.md §3.3).
+                // ⚠ UNSERE SETZUNG: das Original stellt die Einheit beim Bau auf,
+                // wir beim Aussenden aus dem Depot — gesetzt wird darum hier, und
+                // nur fuer die BASIS (Art 1, »build_in_base«). Die Baeume
+                // build_in_airport und der Fabrikbau (Gefecht, unsere KI) sind
+                // nicht gelesen. CPU1 bleibt, wie es ist (das Original schreibt
+                // nur CPU0). Gegenschalter --ki-modus20-aus.
+                if (neuIdx < _entities.Count) KiModus20Setzen(b, _entities[neuIdx]);
             }
             // ⭐ 30.08.2026 — und dasselbe fuer die HEREINGEFAHRENEN. Ohne
             // diese Schleife waere die Einfahrt fuer die KI eine Falle: eine
@@ -2253,6 +2299,39 @@ public partial class MapEntityLayer : Node2D
     /// nicht von »die KI baut und alles bleibt liegen« zu unterscheiden — genau
     /// das war der gemeldete Fehler.</summary>
     public int AiDepotSent, AiDepotStuck;
+
+    /// <summary><c>--ki-modus20-aus</c> (Paket W2, bug-629): ein KI-Transporter aus der
+    /// Basis bleibt Modus 0 (Stand bis Paket W).
+    /// ⚠ 22.10.2026: vorerst STANDARD AUS (= true) wie die Produktionsfreigabe —
+    /// mit Modus 20 faehrt P3 auf K26 schon bei 143 s mit 3 Einheiten los, die
+    /// Einnahme von Myre dauert dann 266 s statt 23 s (--ki-einnahme-check=450
+    /// DURCHGEFALLEN). Erst klaeren, dann einschalten mit <c>--ki-modus20</c>.</summary>
+    public static bool KiModus20Aus = true;
+
+    /// <summary><c>--ki-freigabe-protokoll</c> (Paket W2): Messzeile je KI-Spieler und 1000 Takte.</summary>
+    public static bool KiFreigabeProtokoll;
+    private readonly int[] _kiProtokollTakt = { -1, -1, -1, -1, -1, -1, -1, -1 };
+
+    /// <summary>Wie oft ein KI-Transporter Modus 20 bekam.</summary>
+    public static int KiModus20Gesetzt;
+
+    /// <summary>
+    /// Modus 20 setzen (build_in_base C @0x4BB32B / F @0x4BAE2B): eine Einheit, die
+    /// die BASIS (Art 1) eines KI-Spielers fertig hat, bekommt CPU0 20, wenn sie ein
+    /// Transporter ist (+0x0E == 0x47). Gerufen beim Aussenden — aus der
+    /// Fertigstellung (bug-462, <c>NeubauInListe</c>) und aus <see cref="AiEmptyDepots"/>.
+    /// ⚠ UNSERE SETZUNG: »KI-Spieler« = steht in <c>_ai</c>; der Mensch hat kein
+    /// build_in_base.
+    /// </summary>
+    private void KiModus20Setzen(Entity basis, Entity? neu)
+    {
+        if (KiModus20Aus || neu == null || basis.BType != 1) return;
+        bool ki = false;
+        foreach (var a in _ai) if (a.Player == basis.Owner) { ki = true; break; }
+        if (!ki || !IstTransporter(neu)) return;
+        neu.AiCpu0 = 20;
+        KiModus20Gesetzt++;
+    }
 
     // ================= Zeilenart 1: die Flugzeuge ============================
     //

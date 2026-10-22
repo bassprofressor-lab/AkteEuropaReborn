@@ -82,18 +82,150 @@ public partial class MapEntityLayer
         (4, 4), (12, 4), (20, 4), (4, 12), (12, 12), (20, 12), (4, 20), (12, 20), (20, 20),
     };
 
+    // ---- W2 (22.10.2026, bug-626): die Tafeln aus AIxx.CWI ----------------------
+
+    /// <summary><c>--ki-tafeln-gerechnet</c>: die Tafeln IMMER zur Laufzeit rechnen
+    /// (Stand Paket W), auch wenn eine <c>AIxx.CWI</c> vorliegt.</summary>
+    public static bool KiTafelnGerechnet;
+
+    /// <summary><c>--ki-brueckennachfuehrung-aus</c>: <c>0x41CAD0</c> läuft nur beim
+    /// Laden, nicht beim Bauen/Abreißen einer Brücke — das Nullmodell des
+    /// Brückenfalls in <c>--ki-tafeln-check</c>.</summary>
+    public static bool KiBrueckennachfuehrungAus;
+
+    /// <summary><c>0x542330</c>: 400 Brückensätze zu 5 Byte (Spalte, Zeile, Sektor x,
+    /// Sektor y, Richtung 0 = nach x+1 / 1 = nach y+1). Nur aus der Datei; eine
+    /// gerechnete Karte hat keine (<c>0x41C850</c> nullt sie).</summary>
+    private readonly byte[] _kiBrueckenSaetze = new byte[0x7D0];
+
+    /// <summary>Woher die Tafeln der laufenden Karte stammen: <c>AIxx.CWI</c> (mit
+    /// Pfad) oder »gerechnet«. Für Startzeile und Prüfstand.</summary>
+    public string KiTafelQuelle = "";
+
+    /// <summary>Die Missionsnummer, nach der die Datei gesucht wurde (−1 = keine).</summary>
+    public int KiTafelNummer = -1;
+
+    /// <summary>Zähler: Nachführungen (<c>0x41CAD0</c>) und dabei geöffnete Verbindungen.</summary>
+    public int KiBrueckenNachgefuehrt, KiBrueckenGeoeffnet;
+
     /// <summary>
-    /// <b>Die Sektortafeln bauen</b> — der Nachbau von <c>0x41C850</c> (C) beim
-    /// Kartenladen, wenn keine <c>AIxx.CWI</c> vorliegt.
+    /// <b>Die Sektortafeln bauen</b> — C <c>0x41CB00</c> beim Kartenladen:
+    /// <code>
+    ///   name := "ai" + (NN &lt; 10 ? "0" : "") + NN + ".cwi"     ; NN = word[0x539934]
+    ///   Datei da (erst bloss, dann X:\data\)?                  ; 0x428FD0, 0x4F8188
+    ///     ja:   fread 0x7D0 -&gt; 0x542330 (Brueckensaetze)       ; @0x41CCDC
+    ///           fread 0x1E4 -&gt; 0x541F60 (Anker)                ; @0x41CCF1
+    ///           fread 0x1E4 -&gt; 0x542148 (Verbindungen+Sicherung); @0x41CD06
+    ///     nein: 0x41C850 (rechnen, Brueckensaetze := 0)        ; @0x41CCC8
+    ///   0x41CAD0                                               ; @0x41CD17
+    /// </code>
+    /// <para>⭐ Seit Paket W2 (Spielerentscheidung 22.10.2026) wie im Original: die Datei
+    /// zuerst, die Laufzeitrechnung (<see cref="KiSektorTafelnRechnen"/>) nur, wenn keine
+    /// vorliegt — alte Datenstände ohne eingelesene <c>AIxx.CWI</c>, oder
+    /// <c>--ki-tafeln-gerechnet</c>. Gesucht wird über <see cref="Core.Content.Path"/>
+    /// (<c>user://data/DATA</c>, sonst der Entwicklungsbaum).</para>
+    /// <para>⚠ UNSERE SETZUNG: NN ist die Kampagnenmission
+    /// (<see cref="UI.SkirmishSetup.CampaignMission"/>); ausserhalb der Kampagne
+    /// (Gefecht, Demo) wird gerechnet. Die Tafeln braucht nur die Kampagnen-KI; das
+    /// Gefecht nimmt AiFight. Im Gefecht laufen sie also nie in den Gleichschritt.</para>
+    /// </summary>
+    public void KiSektorTafelnBauen()
+    {
+        _kiTafelnDa = true;
+        Array.Clear(_kiAnker);
+        Array.Clear(_kiVerb);
+        Array.Clear(_kiBrueckenSaetze);
+        KiTafelSuchen = 0;
+        KiBrueckenNachgefuehrt = KiBrueckenGeoeffnet = 0;
+        KiTafelNummer = InCampaign ? UI.SkirmishSetup.CampaignMission : -1;
+        if (!KiTafelnGerechnet && !KiSektorankerAlt && KiCwiLaden(KiTafelNummer))
+        {
+            KiTafelMs = 0;
+        }
+        else
+        {
+            KiSektorTafelnRechnen();
+            KiTafelQuelle = KiSektorankerAlt ? "gerechnet (--ki-sektoranker-alt)"
+                          : KiTafelnGerechnet ? "gerechnet (--ki-tafeln-gerechnet)"
+                          : $"gerechnet (keine AI{Math.Max(0, KiTafelNummer):00}.CWI)";
+        }
+        KiBrueckenNachfuehren();                                           // @0x41CD17
+    }
+
+    /// <summary>Die Datei lesen — die drei <c>fread</c> von <c>0x41CB00</c>.</summary>
+    private bool KiCwiLaden(int nummer)
+    {
+        if (nummer < 0 || nummer > 99) return false;
+        string rel = $"DATA/AI{nummer:00}.CWI";
+        string pfad = Core.Content.Path(rel);
+        if (!FileAccess.FileExists(pfad)) return false;
+        var b = FileAccess.GetFileAsBytes(pfad);
+        if (b == null || b.Length != Import.ContentBuilder.KiTafelLaenge)
+        {
+            GD.PrintErr($"KI-Sektortafeln: {pfad} hat {b?.Length ?? 0} Byte statt {Import.ContentBuilder.KiTafelLaenge} — wird gerechnet");
+            return false;
+        }
+        Array.Copy(b, 0, _kiBrueckenSaetze, 0, 0x7D0);
+        Array.Copy(b, 0x7D0, _kiAnker, 0, 0x1E4);
+        Array.Copy(b, 0x7D0 + 0x1E4, _kiVerb, 0, 0x1E4);
+        KiTafelQuelle = $"AI{nummer:00}.CWI ({pfad})";
+        return true;
+    }
+
+    /// <summary>
+    /// <b>Die Brückennachführung</b> — C <c>0x41CAD0</c> → <c>0x41CA40</c>, selbst
+    /// nachgelesen (22.10.2026):
+    /// <code>
+    ///   rep movsd 0x3C + movsw : 0x54223A -&gt; 0x542148      ; Sicherung zurueck (0xF2 B)
+    ///   fuer i = 0..399:                                     ; cmp cx,0x190
+    ///     s := 0x542330 + 5i ; s[0] == 0 -&gt; naechster         ; @0x41CA52
+    ///     lage := byte[0x542E18 + s[0]·256 + s[1]]           ; sec20, Spalte·256 + Zeile
+    ///     100 &lt;= lage &lt; 200 -&gt; byte[0x542148 + 2·(11·s[2] + s[3]) + s[4]] := 1   ; @0x41CA94
+    /// </code>
+    /// <para>Gerufen beim Kartenladen (@0x41CD17), am Ende von »Erase bridge«
+    /// <c>0x4CB0A0</c> (@0x4CB889, nach <c>sec20 := 0</c>) und am Ende des Brückenbaus
+    /// <c>0x4CC280</c> (@0x4CCA8F, nach <c>sec17 +0x12 := 1</c>). Rampen (Lage 200+)
+    /// öffnen nichts. Eine Brücke öffnet also nur, solange sie STEHT; die Datei trägt
+    /// die Grundtafel ohne Brücken.</para>
+    /// <para>Bei uns ist sec20 für Lage ≥ 100 die Tafel <c>_rampen</c> (Karte:
+    /// <c>ramps</c>, Brückenbau 100 + Platz, Abriss entfernt). ⚠ UNSERE SETZUNG: ein
+    /// Satz, dessen Ziel hinter der Verbindungstafel läge (Sektor ≥ 11 oder Richtung
+    /// &gt; 1), schreibt nichts — im Original träfe er fremden Speicher.</para>
+    /// </summary>
+    private void KiBrueckenNachfuehren()
+    {
+        Array.Copy(_kiVerb, 0xF2, _kiVerb, 0, 0xF2);
+        KiBrueckenNachgefuehrt++;
+        for (int i = 0; i < 400; i++)
+        {
+            int s = 5 * i;
+            int c = _kiBrueckenSaetze[s];
+            if (c == 0) continue;
+            int r = _kiBrueckenSaetze[s + 1];
+            if (!_rampen.TryGetValue(c * 1024 + r, out int lage) || lage < 100 || lage >= 200) continue;
+            int off = 2 * (11 * _kiBrueckenSaetze[s + 2] + _kiBrueckenSaetze[s + 3]) + _kiBrueckenSaetze[s + 4];
+            if (off < 0 || off >= _kiVerb.Length) continue;
+            if (_kiVerb[off] == 0) KiBrueckenGeoeffnet++;
+            _kiVerb[off] = 1;
+        }
+    }
+
+    /// <summary>Aus Brückenbau und -abriss (<c>0x4CCA8F</c>, <c>0x4CB889</c>).</summary>
+    private void KiBrueckeGeaendert(string was)
+    {
+        if (!_kiTafelnDa || KiBrueckennachfuehrungAus) return;
+        KiBrueckenNachfuehren();
+        if (KiPruefAn || KiTafelnPruefAn) GD.Print($"KI-Sektortafeln: {was} — nachgefuehrt ({KiBrueckenNachgefuehrt}.)");
+    }
+
+    /// <summary>
+    /// <b>Die Sektortafeln rechnen</b> — der Nachbau von <c>0x41C850</c> (C), wenn keine
+    /// <c>AIxx.CWI</c> vorliegt (Paket W; seit W2 nur noch der Rückfall).
     ///
-    /// <para>⚠ UNSERE SETZUNG, benannt: Für die Karten mit <c>AIxx.CWI</c> (Missionen
-    /// 1..15, 21, 25, 26 und NET01..08) liest das Original die Tafeln aus der Datei
-    /// (<c>0x41CB00</c>, C @0x41CCDC…0x41CD06). Wir rechnen sie für JEDE Karte zur
-    /// Laufzeit, wie das Original es für die übrigen tut — <c>--ki-wegpunkte-check</c>
-    /// vergleicht das Ergebnis mit der Datei. Die Brückennachführung
-    /// (<c>0x41CAD0</c> → <c>0x41CA40</c>, Brückensätze <c>0x542330</c>) entfällt
-    /// damit: zur Laufzeit gerechnete Tafeln haben im Original auch keine Brückensätze
-    /// (<c>0x41C850</c> nullt <c>0x542330</c> vorher).</para>
+    /// <para>Im Original nullt <c>0x41C850</c> die Brückensätze <c>0x542330</c> vorher;
+    /// eine gerechnete Karte kennt also keine Brückennachführung — die beim Laden
+    /// stehenden Brücken stecken schon in der Rechnung, und <c>0x41CAD0</c> stellt bei
+    /// jedem Bau/Abriss nur die Sicherung wieder her.</para>
     ///
     /// <para>⚠ UNSERE SETZUNG: Die Suche ist die von Satz 999 (<c>push 0x3E7</c>),
     /// dessen Felder im Spiel leer sind — Klasse 0, Fahrwerk 0, also ein gewöhnliches
@@ -101,12 +233,8 @@ public partial class MapEntityLayer
     /// (<c>imap == 0xFFFE</c>, C @0x41BCD2) ist bei uns »befahrbar und unbesetzt«
     /// (<see cref="Simulation.NavGrid.ImapGanzFrei"/>).</para>
     /// </summary>
-    public void KiSektorTafelnBauen()
+    private void KiSektorTafelnRechnen()
     {
-        _kiTafelnDa = true;
-        Array.Clear(_kiAnker);
-        Array.Clear(_kiVerb);
-        KiTafelSuchen = 0;
         if (_nav == null) return;
         var uhr = System.Diagnostics.Stopwatch.StartNew();
         int w = _nav.Width, h = _nav.Height;
@@ -228,13 +356,15 @@ public partial class MapEntityLayer
     /// liest (<c>[ebp + 0x541F60]</c>, ebp = 2·(11·sx + sy)). Mit Sektoren über 10 —
     /// sie entstehen nur beim Lesen über Platz 29 hinaus — greift das Original über die
     /// Ankertafel hinaus. Nachgebaut: Anker (0..0x1E3), Verbindungen ab 0x1E8, die
-    /// Brückensätze ab 0x3D0 (bei uns leer, wie bei einer zur Laufzeit gerechneten
-    /// Karte). ⚠ UNSERE SETZUNG: alles dahinter liest 0.
+    /// Brückensätze ab 0x3D0 (seit W2 aus der <c>AIxx.CWI</c>; bei einer gerechneten
+    /// Karte 0 wie im Original). ⚠ UNSERE SETZUNG: die Lücke 0x1E4..0x1E7 und alles
+    /// hinter den Brückensätzen liest 0.
     /// </summary>
     private int KiAnkerSpeicher(int off)
     {
         if (off >= 0 && off < 0x1E4) return _kiAnker[off];
         if (off >= 0x1E8 && off < 0x1E8 + 0x1E4) return _kiVerb[off - 0x1E8];
+        if (off >= 0x3D0 && off < 0x3D0 + 0x7D0) return _kiBrueckenSaetze[off - 0x3D0];
         return 0;
     }
 
@@ -733,6 +863,13 @@ public partial class MapEntityLayer
         w.Raw("ki_wegcode", "[" + string.Join(",", _kiWegCode) + "]");
         w.Raw("ki_betriebsart", "[" + string.Join(",", _aiSec61) + "]");
         w.Raw("ki_sperre", "[" + string.Join(",", _aiSec106) + "]");
+        // ⭐ Paket W2 (bug-628): sec57 Bausperre 0xB461A0, sec58 Programmzaehler
+        // 0xB38D40 (2 B je Spieler, das Original speichert beide mit), sec59 Freigabe
+        // 0xB46950. Ohne sie sprang die Freigabe beim Laden auf 0 und der Zaehler an
+        // den Anfang. Schluessel neu im Format 3; ein Stand ohne sie laedt wie bisher.
+        w.Raw("ki_freigabe", "[" + string.Join(",", _kiProduktionFrei.Select(b => b ? 1 : 0)) + "]");
+        w.Raw("ki_bausperre", "[" + string.Join(",", Enumerable.Range(0, 8).Select(KiBausperre)) + "]");
+        w.Raw("ki_zaehler", "[" + string.Join(",", Enumerable.Range(0, 8).Select(KiProgrammZaehler)) + "]");
         w.ArrayStart("ki_ziele");
         for (int p = 0; p < 8; p++)
             foreach (var t in _missionTargets[p])
@@ -789,6 +926,29 @@ public partial class MapEntityLayer
         Bytes("ki_wegcode", _kiWegCode);
         Ints("ki_betriebsart", _aiSec61);
         Ints("ki_sperre", _aiSec106);
+        // Paket W2 (bug-628): sec57/58/59 — fehlen sie (Stand aus Paket W), bleibt
+        // der Anfangszustand (Freigabe 0, Sperre 0, Zaehler 0), wie bisher.
+        var frei = new int[8];
+        Ints("ki_freigabe", frei);
+        for (int p = 0; p < 8; p++) _kiProduktionFrei[p] = frei[p] != 0;
+        if (root.ContainsKey("ki_bausperre"))
+        {
+            var sp = new int[8];
+            Ints("ki_bausperre", sp);
+            _routeBausperre.Clear();
+            for (int p = 0; p < 8; p++) if (sp[p] != 0) _routeBausperre[p] = sp[p];
+        }
+        if (root.ContainsKey("ki_zaehler"))
+        {
+            var pc = new int[8];
+            Ints("ki_zaehler", pc);
+            for (int p = 0; p < 8; p++)
+            {
+                _kiPcGeladen[p] = pc[p];
+                foreach (var a in _ai)
+                    if (a.Player == p) { a.Pc = pc[p]; _kiPcGeladen[p] = -1; }
+            }
+        }
 
         int I(Godot.Collections.Dictionary<string, Variant> d, string k, int dflt = 0)
             => d.TryGetValue(k, out var x) ? x.AsInt32() : dflt;
@@ -829,6 +989,19 @@ public partial class MapEntityLayer
     /// <summary>Hat das letzte Laden einen KI-Teil gelesen?</summary>
     public static bool KiZustandGeladen;
 
+    /// <summary>Ein geladener Programmzähler für einen Spieler, dessen KI beim Laden
+    /// noch nicht stand (−1 = keiner); <see cref="AiProducePlanStep"/> übernimmt ihn.</summary>
+    private readonly int[] _kiPcGeladen = { -1, -1, -1, -1, -1, -1, -1, -1 };
+
+    /// <summary>sec58 — der Programmzähler <c>byte[0xB38D40 + 2p]</c> (0 ohne KI).</summary>
+    public int KiProgrammZaehler(int p)
+    {
+        if (p is < 0 or > 7) return 0;
+        if (_kiPcGeladen[p] >= 0) return _kiPcGeladen[p];
+        foreach (var a in _ai) if (a.Player == p) return a.Pc;
+        return 0;
+    }
+
     /// <summary>Für <c>--spielstand-check</c>: der KI-Zustand als Prüfzahlen.</summary>
     public string KiZustandFingerabdruck()
     {
@@ -858,7 +1031,9 @@ public partial class MapEntityLayer
         foreach (var e in _entities) if (!e.IsProp && !e.Dead) cpu += e.AiCpu0 * 31 + e.AiCpu1;
         long ba = 0;
         for (int p = 0; p < 8; p++) ba += (p + 1) * (_aiSec61[p] * 3 + _aiSec106[p]);
+        string prod = string.Join(" ", Enumerable.Range(0, 8).Select(p =>
+            $"{(_kiProduktionFrei[p] ? 1 : 0)}/{KiProgrammZaehler(p)}/{KiBausperre(p)}"));
         return $"KI: {gruppen} Gruppen, {mitglieder} Mitglieder (Pruefzahl {gzellen}, Auftraege {auftraege}), " +
-               $"{ziele} Ziele ({zpruef}), sec108 {s108}, CPU {cpu}, Betriebsart {ba}";
+               $"{ziele} Ziele ({zpruef}), sec108 {s108}, CPU {cpu}, Betriebsart {ba}, Freigabe/Zaehler/Bausperre {prod}";
     }
 }
