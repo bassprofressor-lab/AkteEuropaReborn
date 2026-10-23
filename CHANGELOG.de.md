@@ -14,11 +14,8 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
-## 0.6.11 — in Arbeit · KayelGees siebte Runde, Reapers erste, und ein Computergegner, der marschiert
+## 0.6.11 — 23.10.2026 · KayelGees siebte Runde, Reapers erste, und ein Computergegner, der marschiert
 
-> ⚠ **Noch nicht veröffentlicht.** Dieser Abschnitt beschreibt die Arbeit auf
-> 0.6.11 hin; einen Download dafür gibt es noch nicht.
->
 > **KayelGees siebte Runde und die erste Runde des neuen Testers Reaper [BFTB]
 > sind abgearbeitet.** Behoben ist jeder Punkt bis auf einen: Der Qualm an der
 > Garagentür bleibt, weil das Original genau dasselbe tut. Der Wissenschaftler

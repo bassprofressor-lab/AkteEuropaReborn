@@ -12,11 +12,8 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
-## 0.6.11 — in progress · KayelGee's seventh round, Reaper's first, and a computer opponent that marches
+## 0.6.11 — 2026-10-23 · KayelGee's seventh round, Reaper's first, and a computer opponent that marches
 
-> ⚠ **Not released yet.** This section describes the work towards 0.6.11; there
-> is no download for it yet.
->
 > **KayelGee's seventh round and the first round from a new tester, Reaper
 > [BFTB], are worked through.** Every point is fixed except one: the smoke at
 > the garage door stays, because the original does exactly the same. The
