@@ -1516,6 +1516,7 @@ public partial class MapViewer : Node2D
         // ⭐ 29.10.2026 — Paket P1 (Testerrunde 0.6.12), Rendering/PaketP1Lauf.cs.
         // ⭐ 29.10.2026 — Paket P4 Kampf (Testerrunde 0.6.12), Rendering/PaketP4Lauf.cs.
         if (P4Pruefstaende()) return;
+        if (P5Pruefstaende()) return;      // Paket P5 Tueren, Rendering/PaketP5Lauf.cs
         if (P1Pruefstaende()) return;
         if (P3Pruefstaende()) return;      // Paket P3 Bruecken, Rendering/PaketP3Lauf.cs
         if (BedienungPruefstaende()) return;
@@ -4086,6 +4087,8 @@ _mausProbePunkt = karte;
             if (P1Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P4 Kampf (bug-645/646/658/664/669), Rendering/PaketP4Lauf.cs.
             if (P4Schalter(a)) continue;
+            // ⭐ 29.10.2026 — Paket P5 Tueren (bug-648/657/660), Rendering/PaketP5Lauf.cs.
+            if (P5Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P2 (bug-650/665), Rendering/PaketP2Lauf.cs.
             if (P2Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P3 Bruecken (bug-643/644/661/662), Rendering/PaketP3Lauf.cs.

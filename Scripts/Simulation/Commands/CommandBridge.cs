@@ -657,6 +657,11 @@ public partial class MapEntityLayer
         if (cells.Count == 0) return false;
 
         int n = 0;
+        // ⭐ 29.10.2026, bug-660 K18 (P5) — ⚠ UNSERE SETZUNG: nicht mehr alle auf
+        // DIESELBE Zelle. Der naechste bekommt die Einnahmezelle, jeder weitere eine freie
+        // Nachbarzelle vor dem Gebaeude (TuerTrupp.cs EinnehmerNachbarzelle). Reihenfolge:
+        // Abstand zur Zelle, dann Platz. Gegenschalter --einnahme-ein-ziel-alt.
+        var plan = new List<(int I, Vector2I Best, float D)>();
         foreach (int i in _sel)
         {
             var u = _entities[i];
@@ -667,6 +672,20 @@ public partial class MapEntityLayer
             {
                 float d = new Vector2(c.X - u.Col, c.Y - u.Row).LengthSquared();
                 if (d < bd) { bd = d; best = c; }
+            }
+            plan.Add((i, best, bd));
+        }
+        if (!EinnahmeEinZielAlt)
+            plan.Sort((p, q) => p.D != q.D ? p.D.CompareTo(q.D) : _entities[p.I].Slot.CompareTo(_entities[q.I].Slot));
+        var vergeben = new HashSet<Vector2I>();
+        foreach (var (i, best0, _) in plan)
+        {
+            var best = best0;
+            if (!EinnahmeEinZielAlt)
+            {
+                if (vergeben.Contains(best) && EinnehmerNachbarzelle(b, best, i, vergeben) is { } nb)
+                { best = nb; EinnehmerVerteilt++; }
+                vergeben.Add(best);
             }
             // ⚠ Ueber den gewoehnlichen Bewegungsbefehl, EINE Einheit je Aufruf:
             // PostMove nimmt sonst die ganze Auswahl und streut sie im Umkreis

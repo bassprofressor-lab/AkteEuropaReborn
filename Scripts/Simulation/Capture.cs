@@ -463,6 +463,10 @@ public partial class MapEntityLayer : Node2D
         if (_nav == null || b.DoorCells.Count == 0) return;
         int tx = b.Col + b.DoorCol, ty = b.Row + b.DoorRow;
         VorplatzGeschickt = 0; VorplatzGefunden = 0;
+        // ⭐ 29.10.2026, bug-660 (P5): alle FAHRZEUGE je Zelle, nicht nur der Stempeltraeger,
+        // und kein Fussvolk (0x43D070: imap/1000 == Eindringling). TuerTrupp.cs,
+        // Gegenschalter --vorplatz-stempel-alt.
+        if (!VorplatzStempelAlt) { VorplatzRaeumenAlle(b, who, tx, ty); return; }
         for (int x = tx - 2; x <= tx + 2; x++)
             for (int y = ty + 1; y <= ty + 4; y++)
             {

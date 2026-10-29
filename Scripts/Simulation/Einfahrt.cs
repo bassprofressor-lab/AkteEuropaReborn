@@ -368,9 +368,22 @@ public partial class MapEntityLayer : Node2D
                     else if (einheit && auf!.Ukol == UkolAngemeldet) z = TorSchliesstVon;
                 }
                 b.TorZustand[d] = z;
+                if (Torlog) TorlogNotieren(b, d, z, dc, dr, occ);   // bug-657, TuerTrupp.cs
 
                 // ---- ab hier nur TUER 0, wie im Original -------------------
-                if (d != 0 || !einheit) continue;
+                if (d != 0) continue;
+                // ⭐ 29.10.2026, bug-648 (P5): der Infanteriearm 0x43D661 — ALLE ruhenden
+                // Soldaten auf Tuer 0, ohne Anmeldung und ohne Tor (TuerTrupp.cs).
+                if (!TuerTruppAlt)
+                {
+                    TuerTruppArm(b, dc, dr);
+                    occ = _nav.OccupantAt(dc, dr);
+                    auf = occ >= 0 && occ < _entities.Count ? _entities[occ] : null;
+                    einheit = auf != null && !auf.IsBuilding && !auf.IsProp && !auf.Dead;
+                    // @0x43D57E: angemeldet (48) wird nur ein FAHRZEUG (imap < 0x1F40)
+                    if (einheit && auf!.Infantry >= 0) continue;
+                }
+                if (!einheit) continue;
                 var u = auf!;
 
                 // ⚠ UNSERE Ableitung von UKOL 0 — siehe Kopfkommentar.
