@@ -934,7 +934,9 @@ public sealed class ContentBuilder
                   + $"{baker.SyntheseBoden} Hintergrund, {baker.NebelBoden.Count} Nebeldecke"
                   // Die Gegenprobe zur Arttafel-Aenderung vom 28.08.:
                   // ueber alle Karten genau 20, alle auf map_16.
-                  + $", {baker.KohleAusArttafel} Brandkacheln aus der Arttafel");
+                  + $", {baker.KohleAusArttafel} Brandkacheln aus der Arttafel"
+                  // bug-644: Fahrbahnzellen der Kartenbruecken, nicht mehr gebacken.
+                  + $", {baker.BrueckeLebendZellen} Brueckenfahrbahnzellen lebend");
             }
             catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
         }

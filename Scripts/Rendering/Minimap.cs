@@ -126,6 +126,10 @@ public partial class Minimap : Control
     /// about how long an alarm should last.</summary>
     public const float AlarmSeconds = 12f;
 
+    /// <summary>bug-644: lebend gezeichnete Bauwerkskacheln (Weltrechteck, Quelle in der
+    /// Objektebene) — die Fahrbahn der Kartenbruecken.</summary>
+    public Func<List<(Rect2 Ziel, Rect2 Quelle)>>? Bauwerke;
+
     public void Setup(Texture2D terrain, Vector2 mapPixels,
                       Func<List<(Vector2 Pos, int Owner, bool Building)>> dots,
                       // ⭐ 20.09.2026 — die drei sind jetzt WEGLASSBAR. Der
@@ -221,6 +225,16 @@ public partial class Minimap : Control
         // Streifen mit den verkohlten Baeumen (MapBaker.BurntAtlas), der sonst
         // in die Uebersicht gestaucht wird.
         var obj = OhneObjektebene ? null : _objekte?.Invoke();
+        // ⭐ 29.10.2026, bug-644 — die Fahrbahn der Kartenbruecken steht nicht mehr im
+        // Kartenbild, sie kommt lebend aus der Objektebene (Simulation/KartenbrueckeLebend.cs).
+        var objB = _objekte?.Invoke();
+        if (objB != null && Bauwerke != null && _mapPixels.X > 0 && _mapPixels.Y > 0)
+        {
+            var f = new Vector2(Size.X / _mapPixels.X, Size.Y / _mapPixels.Y);
+            foreach (var (ziel, quelle) in Bauwerke())
+                DrawTextureRectRegion(objB, new Rect2(ziel.Position * f, ziel.Size * f), quelle,
+                                      new Color(0.75f, 0.78f, 0.8f));
+        }
         if (obj != null && _mapPixels.X > 0 && _mapPixels.Y > 0)
         {
             DrawTextureRectRegion(obj, full, new Rect2(Vector2.Zero, _mapPixels),

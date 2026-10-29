@@ -443,7 +443,9 @@ public partial class MapEntityLayer
         // ⭐ 13.09.2026 — die BRUECKE (Bauart 5) geht ab hier ihren eigenen
         // Weg: sie prueft anders, sie baut anders, und sie dauert nicht
         // (Simulation/Pionierbruecke.cs, bug-245).
-        if (e.Bauart == BauartBruecke) { BrueckeFertigstellen(idx, e); return; }
+        // ⭐ 29.10.2026, bug-662 — mit Arbeitszeit und zweiter Probe wie 0x409460
+        // (Pionierbruecke.cs BrueckeArbeitTick; --bruecke-sofort = der Stand davor).
+        if (e.Bauart == BauartBruecke) { BrueckeArbeitTick(idx, e); return; }
         bool ausbessern = e.Bauart == 4;
         // ⭐ DIE BAUPRUEFUNG, nicht die Vorschauregel — siehe MoleBauOk.
         if (!ausbessern && !MoleBauOk(e.Col, e.Row, idx))

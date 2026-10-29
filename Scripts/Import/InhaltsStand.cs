@@ -171,10 +171,14 @@ public static class InhaltsStand
     /// jetzt die KI-Sektortafeln <c>DATA/AIxx.CWI</c> mit ab
     /// (<see cref="ContentBuilder"/>.KiTafelnKopieren). Ohne sie rechnet die KI die
     /// Tafeln zur Laufzeit (Rueckfall, wie das Original ohne Datei).</para>
+    /// <para>⭐ 29.10.2026 (Paket P3, bug-644 K2): <b>karten → 3</b> — der Backofen laesst die
+    /// Fahrbahn der Kartenbruecken (Lage 100..199) im Bodenbild weg, sie wird lebend
+    /// gezeichnet (Simulation/KartenbrueckeLebend.cs). Ohne Neueinlesen bleibt nach einem
+    /// Brueckenabriss der Streifen stehen.</para>
     /// </summary>
     public static readonly IReadOnlyDictionary<string, int> Noetig = new Dictionary<string, int>
     {
-        ["karten"] = 2,
+        ["karten"] = 3,
         ["spielstaende"] = 1,
         ["gebaeude"] = 1,
         ["kachelsaetze"] = 1,

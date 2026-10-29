@@ -1515,6 +1515,7 @@ public partial class MapViewer : Node2D
         // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
         // ⭐ 29.10.2026 — Paket P1 (Testerrunde 0.6.12), Rendering/PaketP1Lauf.cs.
         if (P1Pruefstaende()) return;
+        if (P3Pruefstaende()) return;      // Paket P3 Bruecken, Rendering/PaketP3Lauf.cs
         if (BedienungPruefstaende()) return;
         // ⭐ 04.10.2026 — Paket 2 Infofenster (bug-420..424), Rendering/InfofensterLauf.cs.
         if (InfofensterPruefstand()) return;
@@ -4083,6 +4084,8 @@ _mausProbePunkt = karte;
             if (P1Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P2 (bug-650/665), Rendering/PaketP2Lauf.cs.
             if (P2Schalter(a)) continue;
+            // ⭐ 29.10.2026 — Paket P3 Bruecken (bug-643/644/661/662), Rendering/PaketP3Lauf.cs.
+            if (P3Schalter(a)) continue;
             if (BedienungSchalter(a)) continue;
             // ⭐ 04.10.2026 — Paket 2 Infofenster (bug-420..424), Rendering/InfofensterLauf.cs.
             if (InfofensterSchalter(a)) continue;
@@ -7725,6 +7728,7 @@ _mausProbePunkt = karte;
             // Die Objektebene gehoert mit in die Uebersicht - sonst liegt unter
             // jedem Kulissenbau die blanke Flutfuellung. Herleitung: Minimap._objekte.
             () => _entities.ObjektEbene);
+        _minimap.Bauwerke = _entities.KartenfahrbahnUebersicht;   // bug-644, Simulation/KartenbrueckeLebend.cs
         PlaceMinimap();
         GetViewport().SizeChanged += PlaceMinimap;
     }
@@ -7904,6 +7908,7 @@ _mausProbePunkt = karte;
                 _entities.FogTextureUebersicht,
                 _entities.MinimapHome,
                 () => _entities.ObjektEbene);
+        m.Bauwerke = _entities.KartenfahrbahnUebersicht;   // bug-644
     }
 
     /// <summary>Den Kartenschirm an dieser Bildschirmstelle oeffnen. Das

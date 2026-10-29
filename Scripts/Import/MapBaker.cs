@@ -98,6 +98,10 @@ public sealed class MapBaker
     /// greift - steht sie auf 0, ist Sektion 20 nicht da.</summary>
     public int BefahrbarFlach;
 
+    /// <summary>bug-644: Fahrbahnzellen von Kartenbruecken (Lage 100..199), die NICHT
+    /// mehr gebacken, sondern zur Laufzeit lebend gezeichnet werden.</summary>
+    public int BrueckeLebendZellen;
+
     /// <summary>Wieviele Zellen als GELAENDER erkannt wurden (imap 0xFFFF mit
     /// Lagenbyte >= 100) und damit ins Zeilenfach gehoeren statt flach gebacken
     /// zu werden. ⚠ Steht sie auf 0, waehrend BefahrbarFlach > 0 ist, dann
@@ -1014,8 +1018,17 @@ public sealed class MapBaker
                                 slot));
                     }
                 }
+                // ⭐⭐ 29.10.2026, bug-644 (KayelGee R8 K2) — DIE FAHRBAHN EINER
+                // KARTENBRUECKE (Lage 100..199) WIRD NICHT MEHR GEBACKEN. Ihr Bild ragte
+                // ueber das Satzrechteck hinaus (M4: 8 px), und nach dem Abriss blieb
+                // dieser Ueberstand im Bodenbild stehen. Das Original malt jede Zelle je
+                // Bild aus ihrem Kachelwort; wir malen die Fahrbahn jetzt lebend aus dem
+                // Streifen (Simulation/KartenbrueckeLebend.cs). Hier bleibt darunter die
+                // basis-Fuellung. Rampen (200+) bleiben gebacken.
+                bool brueckeLebend = befahrbar && lageC >= 100 && lageC < 200;
+                if (brueckeLebend) BrueckeLebendZellen++;
                 if (!isObj) Blit(Frame(code[i]), c, r, elev[i]);
-                else if (befahrbar || eigenFlach)
+                else if ((befahrbar || eigenFlach) && !brueckeLebend)
                 {
                     // ⚠ Die Bildbank waehlt der CODE, nicht die Frage, ob die
                     // Zelle befahrbar ist — wie im Original @0x4B428F.
@@ -1248,6 +1261,11 @@ public sealed class MapBaker
                                      lage));
                         continue;
                     }
+                    // ⭐ 29.10.2026, bug-644 — und HIER ein zweites Mal: was nicht ins
+                    // Zeilenfach geht, wurde flach nachgebacken, darunter die Fahrbahn der
+                    // Kartenbruecken. Sie wird lebend gezeichnet (siehe Durchgang A/B).
+                    // ⚠ Der erste Neuexport ohne diese Zeile ergab ein BYTEGLEICHES map_04.png.
+                    if (MapForest.ImFlachenDurchgang(imap, lage) && lage >= 100 && lage < 200) continue;
                     Blit(sp, c, r, elev[i]);
                 }
 

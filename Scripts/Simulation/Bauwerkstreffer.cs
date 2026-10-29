@@ -151,6 +151,8 @@ public partial class MapEntityLayer
         _stege.RemoveAll(s => s.Karte);
         _bauwerkKachel.Clear();
         _bauwerkUeberdeckt.Clear();
+        _kartenFahrbahn.Clear();
+        GelaenderGestempelt = 0; BrueckenMitEckenAusDatei = 0;
         foreach (var b in saetze)
         {
             var st = new Steg
@@ -160,10 +162,31 @@ public partial class MapEntityLayer
                 Tp = b.Hp, Feld = b.Feld,
             };
             foreach (var (z, s, _) in SatzZellen(st))
+            {
                 st.Zellen.Add((z, s == 1, Simulation.NavGrid.Ground.Free));
+                // bug-644 (K2): die Fahrbahn wird lebend gezeichnet (Simulation/KartenbrueckeLebend.cs).
+                if (s == 1) _kartenFahrbahn.Add((z, st.Slot, ElevOf(z.X, z.Y)));
+            }
             _stege.Add(st);
+            // bug-643 (K1): Wie viele Bruecken tragen die Ecken 9…12 schon in der Datei?
+            // (Lesung: 18 von 110.) Dann der Stempel 0x421F90 @0x41F43A.
+            if (_nav != null)
+            {
+                var ecke = BrueckenEcke(st);
+                if (_nav.FlagAt(ecke.X, ecke.Y) == 9) BrueckenMitEckenAusDatei++;
+                GelaenderGestempelt += _nav.GelaenderStempeln(ecke.X, ecke.Y, st.KartenSenkrecht, st.Wasser);
+            }
         }
+        int anzahl = _stege.FindAll(x => x.Karte).Count;
+        if (_nav != null && anzahl > 0)
+            GD.Print($"bruecken: Gelaenderstempel 0x421F90 — {GelaenderGestempelt} Zellen, "
+                   + $"{BrueckenMitEckenAusDatei} von {anzahl} Bruecken trugen die Ecken schon in der Datei"
+                   + (Simulation.NavGrid.GelaenderStempelAlt ? " (--gelaender-stempel-alt: NICHT gestempelt)" : ""));
     }
+
+    /// <summary>bug-643: Zahl der beim Laden gestempelten Gelaenderzellen und der
+    /// Bruecken, die ihre Ecke 9 schon aus der Datei mitbrachten.</summary>
+    public int GelaenderGestempelt, BrueckenMitEckenAusDatei;
 
     /// <summary>
     /// <b>Der Zellzweig</b> — nach einem Treffer, der die Zelle erreicht.
@@ -245,6 +268,8 @@ public partial class MapEntityLayer
             _nav?.BrueckeLoesen(z.X, z.Y, kopf ? Simulation.NavGrid.Ground.Rough
                                                : Simulation.NavGrid.Ground.Water);
             _bauwerkUeberdeckt.Add(key);
+            // bug-643: Brueckenbyte +3 := 0 auf allen Satzzellen (16 Schreiber in 0x4CB0A0).
+            _nav?.BrueckenbyteLoeschen(z.X, z.Y);
             if (kopf)
             {
                 // senkrecht: Kopfzeile y0 -> T+s, y0+k+1 -> T+3+s;

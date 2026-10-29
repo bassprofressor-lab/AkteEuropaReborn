@@ -3561,6 +3561,11 @@ public partial class MapEntityLayer : Node2D
         // walkability grid over the same tiles (props / cliffs / water fallback);
         // the real terrain classes are layered on from the sec2 zones below
         _nav = Simulation.NavGrid.Build(meta);
+        // ⭐ 29.10.2026, bug-661 (K19) — ein toter Fusssoldat/Fahrzeug wird beim Raeumen
+        // eines Ankers nicht neu gestempelt (0x40B270, Simulation/NavGrid.cs IstTot).
+        // Gebaeude und Gegenstaende bleiben aussen vor (Ruinen stempeln anders).
+        _nav.IstTot = i => i >= 0 && i < _entities.Count
+                           && _entities[i] is { Dead: true, IsBuilding: false, IsProp: false };
         _navRect = new Rect2(ox, oy, _nav.Width * TileW, _nav.Height * TileH);
 
         LoadShipDesigns(name);
@@ -8218,6 +8223,9 @@ public partial class MapEntityLayer : Node2D
                 _grundGemeldet = true;
                 GD.Print("boden: --boden-alt — der Gebaeudeboden laeuft im Zeilenfach mit");
             }
+            // ⭐ 29.10.2026, bug-644 — seit die Kartenbruecken nicht mehr gebacken sind,
+            // muessen Molen und Stege auch unter --boden-alt gemalt werden.
+            if (_drawSprites) { ZeichneMolen(); ZeichneStege(); }
             return;
         }
         if (!_drawSprites || Patterns == null) return;

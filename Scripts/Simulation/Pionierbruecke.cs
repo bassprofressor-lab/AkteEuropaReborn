@@ -48,7 +48,10 @@ using Godot;
 ///   Todesprotokoll, <c>Entity.Verbraucht</c>).</item>
 /// <item><b>Trefferpunkte 500</b>, und <b>kein Bautakt</b> — die Brücke steht
 ///   im selben Takt. Die »Bauphasen« des Zeichners sind Schadensstufen
-///   <c>(500 − TP)/167</c>.</item>
+///   <c>(500 − TP)/167</c>. ⚠ 29.10.2026 (bug-662): KEIN Bauzaehler, aber eine
+///   ARBEITSZEIT — zwei Arbeitsanimationen und eine zweite Probe (0x409460), siehe
+///   <see cref="BrueckeArbeitTick"/>; dazu die Flankenprobe 0x4CC0A0
+///   (<see cref="ZelleNurPionier"/>) und das ganze Raeumen der Erschlagenen (bug-661).</item>
 /// </list>
 ///
 /// <para>⚠ <b>UNSERE SETZUNGEN, benannt:</b></para>
@@ -237,7 +240,60 @@ public partial class MapEntityLayer
             if (!_nav.InBounds(z.X, z.Y)) return false;
             if (StegAn(z.X, z.Y) != null) return false;
         }
+        // ⭐ 29.10.2026, bug-662 (K20) — Startzelle UND beide Flanken (0x4CC0A0).
+        if (!BrueckeFlankenAlt)
+        {
+            var quer = new Vector2I(BrueckenLauf[d].Y, BrueckenLauf[d].X);
+            if (!ZelleNurPionier(col, row, idx, true)) return false;
+            if (!ZelleNurPionier(col + quer.X, row + quer.Y, idx, false)) return false;
+            if (!ZelleNurPionier(col - quer.X, row - quer.Y, idx, false)) return false;
+        }
         return true;
+    }
+
+    /// <summary><c>--bruecke-flanken-alt</c> — Stand bis 0.6.12: nur die Startzelle wird
+    /// gefragt, und nur nach ihrem LETZTEN Stempel. Nullmodell zu bug-662.</summary>
+    public static bool BrueckeFlankenAlt;
+
+    /// <summary><c>--bruecke-sofort</c> — Stand bis 0.6.12: gebaut wird im Ankunftstakt,
+    /// ohne Arbeitszeit und ohne zweite Probe. Nullmodell zu bug-662.</summary>
+    public static bool BrueckeSofort;
+
+    /// <summary><c>--bruecke-erschlaegt-alt</c> — Stand bis 0.6.12: das Erschlagen loescht
+    /// je Zelle nur den Stempel, der dort zuletzt stand. Nullmodell zu bug-661.</summary>
+    public static bool BrueckeErschlaegtAlt;
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-662 (KayelGee R8 K20, »Pionier baut Bruecke, wo ein anderer steht
+    /// → der stirbt«) — <b>WER AUF DER STARTREIHE STEHEN DARF.</b> Gelesen (bruecken-r8-opus
+    /// K19/K20, selbst nachgelesen dort): der Probelauf <c>0x4CD900</c> verlangt fuer die
+    /// Startzelle und ihre zwei Flanken (<c>0x4CC0A0</c> @<c>0x4CC0FC…0x4CC112</c>, F
+    /// <c>0x4CBC97</c>) entweder <c>sec6 == 0xFFFD</c> (freie raue Zelle) oder eine
+    /// Infanteriezelle mit GENAU EINEM Mann (<c>byte[0x74EC88 + 22·n] == 1</c>), der der
+    /// Pionier selbst ist (<c>0x433B50</c> vergleicht die neun Plaetze mit seiner Nummer).
+    /// Ein anderer Soldat — auch ein eigener, auch nur mitten im Schritt — verhindert den Bau.
+    /// <para>Bei uns: kein anderer lebender Anker (Zelle, Vormerkung oder Stempel) auf der
+    /// Zelle; eine Flanke ohne den Pionier muss ausserdem RAU sein (0xFFFD). Die Startzelle
+    /// prueft ihren Untergrund schon oben.</para></summary>
+    private bool ZelleNurPionier(int c, int r, int idx, bool start)
+    {
+        if (_nav == null || !_nav.InBounds(c, r)) return false;
+        int wer = _nav.OccupantAt(c, r);
+        if (wer >= 0 && wer != idx) return false;
+        bool pionierDa = false;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var o = _entities[i];
+            if (o.Dead || o.IsBuilding || o.IsProp) continue;
+            bool da = (o.Col == c && o.Row == r) || (o.Reserved is { } rv && rv.X == c && rv.Y == r);
+            if (!da)
+                foreach (var a in _nav.AnkerVon(i))
+                    if (a.X == c && a.Y == r) { da = true; break; }
+            if (!da) continue;
+            if (i != idx) return false;
+            pionierDa = true;
+        }
+        return start || pionierDa || _nav.GroundAt(c, r) == Simulation.NavGrid.Ground.Rough;
     }
 
     // ---- der Menüweg --------------------------------------------------------
@@ -308,9 +364,50 @@ public partial class MapEntityLayer
 
     // ---- bauen --------------------------------------------------------------
 
-    /// <summary>Der Arbeitstakt, wenn der Pionier auf seiner Bauzelle steht —
-    /// gerufen aus <see cref="MoleArbeitTick"/>. ⚠ Die Brücke hat KEINE
-    /// Bauzeit (Kopf, Punkt 7): sie steht im selben Takt.</summary>
+    public int BrueckeErsteProbeFehl, BrueckeZweiteProbeFehl;
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-662 (K20) — <b>UKOL 20, Modus 1, WIE IM ORIGINAL</b>
+    /// (<c>0x409460</c>, F <c>0x4093AF</c>; pionier-menue-fable §1.8):
+    /// <list type="number">
+    /// <item>erster Takt (AKCE 0xFF): Probe <c>0x4CD900</c> am Standplatz — faellt sie
+    ///   durch, wird der Auftrag still fallen gelassen (UKOL 0); sonst AKCE := 3;</item>
+    /// <item>zwei Arbeitsanimationen (AKCE 3 → 2 → 1, je <c>+0x47 := 0x0B</c>) — bei uns
+    ///   <see cref="MoleArbeitTakte"/> = 48 Takte, dieselbe Setzung wie bei der Mole;</item>
+    /// <item>bei AKCE 0 NOCH EINMAL <c>0x4CD900</c>; Ergebnis 0 → AKCE := 0xFF, von vorn
+    ///   (der naechste Takt prueft wieder wie Punkt 1).</item>
+    /// </list>
+    /// Spielerentscheidung 29.10.: Arbeitszeit wie im Original, auch wenn der Bau laenger
+    /// dauert. Bis 0.6.12 stand die Bruecke im Ankunftstakt (Gegenschalter
+    /// <c>--bruecke-sofort</c>).</summary>
+    private void BrueckeArbeitTick(int idx, Entity e)
+    {
+        if (BrueckeSofort) { BrueckeFertigstellen(idx, e); return; }
+        if (e.BauTakte == 0)
+        {
+            if (!BrueckePlatzOk(e.Col, e.Row, idx))
+            {
+                BrueckeErsteProbeFehl++;
+                BrueckeFertigstellen(idx, e);      // faellt durch: Meldung, Auftrag weg
+                return;
+            }
+            e.BauTakte = 1;                       // AKCE := 3
+            return;
+        }
+        if (++e.BauTakte < MoleArbeitTakte) return;
+        if (!BrueckePlatzOk(e.Col, e.Row, idx))
+        {
+            // AKCE := 0xFF — von vorn; der naechste Takt prueft wie beim ersten.
+            BrueckeZweiteProbeFehl++;
+            e.BauTakte = 0;
+            GD.Print($"bruecke: zweite Probe auf ({e.Col},{e.Row}) faellt durch — von vorn (AKCE 0xFF)");
+            return;
+        }
+        BrueckeFertigstellen(idx, e);
+    }
+
+    /// <summary>Der Bau selbst, wenn die Probe(n) bestanden sind — bzw. mit
+    /// <c>--bruecke-sofort</c> im Ankunftstakt (Stand bis 0.6.12).</summary>
     private void BrueckeFertigstellen(int idx, Entity e)
     {
         int col = e.Col, row = e.Row;
@@ -337,6 +434,8 @@ public partial class MapEntityLayer
         e.Verbraucht = true;
         e.Hp = 0; e.Dead = true; e.DeadTime = 0; e.Path = null; e.Target = -1;
         _nav?.ClearOccupant(col, row, idx);
+        // bug-661: 0x433C20 nimmt ihn aus der Infanteriezelle — auch seine Vormerkung.
+        if (!BrueckeErschlaegtAlt) { _nav?.AlleAnkerLoesen(idx); e.Reserved = null; }
         if (!BrueckeAnlegen(idx, col, row)) BrueckeVerworfen++;
     }
 
@@ -371,11 +470,12 @@ public partial class MapEntityLayer
         LichtAnlegen(ecke.X + 1, ecke.Y + 1, 4, 40, "Bruecke gesetzt");
 
         int erschlagen = 0;
+        if (!BrueckeErschlaegtAlt) erschlagen = BrueckeErschlaegt(idx, col, row, d, k);
         foreach (var (z, mitte) in BrueckenZellen(col, row, d, k))
         {
             // ⚠ »Beim Setzen stirbt alles, was auf den Kacheln steht« —
             // Zasah(40200, …), 18 Rufstellen aus 0x4CC280.
-            int drauf = _nav.OccupantAt(z.X, z.Y);
+            int drauf = BrueckeErschlaegtAlt ? _nav.OccupantAt(z.X, z.Y) : -1;
             if (drauf >= 0 && drauf != idx && drauf < _entities.Count)
             {
                 var o = _entities[drauf];
@@ -406,6 +506,51 @@ public partial class MapEntityLayer
         GD.Print($"bruecke: {BrueckeNote}");
         Audio.GameSounds.PlayAt(42, col, row);
         return true;
+    }
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-661 (KayelGee R8 K19, »M9: Fahrzeuge koennen die gebaute Bruecke
+    /// nicht betreten«, Bild 29102026bug19.png) — <b>WER AUF DEN KACHELN STEHT, STIRBT
+    /// GANZ.</b> Original: <c>Zasah(40200, sec6)</c> je Satzzelle (@<c>0x4CC262</c>, F
+    /// <c>0x4CBE12</c>) → Sterbe-Anleger <c>0x40B3C0</c>, Klasse 1 → <c>0x40B270</c>: alle 4000
+    /// Infanteriezellen werden nach dem Mann abgesucht und je Fund <c>0x433C20</c> geraeumt,
+    /// INNERHALB des Treffers, also bevor <c>0x4CC280</c> die Zelle ueberschreibt.
+    /// <para>Bei uns stand: je Zelle <c>OccupantAt</c> → tot, <c>ClearOccupant</c> NUR dieser
+    /// Zelle. Ein Mann mitten im Schritt haelt zwei Anker; <c>ClearOccupant</c> stempelte den
+    /// zweiten sofort neu, und an der zweiten Zelle wurde er als schon Toter uebersprungen —
+    /// ein toter eigener Fusssoldat blieb als Phantom auf dem Brueckenkopf, und jedes
+    /// Fahrzeug wartete vor ihm (<c>FussvolkImWeg</c> → nicht feindlich → GiveWay).</para>
+    /// <para>Jetzt: zuerst ALLE Opfer sammeln (Zelle, Vormerkung, Anker, Stempel auf einer
+    /// der 3·(k+2) Zellen), dann jedes ganz raeumen. Wie bisher ohne <c>Kill()</c> (kein
+    /// Wrack, keine Todeslichtquelle) — UNSERE Setzung von 0.6.3, nicht Gegenstand von K19.
+    /// Gegenschalter <c>--bruecke-erschlaegt-alt</c>.</para></summary>
+    private int BrueckeErschlaegt(int idx, int col, int row, int d, int k)
+    {
+        if (_nav == null) return 0;
+        var zellen = new HashSet<Vector2I>();
+        foreach (var (z, _) in BrueckenZellen(col, row, d, k)) zellen.Add(z);
+        var opfer = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            if (i == idx) continue;
+            var o = _entities[i];
+            if (o.Dead || o.IsBuilding || o.IsProp || Untergestellt(o)) continue;
+            bool drauf = zellen.Contains(new Vector2I(o.Col, o.Row))
+                      || (o.Reserved is { } rv && zellen.Contains(rv));
+            if (!drauf) foreach (var a in _nav.AnkerVon(i)) if (zellen.Contains(a)) { drauf = true; break; }
+            if (!drauf) foreach (var z in zellen) if (_nav.OccupantAt(z.X, z.Y) == i) { drauf = true; break; }
+            if (drauf) opfer.Add(i);
+        }
+        foreach (int i in opfer)
+        {
+            var o = _entities[i];
+            o.Hp = 0; o.Dead = true; o.DeadTime = 0; o.Path = null; o.Target = -1;
+            _nav.AlleAnkerLoesen(i);
+            foreach (var z in zellen) if (_nav.OccupantAt(z.X, z.Y) == i) _nav.ClearOccupant(z.X, z.Y, i);
+            o.Reserved = null;
+            GD.Print($"bruecke: {LabelOf(o)} auf ({o.Col},{o.Row}) von der Bruecke erschlagen (alle Anker geraeumt)");
+        }
+        return opfer.Count;
     }
 
     /// <summary>Die OBERE LINKE Ecke des Satzes — die vier Richtungsfälle des
@@ -520,6 +665,9 @@ public partial class MapEntityLayer
         // Wasserkacheln DECKEND in _bauwerkKachel — und die wurden NACH der
         // Vorschau gemalt, also genau auf dem alten Brueckenfeld darueber.
         // Die Vorschau kommt jetzt danach. Gegenschalter --brueckenvorschau-alt.
+        // ⭐ 29.10.2026, bug-644 (K2) — die Fahrbahn der Kartenbruecken, lebend und als
+        // unterste Lage (Simulation/KartenbrueckeLebend.cs).
+        ZeichneKartenfahrbahn(tex);
         if (BrueckenvorschauAlt) ZeichneBrueckenVorschau(tex);
         ZeichneBauwerkKacheln(tex);
         if (!BrueckenvorschauAlt) ZeichneBrueckenVorschau(tex);

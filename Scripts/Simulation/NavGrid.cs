@@ -170,6 +170,94 @@ public sealed class NavGrid
 
     public int FlagAt(int c, int r) => InBounds(c, r) ? _flag[Idx(c, r)] : 0;
 
+    /// <summary><c>--gelaender-stempel-alt</c> — Stand bis 0.6.12: das Byte <c>+3</c>
+    /// der Brueckenzellen kommt roh aus der Kartendatei (92 von 110 Kartenbruecken
+    /// ohne Eckwerte 9…12). Nullmodell zu bug-643.</summary>
+    public static bool GelaenderStempelAlt;
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-643 (KayelGee R8 K1, »M4: Teile der Bruecken im Nebel des
+    /// Krieges sichtbar«) — <b>DER GELAENDERSTEMPEL <c>0x421F90</c></b> (F <c>0x421150</c>),
+    /// gerufen vom Kartenlader <c>0x41E070</c> @<c>0x41F43A</c> (F Rufer <c>0x41E5F8</c>)
+    /// gleich nach dem Fortschritt 100, und nach dem Brueckenbau @<c>0x4CCA8A</c>.
+    /// Fuer jeden belegten sec17-Platz (OFFENE_FRAGEN »0x421F90 — was genau gestempelt
+    /// wird«, berichte/bruecken-r8-opus.md K1):
+    /// <code>
+    ///   waagerecht (Zeilen y, y+2): (x,y)=9 (x+L+1,y)=10 (x+L+1,y+2)=11 (x,y+2)=12,
+    ///                               dazwischen oben 2, unten 4
+    ///   senkrecht  (Spalten x, x+2): (x,y)=9 (x+2,y)=10 (x+2,y+L+1)=11 (x,y+L+1)=12,
+    ///                               dazwischen links 1, rechts 3
+    /// </code>
+    /// Die Fahrbahn (mittlere Zeile/Spalte) bleibt unberuehrt. Das Byte ist die Hangart,
+    /// die der Nebeldurchgang <c>0x4B47A8</c> liest: die untere Gelaenderzeile bekommt so
+    /// die 35-Zeilen-Maske C4 statt der flachen 20-Zeilen-Maske, und das 15-px-Band ueber
+    /// der gehobenen Fahrbahn liegt im Nebel nicht mehr frei.
+    /// <para>⚠ Dasselbe Byte sperrt bei uns den Gleiter (flag == 0) und flache Bauplaetze —
+    /// die Gelaenderzellen sind <c>0xFFFF</c> und dort ohnehin gesperrt; im Original haengt
+    /// beides am selben Byte. Die Hub-/Posentafel der Einheiten (<c>_flagLookup</c> im
+    /// MapEntityLayer) bleibt roh: auf einem Gelaender steht nie eine Einheit.</para>
+    /// <returns>Zahl der gestempelten Zellen.</returns></summary>
+    public int GelaenderStempeln(int x, int y, bool senkrecht, int k)
+    {
+        if (GelaenderStempelAlt) return 0;
+        int n = 0;
+        void Setze(int c, int r, int v) { if (InBounds(c, r)) { _flag[Idx(c, r)] = (byte)v; n++; } }
+        if (!senkrecht)
+        {
+            Setze(x, y, 9); Setze(x + k + 1, y, 10); Setze(x + k + 1, y + 2, 11); Setze(x, y + 2, 12);
+            for (int p = 1; p <= k; p++) { Setze(x + p, y, 2); Setze(x + p, y + 2, 4); }
+        }
+        else
+        {
+            Setze(x, y, 9); Setze(x + 2, y, 10); Setze(x + 2, y + k + 1, 11); Setze(x, y + k + 1, 12);
+            for (int p = 1; p <= k; p++) { Setze(x, y + p, 1); Setze(x + 2, y + p, 3); }
+        }
+        return n;
+    }
+
+    /// <summary>bug-643: Erase bridge <c>0x4CB0A0</c> setzt das Brueckenbyte <c>+3</c>
+    /// aller Satzzellen auf 0 (16 Schreiber, brueckenzerstoerung-fable §2.3).</summary>
+    public void BrueckenbyteLoeschen(int c, int r)
+    {
+        if (!GelaenderStempelAlt && InBounds(c, r)) _flag[Idx(c, r)] = 0;
+    }
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-661 (KayelGee R8 K19) — <b>EIN TOTER WIRD NICHT NEU GESTEMPELT.</b>
+    /// <see cref="ClearOccupant"/> stempelt die uebrigen Anker einer Einheit sofort neu
+    /// (siehe <see cref="_anker"/>). Fuer einen TOTEN ist das falsch: das Original raeumt
+    /// beim Tod eines Fusssoldaten ALLE 4000 Infanteriezellen nach ihm ab (<c>0x40B270</c>
+    /// → <c>0x433C20</c>, F <c>0x432DE4</c>). Bei uns blieb ein Mann, den die Bruecke
+    /// mitten im Schritt erschlug, mit seinem zweiten Anker als Phantom auf dem
+    /// Brueckenkopf stehen, und kein Fahrzeug kam mehr vorbei (Bild 29102026bug19.png).
+    /// Die Frage stellt der MapEntityLayer (lebt die Einheit noch?). Gegenschalter
+    /// <c>--bruecke-erschlaegt-alt</c> (<see cref="TotNeuStempelnAlt"/>).</summary>
+    public Func<int, bool>? IstTot;
+
+    /// <summary><c>--bruecke-erschlaegt-alt</c> — Stand bis 0.6.12 (bug-661).</summary>
+    public static bool TotNeuStempelnAlt;
+
+    /// <summary>bug-661: ALLE Anker einer Einheit raeumen, ohne Neustempeln —
+    /// <c>0x40B270</c> sucht alle Infanteriezellen nach dem Mann ab.</summary>
+    public int AlleAnkerLoesen(int entity)
+    {
+        int side = HullOf(entity), n = 0;
+        if (_anker.TryGetValue(entity, out var l))
+        {
+            foreach (var a in l)
+                for (int dy = 0; dy < side; dy++)
+                    for (int dx = 0; dx < side; dx++)
+                    {
+                        if (!InBounds(a.X + dx, a.Y + dy)) continue;
+                        int i = Idx(a.X + dx, a.Y + dy);
+                        if (_occupant[i] != entity) continue;
+                        _occupant[i] = -1; _crushable[i] = false; _immobile[i] = false; n++;
+                    }
+            _anker.Remove(entity);
+        }
+        return n;
+    }
+
     public int ElevAt(int c, int r) => InBounds(c, r) ? _elev[Idx(c, r)] : 0;
 
     public int OccupantAt(int c, int r) => InBounds(c, r) ? _occupant[Idx(c, r)] : -1;
@@ -1229,6 +1317,9 @@ public sealed class NavGrid
         // bei _anker. Ohne diese drei Zeilen radiert der aufgegebene Anker die
         // Zellen des behaltenen mit weg, weil beide dieselbe Nummer tragen.
         if (AltStempel) return;
+        // bug-661: ein Toter haelt keinen Anker mehr — alles raeumen, nichts neu stempeln.
+        if (!TotNeuStempelnAlt && IstTot != null && _anker.ContainsKey(entity) && IstTot(entity))
+        { AlleAnkerLoesen(entity); return; }
         if (!_anker.TryGetValue(entity, out var rest)) return;
         var art = _stempelArt.TryGetValue(entity, out var v) ? v : (false, false);
         foreach (var a in rest) Stempeln(a.X, a.Y, entity, art.Item1, art.Item2);
