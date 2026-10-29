@@ -35,7 +35,11 @@ public static class SaveGame
     /// older build is refused with a word rather than half-loaded.</summary>
     /// <para>Format 3 (22.10.2026, Paket W, bug-621): der KI-Zustand (sec61, sec106,
     /// sec69, sec68, sec108, CPU0/CPU1) — siehe Simulation/KiMarschwege.cs.</para>
-    public const int Format = 3;
+    /// <para>Format 4 (29.10.2026, Paket P2): Weg (woertlich wie sec15), Ziel, Angriff,
+    /// unsere Befehlsschlange, Materialroute (sec48) und Sonderauftraege (bug-650,
+    /// Simulation/BefehleSpielstand.cs) sowie die acht Bauteilbloecke sec46 (bug-665,
+    /// Simulation/ForschungUebertrag.cs). Format 1..3 laden weiter.</para>
+    public const int Format = 4;
 
     /// <summary>bug-506: ein Stand im Format 1 wird weiter gelesen — was ihm
     /// fehlt, kommt aus der Kartenvorlage (siehe ApplySaveState).</summary>

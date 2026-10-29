@@ -18,11 +18,16 @@ namespace AkteEuropaReborn.Rendering;
 /// — the same order a fresh start uses, so a save cannot drift from the content
 /// it was made against.</para>
 ///
-/// <para><b>Deliberately not saved:</b> paths and reservations. A loaded unit
-/// stands still instead of continuing a half-walked route; the alternative is
-/// storing a path that may no longer fit the grid. Orders queued behind the
-/// current one go the same way. This is a decision, not an oversight, and it is
-/// what makes the save robust against any later change to the pathfinder.</para>
+/// <para>⚠⚠ 29.10.2026, bug-650 (KayelGee R8 K8) — BERICHTIGT. Hier stand seit 0.4.0
+/// (<c>bb183b0</c>, 07.08.2026): »Deliberately not saved: paths and reservations …
+/// orders queued behind the current one go the same way.« Das war UNSERE Setzung und
+/// widerspricht dem Original: der Speicherer 0x41D210 schreibt sec5 ganz (UKOL, CX/CY,
+/// UTOK_NA …), den Wegpuffer sec15 (0x41D451) und sec48 rob_trans — eine Einheit des
+/// Originals faehrt nach dem Laden weiter. Seit Format 4 gehen Weg (woertlich), Ziel,
+/// Angriff, unsere Befehlsschlange, die Materialroute und die Sonderauftraege mit
+/// (Simulation/BefehleSpielstand.cs, Gegenschalter --laden-befehle-alt), dazu die
+/// Bauteilbloecke sec46 (bug-665, Simulation/ForschungUebertrag.cs). Nicht gespeichert
+/// bleiben die Vormerkung (Reserved) und der halbe Schritt (Progress).</para>
 /// </summary>
 public partial class MapEntityLayer
 {
@@ -33,7 +38,11 @@ public partial class MapEntityLayer
         var w = new Core.SaveGame.Writer();
         w.Open();
         // Paket W (bug-621): Format 3 traegt den KI-Zustand; --ki-spielstand-alt schreibt Format 2.
-        w.Num("format", KiSpielstandAlt ? 2 : Core.SaveGame.Format);
+        // Paket P2 (bug-650/665): Format 4 traegt Befehle und Bauteilbloecke; mit beiden
+        // Gegenschaltern (--laden-befehle-alt --spielstand-bauteile-alt) wieder Format 3.
+        w.Num("format", KiSpielstandAlt ? 2
+                      : LadenBefehleAlt && SpielstandBauteileAlt ? 3 : Core.SaveGame.Format);
+        if (!LadenBefehleAlt) w.Num("befehle", 1);   // Marke: fehlender Schluessel = Vorgabewert
         w.Str("label", label);
         // bug-522: der Kopf des Originals (Schreiber 0x41D210) — +5 Name, +26
         // Mission, +55 Spielername; bei uns als JSON-Felder (Format bleibt UNSERES).
@@ -59,6 +68,9 @@ public partial class MapEntityLayer
         // ⭐ bug-594: die eigenen Entwuerfe (Original: sec47 im game.00N, 0x41D6F1).
         // Simulation/EntwurfVerwalten.cs; fehlt unter --entwuerfe-global.
         EntwuerfeInSpielstand(w);
+        // ⭐ bug-665: die acht Bauteilbloecke (Original: sec46 im .DM, 0x41D6DC).
+        // Simulation/ForschungUebertrag.cs; fehlt unter --spielstand-bauteile-alt.
+        BauteileInSpielstand(w);
 
         // ⚠ Die Gruppen unten zeigen auf die STELLE IM SPIELSTAND, nicht auf
         // die Listenstelle im Spiel und nicht auf den Platz. Der Grund steht
@@ -141,6 +153,8 @@ public partial class MapEntityLayer
                 w.Raw("garage", Liste(gar));
                 if (e.Hangar != null) w.Raw("hangar", Liste(e.Hangar));
             }
+            // bug-650: der Umschlagsatz (sec48) — auch fuer die Ladung an Bord.
+            RouteSchreiben(w, e);
         }
 
         w.ArrayStart("entities");
@@ -152,6 +166,8 @@ public partial class MapEntityLayer
             SchreibeEinheit(e);
             w.Num("unload_rest", e.UnloadRest)
              .Num("unload_col", e.UnloadCell.X).Num("unload_row", e.UnloadCell.Y);
+            // ⭐ bug-650: Weg, Ziel, Angriff, Schlange, Sonderauftraege (Format 4).
+            BefehleSchreiben(w, e, ix => ix >= 0 && ix < stelleImStand.Length ? stelleImStand[ix] : -1);
             w.ItemEnd();
         }
         w.ArrayEnd();
@@ -354,6 +370,10 @@ public partial class MapEntityLayer
         // ⭐ bug-594: die eigenen Entwuerfe VOR den Einheiten (Warteschlangen und
         // Depots sind Indizes in die Liste). Aelterer Stand ohne Abschnitt: bleibt.
         EntwuerfeAusSpielstand(root);
+        // ⭐ bug-665: die Bauteilbloecke, ebenfalls VOR den Einheiten.
+        BauteileAusSpielstandLesen(root);
+        // ⭐ bug-650: traegt dieser Stand die Befehle (Format 4)?
+        bool befehleImStand = !LadenBefehleAlt && root.ContainsKey("befehle");
 
         if (root.TryGetValue("money", out var mv) && mv.VariantType == Variant.Type.Array)
         {
@@ -508,6 +528,10 @@ public partial class MapEntityLayer
             e.Pos = CellCenter(e.Col, e.Row);
             e.UnloadRest = GetI(d, "unload_rest");
             e.UnloadCell = new Vector2I(GetI(d, "unload_col"), GetI(d, "unload_row"));
+            // ⭐ bug-650: der Umschlagsatz aus der Datei, nicht der frische der Vorlage
+            // (MemberwiseClone teilte ihn sogar mit ihr). Fehlt er, haengt
+            // RoutenNachLaden einen neuen an (0x436190).
+            if (befehleImStand) e.Route = RouteLesen(d);
             if (v != null) LadenVorlagen++;
             return e;
         }
@@ -529,6 +553,9 @@ public partial class MapEntityLayer
                 var d = item.AsGodotDictionary<string, Variant>();
                 FrachtAufnehmen(GetI(d, "carrier", -1), BaueEinheit(d));
             }
+        // ⭐ bug-650: die Routensaetze an die Einheiten haengen, Waisen weg, Transporter
+        // ohne Satz bekommen einen — auch fuer alte Staende (Simulation/BefehleSpielstand.cs).
+        RoutenNachLaden();
 
         // ---- Garage und »in welchem Gebaeude« (bug-506) ----------------------
         // Erst jetzt: die Stellen zeigen in beide Richtungen.
@@ -659,6 +686,8 @@ public partial class MapEntityLayer
         // the grid has to agree with the list again — the same routine a
         // fresh map load uses, so there is only one place that does it
         InitEntityMovement();
+        // ⭐ bug-650: die Befehle erst JETZT — InitEntityMovement nullt Path.
+        BefehleLesen(root, listenstelle);
 
         if (root.TryGetValue("fog", out var fv) && fv.VariantType == Variant.Type.Array)
             ApplyFogRle(fv.AsGodotArray());

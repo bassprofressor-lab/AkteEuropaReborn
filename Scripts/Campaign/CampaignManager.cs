@@ -540,6 +540,37 @@ public static class CampaignManager
         }
     }
 
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-665 (Reaper R6, »Kampagne: zu Beginn der naechsten Mission
+    /// alle Forschungsstufen auf 0«, berichte/forschung-kampagne-r8-opus.md §1) —
+    /// <b>die acht Bauteilbloecke vom Ende der zuletzt GEWONNENEN Mission</b>.
+    /// Im Original bleibt die Tafel 0x5045A0 im Speicher stehen; 0x4CFD80 kopiert sie
+    /// beim Sieg nur in den Schatten sec100 (0x4D00E6, 92 800 B), der Kartenlader
+    /// liest sec46 bei .CWM nicht (0x41E6AC jne 0x41EE09).
+    /// ⚠ UNSERE SETZUNG: der Ablageort — ein Abschnitt <c>[bauteile]</c> in
+    /// <c>campaign.cfg</c> (wie <c>[entwuerfe]</c>, bug-594), die 92 800 Byte
+    /// deflate-gepackt und Base64 (Simulation/ForschungUebertrag.cs). Leer = keiner.
+    /// Geschrieben NUR beim Sieg (wie der Schatten), damit »Mission wiederholen« den
+    /// Stand vom Ende der vorigen Mission nimmt (0x4D0290: Schatten -> lebend).
+    /// </summary>
+    public static (string Daten, int Mission) Bauteile
+    {
+        get
+        {
+            using var c = new ConfigFile();
+            if (c.Load(SavePath) != Error.Ok || !c.HasSection("bauteile")) return ("", 0);
+            return ((string)c.GetValue("bauteile", "bloecke", ""), (int)c.GetValue("bauteile", "mission", 0));
+        }
+        set
+        {
+            using var c = new ConfigFile();
+            c.Load(SavePath);
+            c.SetValue("bauteile", "bloecke", value.Daten);
+            c.SetValue("bauteile", "mission", value.Mission);
+            Speichern(c);
+        }
+    }
+
     public static void Reset()
     {
         Completed = 0;
@@ -567,6 +598,12 @@ public static class CampaignManager
         // +0x00/+0x01 (0x44D0C6…0x44D0E8). Gegenschalter --entwuerfe-global.
         if (!Rendering.MapEntityLayer.EntwuerfeGlobal && c.HasSection("entwuerfe"))
             c.EraseSection("entwuerfe");
+        // ⭐ 29.10.2026, bug-665: und die Bauteilbloecke — eine neue Kampagne beginnt
+        // beim GRUNDSTAND (Spielerentscheidung 29.10. Nr. 7: »neue Kampagne nach
+        // Programmstart = Grundstand«). ⚠ UNSERE SETZUNG: im Original liest WinMain
+        // PARTS.CWD nur einmal (0x414ED2), eine zweite Kampagne in derselben Sitzung
+        // behielte die Stufen (Lesung »Ungeklaert« 2) — das bauen wir bewusst nicht nach.
+        if (c.HasSection("bauteile")) c.EraseSection("bauteile");
         Speichern(c);
     }
 

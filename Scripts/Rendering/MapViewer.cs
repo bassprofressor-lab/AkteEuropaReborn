@@ -667,6 +667,15 @@ public partial class MapViewer : Node2D
         _entities.AusSpielstand = !startwerte;
         if (UI.SkirmishSetup.Active)
         {
+            // ⭐ 29.10.2026, bug-665 (Reaper R6): die Bauteilbloecke der vorigen Mission
+            // aufnehmen und den Missionsstart 0x4B23C0 nachbilden — VOR StartCampaign,
+            // Mitnahme und Nachziehen, die alle schon aus den Bloecken rechnen.
+            // Simulation/ForschungUebertrag.cs. Ein Spielstand traegt seine Bloecke selbst;
+            // ⚠ UNSERE SETZUNG: ein alter Stand OHNE Bloecke (Format 1..3) bekommt den
+            // Missionsstart (Stand vom Ende der vorigen Mission) statt des Grundstands.
+            if (UI.SkirmishSetup.CampaignMission > 0
+                && (!ausSpielstand || (!_entities.BauteileAusSpielstand && !MapEntityLayer.SpielstandBauteileAlt)))
+                _entities.ForschungMissionsstart(UI.SkirmishSetup.CampaignMission, neueKampagne: _freshCampaign);
             // A campaign mission is not a skirmish: it keeps the army the level
             // brings and every other side is played, rather than standing about.
             int me = UI.SkirmishSetup.CampaignMission > 0
@@ -780,6 +789,7 @@ public partial class MapViewer : Node2D
             BuildEndBanner();
         }
         SpielstandCheckNachLaden();
+        P2NachLaden();              // Paket P2, Rendering/PaketP2Lauf.cs
         SpeicherfensterCheckNachLaden();
         AutosaveAnlegen();          // bug-524, Autosave.cs
         // ⚠ Steht der Bildprüfstand mit `--shot` zusammen, meldet er GENAU das
@@ -4071,6 +4081,8 @@ _mausProbePunkt = karte;
             // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
             // ⭐ 29.10.2026 — Paket P1 der Testerrunde 0.6.12 (bug-645..664), Rendering/PaketP1Lauf.cs.
             if (P1Schalter(a)) continue;
+            // ⭐ 29.10.2026 — Paket P2 (bug-650/665), Rendering/PaketP2Lauf.cs.
+            if (P2Schalter(a)) continue;
             if (BedienungSchalter(a)) continue;
             // ⭐ 04.10.2026 — Paket 2 Infofenster (bug-420..424), Rendering/InfofensterLauf.cs.
             if (InfofensterSchalter(a)) continue;
@@ -5992,6 +6004,7 @@ _mausProbePunkt = karte;
             }
         }
         SpielstandCheckTakt(delta);
+        P2Takt(delta);              // Paket P2, Rendering/PaketP2Lauf.cs
         SpeicherfensterCheckTakt(delta);
         AutosaveCheckTakt(delta);
         if (_tuerklickAfter > 0f)
@@ -8797,6 +8810,10 @@ _mausProbePunkt = karte;
         if (won && mission > 0)
         {
             if (record) Campaign.CampaignManager.Finished(mission);
+            // ⭐ 29.10.2026, bug-665: der Schatten sec100 (0x4CFD80 @0x4D00E6) — die
+            // Bauteilbloecke gehen in die naechste Mission mit. Nach »alle abfeuern«
+            // (ForschungMissionsende oben). Simulation/ForschungUebertrag.cs.
+            if (record) _entities.ForschungUebertragAblegen(mission);
             var next = Campaign.CampaignManager.Next();
             // ⚠ HIER lag der gemeldete Fehler: `_nextMission` wurde nie
             // gesetzt und blieb -1, also fand StartNextMission() ueber

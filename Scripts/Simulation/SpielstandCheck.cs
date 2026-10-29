@@ -134,6 +134,13 @@ public partial class MapEntityLayer
         sb.Append($"; Kontostand +77 = {_money[me]}");
         // Paket W (bug-621): mitten in einer Wegpunktphase speichern.
         sb.Append("; " + KiProbeMarschLegen());
+        // ⭐ 29.10.2026, Paket P2 (bug-650/665): eine Fahrt und eine Aufwertung — sonst
+        // haetten die neuen Teile »Befehle« und »Bauteile« nichts zu verlieren.
+        if (!SpielstandProbeAlt)
+        {
+            sb.Append("; " + SpielstandProbeFahrt());
+            sb.Append("; " + SpielstandProbeAufwertung());
+        }
         // eine Garage: das naechste Gebaeude mit Tuer bekommt den Spieler als
         // Besitzer und nimmt eine Einheit auf — Einfahren, der Weg des Spiels
         if (garagengast != null)
@@ -195,6 +202,16 @@ public partial class MapEntityLayer
                $" | Lager {lager}" +
                $" | Garage {garage}, Ukol {ukol}, Depot {depot}" +
                $" | Flugzeuge {luft}, Sprit {lfuel}, Munition {lammo}, Arten {lart}, Hoehe {lalt}" +
-               $" | {KiZustandFingerabdruck()}";
+               $" | {KiZustandFingerabdruck()}" +
+               // ⭐ 29.10.2026, Paket P2: die Lage (bug-650 Lesung §1.5: »nicht einmal die
+               // Lage der Einheiten ist darin«), die Befehle und die Bauteilbloecke.
+               (SpielstandProbeAlt ? "" :
+                   $" | {LageFingerabdruck()}" +
+                   $" | {BefehleFingerabdruck()}" +
+                   $" | Bauteile Pruefzahl {BauteilePruefzahl()}");
     }
+
+    /// <summary><c>--spielstand-probe-alt</c> — der Vergleich ohne die Teile von Paket P2
+    /// (Lage, Befehle, Bauteile) und ohne Fahrt/Aufwertung in der Probe (Stand 0.6.11).</summary>
+    public static bool SpielstandProbeAlt;
 }
