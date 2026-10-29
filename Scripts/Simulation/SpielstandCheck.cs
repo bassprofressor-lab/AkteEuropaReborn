@@ -140,6 +140,8 @@ public partial class MapEntityLayer
         {
             sb.Append("; " + SpielstandProbeFahrt());
             sb.Append("; " + SpielstandProbeAufwertung());
+            // ⭐ bug-666: eine laufende Forschung mitten im Lauf (sec96/97).
+            sb.Append("; " + SpielstandProbeForschung());
         }
         // eine Garage: das naechste Gebaeude mit Tuer bekommt den Spieler als
         // Besitzer und nimmt eine Einheit auf — Einfahren, der Weg des Spiels
@@ -208,7 +210,9 @@ public partial class MapEntityLayer
                (SpielstandProbeAlt ? "" :
                    $" | {LageFingerabdruck()}" +
                    $" | {BefehleFingerabdruck()}" +
-                   $" | Bauteile Pruefzahl {BauteilePruefzahl()}");
+                   $" | Bauteile Pruefzahl {BauteilePruefzahl()}" +
+                   // ⭐ bug-666: die zehn Laufsaetze, Losnummer und Wuerfelstand.
+                   $" | {LaufendeForschungFingerabdruck()}");
     }
 
     /// <summary><c>--spielstand-probe-alt</c> — der Vergleich ohne die Teile von Paket P2

@@ -40,8 +40,11 @@ public partial class MapEntityLayer
         // Paket W (bug-621): Format 3 traegt den KI-Zustand; --ki-spielstand-alt schreibt Format 2.
         // Paket P2 (bug-650/665): Format 4 traegt Befehle und Bauteilbloecke; mit beiden
         // Gegenschaltern (--laden-befehle-alt --spielstand-bauteile-alt) wieder Format 3.
+        // bug-666: Format 5 traegt die laufende Forschung (sec96/97); --laufende-forschung-alt
+        // schreibt wieder, was P2 schrieb (4 bzw. 3).
         w.Num("format", KiSpielstandAlt ? 2
-                      : LadenBefehleAlt && SpielstandBauteileAlt ? 3 : Core.SaveGame.Format);
+                      : LadenBefehleAlt && SpielstandBauteileAlt && LaufendeForschungAlt ? 3
+                      : LaufendeForschungAlt ? 4 : Core.SaveGame.Format);
         if (!LadenBefehleAlt) w.Num("befehle", 1);   // Marke: fehlender Schluessel = Vorgabewert
         w.Str("label", label);
         // bug-522: der Kopf des Originals (Schreiber 0x41D210) — +5 Name, +26
@@ -71,6 +74,9 @@ public partial class MapEntityLayer
         // ⭐ bug-665: die acht Bauteilbloecke (Original: sec46 im .DM, 0x41D6DC).
         // Simulation/ForschungUebertrag.cs; fehlt unter --spielstand-bauteile-alt.
         BauteileInSpielstand(w);
+        // ⭐ bug-666: die laufende Forschung (Original: sec96 Laufsaetze, sec97 Losnummer).
+        // Simulation/ForschungSpielstand.cs; fehlt unter --laufende-forschung-alt.
+        LaufendeForschungInSpielstand(w);
 
         // ⚠ Die Gruppen unten zeigen auf die STELLE IM SPIELSTAND, nicht auf
         // die Listenstelle im Spiel und nicht auf den Platz. Der Grund steht
@@ -372,6 +378,9 @@ public partial class MapEntityLayer
         EntwuerfeAusSpielstand(root);
         // ⭐ bug-665: die Bauteilbloecke, ebenfalls VOR den Einheiten.
         BauteileAusSpielstandLesen(root);
+        // ⭐ bug-666: die laufende Forschung (nur Zahlen, die Basis als Platz — keine
+        // Listenstelle, darum schon hier). Stand ohne Schluessel: das Feld bleibt leer.
+        LaufendeForschungAusSpielstand(root);
         // ⭐ bug-650: traegt dieser Stand die Befehle (Format 4)?
         bool befehleImStand = !LadenBefehleAlt && root.ContainsKey("befehle");
 

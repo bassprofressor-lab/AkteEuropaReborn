@@ -36,6 +36,7 @@ public partial class MapViewer
     /// <summary>Die Schalter von P2; true = verbraucht.</summary>
     private bool P2Schalter(string a)
     {
+        if (LfSchalter(a)) return true;                       // bug-666, LaufendeForschungLauf.cs
         switch (a)
         {
             case "--laden-befehle-alt": MapEntityLayer.LadenBefehleAlt = true; return true;            // bug-650
@@ -91,6 +92,7 @@ public partial class MapViewer
         }
         if (_blAn) BefehleLadenCheckTakt(delta);
         if (_fuAn) ForschungUebertragCheckTakt();
+        if (_lfAn) LaufendeForschungCheckTakt(delta);         // bug-666
     }
 
     private void BefehleLadenCheckTakt(double delta)
@@ -180,6 +182,7 @@ public partial class MapViewer
             _blPhase = 2;
         }
         if (_fuAn) ForschungUebertragCheckNachLaden();
+        if (_lfAn) LaufendeForschungCheckNachLaden();          // bug-666
         if (_alName.Length > 0 && _alPhase == 1)
         {
             _alPhase = 2;
