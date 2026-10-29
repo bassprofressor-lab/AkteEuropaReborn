@@ -14,6 +14,181 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.12 — in Arbeit · KayelGees achte Runde, Reapers zweite, und Einheiten, die im Fahren schießen
+
+> **KayelGees achte Runde (21 Punkte) und Reapers zweite Runde (2 Punkte)
+> werden abgearbeitet.** Jeder Punkt wurde zuerst im Programm des Originals
+> nachgelesen und erst dann geändert. Wie immer hat jede Änderung einen
+> Schalter, der das alte Verhalten zurückholt, und einen Prüfstand.
+>
+> Die größte Änderung betrifft den Kampf. Einheiten schießen jetzt wie im
+> Original **im Fahren und beim Angriff auf Gelegenheitsziele**. Eine Einheit
+> mit Angriffsbefehl **fährt bis an ihr Ziel heran**. Die Regel gilt für alle:
+> für deine Einheiten, die Kampagnen-KI und die Gefechts-KI.
+>
+> ⚠ **Das Spiel fragt einmal nach dem Neueinlesen.** Die Brücken der Karten
+> werden jetzt lebend gezeichnet und nicht mehr ins Bodenbild gebacken
+> (Inhaltsstand `karten=3`). Halte die CDs bereit oder die Installation, die das
+> Spiel zuletzt benutzt hat.
+
+### Dank an KayelGee
+
+**KayelGee** hat seine achte Runde am 23. und 24. Oktober geschickt, mit
+Bildern. Alle 21 Punkte sind bearbeitet. Drei bleiben wie im Original:
+- Ein Gegner außerhalb der eigenen Reichweite wehrt sich nicht.
+- Das Original hat keinen Regler für die Filmlautstärke. Wir haben trotzdem
+  einen eingebaut, als Komfort, Vorgabe 100 %.
+- Den Laser der schweren Infanterie *gibt* es im Original. Er wird dort nur als
+  durchgehende Linie gezeichnet, bei uns war er das nicht.
+
+Danke!
+
+### Gemeldet von Reaper [BFTB]
+
+**Reaper [BFTB]** hat seine zweite Runde am 24. Oktober geschickt, mit zwei
+Bildern:
+- Die Flak, die scheinbar nie schoss.
+- Alle Forschungsstufen standen zu Beginn der nächsten Kampagnenmission
+  wieder auf 0.
+
+Danke!
+
+### Kampf
+
+- **Schießen im Fahren (KayelGee 3 und 4).** Das Original führt je Einheit zwei
+  Ziele: das Auftragsziel und das aktuelle Schussziel. Alle 30 Takte sucht eine
+  Einheit einen Feind in Reichweite. Sie beschießt ihn, ohne ihren Weg zu
+  verlassen, und schaltet in 9 von 10 Takten aufs Auftragsziel zurück
+  (`0x40DEC2`, `0x40E240`). Wir hatten nur ein Ziel, darum schien die KI sich
+  auf die erste gesehene Einheit »festzubeißen«. Das gilt jetzt wie im
+  Original für alle Fahrzeuge und Schiffe. Fußvolk behält seine eigene Uhr, die
+  erst teilweise nachgebaut ist. Schalter `--gelegenheitsfeuer-alt`.
+- **Keine Gegenwehr außer Reichweite (KayelGee 4).** Das bleibt so: Unsere
+  Reichweite ist die des Originals (Reichweitenbyte × 40, eine Kreisscheibe in
+  Zellen). Übrig bleibt weniger als eine halbe Zelle, weil wir die Lage der
+  Einheit innerhalb ihrer Zelle nicht berücksichtigen.
+- **Der Angriffsbefehl fährt bis ans Ziel.** Im Original fährt ein befohlener
+  Angriff bis zur Zelle des Ziels und schießt unterwegs weiter (`0x410031`,
+  `0x409060`, `0x40FD10`). Unsere Einheiten hielten bei Reichweite an.
+  Ausnahme, unsere eigene Setzung: Fahrzeuge ohne Turm und Fußvolk halten
+  weiter bei Reichweite. Schalter `--angriff-halt-alt`.
+- **Der Angriffsbefehl endet nicht mit dem Tod des Ziels.** Wie im Original
+  fährt die Einheit weiter zur Zelle, in der das Ziel starb, und steht dort
+  nicht untätig herum.
+- **Eine Einheit konnte mitten im Schritt hängen bleiben**, wenn sie dabei
+  einen neuen Weg bekam. Der Weg begann an der Zelle, die sie gerade
+  verließ. Jetzt beginnt er an der Zelle, in die sie fährt. Gefunden hat das
+  der Prüfstand für gespeicherte Befehle. Schalter `--weg-vormerkung-alt`.
+- **Sichtweite.** Bodeneinheiten sahen schon richtig, wie im Original:
+  Geländehöhe + Sicht − 1, höchstens 19. Falsch waren die Flieger: Sie bekamen
+  Sicht + Höhe − 2. Das Original gibt ihnen Sicht − 1 ohne Höhe (`0x42086F`).
+  Schalter `--sichtradius-alt`.
+- **Laser der schweren Infanterie (KayelGee 16).** Der Strahl ist jetzt eine
+  durchgehende Linie, 20 Punkte je Takt, wie im Original (`0x454CF0`). Er trifft
+  auch so schnell wie dort. Bei uns traf er doppelt so schnell. Schalter
+  `--bodenstrahl-alt`.
+- **Flak (Reaper).**
+  - Die Flugzeuge der KI blieben im Zustand »Start«, und den übersprang der
+    Schusskegel der Flak. Sie wechseln jetzt wie im Original nach 25/42 Takten
+    in den Flug, und die Flak schießt.
+  - Jeder Treffer macht nur 3 bis 6 Schaden, ein Kampfhubschrauber hat 150
+    Trefferpunkte. Das sind rund 36 Treffer je Abschuss, und das ist die
+    Abstimmung des Originals selbst.
+  - Im Handbetrieb bleibt die Flak still, wie im Original (`0x40C8E5`). Der
+    Technikertext, der etwas anderes versprach, ist entfernt.
+- **Zielwahl der KI.** Das Original wählt nur Ziele, die nicht in einem Gebäude
+  stehen (Zustand < 45). Diese Bedingung fehlte.
+
+### Brücken
+
+- **Brücken im Nebel sichtbar (KayelGee 1, Mission 4).** Brücken bekommen
+  jetzt überall den Nebelschleier. In Mission 4 sank die Zahl der Zeilen ohne
+  Schleier von 180 auf 0.
+- **Geländerrest nach einer Brückenzerstörung (KayelGee 2).** Kartenbrücken
+  werden jetzt lebend gezeichnet und nicht mehr ins Bodenbild gebacken. Nach
+  dem Abriss bleibt über dem Wasser nichts stehen. Heile Brücken sehen
+  punktgenau aus wie vorher.
+- **Pionierbrücke in Mission 9 (KayelGee 19 und 20).**
+  - Der Pionier baute die Brücke über einen Soldaten und erschlug ihn. Der
+    tote Soldat sperrte die Brücke danach weiter, deshalb kamen Fahrzeuge
+    nicht hinauf.
+  - Der Pionier wartet jetzt wie im Original, solange die Baustelle oder ihre
+    Flanken belegt sind (`0x4CC0A0`, `0x433B50`).
+  - Der Bau dauert die 48 Takte Arbeitszeit des Originals.
+
+### Türen und Einnahme
+
+- **Mehrere Soldaten an einer Tür (KayelGee 6, Mission 7).** Von den drei
+  Forschern ging nur einer hinein, die anderen steckten in der Tür. Das
+  Original nimmt **alle** ruhenden Soldaten auf Tür 0 im selben Takt auf: Basis
+  `0x43D661`, Depot `0x43D8E8`, Bahnhof `0x43DB0A`. Wir sahen nur den, dem die
+  Zelle »gehörte«. Schalter `--tuer-trupp-alt`.
+- **Forscher blieben im Depot (KayelGee 7).** Einheiten, die das
+  Missionsskript entfernt, werden jetzt wie im Original zuerst aus der
+  Depotliste genommen (`0x4D0B00`).
+- **Ein fremder Soldat auf einer Basistür** wird wie im Original entfernt: eine
+  kleine Flamme, ein Treffer von 50 auf die Zelle links von ihm, dann ist der
+  Soldat weg. An Depot und Bahnhof wird er nur entfernt. Schalter
+  `--tuer-fremdsoldat-alt`.
+- **Feindliche Einheiten tauchen um eine eingenommene Basis auf (KayelGee 5).**
+  Die KI holte jedes Bild alle Einheiten aus ihrer Basis. Jetzt wartet sie, und
+  bei der Einnahme wird der laufende Bau der Basis gelöscht, wie im Original.
+- **Infanterie kann Gebäude einnehmen (KayelGee 11).** Im Original nehmen nur
+  Fahrzeuge ein. Das gilt jetzt auch im Gefecht.
+- **Einheiten wollen in eine eingenommene Fabrik (KayelGee 18).**
+  - Unser Einnahmebefehl schickte alle Einheiten auf dieselbe Zelle unter der
+    Tür. Er verteilt sie jetzt auf freie Zellen vor dem Gebäude. Das ist
+    unsere eigene Zutat, Schalter `--einnahme-ein-ziel-alt`.
+  - Die Räumung des Vorplatzes erfasst jetzt alle Fahrzeuge auf einer Zelle,
+    nicht nur eines, und lässt das Fußvolk stehen, wie im Original
+    (`0x43D070`).
+- **Fabriktore bleiben offen (KayelGee 15).** Eine neue Messzeile, `--torlog`,
+  meldet jedes Tor, das länger als 200 Takte offen steht. In den Fällen, die wir
+  nachstellen konnten, verhält sich das Original genauso: ein ruhendes Fahrzeug
+  auf Tür 1 oder ein Soldat mit Weg auf Tür 0. Wenn es dir wieder passiert,
+  sag uns bitte, welches Gebäude in welcher Mission.
+
+### Kampagne, Forschung und Spielstand
+
+- **Forschung zu Beginn der nächsten Mission auf 0 (Reaper).** Das Original
+  behält seine Forschungstafel über den Missionswechsel. Wir bauten sie jedes
+  Mal neu aus der Tafel des Programms. Jetzt wird die Forschung mitgenommen.
+  Wie im Original erben die Computergegner zu Beginn jeder Mission deinen
+  Forschungsstand (`0x4B2290`). Eine neue Kampagne beginnt mit dem
+  Grundstand.
+- **Die laufende Forschung wird gespeichert** (Spielstandformat 5).
+- **Eine frühere Mission noch einmal spielen:** Startest du sie aus der
+  Missionsübersicht, beginnt sie mit der Forschung, die du beim ersten Beginn
+  hattest, genau wie beim Geld. Das ist unsere eigene Zutat, denn das Original
+  hat keine Missionsübersicht.
+- **Neuer Knopf »Neue Kampagne«** in der Missionsübersicht, mit Rückfrage. Er
+  setzt Fortschritt, Geld, Forschung und die eigenen Entwürfe der Kampagne
+  zurück. Gespeicherte Spielstände bleiben erhalten.
+- **Befehle nach dem Laden weg (KayelGee 8).** Ein Spielstand behält jetzt den
+  genauen Weg, das Ziel, das Angriffsziel, die Transportrouten, die
+  Sonderaufträge und unsere Befehlsschlange (Spielstandformat 4).
+- **Captain Cossarro in Mission 7 (KayelGee 9).** Stirbt er, während du noch
+  Einheiten hast, kommt jetzt wie im Original die Meldung »ins Krankenhaus
+  gebracht« (Text 175).
+- **Zerstörst du ein ziviles Gebäude (KayelGee 12),** kommt die Meldung »nicht
+  befugt« des Originals, und es kostet Geld. Das gilt nur in der Kampagne.
+- **Zahlungen einer Untermission (KayelGee 13).** Jede Zahlung zeigt jetzt
+  ihre eigene Meldung in der Mitte, »Einkommen« oder »Verlust«, etwa 4 Sekunden
+  lang und mit Klang, wie im Original. Eine Zahlung von 0 erscheint als
+  »Verlust: 0«, so wie das Original sie zeigt.
+- **Wüstenwiesel freigeschaltet, aber nicht baubar (KayelGee 17, Mission 9).**
+  Das Fahrwerk fehlte im Katalog und in der Besitztafel. Jetzt ist es baubar.
+
+### Anzeige und Einstellungen
+
+- **Lebensbalken der Infanterie verrutscht (KayelGee 14).** Der Balken folgt
+  jetzt wie im Original dem Versatz des Soldaten in der Zelle.
+- **Ladungsbalken der Transporter (KayelGee 10).** Der Materialbalken 31 × 5
+  über Transportern ist wieder da (`0x42A755`). Der Ladungsbalken der Schiffe
+  ist an das Original angeglichen.
+- **Filmlautstärke (KayelGee 21).** Neuer Regler in den Einstellungen, Vorgabe
+  100 %.
+
 ## 0.6.11 — 23.10.2026 · KayelGees siebte Runde, Reapers erste, und ein Computergegner, der marschiert
 
 > **KayelGees siebte Runde und die erste Runde des neuen Testers Reaper [BFTB]

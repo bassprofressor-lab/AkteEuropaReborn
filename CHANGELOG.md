@@ -12,6 +12,169 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.12 — in progress · KayelGee's eighth round, Reaper's second, and units that fire on the move
+
+> **KayelGee's eighth round (21 points) and Reaper's second round (2 points) are
+> being worked through.** Each point was first looked up in the original's
+> program, then changed. As always, every change has a switch that brings the
+> old behaviour back, and a test.
+>
+> The biggest change is in combat. Units now **fire at targets of opportunity
+> while they move or attack**, as in the original. A unit ordered to attack
+> **drives up to its target**. The same rule applies to everyone: your units,
+> the campaign AI and the skirmish AI.
+>
+> ⚠ **The game will ask once to read in data again.** Map bridges are now drawn
+> live instead of being baked into the ground image (content version
+> `karten=3`). Have your CDs at hand, or the installation the game used last
+> time.
+
+### Thanks to KayelGee
+
+**KayelGee** sent his eighth round on 23 and 24 October, with screenshots. All
+21 points are dealt with. Three stay as in the original:
+- An enemy outside its own range does not answer fire.
+- The original has no film volume slider. We added one anyway as a comfort
+  setting, default 100 %.
+- The heavy infantry's laser *does* exist in the original. It is just drawn as
+  a continuous line, and ours was not.
+
+Thank you!
+
+### Reported by Reaper [BFTB]
+
+**Reaper [BFTB]** sent his second round on 24 October, with two screenshots:
+- The flak that seemed never to fire.
+- All research levels back at 0 at the start of the next campaign mission.
+
+Thank you!
+
+### Combat
+
+- **Fire on the move (KayelGee 3 and 4).** The original keeps two targets per
+  unit: the ordered target and the current shot target. Every 30 ticks a unit
+  looks for a hostile in range. It shoots at it without leaving its path, and
+  in 9 of 10 ticks it switches back to the ordered target (`0x40DEC2`,
+  `0x40E240`). We had only one target, so the AI seemed to "lock on" to the
+  first unit it saw. It now works as in the original for all vehicles and
+  ships. Infantry keeps its own clock, which is only partly rebuilt. Switch
+  `--gelegenheitsfeuer-alt`.
+- **No answer from out of range (KayelGee 4).** This stays: our range is the
+  original's (`range byte × 40`, a disc in cells). What remains is less than
+  half a cell, because we ignore the unit's position inside its cell.
+- **Attack order drives to the target.** In the original an ordered attack
+  drives on to the target's cell, and keeps firing on the way (`0x410031`,
+  `0x409060`, `0x40FD10`). Ours stopped at range. Exception, our own choice:
+  vehicles without a turret and infantry still stop at range. Switch
+  `--angriff-halt-alt`.
+- **The attack order does not end when the target dies.** As in the original,
+  the unit drives on to the cell where the target died and is not idle there.
+- **A unit given a new path in mid-step could get stuck.** The new path started
+  from the cell it was leaving. It now starts from the cell it is entering.
+  Our saved-orders test found this one. Switch `--weg-vormerkung-alt`.
+- **Sight radius.** Ground units already saw terrain height + sight − 1, capped
+  at 19, as in the original. Aircraft were wrong: they got sight + height − 2.
+  The original gives them sight − 1, without height (`0x42086F`). Switch
+  `--sichtradius-alt`.
+- **Heavy infantry laser (KayelGee 16).** The beam is now a continuous line,
+  20 points per tick, as in the original (`0x454CF0`). It also hits as fast as
+  there. Ours hit twice as fast. Switch `--bodenstrahl-alt`.
+- **Flak (Reaper).**
+  - Computer aircraft stayed in their "take off" state, and the flak's firing
+    cone skipped that state. They now switch to flight after 25/42 ticks, as
+    in the original, and the flak fires.
+  - Each hit does only 3 to 6 points of damage, and a combat helicopter has
+    150. That is about 36 hits per kill, and it is the original's own balance.
+  - In manual mode the flak stays silent, as in the original (`0x40C8E5`). The
+    technician text that suggested otherwise is gone.
+- **Computer target choice.** The original only picks targets that are not
+  inside a building (state < 45). That gate was missing.
+
+### Bridges
+
+- **Bridges visible in the fog of war (KayelGee 1, mission 4).** Bridges now
+  get the fog veil everywhere. In mission 4, 180 uncovered lines dropped to 0.
+- **Railing left standing after a bridge is destroyed (KayelGee 2).** Map
+  bridges are now drawn live instead of being baked into the ground image.
+  After demolition nothing is left over the water. Intact bridges look
+  pixel-for-pixel as before.
+- **Pioneer bridge in mission 9 (KayelGee 19 and 20).**
+  - The pioneer built the bridge on top of a soldier and killed him. The dead
+    soldier kept blocking the bridge, so vehicles could not get onto it.
+  - The pioneer now waits, as in the original, while the building site or its
+    flanks are occupied (`0x4CC0A0`, `0x433B50`).
+  - Building takes the original's 48 ticks of work.
+
+### Doors and capturing
+
+- **Several soldiers at a door (KayelGee 6, mission 7).** Only one of the three
+  researchers went in, the others stuck in the door. The original takes
+  **every** resting soldier on door 0 inside in the same tick: base
+  `0x43D661`, depot `0x43D8E8`, station `0x43DB0A`. We only saw the one that
+  "owned" the cell. Switch `--tuer-trupp-alt`.
+- **Researchers stayed in the depot (KayelGee 7).** Units removed by the
+  mission script are now taken out of the depot list first, as in the
+  original (`0x4D0B00`).
+- **A foreign soldier standing on a base door** is removed as in the original:
+  a small flame, a hit of 50 on the cell to its left, then the soldier is
+  gone. At a depot or station he is only removed. Switch
+  `--tuer-fremdsoldat-alt`.
+- **Enemy units appearing around a captured base (KayelGee 5).** The computer
+  pulled every unit out of its base every frame. Now it waits, and on capture
+  the base's running production is deleted, as in the original.
+- **Infantry can capture buildings (KayelGee 11).** In the original only
+  vehicles capture. That now applies in skirmish too.
+- **Units trying to drive into a captured factory (KayelGee 18).**
+  - Our capture order sent every unit to the same cell under the door. It now
+    spreads them over free cells in front of the building. This is our own
+    addition, switch `--einnahme-ein-ziel-alt`.
+  - Clearing the forecourt now catches every vehicle on a cell, not just one,
+    and leaves infantry alone, as in the original (`0x43D070`).
+- **Factory doors that stay open (KayelGee 15).** A new diagnostic line,
+  `--torlog`, reports every door that stays open for more than 200 ticks. In
+  the cases we could reproduce, the original does the same: a vehicle resting
+  on door 1, or a soldier with a path on door 0. If it happens to you again,
+  please tell us which building and mission.
+
+### Campaign, research and saving
+
+- **Research reset to 0 at the next mission (Reaper).** The original keeps its
+  research table across missions. We rebuilt it from the program's table each
+  time. Research now carries over. As in the original, the computer opponents
+  inherit your research level at the start of each mission (`0x4B2290`). A new
+  campaign starts from the base state.
+- **Running research is saved** with the game (save format 5).
+- **Replaying an earlier mission** from the mission overview now starts with
+  the research you had when you first began it, just as the money does. This is
+  our own addition, because the original has no mission overview.
+- **New button "Neue Kampagne"** in the mission overview, with a confirmation
+  question. It resets progress, money, research and the campaign's own
+  designs. Saved games stay untouched.
+- **Orders lost after loading (KayelGee 8).** A save now keeps the exact path,
+  the target, the attack target, transport routes, special jobs and our order
+  queue (save format 4).
+- **Captain Cossarro in mission 7 (KayelGee 9).** When he dies while you still
+  have units, the message "taken to hospital" (text 175) now appears, as in the
+  original.
+- **Destroying a civilian building (KayelGee 12)** brings the original's
+  message "not authorised" and costs money, in the campaign only.
+- **Payments from a sub-mission (KayelGee 13).** Each payment now shows its own
+  centred message, "Income" or "Loss", for about 4 seconds with its sound, as
+  in the original. A payment of 0 shows as "Loss: 0", just as the original
+  shows it.
+- **Desert Weasel unlocked but not buildable (KayelGee 17, mission 9).** The
+  chassis was missing from the catalogue and from the ownership table. It is
+  now buildable.
+
+### Display and settings
+
+- **Infantry health bar misaligned (KayelGee 14).** The bar now follows the
+  soldier's offset in the cell, as in the original.
+- **Transporter cargo bar (KayelGee 10).** The 31 × 5 material bar above
+  transporters is back (`0x42A755`). The ship's cargo bar now matches the
+  original.
+- **Film volume (KayelGee 21).** New slider in the settings, default 100 %.
+
 ## 0.6.11 — 2026-10-23 · KayelGee's seventh round, Reaper's first, and a computer opponent that marches
 
 > **KayelGee's seventh round and the first round from a new tester, Reaper
