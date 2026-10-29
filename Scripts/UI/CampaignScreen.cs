@@ -257,7 +257,123 @@ public sealed partial class CampaignScreen : Control
         var back = new Button { Text = "Zurueck", CustomMinimumSize = new Vector2(0, TileH * Scale) };
         Style(back, font);
         back.Pressed += QueueFree;
-        body.AddChild(back);
+        // ⭐ 29.10.2026, bug-668 (Spielerwunsch, Testerrunde 0.6.12 »Nachtraege 29.10.«) —
+        // »Neue Kampagne« neben »Zurueck«, mit Rueckfrage. ⚠ UNSERE SETZUNG: das
+        // Original hat »Neues Spiel« (ohne Rueckfrage, Hilfeindex 104); unsere erste
+        // Menuezeile heisst seit dem 11.08. »Kampagne« und oeffnet diese Uebersicht, also
+        // gehoert der Neuanfang HIERHER, wo der Fortschritt zu sehen ist. Das Menue ist
+        // einsprachig deutsch (wie alle Knoepfe dieser Seite). Gegenschalter
+        // --neue-kampagne-alt (kein Knopf, Stand 0.6.12).
+        if (missions.Count > 0 && Array.IndexOf(OS.GetCmdlineUserArgs(), "--neue-kampagne-alt") < 0)
+        {
+            var reihe = new HBoxContainer();
+            reihe.AddThemeConstantOverride("separation", 8 * Scale);
+            back.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            var neu = new Button { Text = "Neue Kampagne", CustomMinimumSize = new Vector2(0, TileH * Scale),
+                                   SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            Style(neu, font);
+            neu.TooltipText = "Den Kampagnenfortschritt zuruecksetzen und bei Mission 1 neu beginnen";
+            neu.MouseEntered += () => _status.Text = "Neue Kampagne — der bisherige Fortschritt wird zurueckgesetzt (mit Rueckfrage)";
+            neu.MouseExited += () => _status.Text = _footer;
+            neu.Pressed += () => Rueckfrage(font);
+            reihe.AddChild(neu);
+            reihe.AddChild(back);
+            body.AddChild(reihe);
+            // Bildlauf: --neue-kampagne-bild-check=1 oeffnet die Rueckfrage von selbst
+            // (nie »Ja« — der Knopf wird nie im Profil des Spielers ausgeloest).
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a == "--neue-kampagne-bild-check=1") CallDeferred(nameof(RueckfrageFuerBild));
+        }
+        else body.AddChild(back);
+    }
+
+    /// <summary>bug-668: wird nach dem Zuruecksetzen gerufen (MainMenu erneuert seine
+    /// Fusszeile »N Missionen · K geschafft«).</summary>
+    public Action? NachNeuerKampagne;
+
+    private Control? _frage;
+
+    private void RueckfrageFuerBild() => Rueckfrage(BriefingScreen.LegacyFont(second: false));
+
+    /// <summary>bug-668: die Rueckfrage — gebaut wie dieses Fenster (Rampe 0x2a/0x28/0x2c,
+    /// Titel in Gold 0x96, Spielschrift). ⚠ UNSERE SETZUNG, Wortlaut und Gestalt.</summary>
+    private void Rueckfrage(Font? font)
+    {
+        if (_frage != null && IsInstanceValid(_frage)) return;
+        var huelle = new Control { MouseFilter = MouseFilterEnum.Stop };
+        huelle.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.5f), MouseFilter = MouseFilterEnum.Ignore };
+        dim.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        huelle.AddChild(dim);
+        var center = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
+        center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        huelle.AddChild(center);
+        var p = new PanelContainer { CustomMinimumSize = new Vector2(250 * Scale, 0) };
+        p.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = StartMenuPanel.Pal(0x2a), BorderColor = StartMenuPanel.Pal(0x96),
+            BorderWidthTop = 2, BorderWidthBottom = 2, BorderWidthLeft = 2, BorderWidthRight = 2,
+        });
+        center.AddChild(p);
+        var col = new VBoxContainer();
+        col.AddThemeConstantOverride("separation", 0);
+        p.AddChild(col);
+        var bar = new PanelContainer();
+        bar.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = StartMenuPanel.Pal(0x2c),
+            ContentMarginLeft = 10 * Scale, ContentMarginRight = 8 * Scale,
+            ContentMarginTop = 2 * Scale, ContentMarginBottom = 2 * Scale,
+            BorderColor = StartMenuPanel.Pal(0x28), BorderWidthBottom = Scale,
+        });
+        col.AddChild(bar);
+        var titel = new Label { Text = "Neue Kampagne" };
+        titel.AddThemeColorOverride("font_color", StartMenuPanel.Pal(0x96));
+        Style(titel, font);
+        bar.AddChild(titel);
+        var pad = new MarginContainer();
+        foreach (string m in new[] { "margin_left", "margin_right" }) pad.AddThemeConstantOverride(m, 12 * Scale);
+        pad.AddThemeConstantOverride("margin_top", 8 * Scale);
+        pad.AddThemeConstantOverride("margin_bottom", 8 * Scale);
+        col.AddChild(pad);
+        var inner = new VBoxContainer();
+        inner.AddThemeConstantOverride("separation", 8 * Scale);
+        pad.AddChild(inner);
+        int done = Campaign.CampaignManager.Completed;
+        var text = new Label
+        {
+            Text = "Eine neue Kampagne beginnen?\n" +
+                   "Der bisherige Kampagnenfortschritt geht verloren:\n" +
+                   $"{done} geschaffte Missionen, Kontostand, Forschung\n" +
+                   "und eigene Entwuerfe der Kampagne.\n" +
+                   "Gespeicherte Spielstaende bleiben erhalten.",
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        text.AddThemeColorOverride("font_color", StartMenuPanel.Pal(0xfe));
+        Style(text, font);
+        inner.AddChild(text);
+        var knoepfe = new HBoxContainer();
+        knoepfe.AddThemeConstantOverride("separation", 8 * Scale);
+        inner.AddChild(knoepfe);
+        var ja = new Button { Text = "Ja", CustomMinimumSize = new Vector2(0, TileH * Scale), SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var nein = new Button { Text = "Nein", CustomMinimumSize = new Vector2(0, TileH * Scale), SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        Style(ja, font); Style(nein, font);
+        knoepfe.AddChild(ja);
+        knoepfe.AddChild(nein);
+        nein.Pressed += () => { huelle.QueueFree(); _frage = null; };
+        ja.Pressed += () =>
+        {
+            Campaign.CampaignManager.NeueKampagne();
+            NachNeuerKampagne?.Invoke();
+            // die Uebersicht neu aufschlagen — jetzt mit »0 geschafft«
+            var eltern = GetParent();
+            var neuSeite = new CampaignScreen(_start) { NachNeuerKampagne = NachNeuerKampagne };
+            QueueFree();
+            eltern?.AddChild(neuSeite);
+        };
+        AddChild(huelle);
+        _frage = huelle;
+        nein.CallDeferred(Control.MethodName.GrabFocus);   // »Nein« vorbelegt: Enter loescht nichts
     }
 
     /// <summary>Eine Missionskachel in einem der drei Zustaende.</summary>
@@ -332,7 +448,9 @@ public sealed partial class CampaignScreen : Control
     {
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
         {
-            QueueFree();
+            // bug-668: ESC bei offener Rueckfrage = »Nein«, die Uebersicht bleibt
+            if (_frage != null && IsInstanceValid(_frage)) { _frage.QueueFree(); _frage = null; }
+            else QueueFree();
             GetViewport().SetInputAsHandled();
         }
     }

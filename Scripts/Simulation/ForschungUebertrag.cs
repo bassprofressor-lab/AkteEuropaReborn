@@ -36,7 +36,11 @@ using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 /// (<c>[bauteile]</c>, gepackt); Mission 1 beginnt beim Grundstand (= neue Kampagne);
 /// eine Mission OHNE Fahrplan behaelt den Grundbesitz statt ihn zu nullen; wer eine
 /// FRUEHERE Mission nachspielt, bekommt den Stand vom Ende der zuletzt gewonnenen
-/// (das Original haette dann den Stand im Speicher — ebenfalls den letzten).</para>
+/// (das Original haette dann den Stand im Speicher — ebenfalls den letzten).
+/// ⭐ Seit 29.10.2026 (bug-667) gilt das nur noch unter <c>--forschung-anfangsstand-alt</c>:
+/// eine geschaffte Mission beginnt mit ihrem beim ersten Erreichen festgehaltenen
+/// Anfangsstand (<c>[forschung_anfang]</c>, wie das Geld ueber <c>[mission_balance]</c>);
+/// Pruefstand <c>--forschung-anfangsstand-check</c> (Rendering/NeueKampagneLauf.cs).</para>
 ///
 /// <para>Gegenschalter: <c>--forschung-uebertrag-alt</c> (jede Mission vom Grundstand,
 /// Stand 0.6.11), <c>--ki-erbt-forschung-alt</c> (ohne die Kopie Block 0 → 1…7),
@@ -168,6 +172,20 @@ public partial class MapEntityLayer
         // --fresh-campaign: CampaignManager.Reset laeuft erst NACH diesem Aufruf (MapViewer,
         // Kampagnenzweig) — die neue Kampagne darf den alten Abschnitt nicht mehr lesen.
         else if (neueKampagne) quelle = "Grundstand (neue Kampagne, --fresh-campaign)";
+        // ⭐ 29.10.2026, bug-667 — eine SCHON GESCHAFFTE Mission (aus der Missionsuebersicht
+        // nachgespielt, UI.CampaignScreen = unsere Zutat) beginnt mit den Bloecken, mit denen
+        // sie zum ERSTEN MAL begonnen wurde — wie das Geld ueber [mission_balance].
+        // ⚠ UNSERE SETZUNG (das Original kennt kein Nachspielen). Der Weiterweg und »Mission
+        // wiederholen« der laufenden Mission (mission = Completed+1) bleiben beim Stand vom
+        // Ende der vorigen (0x4D0290). Gegenschalter --forschung-anfangsstand-alt.
+        else if (!Campaign.CampaignManager.ForschungAnfangsstandAlt
+                 && mission <= Campaign.CampaignManager.Completed
+                 && Campaign.CampaignManager.ForschungAnfangsstandOf(mission) is { Length: > 0 } anfang
+                 && BauteileDekodieren(anfang) is { } rohAnfang)
+        {
+            BauteileAusAbbild(rohAnfang);
+            quelle = $"campaign.cfg [{Campaign.CampaignManager.ForschungAnfangAbschnitt}] (Anfangsstand Mission {mission}, bug-667)";
+        }
         else
         {
             var (daten, von) = Campaign.CampaignManager.Bauteile;
@@ -178,6 +196,11 @@ public partial class MapEntityLayer
                 quelle = $"campaign.cfg [bauteile] (Sieg in Mission {von})";
             }
             else quelle = daten.Length > 0 ? "Grundstand (⚠ [bauteile] unlesbar)" : "Grundstand (kein [bauteile])";
+            // bug-667: beim ERSTEN Erreichen im Kampagnenfluss (mission = Completed+1) die
+            // Bloecke festhalten, wie sie VOR 0x4B23C0 aufgenommen wurden; Riegel und
+            // Nie-Ueberschreiben in CampaignManager.NoteForschungAnfangsstand.
+            if (mission >= 2 && Campaign.CampaignManager.NoteForschungAnfangsstand(mission, BauteileKodieren(BauteileAbbild())))
+                quelle += $"; als Anfangsstand Mission {mission} festgehalten (bug-667)";
         }
 
         var b0 = _bauteile![0];

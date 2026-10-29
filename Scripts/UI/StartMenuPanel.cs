@@ -214,6 +214,14 @@ public partial class StartMenuPanel : Control
     /// lives in its side panel, which this screen has not got.</summary>
     public string Footer = "";
 
+    /// <summary>bug-668 (29.10.2026): die Fusszeile neu setzen, auch wenn sie schon steht
+    /// (nach »Neue Kampagne« stimmte »K geschafft« sonst bis zum naechsten Menuebesuch nicht).</summary>
+    public void FooterSetzen(string text)
+    {
+        Footer = text;
+        if (_status != null && IsInstanceValid(_status)) _status.Text = text;
+    }
+
     /// <summary>Was der X-Knopf tun soll. ⚠ UNSERE SETZUNG, siehe
     /// <see cref="BuildTitleBar"/> — im Original ist nicht gelesen, wohin er
     /// führt. Bleibt er ungesetzt, wird kein X gezeichnet.</summary>

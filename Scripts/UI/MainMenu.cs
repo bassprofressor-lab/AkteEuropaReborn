@@ -505,7 +505,12 @@ public partial class MainMenu : Control
     /// das die naechste Mission ohne Rueckfrage startete. Wer nur weiterspielen
     /// will, klickt auf der Uebersicht die eine hell umrahmte Kachel — das ist
     /// ein Klick mehr, dafuer sieht man vorher, wo man steht.</para></summary>
-    private void ShowCampaign() => AddChild(new CampaignScreen(StartMission));
+    private void ShowCampaign() => AddChild(new CampaignScreen(StartMission)
+    {
+        // bug-668 (29.10.2026): nach »Neue Kampagne« die Fusszeile des Startmenues erneuern
+        NachNeuerKampagne = () => _start?.FooterSetzen(
+            $"{Campaign.CampaignManager.Missions.Count} Missionen · {Campaign.CampaignManager.Completed} geschafft"),
+    });
 
     /// <summary>Den Aufbauschirm zeigen — als GEFECHT gegen den Rechner oder als
     /// MULTIPLAYER gegen Menschen.
@@ -651,6 +656,11 @@ public partial class MainMenu : Control
                 GetTree().Quit(0);
                 return;
             }
+            // ⭐ 29.10.2026, bug-668: der Weg des Knopfs »Neue Kampagne« (MainMenuNeueKampagne.cs)
+            else if (a == "--neue-kampagne-check") { NeueKampagneCheck(); return; }
+            // Bildlauf: die Missionsuebersicht direkt aufschlagen (--menu-click traf bei 1920x1080
+            // die Titelleiste statt der Zeile »Kampagne«, gemessen 29.10.)
+            else if (a.StartsWith("--neue-kampagne-bild-check=")) Callable.From(ShowCampaign).CallDeferred();
             else if (a == "--filme-probe")
             {
                 // bug-469: was der Import uebernehmen wuerde — nur zaehlen, nicht kopieren.

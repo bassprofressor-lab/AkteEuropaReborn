@@ -571,6 +571,69 @@ public static class CampaignManager
         }
     }
 
+    // ---- bug-667: der Anfangsstand der Forschung je Mission ----------------
+
+    /// <summary><c>--forschung-anfangsstand-alt</c> — bug-667: nichts festhalten, eine
+    /// nachgespielte Mission nimmt wie bis 0.6.12 den Stand vom Ende der zuletzt
+    /// gewonnenen (<c>[bauteile]</c>).</summary>
+    public static bool ForschungAnfangsstandAlt;
+
+    public const string ForschungAnfangAbschnitt = "forschung_anfang";
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-667 — <b>DIE BAUTEILBLOECKE, MIT DENEN EINE MISSION ZUM ERSTEN
+    /// MAL BEGONNEN HAT</b>, gepackt wie <see cref="Bauteile"/> (»z1:«); leer = keiner.
+    /// Das Gegenstueck zu <see cref="StartBalanceOf"/>: wer eine geschaffte Mission aus
+    /// der Missionsuebersicht noch einmal beginnt, soll nicht mit der Forschung von
+    /// Mission 22 in Mission 4 stehen.
+    /// <para>⚠ <b>UNSERE SETZUNG</b>, doppelt wie beim Geld: das Original kennt kein
+    /// Nachspielen (sein Menue nur »Neues Spiel« / »Spiel laden«), und der Ablageort —
+    /// ein eigener Abschnitt <c>[forschung_anfang]</c> in <c>campaign.cfg</c>, je Mission
+    /// ein Schluessel — ist unserer. Gegenschalter <c>--forschung-anfangsstand-alt</c>.</para>
+    /// </summary>
+    public static string ForschungAnfangsstandOf(int mission)
+    {
+        using var c = new ConfigFile();
+        if (c.Load(SavePath) != Error.Ok) return "";
+        return (string)c.GetValue(ForschungAnfangAbschnitt, mission.ToString(), "");
+    }
+
+    /// <summary>Den Anfangsstand festhalten — nur beim ERSTEN Erreichen im Kampagnenfluss,
+    /// nie ueberschreiben. true = geschrieben.
+    /// <para>⚠ Der Riegel ist <b>strenger</b> als bei <see cref="NoteStartBalance"/>: nur
+    /// <c>mission == Completed + 1</c>, nicht auch eine schon geschaffte. Beim Geld gibt
+    /// es fuer eine geschaffte Mission ohne Eintrag eine Rekonstruktion (Summe der
+    /// Bezahlungen); fuer die Forschung gibt es keine — festgehalten wuerde dort der Stand
+    /// vom Ende der zuletzt gewonnenen Mission, und der waere dann fuer immer falsch
+    /// eingefroren. Direktspruenge (<c>--campaign=N</c> mit N &gt; Completed+1) halten
+    /// ebenso nichts fest. UNSERE SETZUNG.</para></summary>
+    public static bool NoteForschungAnfangsstand(int mission, string daten)
+    {
+        if (ForschungAnfangsstandAlt || mission <= 1 || string.IsNullOrEmpty(daten)) return false;
+        if (mission != Completed + 1) return false;
+        if (ForschungAnfangsstandOf(mission).Length > 0) return false;
+        using var c = new ConfigFile();
+        c.Load(SavePath);
+        c.SetValue(ForschungAnfangAbschnitt, mission.ToString(), daten);
+        Speichern(c);
+        return true;
+    }
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-668 — <b>der Weg des Knopfs »Neue Kampagne«</b> (Missionsuebersicht,
+    /// UI.CampaignScreen) — derselbe wie <c>--fresh-campaign</c>, also <see cref="Reset"/>.
+    /// Ein eigener Name, damit der Pruefstand <c>--neue-kampagne-check</c> GENAU diesen
+    /// Aufruf misst. Spielstaende in <c>user://saves</c>, die Gefechtsbibliothek
+    /// <c>designs-gefecht.cfg</c>, die alte <c>designs.cfg</c> und <c>settings.cfg</c>
+    /// fasst er nicht an. ⚠ UNSERE SETZUNG (Original: »Neues Spiel« ohne Rueckfrage).
+    /// </summary>
+    public static void NeueKampagne()
+    {
+        Reset();
+        GD.Print($"Kampagne: »Neue Kampagne« — {SavePath} zurueckgesetzt (Fortschritt, Kontostand, " +
+                 "Anfangsstaende, Variablen, Mitnahme, Entwuerfe, Bauteilbloecke); Spielstaende und Gefechtsbibliothek unberuehrt");
+    }
+
     public static void Reset()
     {
         Completed = 0;
@@ -604,6 +667,13 @@ public static class CampaignManager
         // PARTS.CWD nur einmal (0x414ED2), eine zweite Kampagne in derselben Sitzung
         // behielte die Stufen (Lesung »Ungeklaert« 2) — das bauen wir bewusst nicht nach.
         if (c.HasSection("bauteile")) c.EraseSection("bauteile");
+        // ⭐ 29.10.2026, bug-667: und die festgehaltenen Anfangsstaende der Forschung —
+        // aus demselben Grund wie [mission_balance] oben.
+        if (c.HasSection(ForschungAnfangAbschnitt)) c.EraseSection(ForschungAnfangAbschnitt);
+        // ⭐ 29.10.2026, bug-668: und die Mitnahme. Sie wird zwar am Ende JEDER Mission neu
+        // geschrieben (M1..M11 haben keine Plaetze), stand aber bis zur ersten gewonnenen
+        // Mission der neuen Kampagne als Rest der alten in der Datei. UNSERE SETZUNG.
+        if (c.HasSectionKey("campaign", "carried")) c.EraseSectionKey("campaign", "carried");
         Speichern(c);
     }
 
