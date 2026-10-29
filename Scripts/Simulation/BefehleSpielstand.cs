@@ -147,6 +147,9 @@ public partial class MapEntityLayer
         if (e.Ordered) w.Bool("ordered", true);
         if (e.AngriffsZelle is { } az) w.Raw("angriffs_zelle", ZelleText(az));               // UTOK_NA-Band 30000+
         if (e.TurmHalteZiel >= 0) w.Num("turm_halte_ziel", St(e.TurmHalteZiel));
+        // bug-645 (29.10.2026): Schussziel STRILI_NA +0x34 und Restauftrag (Gelegenheitsfeuer.cs)
+        if (e.Schussziel >= 0) w.Num("schussziel", St(e.Schussziel));
+        if (e.RestZiel is { } rz) w.Raw("rest_ziel", ZelleText(rz)).Raw("rest_goal", ZelleText(e.RestGoal));
         if (e.SchussZelle is { } sz) w.Raw("schuss_zelle", ZelleText(sz)).Num("schuss_zelle_fuer", St(e.SchussZelleFuer));
         if (e.GebaeudeFahrzelle is { } gf) w.Raw("gebaeude_fahrzelle", ZelleText(gf)).Num("gebaeude_fahrt_fuer", St(e.GebaeudeFahrtFuer));
         if (e.Cooldown != 0f) w.Raw("cooldown", Genau(e.Cooldown));
@@ -242,6 +245,9 @@ public partial class MapEntityLayer
             e.Ordered = d.TryGetValue("ordered", out var od) && od.AsBool();
             e.AngriffsZelle = ZelleLesen(d, "angriffs_zelle");
             e.TurmHalteZiel = L("turm_halte_ziel");
+            e.Schussziel = L("schussziel");
+            e.RestZiel = ZelleLesen(d, "rest_ziel");
+            e.RestGoal = ZelleLesen(d, "rest_goal") ?? default;
             e.SchussZelle = ZelleLesen(d, "schuss_zelle");
             e.SchussZelleFuer = e.SchussZelle != null ? L("schuss_zelle_fuer") : -1;
             e.GebaeudeFahrzelle = ZelleLesen(d, "gebaeude_fahrzelle");

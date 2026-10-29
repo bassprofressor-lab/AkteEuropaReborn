@@ -49,8 +49,10 @@ public partial class MapEntityLayer : Node2D
     private readonly List<(int Opfer, int Angreifer, int Zaehler, int Takt)> _svTafel = new();
     public int SvEintraege, SvAusgeloest, SvVoll;
 
+    // bug-645 (29.10.2026): ein Restauftrag (Ziel tot, UKOL 4 laeuft weiter) ist nicht
+    // untaetig — 0x40CA60 traegt nur bei UKOL 0 ein. Simulation/Gelegenheitsfeuer.cs.
     private static bool Untaetig(Entity e)
-        => e.Ukol == 0 && e.Path == null && e.Target < 0 && e.Orders.Count == 0;
+        => e.Ukol == 0 && e.Path == null && e.Target < 0 && e.Orders.Count == 0 && e.RestZiel == null;
 
     /// <summary>@0x40CA58 → 0x411770.</summary>
     private void SelbstverteidigerEintrag(Entity? shooter, int si, Entity victim, int vi)

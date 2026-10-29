@@ -120,6 +120,9 @@ public partial class MapEntityLayer
     /// <summary>bug-664: vom Zustandsfilter (uk 2/4) verworfen, und welche Slots der
     /// Kegel ueberhaupt geprueft hat.</summary>
     public int FlakUkVerworfen;
+    /// <summary>bug-664 Nachtrag: Schaden je Flakschuss (Spanne, Summe) und die Groessen dazu.</summary>
+    public int FlakDmgZahl, FlakDmgSumme, FlakDmgMin = int.MaxValue, FlakDmgMax = int.MinValue,
+               FlakA = -1, FlakV = -1, FlakZielTpMax, FlakZielTpMin = int.MaxValue;
     public readonly System.Collections.Generic.HashSet<int> FlakGeprueft = new();
 
     /// <summary>Wie oft ein Rohr gedreht wurde, und wie oft davon OHNE einen
@@ -433,6 +436,12 @@ public partial class MapEntityLayer
 
             int dmg = ((Simulation.Determinism.Roll(4) + s.Attack)
                      - (Simulation.Determinism.Roll(4) + ziel.Defence)) / 2;
+            // bug-664 Nachtrag (29.10.2026): die Groessen des Schadens mitschreiben —
+            // A (+0x26 der Flak), V (+0x23 des Flugzeugs), TP (+0x19, ein BYTE).
+            FlakDmgZahl++; FlakDmgSumme += dmg;
+            FlakDmgMin = Mathf.Min(FlakDmgMin, dmg); FlakDmgMax = Mathf.Max(FlakDmgMax, dmg);
+            FlakA = s.Attack; FlakV = ziel.Defence; FlakZielTpMax = Mathf.Max(FlakZielTpMax, ziel.HpMax);
+            FlakZielTpMin = Mathf.Min(FlakZielTpMin, ziel.Hp);
             if (dmg < 0)
             {
                 FlakNegativSchaden++;
@@ -516,6 +525,20 @@ public partial class MapEntityLayer
                     + $"(Soll 12..17, Mittel 14,5) {(spanne && m > 13f && m < 16f ? "ok" : "⚠ DANEBEN")}, ");
         }
         sb.Append($"Schuesse {FlakSchuesse}, Abschuesse {FlakAbschuesse}");
+        if (FlakDmgZahl > 0)
+        {
+            // bug-664 Nachtrag: das SOLL aus der Station selbst (C 0x4287BE..0x428801):
+            // ((rand&3) + A) − ((rand&3) + V), cdq/sub/sar 1 = gegen null halbiert, ueber
+            // alle 16 Wurfpaare gemittelt. Ein Abschuss braucht TP/Mittel Treffer.
+            float soll = 0f;
+            for (int r1 = 0; r1 < 4; r1++)
+                for (int r2 = 0; r2 < 4; r2++) soll += ((r1 + FlakA) - (r2 + FlakV)) / 2;
+            soll /= 16f;
+            float mittel = (float)FlakDmgSumme / FlakDmgZahl;
+            sb.Append($", Schaden je Schuss {FlakDmgMin}..{FlakDmgMax} Mittel {mittel:0.00} (Soll aus 0x4287BE: {soll:0.00} bei "
+                    + $"A {FlakA} / V {FlakV}), Ziel-TP hoechstens {FlakZielTpMax} -> rund "
+                    + $"{(soll > 0 ? Mathf.CeilToInt(FlakZielTpMax / soll) : 0)} Treffer je Abschuss, niedrigster Stand {FlakZielTpMin}");
+        }
         if (FlakNegativSchaden > 0)
             sb.Append($", negativer Schaden {FlakNegativSchaden}x " +
                       (FlakSchadenKlemme ? "(geklemmt)" : "(= Sofortabschuss, wie das Original)"));

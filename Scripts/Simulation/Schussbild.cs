@@ -131,6 +131,8 @@ public partial class MapEntityLayer
             {
                 Pos = start, Ziel = zielPos, Zielgriff = vi, Schaden = schaden,
                 Owner = shooter.Owner, Name = LabelOf(shooter), Schuetze = si, Punkt = "strahlpunkt_gruen",
+                // bug-658: Bodenzweig des Strahltakts (Luftschuss.BodenstrahlTakt)
+                Boden = true, Start = start, Laenge = (zielPos - start).Length(),
             });
             SchussBodenstrahlen++;
             return true;

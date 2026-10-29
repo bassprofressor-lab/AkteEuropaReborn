@@ -189,7 +189,29 @@ public partial class MapEntityLayer
         /// <summary>bug-514: der Bodenschuetze (Fussvolk-Laser), sonst −1.</summary>
         public int Schuetze = -1;
         public string Punkt = "strahlpunkt";
+        /// <summary>bug-658 (29.10.2026): der BODENZWEIG des Strahltakts 0x454CF0 —
+        /// Startpunkt, Laenge L in Feineinheiten (= Bildpunkten), Taktzaehler n
+        /// (+0x25, der Anleger 0x45542B setzt 1), Schritt 20 und Zuschlag 4
+        /// (0x454E21). Nur fuer den Fussvolk-Laser; der Hubschrauber bleibt beim
+        /// alten Weg (siehe <see cref="BodenstrahlAlt"/>).</summary>
+        public bool Boden;
+        public Vector2 Start;
+        public float Laenge;
+        public int N = 1, Punkte, Takte;
     }
+
+    /// <summary><c>--bodenstrahl-alt</c> — der Fussvolk-Laser wieder wie bis 29.10.2026:
+    /// ein 2×2-Punkt je Takt, 40 px je Takt (doppelt so schnell wie das Original).</summary>
+    public static bool BodenstrahlAlt;
+
+    /// <summary>Schritt und Zuschlag des Bodenzweigs (0x454E21: <c>mov esi,0x14 /
+    /// mov ebx,4 / Art 0x4A</c>).</summary>
+    private const int BodenSchritt = 20, BodenZuschlag = 4;
+
+    /// <summary>Zaehler fuer den Pruefstand: Bodenstrahlen angekommen, ihre Punkte und
+    /// Takte (Summe), und der letzte Strahl einzeln (Laenge, Punkte, Takte).</summary>
+    public int BsAngekommen, BsPunkteSumme, BsTakteSumme;
+    public (float Laenge, int Punkte, int Takte) BsLetzter;
 
     private readonly List<Strahl> _strahlen = new();
 
@@ -244,12 +266,19 @@ public partial class MapEntityLayer
         for (int i = _strahlen.Count - 1; i >= 0; i--)
         {
             var s = _strahlen[i];
+            if (s.Boden && !BodenstrahlAlt) { if (BodenstrahlTakt(s)) _strahlen.RemoveAt(i); continue; }
             var weg = s.Ziel - s.Pos;
             float rest = weg.Length();
+            s.Takte++;                       // bug-658: Zaehler auch im alten Weg (Nullmodell)
             if (rest <= StrahlSchritt)
             {
                 // angekommen: der Treffer sitzt auf der ZIELZELLE
                 _strahlen.RemoveAt(i);
+                if (s.Boden)
+                {
+                    BsAngekommen++; BsPunkteSumme += s.Punkte; BsTakteSumme += s.Takte;
+                    BsLetzter = (s.Laenge, s.Punkte, s.Takte);
+                }
                 if (CellAt(s.Ziel) is { } zc)
                 {
                     int c = Mathf.RoundToInt(zc.X), r = Mathf.RoundToInt(zc.Y);
@@ -266,7 +295,58 @@ public partial class MapEntityLayer
             }
             s.Pos += weg.Normalized() * StrahlSchritt;
             _effects.Add(new Effect { Pos = s.Pos, Kind = s.Punkt, FrameTime = 0.08f });
+            s.Punkte++;
         }
+    }
+
+    /// <summary>
+    /// ⭐ 29.10.2026, bug-658 (KayelGee R8 K16: »schwere Infanterie schiesst keine
+    /// sichtbaren Laser«) — <b>der Bodenzweig des Strahltakts</b> <c>0x454CF0</c>
+    /// (F <c>0x4539A0</c>), selbst nachgelesen (C):
+    /// <code>
+    ///   0x454D72..0x454D89  L = sqrt(dx² + dy²) in Feineinheiten, mindestens 1
+    ///   0x454DCC  Marke &gt; 0x80 (Hubschrauber)     -> Schritt 40, Zuschlag 6, Art 73
+    ///   0x454E09  Zieleinheit +0x43 == 0xBF          -> Schritt 20, Zuschlag 6, Art 73
+    ///   0x454E21  sonst (Bodenschuetze)              -> Schritt 20, Zuschlag 4, Art 74
+    ///   0x454E32  vorher = (n−1)·Schritt + Zuschlag ; jetzt = n·Schritt + Zuschlag
+    ///   0x454E48  jetzt &gt;= L -> jetzt := L, Ankunft (Zasah auf die Zielzelle), Satz frei
+    ///   0x454FD3  sonst n++
+    ///   0x454FDB  fuer t = vorher … jetzt−1: Punkt = Start + (Ziel − Start)·t/L  (0x45500A)
+    /// </code>
+    /// <para>Die Punktschleife steht HINTER allen drei Zweigen und laeuft auch im
+    /// Ankunftstakt: je Takt ein Strich aus 20 Punkten (2×2-Flecken), zusammen eine
+    /// geschlossene Linie aus L − 4 Punkten, Treffer nach ⌈(L − 4)/20⌉ Takten. Bei uns
+    /// stand ein Punkt je 40 px und Ankunft nach ⌈L/40⌉ Takten — bei 4 Zellen 3 Punkte
+    /// statt 156, und doppelt so schnell.</para>
+    /// <para>⚠ UNSERE SETZUNGEN: die Lebensdauer eines Punktes (0,08 s, wie bisher —
+    /// die eines sec42-Ein-Bild-Satzes ist ungelesen); die Hoehe des Strichs (das
+    /// Original rechnet −40 Feineinheiten @0x455048, wir ziehen von der Muendung zum
+    /// Bildpunkt des Ziels). Der gelbe Sonderfall <c>+0x43 == 0xBF</c> der Zieleinheit
+    /// ist ungedeutet und nicht gebaut. ⚠ Der Hubschrauberstrahl laeuft durch dieselbe
+    /// Punktschleife (40 Punkte je Takt), bleibt hier aber beim alten Weg — nicht
+    /// Teil des Auftrags, im Bericht vermerkt.</para>
+    /// <para>true = angekommen (der Satz ist frei).</para></summary>
+    private bool BodenstrahlTakt(Strahl s)
+    {
+        float L = Mathf.Max(1f, s.Laenge);
+        int vorher = (s.N - 1) * BodenSchritt + BodenZuschlag;
+        int jetzt = s.N * BodenSchritt + BodenZuschlag;
+        bool an = jetzt >= L;
+        if (an) jetzt = (int)L;
+        else s.N++;
+        s.Takte++;
+        var d = s.Ziel - s.Start;
+        for (int t = vorher; t < jetzt; t++)
+        {
+            _effects.Add(new Effect { Pos = s.Start + d * (t / L), Kind = s.Punkt, FrameTime = 0.08f });
+            s.Punkte++;
+        }
+        if (!an) return false;
+        BsAngekommen++; BsPunkteSumme += s.Punkte; BsTakteSumme += s.Takte;
+        BsLetzter = (s.Laenge, s.Punkte, s.Takte);
+        if (CellAt(s.Ziel) is { } zc)
+            ZellEinschlag(s.Schuetze, Mathf.RoundToInt(zc.X), Mathf.RoundToInt(zc.Y), s.Schaden, 0);
+        return true;
     }
 
     /// <summary>

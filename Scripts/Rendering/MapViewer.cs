@@ -1514,6 +1514,8 @@ public partial class MapViewer : Node2D
         }
         // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
         // ⭐ 29.10.2026 — Paket P1 (Testerrunde 0.6.12), Rendering/PaketP1Lauf.cs.
+        // ⭐ 29.10.2026 — Paket P4 Kampf (Testerrunde 0.6.12), Rendering/PaketP4Lauf.cs.
+        if (P4Pruefstaende()) return;
         if (P1Pruefstaende()) return;
         if (P3Pruefstaende()) return;      // Paket P3 Bruecken, Rendering/PaketP3Lauf.cs
         if (BedienungPruefstaende()) return;
@@ -4082,6 +4084,8 @@ _mausProbePunkt = karte;
             // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
             // ⭐ 29.10.2026 — Paket P1 der Testerrunde 0.6.12 (bug-645..664), Rendering/PaketP1Lauf.cs.
             if (P1Schalter(a)) continue;
+            // ⭐ 29.10.2026 — Paket P4 Kampf (bug-645/646/658/664/669), Rendering/PaketP4Lauf.cs.
+            if (P4Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P2 (bug-650/665), Rendering/PaketP2Lauf.cs.
             if (P2Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P3 Bruecken (bug-643/644/661/662), Rendering/PaketP3Lauf.cs.
@@ -6341,6 +6345,8 @@ _mausProbePunkt = karte;
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
             GD.Print(_entities.SchussbildLine());
+            GD.Print(_entities.GelegenheitsfeuerLine());   // bug-645 (P4)
+            GD.Print(_entities.BodenstrahlLine());         // bug-658 (P4)
             GD.Print(_entities.NachschubSichtLine());
             GD.Print(_entities.FlughuepfenLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
@@ -9137,6 +9143,7 @@ _mausProbePunkt = karte;
 
     public override void _Process(double delta)
     {
+        P4BildTakt();                             // --bodenstrahl-bild= (bug-658), Rendering/PaketP4Lauf.cs
         // ⭐ 03.10.2026 (bug-411) — ein verlorenes Loslassen darf den Zeiger
         // nicht gefangen lassen. MausTabLauf.cs.
         RollenWache();

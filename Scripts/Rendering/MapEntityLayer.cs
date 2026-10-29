@@ -890,7 +890,19 @@ public partial class MapEntityLayer : Node2D
         public Vector2I? GebaeudeFahrzelle;
         public int GebaeudeFahrtFuer = -1;
         public bool Ordered;            // true = the player ordered this attack
-        public bool DugIn;               // "Eingraben" — holds position, harder to kill
+        /// <summary>⭐ 29.10.2026, bug-645 (K3) — das SCHUSSZIEL <c>STRILI_NA</c>
+        /// <c>+0x34</c> einer Einheit mit Angriffsauftrag, getrennt vom
+        /// Auftragsziel <see cref="Target"/> (<c>UTOK_NA</c> <c>+0x36</c>); −1 = leer.
+        /// Nur gefuehrt, solange <see cref="Ordered"/> gilt. Simulation/Gelegenheitsfeuer.cs.</summary>
+        public int Schussziel = -1;
+        /// <summary>⭐ 29.10.2026, bug-645 — der RESTAUFTRAG: das Auftragsziel ist tot,
+        /// der Auftrag (UKOL 4) laeuft im Original weiter (0x409060 ruft 0x40FC90 neu,
+        /// keiner der beiden prueft den Tod). Die Zelle, an der das Ziel starb; null =
+        /// kein Restauftrag. Simulation/Gelegenheitsfeuer.cs.</summary>
+        public Vector2I? RestZiel;
+        /// <summary>Das Fahrziel des Restauftrags (NearestFree der Todeszelle).</summary>
+        public Vector2I RestGoal;
+        public bool DugIn;              // "Eingraben" — holds position, harder to kill
 
         /// <summary>
         /// <b>Das Schiff steht noch IM DOCK und wartet auf eine freie
@@ -2594,8 +2606,11 @@ public partial class MapEntityLayer : Node2D
                 // und der Stempler bricht bei r < 0 ab; eine Einheit mit Sicht 0
                 // deckt also nur so weit auf, wie ihre Hoehe reicht. 294 von
                 // 4833 Kartensaetzen tragen Sicht 0.
+                // ⭐ 29.10.2026 (bug-669): Radius = Hoehe + Sicht − 1, auf 19 geklemmt —
+                // so seit 11.08. gebaut, am 29.10. in C und F nachgelesen
+                // (Simulation/Sichtradius.cs). --sichtradius-bloss ist das Nullmodell.
                 yield return (e.Col, e.Row, NebelAlteSicht && e.Sight <= 0 ? 4 : e.Sight,
-                              ElevOf(e.Col, e.Row));
+                              SichtradiusBloss ? 1 : ElevOf(e.Col, e.Row));
                 continue;
             }
 
@@ -2662,7 +2677,13 @@ public partial class MapEntityLayer : Node2D
                 NebelFlugzeuge++;
                 int sicht = sp.Sight - 1;
                 if (sicht < 0) continue;
-                yield return (sp.Col, sp.Row, sicht, ElevOf(sp.Col, sp.Row));
+                // ⭐ 29.10.2026, bug-669 — DER FLIEGER RECHNET KEINE HOEHE. Der Flugzeugarm
+                // stempelt `+0x24 − 1` OHNE 0x41D0E0 (C 0x42085D/0x42086F, F 0x41FA1D/
+                // 0x41FA2F, selbst nachgelesen). Hier ging die Hoehe der Zelle darunter
+                // und ein ZWEITES −1 (UnitRadius) mit hinein: auf ebenem Boden eine Zelle
+                // zu wenig, auf Stufe e um e−1 zu viel. Hoehe 1 haelt UnitRadius bei
+                // genau `sicht`. Gegenschalter --sichtradius-alt. Simulation/Sichtradius.cs.
+                yield return (sp.Col, sp.Row, sicht, SichtradiusAlt ? ElevOf(sp.Col, sp.Row) : 1);
             }
 
         foreach (var w in RadarWatchers(betrachter)) yield return w;
@@ -12279,11 +12300,13 @@ public partial class MapEntityLayer : Node2D
     /// sehen wir zu wenig oder wir schiessen weiter als in Wirklichkeit«. Es
     /// war das Zweite.</para>
     ///
-    /// <para>⭐ Nebenbefund derselben Lesung, NICHT gebaut: der Sichtradius des
-    /// Originals ist <c>Gelaendehoehe + Sicht − 1</c> (@0x4207AF…0x4207CF), auf
-    /// 19 geklemmt. Wir nehmen die blosse Sicht. Auf ebenem Boden decken wir
-    /// damit eine Zelle MEHR auf als das Original, auf einem Huegel deutlich
-    /// weniger.</para>
+    /// <para>⭐ Nebenbefund derselben Lesung: der Sichtradius des Originals ist
+    /// <c>Gelaendehoehe + Sicht − 1</c> (@0x4207AF…0x4207CF), auf 19 geklemmt.
+    /// ⚠ BERICHTIGT 29.10.2026 (bug-669): hier stand »NICHT gebaut, wir nehmen die
+    /// blosse Sicht« — das stimmte fuer die Bodeneinheiten nicht, die Nebelrunde
+    /// rechnet es seit dem 11.08.2026 (<c>FogGrid.UnitRadius</c>, <c>Watchers</c>).
+    /// Falsch war nur der FLIEGER (Hoehe und ein zweites −1). Simulation/Sichtradius.cs,
+    /// gemessen mit <c>--sichtradius-check</c>.</para>
     ///
     /// <para>⚠ Die Feinstellung innerhalb der Zelle (<c>KOLIK</c>/<c>POHYB</c>)
     /// lassen wir weg: unsere Einheiten stehen auf Zellmitten. Sie würde die
@@ -12573,6 +12596,10 @@ public partial class MapEntityLayer : Node2D
     private void UpdateCombat(int i, Entity e, float dt)
     {
         if (e.Cooldown > 0) e.Cooldown -= dt;
+        // ⭐ 29.10.2026, bug-645 — Schussziel nur mit Auftrag; der Restauftrag endet mit
+        // jedem neuen Auftrag. Simulation/Gelegenheitsfeuer.cs.
+        if (!e.Ordered) e.Schussziel = -1;
+        GfRestPruefen(e);
         // ⭐ 31.08.2026 — OHNE ZIELEINHEIT kann trotzdem ein BODENZIEL
         // anliegen (Strg-Angriff auf eine Zelle). Siehe Bodenangriff.cs.
         if (e.Target < 0)
@@ -12589,6 +12616,10 @@ public partial class MapEntityLayer : Node2D
         if (t.Dead || t.IsProp)
         {
             if (Schussgruende) e.Schussgrund = "Ziel ist tot oder Kulisse";
+            // ⭐ bug-645: der Auftrag endet im Original NICHT mit dem Tod des Ziels —
+            // Restauftrag zur Todeszelle (Simulation/Gelegenheitsfeuer.cs, 0x409060/0x40FC90).
+            if (t.Dead && GfRestauftrag(i, e, t)) e.Ordered = false;
+            e.Schussziel = -1;
             e.Target = -1; return;
         }
         // bug-511: wer vor dem Einfahren im Visier war, ist jetzt im Gebaeude —
@@ -12637,6 +12668,9 @@ public partial class MapEntityLayer : Node2D
         var w = WeaponOf(e.Weapon);
         float dist;
         Vector2 zielRichtung = t.Pos - e.Pos;
+        // ⭐ 29.10.2026, bug-645 — Auftragsziel (Target, UTOK_NA) und Schussziel
+        // (Schussziel, STRILI_NA) getrennt. Simulation/Gelegenheitsfeuer.cs.
+        bool gf = GfAn(e);
         // ⭐ bug-597 (22.10.2026) — EIN GEBAEUDE WIRD UEBER SEINE SCHUSSZELLE
         // beschossen (+0x3B/+0x3C), nicht ueber den Anker: Abstand, Turm und
         // Einschlag gehen auf die eine Fussabdruckzelle, die DIESE Einheit
@@ -12646,6 +12680,8 @@ public partial class MapEntityLayer : Node2D
         {
             if (!GebaeudeSchusszelle(i, e, t, out dist, out var zp))
             {
+                // bug-645: auf dem Weg zum Gebaeude schiesst die Uhr auf Gelegenheitsziele
+                if (gf && GfSchiessuhr(i, e, false) is var sg && sg >= 0 && sg != e.Target) GfFeuer(i, e, sg);
                 GebaeudeAnfahren(i, e, t);
                 return;
             }
@@ -12656,10 +12692,19 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 03.10.2026 (bug-406/407) — ein eigener Turm SPRINGT nicht: die
         // Schiessuhr setzt nur den Wunsch +0x17 (0x40E7DA–0x40E7F0), gedreht
         // wird stufig in TurmTakt. Gegenschalter --turm-alt.
-        if (TurmEigen(e)) TurmZielWunsch(e, DirToFacing(zielRichtung));
+        bool imFenster = InFiringWindow(e, dist);
+        int gs = gf ? GfSchiessuhr(i, e, imFenster) : e.Target;
+        bool gelegenheit = gs >= 0 && gs != e.Target;
+        // ⭐ 29.10.2026 (P4-Zusatz) — der Angriffsbefehl faehrt zur ZIELZELLE (0x410031) und
+        // wird am Wegende neu gerufen, solange nicht aufs Ziel geschossen wird
+        // (0x409060 -> 0x40FC90, Tor 0x40FD10). Simulation/Gelegenheitsfeuer.cs.
+        bool angriffFaehrt = AngriffFaehrtWeiter(e);
+        if (angriffFaehrt && e.Path == null && !(gf ? gs == e.Target : imFenster)) AngriffNeuRufen(i, e, t);
+        if (gelegenheit) GfFeuer(i, e, gs);                 // dreht den Turm aufs Schussziel
+        else if (TurmEigen(e)) TurmZielWunsch(e, DirToFacing(zielRichtung));
         else e.AimFacing = DirToFacing(zielRichtung);   // the turret tracks its target
 
-        if (InFiringWindow(e, dist))
+        if (imFenster)
         {
             // ⚠ 16.08.2026 — DER FAHRBEFEHL UEBERLEBT DAS GEFECHT.
             //
@@ -12686,7 +12731,9 @@ public partial class MapEntityLayer : Node2D
             // Verfolgung, und die ruehre ich ohne eigene Lesung nicht an.
             // ⚠ Und ohne Turm (`Weapon == 0`) muss der ganze Rumpf drehen; das
             // geht im Fahren nicht, also schiesst so eine Einheit nur im Stand.
-            bool imFahren = !KeinFeuerImFahren && !e.Ordered
+            // ⭐ P4-Zusatz: ein befohlener Angriff haelt bei Reichweite NICHT mehr an
+            // (Gegenschalter --angriff-halt-alt), siehe AngriffFaehrtWeiter.
+            bool imFahren = !KeinFeuerImFahren && (!e.Ordered || angriffFaehrt)
                             && e.Path != null && e.Infantry < 0 && e.Weapon != 0;
             if (!imFahren)
             {
@@ -12719,6 +12766,13 @@ public partial class MapEntityLayer : Node2D
                 // --fussrichtung-alt.
                 if (e.Weapon == 0 || (e.Infantry >= 0 && !FussrichtungAlt))
                     e.Facing = e.AimFacing;
+            }
+            // bug-645: die Schiessuhr hat diesen Takt kein Schussziel (Suche nur jeden
+            // 30. Takt) oder ein anderes (1 von 10 Takten haelt sie es, 0x40E240).
+            if (gs < 0 || gelegenheit)
+            {
+                if (Schussgruende && gs < 0) e.Schussgrund = "Schiessuhr: Schussziel leer (Suche alle 30 Takte, 0x40DEC2)";
+                return;
             }
             if (Schussgruende)
                 e.Schussgrund = e.Cooldown > 0
@@ -12781,7 +12835,8 @@ public partial class MapEntityLayer : Node2D
         {
             var goal = _nav.NearestFree(new Vector2I(t.Col, t.Row), e.Move, i);
             if (goal == null) { ChaseGiveUp(i, e, "kein Zielfeld"); return; }
-            var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Move, i);
+            // P4-Nacharbeit: ab der vorgemerkten Zelle, wenn ein Schritt laeuft (WegAbVormerkung)
+            var path = WegAbVormerkung(i, e, goal.Value);
             if (path == null || path.Count == 0) { ChaseGiveUp(i, e, "kein Weg"); return; }
             e.Path = path;
             e.PathIdx = 0;
@@ -13021,6 +13076,8 @@ public partial class MapEntityLayer : Node2D
         // waehrend eines Feuerstosses nicht flackert.
         shooter.FireUntil = _clock + FirePoseSeconds;
         if (si == _fspSchuetze) FussSchuesse++;      // siehe FussSchussProbe.cs
+        GfProbeZaehlen(si, vi);                       // --gelegenheitsfeuer-check (bug-645)
+        AfProbeZaehlen(si, vi);                       // --angriff-fahrt-check (P4-Zusatz)
         // `--beschuss-check`: hier, am Ende der Kette, faellt der Schuss
         // wirklich — nicht dort, wo die Buendnisfrage haette gestellt werden
         // muessen. Siehe Simulation/BeschussCheck.cs.
@@ -13660,8 +13717,18 @@ public partial class MapEntityLayer : Node2D
             _nav?.ClearOccupant(victim.Col, victim.Row, vi);
             if (victim.Reserved is { } rc) _nav?.ClearOccupant(rc.X, rc.Y, vi);
             _sel.Remove(vi);
-            foreach (var other in _entities)
-                if (other.Target == vi) other.Target = -1;
+            for (int oi = 0; oi < _entities.Count; oi++)
+            {
+                var other = _entities[oi];
+                // ⭐ bug-645 (29.10.2026): ein Angriffsauftrag endet im Original nicht mit dem
+                // Tod des Ziels — Restauftrag zur Todeszelle (Simulation/Gelegenheitsfeuer.cs).
+                if (other.Target == vi)
+                {
+                    if (other.Ordered && GfRestauftrag(oi, other, victim)) other.Ordered = false;
+                    other.Target = -1;
+                }
+                if (other.Schussziel == vi) other.Schussziel = -1;
+            }
             if (_selected == vi) SetPrimary();
         }
         victim.Reserved = null;
@@ -29868,6 +29935,9 @@ public partial class MapEntityLayer : Node2D
         {
             if (q.Target == idx) q.Target = -1;
             else if (q.Target > idx) q.Target--;
+            // bug-645: das Schussziel ist ebenfalls eine Listenstelle
+            if (q.Schussziel == idx) q.Schussziel = -1;
+            else if (q.Schussziel > idx) q.Schussziel--;
         }
     }
 
