@@ -23,6 +23,8 @@ public partial class MapEntityLayer
     /// <summary><c>--gebaeude-durchflug-alt</c> — Stand 0.6.9: Geschosse fliegen durch
     /// eigene und verbuendete Gebaeude hindurch. bug-553.</summary>
     public static bool GebaeudeDurchflugAlt;
+    /// <summary><c>--eb-platz-alt</c>: Klick auf die Zellmitte statt den Koerper des Fusssoldaten (bug-673, Nullmodell).</summary>
+    public static bool EbPlatzAlt;
 
     /// <summary>Wie oft ein Geschoss an etwas NICHT Feindlichem haltmachte.</summary>
     public static int EigenbeschussHalt, EigenTreffer;
@@ -83,13 +85,23 @@ public partial class MapEntityLayer
             var f = _entities[fi];
             var pf = ProbeFreiNahe(v.Col, v.Row, 2, 4, fi);
             if (pf != null) ProbeVersetzen(fi, pf.Value.X, pf.Value.Y);
+            // ⭐ 30.10.2026, bug-673 — GEKLICKT WIRD AUF DEN KOERPER, nicht auf die Zellmitte.
+            // Seit 6db02b9 (22.10., bug-596/602: Versatz je Soldat, Fussanker, Klickkasten
+            // wie im Original) liegt der Klickkasten eines Fusssoldaten NICHT mehr auf der
+            // Zellmitte: gemessen K14 Pick(f.Pos) = -1 auf allen Ringzellen 2..6 — der
+            // Strg-Klick wurde zum Bodenziel und die Sperre 0x4374B4 kam nie zum Zug.
+            // Jetzt die Mitte von BodyRect (dieselbe Flaeche, die Pick prueft).
+            // Nullmodell --eb-platz-alt: Klick auf f.Pos (faellt durch). Im Spiel wirkungslos.
             ProbeRuhe(v); ProbeRuhe(f);
             int verw0 = StrgFusssoldatVerweigert, fhp = f.Hp;
-            StrgRechtsklick(f.Pos, false);
+            var klick = EbPlatzAlt ? f.Pos : BodyRect(f).GetCenter();
+            int pickF = Pick(klick);   // Messzeile: trifft der Zeiger den Fusssoldaten?
+            StrgRechtsklick(klick, false);
             for (int t = 0; t < 100; t++) SimTickFuerProbe();
             Soll(StrgFusssoldatVerweigert == verw0 + 1 && v.Target < 0 && v.AngriffsZelle == null && f.Hp >= fhp,
                  $"Fahrzeug, Strg auf den EIGENEN Fusssoldaten: verweigert {StrgFusssoldatVerweigert - verw0}x (Soll 1, 0x4374B4), "
-                 + $"Ziel {v.Target}, Bodenziel {(v.AngriffsZelle?.ToString() ?? "-")}, TP {fhp} -> {f.Hp}");
+                 + $"Ziel {v.Target}, Bodenziel {(v.AngriffsZelle?.ToString() ?? "-")}, TP {fhp} -> {f.Hp}; "
+                 + $"Fusssoldat bei ({f.Col},{f.Row}) Klick {klick}, Pick {pickF} (Soll {fi}), »{_order}«");
         }
         ProbeRuhe(v);
 

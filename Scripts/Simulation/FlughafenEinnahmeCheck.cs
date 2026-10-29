@@ -34,6 +34,26 @@ public partial class MapEntityLayer
             SimTickFuerProbe();
         }
         sb.AppendLine($"  gewartet {w / SimHz} s (hoechstens {warteSekunden} s)");
+        // ⭐ 30.10.2026, bug-671 — DER PRUEFSTAND WAR UEBERHOLT, nicht das Spiel.
+        // Bis W4 (ac292b2, 22.10.) kaufte die KI ihr Flugzeug im ersten Takt
+        // (»gewartet 0 s«). Seit der Produktionsfreigabe sec59 (C 0x4BB9BB,
+        // bug-628, Standard EIN) laeuft ai_production nur, wenn die Transport-
+        // logik freigibt — in K27 tut sie das in 600 s nicht (gemessen: 0 Flugzeuge;
+        // mit --ki-produktionsfreigabe-aus wieder 1 Flugzeug nach 0 s). Gemessen
+        // wird hier aber die EINNAHME (C 0x43D214), nicht die KI-Produktion.
+        // Also: findet sich keines, kauft der Pruefstand selbst eines am ersten
+        // fremden Flughafen (BuyAircraft, derselbe Weg wie Spieler und KI).
+        // ⚠ EINGRIFF / UNSERE SETZUNG des Pruefstands, im Spiel wirkungslos.
+        if (w >= warteSekunden * SimHz)
+        {
+            int fi = _entities.FindIndex(e => e.IsBuilding && !e.IsProp && !e.Dead && e.BType == 9 && e.Owner != ViewPlayer);
+            if (fi >= 0)
+            {
+                bool gekauft = BuyAircraft(_entities[fi]);
+                sb.AppendLine($"  ⚠ EINGRIFF: kein KI-Flugzeug — Pruefstand kauft eines am Flughafen Platz {_entities[fi].Slot}: " +
+                              (gekauft ? "gekauft" : $"abgelehnt ({_order})"));
+            }
+        }
         int geprueft = 0, falsch = 0, versorgerFalsch = 0;
         foreach (var e in _entities.Where(e => e.IsBuilding && !e.IsProp && !e.Dead && e.BType == 9))
             sb.AppendLine($"  Flughafen Platz {e.Slot} Spieler {e.Owner}, Hangarliste {(e.Hangar == null ? "-" : string.Join(",", e.Hangar))}");

@@ -4325,6 +4325,8 @@ _mausProbePunkt = karte;
             else if (a == "--zellschuss-ohne-zwilling") MapEntityLayer.ZellschussOhneZwilling = true;
             else if (a == "--zasah-check") _zasahCheck = true;
             else if (a == "--selbstverteidiger-check") _svCheck = true;
+            else if (a == "--sv-streifen-alt") MapEntityLayer.SvStreifenAlt = true;   // bug-672 Nullmodell
+            else if (a == "--eb-platz-alt") MapEntityLayer.EbPlatzAlt = true;   // bug-673 Nullmodell
             else if (a == "--gegenschuss-sofort") MapEntityLayer.GegenschussSofort = true;
             else if (a == "--druckwelle-check") _dwCheck = true;
             // Die Aufklaerung der Gefechts-KI, siehe Simulation/KiAufklaerung.cs.

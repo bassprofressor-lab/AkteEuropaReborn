@@ -352,7 +352,7 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Ein Streifen von 7 Zellen, flach, frei fuer alle drei
     /// Landklassen, mit freien Zeilen darueber und darunter (der Freund soll
     /// ausweichen koennen), weit genug vom naechsten Streifen.</summary>
-    private bool FreierStreifen(out int col, out int row)
+    private bool FreierStreifen(out int col, out int row, System.Func<int, int, bool>? zusatz = null)
     {
         col = row = -1;
         for (int r = 6; r < _nav!.Height - 6; r++)
@@ -374,6 +374,7 @@ public partial class MapEntityLayer : Node2D
                            && (y != r || (_nav.IsFree(x, y, Simulation.NavGrid.MoveClass.Hover, -1)
                                           && _nav.ElevAt(x, y) == el));
                 if (!gut) continue;
+                if (zusatz != null && !zusatz(c, r)) continue;   // bug-672: Selbstverteidiger-Pruefstand
                 col = c; row = r;
                 _uZeilen.Add(r);
                 return true;

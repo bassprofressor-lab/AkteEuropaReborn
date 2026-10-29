@@ -85,7 +85,16 @@ public partial class MapEntityLayer : Node2D
             k--;
             if (t.Opfer < 0 || t.Opfer >= _entities.Count) continue;
             var o = _entities[t.Opfer];
-            if (o.Dead || !Untaetig(o)) continue;                                        // @0x411867/@0x411875
+            if (o.Dead || !Untaetig(o))                                                  // @0x411867/@0x411875
+            {
+                // Pruefstand: WARUM der Ablauf nichts tat (nur unter --selbstverteidiger-check).
+                if (_svCheckAn) _svAblaufGrund[t.Opfer] = o.Dead ? "tot" :
+                    $"nicht untaetig: Ukol {o.Ukol}, Weg {(o.Path != null ? "ja" : "nein")}, Ziel {o.Target}" +
+                    (o.Target >= 0 && o.Target < _entities.Count
+                        ? $" (Spieler {_entities[o.Target].Owner} bei {_entities[o.Target].Col},{_entities[o.Target].Row})" : "") + ", " +
+                    $"Auftraege {o.Orders.Count}, Restziel {(o.RestZiel != null ? "ja" : "nein")}, Ordered {o.Ordered}";
+                continue;
+            }
             if (t.Angreifer < 0 || t.Angreifer >= _entities.Count || _entities[t.Angreifer].Dead) continue;
             if (Angriffsbefehl(t.Opfer, o, t.Angreifer))
             {
@@ -116,8 +125,14 @@ public partial class MapEntityLayer : Node2D
     // ================= der Pruefstand ==========================================
 
     private bool _svCheckAn;
+    /// <summary><c>--sv-streifen-alt</c>: der Pruefstand nimmt wieder den ersten freien Streifen (bug-672, Nullmodell).</summary>
+    public static bool SvStreifenAlt;
+    // UNSERE SETZUNG (nur Pruefstand). Gemessen K2: 16 -> Faelle 2..4 ohne Streifen,
+    // 8 -> Fall 4 ohne Streifen, 5 -> alle vier herstellbar; der Feind lag bei Abstand 1.
+    private const int SvFeindAbstand = 5;
     private readonly Dictionary<int, (int Takte, int Angreifer, bool Weg)> _svAusloesung = new();
     private readonly HashSet<int> _svEingetragen = new();
+    private readonly Dictionary<int, string> _svAblaufGrund = new();
 
     private sealed class SvFall
     {
@@ -181,7 +196,26 @@ public partial class MapEntityLayer : Node2D
             _svFaelle.Add(f);
             f.Opfer = fussvolk ? Suche(x => x.Infantry >= 0 && CanFight(x)) : Suche(BewaffnetesFahrzeug);
             if (f.Opfer < 0) { f.Notiz = "kein Opfer"; return f; }
-            if (!FreierStreifen(out int c, out int r)) { f.Notiz = "kein freier Streifen"; f.Opfer = -1; return f; }
+            // ⭐ 30.10.2026, bug-672 — DER STREIFEN MUSS AUCH FEINDFREI SEIN. Gemessen K2
+            // Fall 1: der erste freie Streifen (48,12) lag in Sicht eines Feindes, das
+            // Opfer nahm ihn binnen der 20 Takte selbst auf (Ziel 12, Ukol 0) — dann ist
+            // es zum Ablauf nicht untaetig (@0x411875) und der Fall misst nicht, was er
+            // soll. Nullmodell (ohne die Bedingung): Fall 1 NEIN. ⚠ UNSERE SETZUNG des
+            // Pruefstands: kein feindliches Objekt binnen FeindAbstand Zellen; im Spiel
+            // wirkungslos. Gegenschalter --sv-streifen-alt.
+            var opf = _entities[f.Opfer];
+            bool Feindfrei(int c0, int r0)
+            {
+                if (SvStreifenAlt || fussvolk) return true;   // Fall 4 traegt nie ein — dort gleichgueltig
+                foreach (var x in _entities)
+                {
+                    if (x.Dead || x.IsProp || x == opf || x.Owner < 0 || x.Owner > 7 || Allied(ViewPlayer, x.Owner)) continue;
+                    int dx = x.Col < c0 ? c0 - x.Col : x.Col > c0 + 7 ? x.Col - c0 - 7 : 0;
+                    if (System.Math.Max(dx, System.Math.Abs(x.Row - r0)) <= SvFeindAbstand) return false;
+                }
+                return true;
+            }
+            if (!FreierStreifen(out int c, out int r, Feindfrei)) { f.Notiz = "kein freier Streifen"; f.Opfer = -1; return f; }
             var o = _entities[f.Opfer];
             o.Owner = ViewPlayer; o.Target = -1; o.Path = null; o.Ordered = false; o.Ukol = 0;
             o.Orders.Clear();
@@ -260,6 +294,8 @@ public partial class MapEntityLayer : Node2D
                            + $"Weg {(a.Weg ? "ja" : "nein")}"
                            : "kein Ziel gesetzt")
                     + $" (jetzt Ziel {o.Target}, auf ({o.Col},{o.Row}))  {(soll ? "ja" : "NEIN")}\n");
+            if (_svAblaufGrund.TryGetValue(f.Opfer, out var grund))
+                sb.Append($"      Ablauf ohne Wirkung: {grund}\n");
         }
         sb.Append($"  Tafel: {SvEintraege} Eintraege, {SvAusgeloest} ausgeloest, {SvVoll}x voll; "
                 + $"Gegenschalter --gegenschuss-sofort: {GegenschussSofort}\n");
