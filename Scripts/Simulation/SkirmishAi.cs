@@ -2307,7 +2307,38 @@ public partial class MapEntityLayer : Node2D
             // Spielers »Aussenden« kennt. Gemessen ist der Fall: auf Kampagne
             // 10/23/26 gingen im ersten Lauf 2 bis 5 Einheiten der Gegner von
             // selbst hinein. Siehe Simulation/Einfahrt.cs.
+            // ⭐⭐ 29.10.2026, bug-647 (KayelGee R8 K5: »Basis einnehmen: gegnerische
+            // produzierte Einheiten tauchen um die Basis auf«, berichte/tueren-einnahme-
+            // r8-opus.md §1). Diese Schleife holte JEDES Bild alle Saetze mit
+            // AusfahrenAusGarage(b, 0) heraus — ohne Tuerzwang, also ueber SpawnCellFor
+            // in den Rueckfall NearestFree (12 Zellen). Waehrend einer Einnahme ist die
+            // Tuer gesperrt und auf der Folgezelle steht der Eindringling: jeder Neubau
+            // erschien NEBEN der Basis. Im Original warten fertige Einheiten mit UKOL
+            // 0x33 in der Liste; der Auslass 0x43DCA6..0x43DE58 laesst hoechstens eine
+            // je Takt heraus, und nur wenn Tuer UND Folgezelle frei sind (0x43DCD8..
+            // 0x43DD0C) — einen zweiten Schreiber von imap := Einheit gibt es nicht
+            // (@0x43DDBF). Darum hier nur noch AUSSENDEN (UKOL 0x33); herauslassen tut
+            // DepotAuslass (Basis/Depot/Bahnhof). Fuer andere Gebaeudearten mit Garage
+            // bleibt der Weg, aber mit Tuerzwang (unsere Setzung, dort ungelesen).
+            // Gegenschalter --ki-auslass-rueckfall-alt (Stand 0.6.11).
             wache = 0;
+            if (!KiAuslassRueckfallAlt)
+            {
+                bool auslass = b.BType is 1 or 5 or 6 or 12 && !AussendenSofort;
+                for (int k = 0; k < b.Garage.Count; k++)
+                {
+                    var u = b.Garage[k];
+                    if (u.Ukol == UkolVerlaesst) continue;
+                    u.Ukol = UkolVerlaesst;               // 0x410420: ausgesandt
+                    AiDepotSent++;
+                }
+                if (!auslass)
+                    while (b.Garage.Count > 0 && wache++ < DepotSlots)
+                    {
+                        if (!AusfahrenAusGarage(b, 0, nurTuer: true)) { AiDepotStuck++; break; }
+                    }
+            }
+            else
             while (b.Garage.Count > 0 && wache++ < DepotSlots)
             {
                 if (!AusfahrenAusGarage(b, 0)) { AiDepotStuck++; break; }
@@ -2793,6 +2824,8 @@ public partial class MapEntityLayer : Node2D
         flz.TurnPoint = null;
         flz.Order = 4;                        // uk  := 4  (START)
         flz.Order2 = 7;                       // m_uk := 7 (Angriff)
+        flz.StartUhr = 0;                     // bug-664: die Startuhr beginnt (Simulation/Startzustand.cs)
+        KiStartGemerkt(flz);
     }
 
     /// <summary><b><c>ai_air_find_target(spieler)</c> @0x4BDA10</b> — zwei
@@ -3275,6 +3308,10 @@ public partial class MapEntityLayer : Node2D
                 var u = _entities[ui];
                 if (u.DugIn) continue;
                 if (GefechtKiMarschAn && u.AiCpu0 == 10) continue;   // W3: kein Gruppenmitglied
+                // ⭐ 29.10.2026, bug-653: nur FAHRZEUGE nehmen ein (Tor imap < 8000,
+                // C 0x43CBF6) — ein Soldat staende an einer Tuer, an der nichts
+                // geschieht. AiGrab selbst ist unsere Setzung. --fussvolk-einnahme-alt.
+                if (u.Infantry >= 0 && !FussvolkEinnahmeAlt) continue;
                 float d = new Vector2(b.Col - u.Col, b.Row - u.Row).Length();
                 if (d >= bestD) continue;
                 bestD = d; bestB = bi; bestU = ui;

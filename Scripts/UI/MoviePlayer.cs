@@ -287,7 +287,8 @@ public partial class MoviePlayer : CanvasLayer
         if (_ton == null) return;
         _ton.Play();
         GD.Print($"Film: Ton laeuft — {_tonAbtastungen} Abtastungen " +
-                 $"({_tonSekunden:0.0} s), spielt: {_ton.Playing}");
+                 $"({_tonSekunden:0.0} s), spielt: {_ton.Playing}, VolumeDb {_ton.VolumeDb:0.00}"
+                 + (FilmtonAlt ? " (--filmton-alt)" : ""));
     }
 
     public override void _Input(InputEvent e)
@@ -355,9 +356,24 @@ public partial class MoviePlayer : CanvasLayer
         _tonAbtastungen = pcm.Length;
         int kanaele = Math.Max(1, _film.SoundChannels);
         _tonSekunden = pcm.Length / (double)kanaele / Math.Max(1, _film.SoundRate);
-        var sp = new AudioStreamPlayer { Stream = w, Bus = "Master" };
+        // ⭐ 29.10.2026, bug-663: der Filmregler (KOMFORT, unsere Setzung — siehe
+        // Settings.MovieVolume). Vorgabe 100 = 0 dB wie bisher.
+        var sp = new AudioStreamPlayer { Stream = w, Bus = "Master", VolumeDb = FilmtonDb() };
         AddChild(sp);
         return sp;
+    }
+
+    /// <summary><c>--filmton-alt</c> — bug-663: der Regler wird ignoriert, der Film
+    /// laeuft immer mit 0 dB (Stand 0.6.11 = Original).</summary>
+    public static bool FilmtonAlt;
+
+    /// <summary>Die Lautstaerke des Filmtons: 20·log10(v/100) dB, 0 → −80 dB (stumm).
+    /// ⚠ UNSERE SETZUNG (Komfort): das Original hat keinen Filmregler.</summary>
+    public static float FilmtonDb(int? wert = null)
+    {
+        if (FilmtonAlt) return 0f;
+        int v = Math.Clamp(wert ?? Settings.MovieVolumeTest ?? Settings.MovieVolume, 0, 100);
+        return v <= 0 ? -80f : (float)(20.0 * Math.Log10(v / 100.0));
     }
 
     public override void _Process(double delta)

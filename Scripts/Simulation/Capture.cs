@@ -285,8 +285,26 @@ public partial class MapEntityLayer : Node2D
         if (i < 0 || i >= _entities.Count) return -1;
         var e = _entities[i];
         if (e.IsBuilding || e.IsProp || e.Dead) return -1;
+        // ⭐ 29.10.2026, bug-653 (KayelGee R8 K11: »Infanterie sollte keine Gebaeude
+        // einnehmen koennen«, berichte/flak-einnahme-r8-opus.md §2): das Einnahme-Tor
+        //     C 0x43CBEF  mov ax, word [ecx+0xBDEA82]   ; imap der Zelle vor Tuer 0
+        //     C 0x43CBF6  cmp ax, 0x1F40 ; jae Abfluss   ; >= 8000 -> niemand
+        //     (F 0x43BC8F / 0x43BC96 / 0x43BC9A, gleich)
+        // laesst nur Einheitenplaetze < 8000 durch (Fahrzeug, Schiff). Fussvolk steht
+        // in der imap als Infanteriezelle 10000..13999 und faellt durch — im Original
+        // nimmt es NIE ein, egal wie viele Maenner. Ein Soldat vor der Tuer zaehlt
+        // also als »niemand«: der Fortschritt laeuft ab (0x43D29E dec). In Kampagne
+        // UND Gefecht (Spielerentscheidung 12). Gegenschalter --fussvolk-einnahme-alt.
+        if (e.Infantry >= 0 && !FussvolkEinnahmeAlt) { FussvolkEinnahmeAbgewiesen++; return -1; }
         return e.Owner is >= 0 and <= 7 ? e.Owner : -1;
     }
+
+    /// <summary><c>--fussvolk-einnahme-alt</c> — bug-653: Fussvolk nimmt ein, und die
+    /// Gefechts-KI schickt auch Fussvolk als Greifer (Stand 0.6.11).</summary>
+    public static bool FussvolkEinnahmeAlt;
+
+    /// <summary>Wie oft das Tor einen Soldaten vor der Tuer abgewiesen hat (Pruefstand).</summary>
+    public int FussvolkEinnahmeAbgewiesen;
 
     /// <summary>
     /// One tick of the capture, called from the building tick in

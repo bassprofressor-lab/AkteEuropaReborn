@@ -85,10 +85,22 @@ public partial class MapEntityLayer
             HandKlickGeklemmt++;
         }
         if (FireAtAusfuehren(HandsteuerungIdx, col, row)) HandKlickSchuesse++;
+        // ⭐ 29.10.2026, bug-664 (Spielerentscheidung 15): die Flak (ZBRAN 0x12) lehnt
+        // den Handklick im Original STILL ab (fire_at 0x40C8C0: cmp ecx,0x12 / je ->
+        // xor al,al / ret, C 0x40C8E5, F 0x40C7A5 — kein Meldungsruf). Der Text
+        // »ZBRAN 0x12 — 0x40C8C0 tut nichts« war unser Technikertext fuer den Spieler.
+        // Gezaehlt wird weiter (FireAtVerweigert). Gegenschalter --flak-handtext-alt.
+        else if (e.Weapon == FlakAufsatz && !FlakHandtextAlt) FlakHandStill++;
         else if (FireAtGrund.Length > 0) Say("Handsteuerung: " + FireAtGrund);
         return true;
     }
     public static bool HandsteuerungBodenCheckAn;
+
+    /// <summary><c>--flak-handtext-alt</c> — bug-664: der Technikertext beim Handklick
+    /// einer Flak kommt wieder (Stand 0.6.11). <see cref="FlakHandStill"/> zaehlt die
+    /// still abgelehnten Klicks.</summary>
+    public static bool FlakHandtextAlt;
+    public int FlakHandStill;
 
     /// <summary>Die Maus auf der Karte, je Bild von der Oberfläche abgelegt
     /// (Rohrrichtung, 0x433497).</summary>

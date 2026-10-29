@@ -117,6 +117,10 @@ public partial class MapEntityLayer
     // oder dass gar keine Flak steht — und das sind drei verschiedene Befunde.
     public int FlakAuftraege, FlakSchuesse, FlakAbschuesse, FlakNegativSchaden;
     public int FlakKegelProben, FlakRingTreffer;
+    /// <summary>bug-664: vom Zustandsfilter (uk 2/4) verworfen, und welche Slots der
+    /// Kegel ueberhaupt geprueft hat.</summary>
+    public int FlakUkVerworfen;
+    public readonly System.Collections.Generic.HashSet<int> FlakGeprueft = new();
 
     /// <summary>Wie oft ein Rohr gedreht wurde, und wie oft davon OHNE einen
     /// Auftrag anzulegen — das ist der sichtbare Unterschied: die Flak zuckt
@@ -313,7 +317,12 @@ public partial class MapEntityLayer
                 // macht. `air_back_to_airport` setzt fuer ALLE `uk := 1`
                 // (@0x4261E0); die Uebergabe `uk := m_uk` steht nur im
                 // Startzweig. Der Weg dazwischen ist nicht gelesen.
-                if (!FlakUkAlt && (a.Order == 2 || a.Order == 4)) continue;
+                // ⭐ 29.10.2026, bug-664: GEZAEHLT, bevor verworfen wird — sonst sieht
+                // kein Lauf, dass der Filter alles schluckt (K17: Kegelproben 0 bei
+                // vier Helis in der Luft). Die Zeile selbst ist richtig gelesen; der
+                // Fehler war der Start, der nie endete (Simulation/Startzustand.cs).
+                if (!FlakUkAlt && (a.Order == 2 || a.Order == 4)) { FlakUkVerworfen++; continue; }
+                FlakGeprueft.Add(a.Slot);
                 if (a.Owner is < 0 or > 7 || Allied(s.Owner, a.Owner)) continue;
 
                 FlakKegelProben++;
@@ -476,6 +485,7 @@ public partial class MapEntityLayer
 
         var sb = new System.Text.StringBuilder();
         sb.Append($"flak-check: {flak} Flak, {flugzeuge} in der Luft; ");
+        sb.Append($"vom uk-Filter verworfen {FlakUkVerworfen}, ");
         sb.Append($"Kegelproben {FlakKegelProben}, im Ring {FlakRingTreffer}, ");
         sb.Append(FlakDzMin <= FlakDzMax
             ? $"dz {FlakDzMin}..{FlakDzMax} (davon {FlakDzNull}x null), "
@@ -539,6 +549,9 @@ public partial class MapEntityLayer
 
     private bool _flakProbe;
     private int _flakProbeTakte;
+    /// <summary>bug-664: Slot des Probefliegers im Startzustand, und der Takt, in dem
+    /// der Kegel ihn zuerst geprueft hat (−1 = nie).</summary>
+    private int _flakProbeStart = -1, _flakProbeStartErst = -1;
     private int _flakProbeSchuetzeCol, _flakProbeSchuetzeRow, _flakProbeGelaende;
     private Vector2 _flakProbeSchuetzePos;
     private readonly List<(string Titel, int Slot, bool Soll)> _flakProbeFaelle = new();
@@ -635,6 +648,28 @@ public partial class MapEntityLayer
         };
         int slot = 0;
         foreach (var x in _special) slot = Mathf.Max(slot, x.Slot + 1);
+        // ⭐ 29.10.2026, bug-664 — der Fall, den die Probe bisher NICHT sehen konnte:
+        // alle Probeflieger standen auf Order 0. Ein neunter steht im START (Order 4,
+        // m_uk 7, Uhr 0) 5 Zellen westlich auf Hoehe 130 — im Ring. Soll: die ersten
+        // 25 Takte NICHT geprueft (uk 4 ist ausgeschlossen, 0x428413), danach Order 7
+        // und geprueft. Nullmodell --startzustand-alt: nie geprueft.
+        {
+            int alt = FlakProbeHoeheAbsolut ? 130 : g + 130;
+            var st = new Special
+            {
+                Slot = slot++, Kind = 4, Name = "Probeflieger (Start)", TypeName = "Probeflieger",
+                Owner = gegner, Stored = false,
+                Col = s.Col - 5, Row = s.Row,
+                Pos = s.Pos + new Vector2(-5 * TileW, 0),
+                Hp = 100000, HpMax = 100000, Defence = 0, Attack = 0,
+                Ammo = 0, AmmoMax = 0, Fuel = 9999, FuelMax = 9999,
+                Alt = alt, Sollhoehe = alt, Order = 4, Order2 = 7, StartUhr = 0,
+            };
+            st.Goal = st.Pos;
+            _special.Add(st);
+            _flakProbeStart = st.Slot;
+            _flakProbeHalt.Add((st.Slot, st.Pos, st.Col, st.Row, alt));
+        }
         foreach (var f in faelle)
         {
             // ⚠⚠ 07.10.2026, bug-480 — DIE SOLLWERTE KENNEN DAS GELAENDE NICHT.
@@ -705,6 +740,8 @@ public partial class MapEntityLayer
             a.Goal = pos; a.PlayerGoal = null; a.TurnPoint = null;
         }
 
+        if (_flakProbeStart >= 0 && _flakProbeStartErst < 0 && FlakGeprueft.Contains(_flakProbeStart))
+            _flakProbeStartErst = _flakProbeTakte;
         if (++_flakProbeTakte < FlakProbeTakte) return;
         _flakProbeTakte = -1;
 
@@ -715,7 +752,7 @@ public partial class MapEntityLayer
         for (int k = 0; k < _flakProbeFaelle.Count; k++)
         {
             var (titel, pslot, soll) = _flakProbeFaelle[k];
-            var halt = _flakProbeHalt[k];
+            var halt = _flakProbeHalt.Find(h => h.Slot == pslot);
             var a = _special.Find(x => x.Slot == pslot);
             // ⚠ DIESELBE Rechnung wie der Kegel, nicht eine eigene — siehe
             // FlakAbstand. Hier stand `Abs(Col - SchuetzeCol)`, also allein die
@@ -762,7 +799,14 @@ public partial class MapEntityLayer
         // bug-480: ein Urteil, das die Regression lesen kann. Die REGEL muss ganz
         // stimmen; die KETTE braucht mindestens einen beschossenen Flieger (unter
         // --flak-kegel-aus / --flak-treffer-aus faellt genau sie).
-        bool bestanden = ok == _flakProbeFaelle.Count && getroffen >= 1;
+        // bug-664: der Startflieger
+        var stf = _special.Find(x => x.Slot == _flakProbeStart);
+        bool startOk = _flakProbeStartErst > StartUhrFlugzeug && stf != null && stf.Order == 7;
+        sb.Append($"\n   {(startOk ? "ok  " : "⚠ FALSCH")} Startflieger (Order 4 -> m_uk 7): zuerst geprueft im Takt "
+                + $"{(_flakProbeStartErst < 0 ? "NIE" : _flakProbeStartErst.ToString())} (Soll > {StartUhrFlugzeug}), Order jetzt {stf?.Order} (Soll 7), "
+                + $"vom uk-Filter verworfen {FlakUkVerworfen}"
+                + (StartzustandAlt ? " [Nullmodell --startzustand-alt: nie geprueft, die Probe MUSS durchfallen]" : ""));
+        bool bestanden = ok == _flakProbeFaelle.Count && getroffen >= 1 && startOk;
         sb.Append(bestanden
             ? $"\n   ✅ BESTANDEN — Regel {ok}/{_flakProbeFaelle.Count}, Kette {getroffen} beschossen " +
               $"(Flak auf Gelaende*15 = {_flakProbeGelaende})"

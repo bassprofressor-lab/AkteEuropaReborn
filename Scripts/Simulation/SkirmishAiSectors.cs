@@ -1417,6 +1417,15 @@ public partial class MapEntityLayer : Node2D
     /// <c>RX/24 == sx</c>, <c>RY/24 == sy</c>, <c>+0x0A &lt; 4</c> (Landeinheit,
     /// <b>kein Schiff</b>) und <c>UKOL &lt; 45</c>.</para>
     /// </summary>
+    /// <summary><c>cmp UKOL, 0x2D</c> @0x4BC49E.</summary>
+    private const int KiZielUkolGrenze = 0x2D;
+
+    /// <summary><c>--ki-zielwahl-ukol-alt</c> — bug-645 B2: ohne das UKOL-Tor (Stand 0.6.11).</summary>
+    public static bool KiZielwahlUkolAlt;
+
+    /// <summary>Pruefstand: wie oft das Tor einen Kandidaten verworfen hat.</summary>
+    public int KiZielUkolVerworfen;
+
     private int AiZielImSektor(int p, int sx, int sy)
     {
         for (int i = 0; i < _entities.Count; i++)
@@ -1427,6 +1436,13 @@ public partial class MapEntityLayer : Node2D
             var (ex, ey) = AiSektorVon(e.Col, e.Row);
             if (ex != sx || ey != sy) continue;
             if (!e.Mobile) continue;                     // Landeinheit, kein Schiff
+            // ⭐ 29.10.2026, bug-645 Teil B2 (KayelGee R8 K3, berichte/ki-zielwahl-r8-
+            // opus.md §1.4) — das Tor `UKOL < 0x2D` (C 0x4BC49E, F 0x4BBF5E) fehlte:
+            // es schliesst aus Tuer angemeldet 0x30, untergestellt 0x32, verlassend
+            // 0x33, Bahn 0x37/0x38, im Transporter 0x39 und sterbend >= 100. Ohne das
+            // Tor bekam ein ganzer Sektor eine Einheit im Depot als Gruppenziel.
+            // Gegenschalter --ki-zielwahl-ukol-alt.
+            if (e.Ukol >= KiZielUkolGrenze && !KiZielwahlUkolAlt) { KiZielUkolVerworfen++; continue; }
             // Paket W3 (bug-635): im Gefecht nur, was diese KI gesehen hat (KiAufklaerung,
             // --ki-sicht-check). Das Original kennt keinen Nebel fuer die KI. UNSERE SETZUNG.
             if (GefechtKiMarschAn && !KiKennt(p, e)) continue;

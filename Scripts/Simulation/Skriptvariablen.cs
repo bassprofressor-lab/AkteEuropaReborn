@@ -622,11 +622,50 @@ public partial class MapEntityLayer
                 Immer(w != null, "Wissenschaftler 7001 auf der Karte");
                 if (w == null) break;
                 if (alt && V(8) == 0) { Eingriff("v8 := 3 (Nullmodell: Start fehlt, Bezahlung trotzdem pruefen)"); Setze(8, 3); }
-                Eingriff("7001 -> Spieler 0, UKOL 50");
-                w.Owner = 0; w.Ukol = 50;
+                // ⭐ 29.10.2026, bug-649 (K7) — der Forscher wird ECHT in die Basis
+                // gelegt (Einfahren, UKOL 50, Garage), nicht nur `Ukol = 50` gesetzt:
+                // sonst sieht der Pruefstand die tote Zeile in der Andockliste nie
+                // (Messfalle »wer eine Wirkung misst, muss die Ankunft mitmessen«).
+                Entity? basis = null;
+                foreach (var x in _entities)
+                    if (x.IsBuilding && !x.IsProp && !x.Dead && x.BType == 1 && x.Owner == view && x.DoorCells.Count > 0) { basis = x; break; }
+                if (basis == null)
+                    foreach (var x in _entities)
+                        if (x.IsBuilding && !x.IsProp && !x.Dead && x.BType == 1 && x.DoorCells.Count > 0)
+                        {
+                            // M7: der Spieler hat zu Beginn keine Basis (nur Cossarro) — statt Einnahme
+                            Eingriff($"Basis Platz {x.Slot} (Spieler {x.Owner}) an Spieler {view} gegeben (statt Einnahme), Liste geleert");
+                            x.Owner = x.Team = x.ShownOwner = view;
+                            x.Garage.Clear(); x.Depot.Clear();
+                            basis = x;
+                            break;
+                        }
+                w.Owner = 0;
+                int wi = _entities.IndexOf(w);
+                int belegtVor = -1;
+                if (basis != null && GarageBelegt(basis) < DepotSlots)
+                {
+                    Eingriff($"7001 -> Spieler 0, in die Basis Platz {basis.Slot} eingefahren (Einfahren, UKOL 50)");
+                    Einfahren(basis, wi, w);
+                    belegtVor = GarageBelegt(basis);
+                }
+                else
+                {
+                    Eingriff("7001 -> Spieler 0, UKOL 50 (⚠ keine eigene Basis mit freiem Platz — Garage NICHT geprueft)");
+                    w.Ukol = 50;
+                }
+                Immer(basis == null || basis.Garage.Contains(w), $"Ankunft: 7001 in der Garage {(basis != null && basis.Garage.Contains(w))}, UKOL {w.Ukol}");
                 int g0 = geld;
                 Takte(250);
                 Soll(geld - g0 == 350 && V(9) == 1 && w.Dead, $"0x49B0CE: +{geld - g0} $ (350), v9 = {V(9)}, v8 = {V(8)}, entfernt {w.Dead}");
+                if (basis != null && belegtVor >= 0)
+                {
+                    bool raus = !basis.Garage.Contains(w) && GarageBelegt(basis) == belegtVor - 1;
+                    bool ok = raus;          // das Nullmodell behaelt die Erwartung — und faellt
+                    sb.Append(ok ? "  ok     " : "  FEHLER ").Append(SkriptEntferntGarageAlt ? "[Nullmodell --skript-entfernt-garage-alt: die tote Zeile bleibt, MUSS durchfallen] " : "")
+                      .Append($"0x4D0B00 ausgedockt: 7001 noch in der Garage {basis.Garage.Contains(w)}, belegt {belegtVor} -> {GarageBelegt(basis)} (Soll {belegtVor - 1})\n");
+                    if (!ok) fehler++;
+                }
                 break;
             }
             case 3:

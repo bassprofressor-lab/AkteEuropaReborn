@@ -240,11 +240,23 @@ public partial class MapEntityLayer : Node2D
     {
         var c = BauteilFuer(spieler, bauteil);
         if (c == null || c.Length < 58) return false;
-        if (c[0x00] == 0) return false;              // 0x4AA9D2, unsere Grundtafel
-
         int mission = UI.SkirmishSetup.CampaignMission;
-        if (ForschungBesitzAlt || mission <= 0) return true;
-        var u = Campaign.CampaignManager.UnlocksFor(mission);
+        var u = mission > 0 && !ForschungBesitzAlt ? Campaign.CampaignManager.UnlocksFor(mission) : null;
+        bool fahrplan = u != null && u.Known;
+        // ⭐ 29.10.2026, bug-659 (KayelGee R8 K17, »M9: Wuestenwiesel freigeschaltet,
+        // aber keine Einheit damit erstellbar«, berichte/forschung-kampagne-r8-opus.md
+        // §2.2 Sperre 1): in der KAMPAGNE schreibt den Besitz das Missionsskript —
+        // set_part 0x4D0520 schreibt genau +0x00 (`mov byte [(Bauteil+200·Spieler)·58
+        // + 0x5045A0], Wert` @0x4D0543), der Wert der EXE-Grundtafel spielt danach
+        // keine Rolle. In der Grundtafel stehen 65, 68, 69, 169, 170, 171, 172 auf 0,
+        // und dieses Tor sperrte sie darum in der GANZEN Kampagne (auch im
+        // Forschungsangebot). Mit Fahrplan entscheidet jetzt allein der Fahrplan.
+        // ⚠ Der schmale Weg: der Spielerblock wird hier NICHT beschrieben — das
+        // Schreiben wie set_part haengt am Forschungsuebertrag ueber Missionen
+        // (Bauvorschlag A.2, Paket P2). Gegenschalter --besitz-grundtafel-alt.
+        if (c[0x00] == 0 && (!fahrplan || BesitzGrundtafelAlt)) return false;   // 0x4AA9D2
+
+        if (ForschungBesitzAlt || mission <= 0 || u == null) return true;
         if (!u.Known) return true;                   // ohne Fahrplan der alte Stand
 
         // Die eine Zeile, die der Missionsstart selbst setzt (0x4B23F9).
@@ -254,6 +266,10 @@ public partial class MapEntityLayer : Node2D
         // besitzt, was der Mensch besitzt.
         return spieler != 0 && u.Parts.Contains((0, bauteil));
     }
+
+    /// <summary><c>--besitz-grundtafel-alt</c> — bug-659: die EXE-Grundtafel (+0x00)
+    /// sperrt auch in der Kampagne (65, 68, 69, 169..172 nie besessen; Stand 0.6.11).</summary>
+    public static bool BesitzGrundtafelAlt;
 
     private string ForschungBauteilName(int bauteil)
     {

@@ -138,7 +138,29 @@ public partial class MapEntityLayer
         b.Garage.Clear();
         DepotEintraegeGeloescht += b.Depot.Count;
         b.Depot.Clear();
+        // ⭐ 29.10.2026, bug-647 (K5, Spielerentscheidung 8 »wie im Original«): auch der
+        // LAUFENDE Bau und die Warteschlange des Vorbesitzers gehen verloren. Im
+        // Original gibt es keine Bauzeit (0x4B1840 dockt den Neubau sofort an, UKOL
+        // 0x33) — was dort »im Bau« waere, steht schon in der Liste, und die loescht
+        // 0x43D19F ganz. Bei uns lief BuildTime ueber den Besitzerwechsel weiter, und
+        // der NEUE Besitzer bekam eine Einheit, die der Gegner bezahlt hatte
+        // (NeubauInListe mit e.Owner). ⚠ Die BuildQueue ist UNSERE Zutat; sie wird
+        // ersatzlos geloescht (keine Erstattung). Gegenschalter --einnahme-bau-weiter.
+        if (!EinnahmeBauWeiter)
+        {
+            if (b.BuildTime > 0f) LaufendeBautenGeloescht++;
+            LaufendeBautenGeloescht += b.BuildQueue.Count;
+            b.BuildTime = 0f;
+            b.BuildQueue.Clear();
+        }
     }
+
+    /// <summary><c>--einnahme-bau-weiter</c> — bug-647: laufender Bau und Warteschlange
+    /// einer eingenommenen Basis bleiben (Stand 0.6.11).</summary>
+    public static bool EinnahmeBauWeiter;
+
+    /// <summary>Pruefstand: wie viele laufende/wartende Bauten die Einnahme geloescht hat.</summary>
+    public int LaufendeBautenGeloescht;
 
     /// <summary><c>--flughafen-einnahme-alt</c> — der Stand bis 12.10.2026: die
     /// Flugzeuge eines eingenommenen Flughafens behalten ihren alten Besitzer

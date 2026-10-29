@@ -1455,6 +1455,11 @@ public partial class MapEntityLayer : Node2D
         /// Versorgungsaufträge.</summary>
         public int Order, Order2;
 
+        /// <summary>⭐ 29.10.2026, bug-664 — die STARTUHR (Satz +0x12, byte[0x6DDF82]):
+        /// zaehlt je Takt, solange <see cref="Order"/> == 4 (Start). Siehe
+        /// Simulation/Startzustand.cs.</summary>
+        public int StartUhr;
+
         /// <summary>What is left of the payload (record +0x31). A full top-up
         /// of one customer costs 50, a Nachschub-Posten refills it to 255.</summary>
         public int Cargo;
@@ -5328,9 +5333,31 @@ public partial class MapEntityLayer : Node2D
         if (punkte <= 0) return;
 
         var pos = e.Pos + new Vector2(BalkenDx(e) - LadungBreite / 2f, -(BalkenHub(e) + LadungUeberLeben));
-        DrawRect(new Rect2(pos - Vector2.One, new Vector2(LadungBreite + 2, LadungHoehe + 2)),
-                 new Color(0, 0, 0, 0.75f));
-        DrawRect(new Rect2(pos, new Vector2(LadungBreite, LadungHoehe)), LadungRahmen);
+        // ⭐ 29.10.2026 (Spielerentscheidung 14, berichte/anzeige-r8-opus.md §1.5,
+        // transportladung-fable.md §4): 0x4B90D0 zeichnet nur den 1-px-RAHMEN in
+        // 0xFE (Spalten x−16..x+15, Zeilen y und y+5, Seiten y+1..y+4) — innen
+        // DURCHSICHTIG, die Ladung nur in den Zeilen y+1..y+4 ab Spalte x−15,
+        // hoechstens 30 Punkte. Hier stand ein schwarzer Rand α 0,75 aussen und
+        // ein ganz gefuellter weisser Kasten (dasselbe Muster wie der Lebensbalken
+        // vor bug-410). Gegenschalter --ladungsbalken-bild-alt.
+        float innen = LadungBreite, ly = 0, lh = LadungHoehe;
+        if (!LadungsbalkenBildAlt)
+        {
+            pos = new Vector2(Mathf.Floor(pos.X), Mathf.Floor(pos.Y));
+            DrawRect(new Rect2(pos, new Vector2(LadungBreite, 1)), LadungRahmen);
+            DrawRect(new Rect2(pos + new Vector2(0, LadungHoehe - 1), new Vector2(LadungBreite, 1)), LadungRahmen);
+            DrawRect(new Rect2(pos + new Vector2(0, 1), new Vector2(1, LadungHoehe - 2)), LadungRahmen);
+            DrawRect(new Rect2(pos + new Vector2(LadungBreite - 1, 1), new Vector2(1, LadungHoehe - 2)), LadungRahmen);
+            pos += Vector2.One;
+            innen = LadungBreite - 2; ly = 0; lh = LadungHoehe - 2;
+        }
+        else
+        {
+            DrawRect(new Rect2(pos - Vector2.One, new Vector2(LadungBreite + 2, LadungHoehe + 2)),
+                     new Color(0, 0, 0, 0.75f));
+            DrawRect(new Rect2(pos, new Vector2(LadungBreite, LadungHoehe)), LadungRahmen);
+        }
+        LadungsbalkenGezeichnet++;
 
         // ⚠ Die zwei Sorten stehen NEBENEINANDER, nicht uebereinander: der
         // Zeichner faehrt einen Zaehler ueber dieselbe Zeile. Fahrzeuge zuerst,
@@ -5338,16 +5365,23 @@ public partial class MapEntityLayer : Node2D
         float x = 0;
         if (fahrzeuge > 0)
         {
-            float w = Mathf.Min(LadungBreite - x, fahrzeuge * LadungProFahrzeug);
-            DrawRect(new Rect2(pos + new Vector2(x, 0), new Vector2(w, LadungHoehe)), LadungFahrzeug);
+            float w = Mathf.Min(innen - x, fahrzeuge * LadungProFahrzeug);
+            DrawRect(new Rect2(pos + new Vector2(x, ly), new Vector2(w, lh)), LadungFahrzeug);
             x += w;
         }
-        if (fussvolk > 0 && x < LadungBreite)
+        if (fussvolk > 0 && x < innen)
         {
-            float w = Mathf.Min(LadungBreite - x, fussvolk * LadungProFussvolk);
-            DrawRect(new Rect2(pos + new Vector2(x, 0), new Vector2(w, LadungHoehe)), LadungFussvolk);
+            float w = Mathf.Min(innen - x, fussvolk * LadungProFussvolk);
+            DrawRect(new Rect2(pos + new Vector2(x, ly), new Vector2(w, lh)), LadungFussvolk);
         }
     }
+
+    /// <summary><c>--ladungsbalken-bild-alt</c> — der Schiffs-Ladungsbalken wieder als
+    /// gefuellter weisser Kasten mit schwarzem Aussenrand (Stand 0.6.11).</summary>
+    public static bool LadungsbalkenBildAlt;
+
+    /// <summary>Wie viele Schiffs-Ladungsbalken gezeichnet wurden (Pruefstand).</summary>
+    public int LadungsbalkenGezeichnet;
 
     /// <summary><c>--ladungsbalken-aus</c> — der Stand vor dem 07.09.2026: ein
     /// beladener Transporter zeigt nicht, was er traegt.</summary>
@@ -13558,6 +13592,10 @@ public partial class MapEntityLayer : Node2D
                    + $"auf ({victim.Col},{victim.Row}), TP {victim.Hp}/{victim.HpMax}, Grund: "
                    + (grund.Length > 0 ? grund : "UNBENANNT ⚠")
                    + (by is >= 0 and <= 7 ? $", durch Spieler {by}" : ", ohne Schuetzen"));
+        // ⭐ 29.10.2026, bug-649 — wer als untergestellter Satz stirbt, verlaesst die
+        // Andockliste (sonst bleibt eine tote Zeile im Depot und belegt den Platz).
+        // Simulation/SkriptEntferntGarage.cs, --skript-entfernt-garage-alt.
+        if (!victim.IsBuilding && !victim.Dead) TodAusGarage(victim);
         UeberfahrenCheckTod(victim, grund);   // bug-429: Todesgrund der Probanden
         NoteKill(victim, by);
         // ⭐ 02.10.2026 (bug-389) — die zwei Engine-Schreiber der Variablentafel
@@ -13569,6 +13607,10 @@ public partial class MapEntityLayer : Node2D
         // ⭐ 22.10.2026 (Paket K, K7) — und mit der Ansage 135 »Gebaeude zerstoert«,
         // ohne Besitzertor. Simulation/KlangAbgleich.cs, --gebaeudezerstoert-klang-aus.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeZerstoertKlang(victim, grund);
+        // ⭐ 29.10.2026, bug-654 (K12) — die ZIVILSTRAFE der Gebaeudetodroutine
+        // (C 0x4C9964..0x4C99BB): built == 0 und Terraniumwort +0x32 != 0 ->
+        // Text 103 und Befehl 528 (−Wert, Spieler 0). Simulation/Zivilstrafe.cs.
+        if (victim.IsBuilding && !victim.IsProp && !victim.Dead) ZivilstrafeBeimTod(victim);
         // ⭐ 14.09.2026 — der Gebaeudetod streicht die Routen mit demselben Streicher
         // wie die Einnahme (0x440190 @C 0x4C9A6C / F 0x4C961C). Simulation/EinnahmeAbschluss.cs.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) RouteGebaeudeStreichen(victim.Slot);
@@ -15065,6 +15107,11 @@ public partial class MapEntityLayer : Node2D
             // und der Raumfrachter holt sie ab; erst DANN steht v98.
             // Simulation/Skriptvariablen.cs, Gegenschalter --verkauf-sofort.
             if (sold && SkriptVerkauf(i, e)) return;
+            // ⭐ 29.10.2026, bug-649 (K7) — eine UNTERGESTELLTE Einheit wird zuerst
+            // ausgedockt und dann still geloescht (remove_unit 0x4D0B00:
+            // UKOL 0x32/0x33 -> Ausdocken nach Gebaeudeart, dann 0x410E60).
+            // Simulation/SkriptEntferntGarage.cs, --skript-entfernt-garage-alt.
+            if (!sold && SkriptEntferntAusGarage(i, e)) return;
             GD.Print($"Missionsskript: Einheit {slot} " +
                      (sold ? "verkauft (sofort, --verkauf-sofort)" : "verschwindet"));
             Kill(i, e, -1, sold ? "Missionsskript sell_unit" : "Missionsskript remove_unit");
@@ -15373,9 +15420,16 @@ public partial class MapEntityLayer : Node2D
                     // @0x4C3AC2 laesst nur POSITIVE Betraege durch (`test dx,dx
                     // / jle`), dann baut @0x4C3AD4..0x4C3ADA den Text aus
                     // "Einkommen: " (0x4FB6C8) und der Zahl und zeigt ihn.
-                    if (betrag > 0 && spieler == ViewPlayer)
-                        UI.HelpWindow.ShowText(GetTree().Root,
-                                               $"Einkommen: {betrag}", 0, 0);
+                    // ⭐ 29.10.2026, bug-655 (K13): die Meldung ist ein MELDUNGSFENSTER
+                    // Art 13, nicht ein Hilfefenster — Simulation/Geldmeldung.cs.
+                    // Gegenschalter --geldmeldung-alt (dieser alte Weg).
+                    if (GeldmeldungAlt || OnMeldung == null || MeldungsfensterAus)
+                    {
+                        if (betrag > 0 && spieler == ViewPlayer)
+                            UI.HelpWindow.ShowText(GetTree().Root,
+                                                   $"Einkommen: {betrag}", 0, 0);
+                    }
+                    else GeldmeldungZeigen(betrag, spieler);
                     // ⚠ UNSERE SETZUNG: was hier AUSGEZAHLT wird, ist das, was
                     // das Abschlussfenster "Missionsbezahlung" nennt. Der
                     // Betrag stammt aus dem Missionsblock (Busbefehl 528), die
@@ -18345,6 +18399,13 @@ public partial class MapEntityLayer : Node2D
         into.Sort((a, b) => a.Id.CompareTo(b.Id));
     }
 
+    /// <summary><c>--fahrwerkliste-katalog-alt</c> — bug-659: Fahrwerke nur aus
+    /// unit_catalog.json (169, 172, 175 fehlen; Stand 0.6.11).</summary>
+    public static bool FahrwerklisteKatalogAlt;
+
+    /// <summary>Die letzte Fahrwerkzeile der Liste (unsere Setzung, siehe LoadDesignParts).</summary>
+    private const int FahrwerkTafelEnde = 175;
+
     private void LoadDesignParts()
     {
         // bug-460: neu fuellen, denn der Besitz waechst waehrend der Mission
@@ -18358,6 +18419,16 @@ public partial class MapEntityLayer : Node2D
                 if (kv.Key >= 160 && kv.Key <= 175 && !string.IsNullOrEmpty(kv.Value.Item2))
                     Designer.Propulsions.Add(new DesignScreen.Part
                     { Id = kv.Key, Name = kv.Value.Item2 });
+        // ⭐ 29.10.2026, bug-659 (K17, Sperre 2): der Einheitenkatalog kennt nur
+        // Fahrwerke, die die EXE-Einheitentafel benennt — 169 Wuestenwiesel, 172
+        // Schwerer Blocker und 175 Schweber fehlen dort. Der Listenaufbau 0x46C490
+        // nimmt Fahrwerkzeilen aus der BAUTEILTAFEL (Besitz +0x00 != 0). Die
+        // Katalognamen bleiben, die fehlenden Zeilen kommen aus der Tafel (+0x25).
+        // ⚠ UNSERE SETZUNG: nur bis 175 — 0x46C490 reicht bis 199 (`cmp cx,0xC8`),
+        // aber 190..199 sind die Fussvolkwaffen (Maschinengewehr, Laser …) mit
+        // Besitz 1; ob das Original sie dort ausfiltert, ist ungelesen.
+        // Gegenschalter --fahrwerkliste-katalog-alt.
+        if (!FahrwerklisteKatalogAlt) TafelTeile(160, FahrwerkTafelEnde, Designer.Propulsions);
         Designer.Propulsions.Sort((a, b) => a.Id.CompareTo(b.Id));
 
         ReadParts("Maps/weapons.json", "types", Designer.Weapons);
@@ -40894,6 +40965,9 @@ public partial class MapEntityLayer : Node2D
             // STUERZT AB, er fliegt nicht in den Huegel. --handsteuerung-luft-boden-alt.
             if (IstHandgesteuert(a)) { AirDrift(a, dt); HandLuftBoden(a); continue; }
 
+            // ⭐ 29.10.2026, bug-664 (Reaper R5) — der Start ENDET: nach 25 (Flugzeug)
+            // bzw. 42 Takten (Heli) uk := m_uk. Simulation/Startzustand.cs.
+            StartuhrTakt(a);
             FlughoeheTakt(a);
             // ⭐⭐ 20.09.2026, bug-348 — DAS TEMPO WIRD GEREGELT, es ist keine
             // Konstante. Siehe Simulation/Flugtempo.cs.
@@ -42781,6 +42855,10 @@ public partial class MapEntityLayer : Node2D
             // Besitzer, sobald etwas geladen ist (@0x42AEA0). Darum steht er
             // VOR dem Ausstieg fuer unbeschaedigte, nicht angewaehlte Einheiten.
             LadungsbalkenZeichnen(e);
+            // ⭐ 29.10.2026, bug-652 — und der MATERIALBALKEN des eigenen Wagens,
+            // ebenso vor dem Tab-Ausstieg: 0x42A755 steht HINTER dem Tab-Tor des
+            // Lebensbalkens (0x42A707). Simulation/Materialbalken.cs.
+            MaterialbalkenZeichnen(e);
 
             // ⭐⭐ 03.10.2026 (bug-412) — DIE TAB-BALKEN DES ORIGINALS: die
             // Stellung byte[0xA31A88] (Tab, 0x412FF5) entscheidet, nicht Auswahl

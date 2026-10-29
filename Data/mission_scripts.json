@@ -33052,7 +33052,62 @@
    "rules": [
     {
      "_at": "0x49AB4F",
+     "_ersetzt_leser": true,
+     "_schalter": "--cossarro-text-alt",
+     "_von_hand": "29.10.2026 bug-651 (KayelGee R8 K9, berichte/missionsmeldungen-r8-opus.md §1): Cossarro (Platz 0, Marke 190) tot -> v16++, und hat Spieler 0 noch Einheiten ODER Gebaeude: show_text(430,310,175) @0x49AB90 (C), dann v303 := 1 @0x49AB98. Der Leser hatte die verschachtelte Wirkung nicht uebersetzt (then: []). Spielerentscheidung Fassung C: KEIN sell_unit(0) (nur F @0x49A4A4). Der Niederlagezweig (0x4D0280) bleibt Regel 0x49AB78. ⚠ Mit any_groups haengt der Riegel v16 nur am Textzweig; im Original faellt er auch im Niederlagezweig — ohne Folge, die Mission endet dort.",
+     "any_groups": [
+      [
+       {
+        "a": 0,
+        "b": 0,
+        "c": 0,
+        "kind": "units",
+        "op": "!="
+       }
+      ],
+      [
+       {
+        "a": 1,
+        "b": 0,
+        "c": 0,
+        "kind": "objects",
+        "op": "!="
+       }
+      ]
+     ],
+     "once": 16,
+     "then": [
+      {
+       "_at": "0x49AB90",
+       "a": 175,
+       "b": 1,
+       "c": 430,
+       "d": 310,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49AB98",
+       "a": 303,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 190,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AB4F",
+     "_ersetzt_leser": true,
+     "_nur_mit": "--cossarro-text-alt",
      "_tut_ausserdem": "g_robot_class_count",
+     "_von_hand": "29.10.2026 bug-651: die Leserfassung bis 0.6.11 (then: []), nur noch unter --cossarro-text-alt (Nullmodell).",
      "once": 16,
      "then": [],
      "when": [

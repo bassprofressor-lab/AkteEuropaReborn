@@ -1503,6 +1503,8 @@ public partial class MapViewer : Node2D
             return;
         }
         // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
+        // ⭐ 29.10.2026 — Paket P1 (Testerrunde 0.6.12), Rendering/PaketP1Lauf.cs.
+        if (P1Pruefstaende()) return;
         if (BedienungPruefstaende()) return;
         // ⭐ 04.10.2026 — Paket 2 Infofenster (bug-420..424), Rendering/InfofensterLauf.cs.
         if (InfofensterPruefstand()) return;
@@ -4067,6 +4069,8 @@ _mausProbePunkt = karte;
         foreach (string a in Core.CommandLine.Args)
         {
             // ⭐ 04.10.2026 — Paket 1 Bedienung (bug-415..419), Rendering/BedienungLauf.cs.
+            // ⭐ 29.10.2026 — Paket P1 der Testerrunde 0.6.12 (bug-645..664), Rendering/PaketP1Lauf.cs.
+            if (P1Schalter(a)) continue;
             if (BedienungSchalter(a)) continue;
             // ⭐ 04.10.2026 — Paket 2 Infofenster (bug-420..424), Rendering/InfofensterLauf.cs.
             if (InfofensterSchalter(a)) continue;
@@ -6565,6 +6569,8 @@ _mausProbePunkt = karte;
         if (_flakGedruckt || !_flakCheck) return;
         _flakGedruckt = true;
         GD.Print(_entities.FlakCheckLine());
+        // bug-664 (29.10.2026): --flak-ki-start-check, Simulation/Startzustand.cs
+        if (MapEntityLayer.FlakKiStartCheckAn) GD.Print(_entities.FlakKiStartLine());
     }
 
     /// <summary>⭐ Wie <see cref="FlakAusgeben"/>, und aus demselben Grund am

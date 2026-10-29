@@ -629,6 +629,28 @@ public partial class MainMenu : Control
                 _kulissenCheck = Mathf.Max(1, a["--kulissen-check=".Length..].ToInt());
             else if (a == "--filme-nicht-kopieren") Core.DiscCoverage.FilmeNichtKopieren = true;
             else if (a == "--demokamera-alt") MenuBackdrop.DemokameraAlt = true;
+            // ⭐ 29.10.2026, bug-663: Filmregler (Komfort). --filmton-check rechnet die
+            // Pegel ueber MoviePlayer.FilmtonDb (Uebersteuerung, settings.cfg bleibt).
+            else if (a == "--filmton-alt") MoviePlayer.FilmtonAlt = true;
+            else if (a == "--filmton-check")
+            {
+                var sbf = new System.Text.StringBuilder("filmton-check" + (MoviePlayer.FilmtonAlt ? " — NULLMODELL --filmton-alt" : "") + ":");
+                bool okf = true;
+                foreach (var (v, soll) in new[] { (100, 0f), (50, -6.02f), (25, -12.04f), (0, -80f) })
+                {
+                    Settings.MovieVolumeTest = v;
+                    float db = MoviePlayer.FilmtonDb();
+                    bool gut = Mathf.Abs(db - soll) < 0.01f;
+                    okf &= gut;
+                    sbf.Append($" {v} % -> {db:0.00} dB (Soll {soll:0.00}) {(gut ? "ok" : "FEHLER")};");
+                }
+                Settings.MovieVolumeTest = null;
+                sbf.Append($" gespeicherter Wert movie_volume = {Settings.MovieVolume} (Vorgabe 100)");
+                sbf.Append(okf ? " BESTANDEN" : " DURCHGEFALLEN");
+                GD.Print(sbf.ToString());
+                GetTree().Quit(0);
+                return;
+            }
             else if (a == "--filme-probe")
             {
                 // bug-469: was der Import uebernehmen wuerde — nur zaehlen, nicht kopieren.

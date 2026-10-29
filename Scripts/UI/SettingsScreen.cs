@@ -319,6 +319,27 @@ public partial class SettingsScreen : Control
         mvolRow.AddChild(mvol);
         mvolRow.AddChild(mvolVal);
         box.AddChild(mvolRow);
+
+        // ⭐ 29.10.2026, bug-663 (KayelGee R8 K21) — der FILMREGLER. ⚠ KOMFORT, UNSERE
+        // SETZUNG: das Original hat keinen (Einstellungsfenster Art 34 nur »Spiel« und
+        // »Sprache«, kein Leser im Filmteil). Vorgabe 100 % = 0 dB = Original.
+        // Gespeichert in settings.cfg (movie_volume), wirkt beim naechsten Film.
+        var fvol = new HSlider
+        {
+            MinValue = 0, MaxValue = 100, Step = 5, Value = Settings.MovieVolume,
+            CustomMinimumSize = new Vector2(220, 0),
+        };
+        var fvolVal = new Label { Text = $"{Settings.MovieVolume}" };
+        fvol.ValueChanged += v =>
+        {
+            Settings.MovieVolume = (int)v;
+            fvolVal.Text = $"{(int)v}";
+        };
+        var fvolRow = new HBoxContainer();
+        fvolRow.AddChild(new Label { Text = "Filmlautstaerke (Komfort)", CustomMinimumSize = new Vector2(260, 0) });
+        fvolRow.AddChild(fvol);
+        fvolRow.AddChild(fvolVal);
+        box.AddChild(fvolRow);
         // ⚠ 21.08.2026 — der Regler kann nicht mehr, als er hier sagt, und das
         // gehoert dazugeschrieben statt vorgetaeuscht. Gemeldet war: ihn
         // herunterzuziehen nahm AUCH die uebrigen Klaenge weg. Ursache und

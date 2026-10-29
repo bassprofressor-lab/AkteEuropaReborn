@@ -137,11 +137,54 @@ public partial class MapEntityLayer
     private void TabBalkenMalen(Entity e, TabBalken b)
     {
         float bw = b.Breite, h = b.Hoehe;
-        var hb = e.IsBuilding && !GebaeudebalkenAlt
-            ? GebaeudeBalkenPunkt(e, bw)                       // bug-466
-            : e.Pos + new Vector2(-bw / 2f, -BalkenHub(e));
-        hb = new Vector2(Mathf.Floor(hb.X), Mathf.Floor(hb.Y));
+        var hb = TabBalkenPunkt(e, bw);
         var rc = e.Owner >= 0 && e.Owner < BalkenRahmen.Length ? BalkenRahmen[e.Owner] : PropColor;
+        BalkenMitRahmen(hb, bw, h, b.Fuellung, b.Farbe, rc);
+    }
+
+    /// <summary>Die linke obere Ecke eines Tab-Balkens (ganze Punkte).
+    ///
+    /// <para>⭐ 29.10.2026, bug-656 (KayelGee R8 K14, Bild 29102026bug14.png,
+    /// berichte/anzeige-r8-opus.md §2): der FUSSVOLKBALKEN haengt im Original am
+    /// Blitpunkt des Bildes. Fussvolkzeichner <c>0x42AABE</c> uebergibt denselben
+    /// Punkt (di, [esp+0x2C]) wie der Blit <c>0x42AA49</c>; der Fussvolkarm des
+    /// Verteilers <c>0x4B732D</c> legt den Balken auf <b>Blit + (12, 10)</b>, und
+    /// <c>0x4B6F60</c> zentriert ihn dort (<c>x −= breite/2</c>, ganzzahlig).
+    /// Blit = Spalte·40 + 5 + dx ⇒ Balkenmitte = Zellmitte − 3 + dx. Hier stand
+    /// <c>e.Pos.X</c> ohne dx (bug-596 hatte BalkenDx nur in den alten Weg, den
+    /// Ladungs- und den Einnahmebalken gebracht): Fehlbetrag 3 − dx, im Bild
+    /// rund 16 px. Senkrecht war es schon richtig (dy steckt in BalkenHub).
+    /// Fahrzeuge und Gebaeude unveraendert. Gegenschalter
+    /// <c>--fussbalken-dx-alt</c> (Balken auf der Zellmitte, Stand 0.6.11).</para></summary>
+    private Vector2 TabBalkenPunkt(Entity e, float bw)
+    {
+        if (e.IsBuilding && !GebaeudebalkenAlt)
+        {
+            var g = GebaeudeBalkenPunkt(e, bw);                // bug-466
+            return new Vector2(Mathf.Floor(g.X), Mathf.Floor(g.Y));
+        }
+        float y = Mathf.Floor(e.Pos.Y - BalkenHub(e));
+        if (!e.IsBuilding && e.Infantry >= 0 && !FussbalkenDxAlt)
+        {
+            // Mitte = Blit.x + 12 = Pos.X − 3 + dx; x −= breite/2 GANZZAHLIG (0x4B6F6D)
+            float mitte = Mathf.Floor(e.Pos.X + BalkenDx(e) - FussbalkenLinks);
+            return new Vector2(mitte - ((int)bw / 2), y);
+        }
+        return new Vector2(Mathf.Floor(e.Pos.X - bw / 2f), y);
+    }
+
+    /// <summary>Blit.x + 12 gegen die Zellmitte (Blit.x = Mitte − 15 + dx): 3 Punkte
+    /// links — 0x4B732D, gelesen in berichte/anzeige-r8-opus.md §2.1.</summary>
+    private const float FussbalkenLinks = 3f;
+
+    /// <summary><c>--fussbalken-dx-alt</c> — bug-656: der Tab-Balken des Fussvolks
+    /// wieder auf der Zellmitte ohne den Versatz dx (Stand 0.6.11).</summary>
+    public static bool FussbalkenDxAlt;
+
+    /// <summary>Das Muster von <c>0x4B6F60</c> an einer festen Ecke: Umriss 1 px in
+    /// <paramref name="rc"/>, Fuellung (fuell−1) Spalten ab x+1, Zeilen y+1..y+h−2.</summary>
+    private void BalkenMitRahmen(Vector2 hb, float bw, float h, int fuell, Color farbe, Color rc)
+    {
         DrawRect(new Rect2(hb, new Vector2(bw, 1)), rc);
         DrawRect(new Rect2(hb + new Vector2(0, h - 1), new Vector2(bw, 1)), rc);
         if (h > 2)
@@ -149,8 +192,8 @@ public partial class MapEntityLayer
             DrawRect(new Rect2(hb + new Vector2(0, 1), new Vector2(1, h - 2)), rc);
             DrawRect(new Rect2(hb + new Vector2(bw - 1, 1), new Vector2(1, h - 2)), rc);
         }
-        if (b.Fuellung > 1 && h > 2)
-            DrawRect(new Rect2(hb + Vector2.One, new Vector2(b.Fuellung - 1, h - 2)), b.Farbe);
+        if (fuell > 1 && h > 2)
+            DrawRect(new Rect2(hb + Vector2.One, new Vector2(fuell - 1, h - 2)), farbe);
     }
 
     /// <summary>Der alte Ausstieg (vor bug-412): Balken nur bei Anwahl oder Schaden.</summary>

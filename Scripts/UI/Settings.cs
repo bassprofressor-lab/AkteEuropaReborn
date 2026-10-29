@@ -329,6 +329,19 @@ public static class Settings
     /// <summary>0..100.</summary>
     public static int SfxVolume { get => I("sfx_volume", 80); set => Set("sfx_volume", value); }
 
+    /// <summary>⭐ 29.10.2026, bug-663 (KayelGee R8 K21: »Videolautstaerke sollte
+    /// einstellbar sein«) — 0..100, Vorgabe 100. ⚠ <b>UNSERE SETZUNG / KOMFORT, nicht
+    /// im Original</b>: das Einstellungsfenster Art 34 hat nur »Spiel« (0x500E10) und
+    /// »Sprache« (0x500E14), keiner der beiden hat einen Leser im Filmteil, und
+    /// <c>Player_InitSound</c> (winplay.dll, Ruf C 0x4D4B0A) bekommt keine Lautstaerke
+    /// (berichte/anzeige-r8-opus.md §4). 100 = 0 dB = der Stand des Originals.
+    /// Gespeichert in settings.cfg (<c>movie_volume</c>). Siehe MoviePlayer.FilmtonDb.</summary>
+    public static int MovieVolume { get => I("movie_volume", 100); set => Set("movie_volume", value); }
+
+    /// <summary>Pruefstand-Uebersteuerung fuer <see cref="MovieVolume"/> (schreibt
+    /// settings.cfg NICHT) — <c>--filmton-check</c>.</summary>
+    public static int? MovieVolumeTest;
+
     /// <summary>"MIDI-Musik an/aus" — the original's own wording for it.</summary>
     public static bool MusicOn { get => B("music", true); set => Set("music", value); }
 
