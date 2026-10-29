@@ -10,7 +10,7 @@ using Godot;
 public partial class MapViewer
 {
     private bool _p1Fussbalken, _p1Material, _p1Zivil, _p1Geld, _p1Wiesel, _p1KiAuslass,
-                 _p1FussEinnahme, _p1UkolCheck, _p1Cossarro;
+                 _p1FussEinnahme, _p1UkolCheck, _p1Cossarro, _p1WieselBild;
 
     /// <summary>Die Schalter von P1; true = verbraucht.</summary>
     private bool P1Schalter(string a)
@@ -40,6 +40,9 @@ public partial class MapViewer
             case "--zivilstrafe-check": _p1Zivil = true; UI.HelpWindow.Suppressed = true; return true;
             case "--geldmeldung-check": _p1Geld = true; return true;
             case "--wiesel-check": _p1Wiesel = true; return true;
+            // 29.10.2026 (Nachtrag bug-659): Gegenschalter der Rumpfbildprobe und der Bildlauf
+            case "--wiesel-rumpfbild-res-alt": MapEntityLayer.WieselRumpfbildResAlt = true; return true;
+            case "--wiesel-bild": _p1WieselBild = true; return true;
             case "--ki-einnahme-auslass-check": _p1KiAuslass = true; return true;
             case "--fussvolk-einnahme-check": _p1FussEinnahme = true; return true;
             case "--ki-zielwahl-ukol-check": _p1UkolCheck = true; return true;
@@ -54,6 +57,16 @@ public partial class MapViewer
     private bool P1Pruefstaende()
     {
         string? zeile = null;
+        // --wiesel-bild: zwei eigene Fahrzeuge umbauen (169/172) und, ohne eigenes --look,
+        // die Kamera auf das erste; der Lauf geht danach normal weiter (--shot=).
+        if (_p1WieselBild)
+        {
+            _p1WieselBild = false;
+            var log = new System.Text.StringBuilder();
+            var zelle = _entities.WieselUmbau(log);
+            GD.Print(log.ToString().TrimEnd());
+            if (zelle is { } z && _look.Length == 0) _look = $"{z.Col},{z.Row},4";
+        }
         if (_p1Fussbalken) zeile = _entities.FussbalkenLageCheck();
         else if (_p1Material) zeile = _entities.MaterialbalkenCheck();
         else if (_p1Zivil) zeile = _entities.ZivilstrafeCheck();
