@@ -12,10 +12,10 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
-## 0.6.12 — in progress · KayelGee's eighth round, Reaper's second, and units that fire on the move
+## 0.6.12 — 2026-10-30 · KayelGee's eighth round, Reaper's second, and units that fire on the move
 
 > **KayelGee's eighth round (21 points) and Reaper's second round (2 points) are
-> being worked through.** Each point was first looked up in the original's
+> worked through.** Each point was first looked up in the original's
 > program, then changed. As always, every change has a switch that brings the
 > old behaviour back, and a test.
 >

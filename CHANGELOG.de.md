@@ -14,10 +14,10 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
-## 0.6.12 — in Arbeit · KayelGees achte Runde, Reapers zweite, und Einheiten, die im Fahren schießen
+## 0.6.12 — 30.10.2026 · KayelGees achte Runde, Reapers zweite, und Einheiten, die im Fahren schießen
 
 > **KayelGees achte Runde (21 Punkte) und Reapers zweite Runde (2 Punkte)
-> werden abgearbeitet.** Jeder Punkt wurde zuerst im Programm des Originals
+> sind abgearbeitet.** Jeder Punkt wurde zuerst im Programm des Originals
 > nachgelesen und erst dann geändert. Wie immer hat jede Änderung einen
 > Schalter, der das alte Verhalten zurückholt, und einen Prüfstand.
 >
