@@ -99,6 +99,16 @@ Danke!
 - **Zielwahl der KI.** Das Original wählt nur Ziele, die nicht in einem Gebäude
   stehen (Zustand < 45). Diese Bedingung fehlte.
 
+- **Versorgungshubschrauber für den Computer (KI-Takt 10, `0x4BE330`).** Wie im
+  Original bekommen die Gegner in der Kampagne jetzt Treibstoff- und
+  Munitionshubschrauber geschenkt, an einem Nachschub-Posten: etwa einen je 19
+  bis 20 eigene Einheiten. Die Hubschrauber erscheinen am Posten in ihrem
+  sichersten Sektor. Dafür können sie in der Kampagne keine Flugzeuge mehr für
+  Geld am Flughafen kaufen. Das war unsere eigene Zutat, und in Mission 27
+  umging sie sogar die Produktionsfreigabe. Darum hat Lysekij in Mission 27
+  zunächst keine Flugzeuge, wie im Original. Er kauft erst, wenn seine Fabriken
+  gefallen sind. Schalter `--ki-helikauf-aus`, `--ki-flughafenheli-alt`.
+
 ### Brücken
 
 - **Brücken im Nebel sichtbar (KayelGee 1, Mission 4).** Brücken bekommen
@@ -130,6 +140,12 @@ Danke!
   kleine Flamme, ein Treffer von 50 auf die Zelle links von ihm, dann ist der
   Soldat weg. An Depot und Bahnhof wird er nur entfernt. Schalter
   `--tuer-fremdsoldat-alt`.
+- **Volle Garage.** Ein eigener Soldat auf der Tür einer vollen Basis wird wie
+  im Original entfernt (`0x43BFC0`). An einem vollen Depot oder Bahnhof macht
+  ihn das Original zu einem unsichtbaren »Geist«, der nie wieder herauskommt.
+  Das ist ein Fehler des Originals, und wir haben ihn behoben: Der Soldat
+  bleibt draußen. Fahrzeuge kommen bei voller Garage einfach nicht hinein.
+  Schalter `--tuer-voll-alt`, `--tuer-geist-original`.
 - **Feindliche Einheiten tauchen um eine eingenommene Basis auf (KayelGee 5).**
   Die KI holte jedes Bild alle Einheiten aus ihrer Basis. Jetzt wartet sie, und
   bei der Einnahme wird der laufende Bau der Basis gelöscht, wie im Original.

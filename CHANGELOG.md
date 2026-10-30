@@ -90,6 +90,16 @@ Thank you!
 - **Computer target choice.** The original only picks targets that are not
   inside a building (state < 45). That gate was missing.
 
+- **Supply helicopters for the computer (KI tick 10, `0x4BE330`).** As in the
+  original, campaign opponents now get fuel and ammunition helicopters for
+  free at a supply post: about one per 19–20 units of their own. The
+  helicopters appear at the post in their safest sector. Instead, they can no
+  longer buy aircraft for money at an airfield in the campaign. That was our
+  own addition, and in mission 27 it even bypassed the production release.
+  So in mission 27 Lysekij gets no aircraft at first, just as in the original.
+  He only starts buying once his factories are gone. Switches
+  `--ki-helikauf-aus`, `--ki-flughafenheli-alt`.
+
 ### Bridges
 
 - **Bridges visible in the fog of war (KayelGee 1, mission 4).** Bridges now
@@ -119,6 +129,12 @@ Thank you!
   a small flame, a hit of 50 on the cell to its left, then the soldier is
   gone. At a depot or station he is only removed. Switch
   `--tuer-fremdsoldat-alt`.
+- **Full garage.** A soldier of your own standing on the door of a full base
+  is removed, as in the original (`0x43BFC0`). At a full depot or station the
+  original makes him an invisible "ghost" that never comes out again. That is
+  a bug in the original, and we fixed it: he stays outside. Vehicles simply
+  cannot drive in while the garage is full. Switches `--tuer-voll-alt`,
+  `--tuer-geist-original`.
 - **Enemy units appearing around a captured base (KayelGee 5).** The computer
   pulled every unit out of its base every frame. Now it waits, and on capture
   the base's running production is deleted, as in the original.
