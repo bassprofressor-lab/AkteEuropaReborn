@@ -47,7 +47,10 @@ using Godot;
 /// (<c>0x4F5B38</c>), schaltet NICHT aufs Auftragsziel zurueck und haelt die Einheit an
 /// (<c>POHYB := 0xFF</c> @0x40F244), wenn das gefundene Ziel das Auftragsziel ist. Unser
 /// Fussvolk geht zellweise ohne Zwischenhalt; es behaelt darum den bisherigen Weg (im
-/// Gehen kein Schuss, im Stand das Auftragsziel). UNSERE SETZUNG, benannt.</para>
+/// Gehen kein Schuss, im Stand das Auftragsziel). UNSERE SETZUNG, benannt.
+/// ⭐ Seit 30.10.2026 (bug-688) GEBAUT: Simulation/FussvolkUhr.cs — sie laeuft auch im
+/// Gehen, beim Betreten jeder Zelle (Ankunftsarm UKOL 4 @0x407D27); diese Setzung gilt
+/// nur noch unter <c>--fussvolk-uhr-alt</c>.</para>
 ///
 /// <para>⚠ <b>UNSERE SETZUNGEN:</b> (1) die »Einheit« im Taktversatz ist unsere
 /// Listenstelle (ein gebauter Satz traegt bei uns Platz −1); (2) der Probeschuss

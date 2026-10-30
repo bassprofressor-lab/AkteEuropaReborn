@@ -199,10 +199,12 @@ public partial class MapEntityLayer
             Schussgruende = sg0;
             int steh = _gfpAlle - nachher0;
             if (steh == 0) sb.AppendLine($"    (Fusssoldat ({F.Col},{F.Row}), Y ({yz.X},{yz.Y}), Weg {(F.Path != null)}, Ziel {F.Target}, feindlich {IsHostile(F, Y)}, Abstand {CellDistance(F, Y):0.0}, Reichweite {RangeOf(F):0.0}/{RangeMinOf(F):0.0}, Ukol {F.Ukol}, Grund: {F.Schussgrund})");
-            bool g4 = gehTakte > 0 && gehend == 0 && steh > 0;
+            // bug-688: mit der Fussvolk-Uhr schiesst er im Gehen beim Betreten einer Zelle
+            // (Ankunftsarm 0x407D27) — das Soll im Gehen haengt am Schalter --fussvolk-uhr-alt.
+            bool g4 = gehTakte > 0 && (FussvolkUhrAlt ? gehend == 0 : gehend > 0) && steh > 0;
             ok &= g4;
             sb.AppendLine($"  G4 Fusssoldat Platz {F.Slot} mit Auftrag im Gehen ({gehTakte} Takte): Schuesse (auf irgendwen) {gehend}; "
-                        + $"nach Halt im Stand: {steh} — Soll 0 / >0 (Nullmodell gleich) -> {(g4 ? "ja" : "NEIN")}");
+                        + $"nach Halt im Stand: {steh} — Soll {(FussvolkUhrAlt ? "0" : ">0 (Fussvolk-Uhr, Ankunftsarm)")} / >0 -> {(g4 ? "ja" : "NEIN")}");
             _gfpA = ai;
         }
 

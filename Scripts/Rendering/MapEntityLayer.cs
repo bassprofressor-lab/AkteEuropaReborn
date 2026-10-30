@@ -12407,6 +12407,9 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
             if (e.Target >= 0) continue;        // hat eins — der Grund faellt in UpdateCombat
+            // ⭐ bug-688 (30.10.2026): das Fussvolk sucht selbst, jeden Takt (0x40F0A0) —
+            // Simulation/FussvolkUhr.cs, --fussvolk-uhr-alt.
+            if (FussUhrAn(e)) continue;
             if (DrehenCheckAn && i == _drE) continue;   // --drehen-check: die Messeinheit nimmt nichts auf
             // ⭐⭐⭐ 01.09.2026 — EINE FAHRENDE EINHEIT NIMMT SEHR WOHL EIN ZIEL AUF.
             //
@@ -12622,13 +12625,16 @@ public partial class MapEntityLayer : Node2D
         if (e.Cooldown > 0) e.Cooldown -= dt;
         // ⭐ 29.10.2026, bug-645 — Schussziel nur mit Auftrag; der Restauftrag endet mit
         // jedem neuen Auftrag. Simulation/Gelegenheitsfeuer.cs.
-        if (!e.Ordered) e.Schussziel = -1;
+        // bug-688: beim Fussvolk ist das Schussziel STRILI_NA auch ohne Auftrag (0x40F0A0).
+        if (!e.Ordered && !FussUhrAn(e)) e.Schussziel = -1;
         GfRestPruefen(e);
         // ⭐ 31.08.2026 — OHNE ZIELEINHEIT kann trotzdem ein BODENZIEL
         // anliegen (Strg-Angriff auf eine Zelle). Siehe Bodenangriff.cs.
         if (e.Target < 0)
         {
             if (BodenKampf(i, e, dt)) return;
+            // ⭐ bug-688: die Fussvolk-Uhr im Stand, ohne Auftragsziel (@0x409FEE).
+            if (FussUhrAn(e)) FussUhrStand(i, e, -1);
             // ⭐ 03.10.2026 (bug-406) — ein eigener Turm klappt NICHT auf den
             // Rumpf zurück: er zielt im Fahren aufs Endziel und bleibt im Stand,
             // wie er stand (0x409F26…0x409F6A). Simulation/TurmDrehung.cs, --turm-alt.
@@ -12643,7 +12649,7 @@ public partial class MapEntityLayer : Node2D
             // ⭐ bug-645: der Auftrag endet im Original NICHT mit dem Tod des Ziels —
             // Restauftrag zur Todeszelle (Simulation/Gelegenheitsfeuer.cs, 0x409060/0x40FC90).
             if (t.Dead && GfRestauftrag(i, e, t)) e.Ordered = false;
-            e.Schussziel = -1;
+            if (!FussUhrAn(e)) e.Schussziel = -1;      // bug-688: STRILI_NA bleibt (0x40F43B prueft selbst)
             e.Target = -1; return;
         }
         // bug-511: wer vor dem Einfahren im Visier war, ist jetzt im Gebaeude —
@@ -12688,6 +12694,12 @@ public partial class MapEntityLayer : Node2D
             if (!e.Ordered) { e.Target = -1; PlasmaZielFallen++; }
             return;
         }
+
+        // ⭐ bug-688 (30.10.2026) — ein Fusssoldat schiesst NUR ueber seine Uhr 0x40F0A0:
+        // im Stand jeden Takt, im Gehen beim Betreten einer Zelle (Ankunftsarm), Halt beim
+        // Auftragsziel. Ein Gebaeude als Auftragsziel bleibt beim Gebaeudeangriff (bug-597).
+        // Simulation/FussvolkUhr.cs, Gegenschalter --fussvolk-uhr-alt.
+        if (FussUhrAn(e) && !t.IsBuilding) { FussUhrMitZiel(i, e, t); return; }
 
         var w = WeaponOf(e.Weapon);
         float dist;
@@ -13101,6 +13113,7 @@ public partial class MapEntityLayer : Node2D
         shooter.FireUntil = _clock + FirePoseSeconds;
         if (si == _fspSchuetze) FussSchuesse++;      // siehe FussSchussProbe.cs
         GfProbeZaehlen(si, vi);                       // --gelegenheitsfeuer-check (bug-645)
+        FuProbeZaehlen(si, vi);                       // --fussvolk-uhr-check (bug-688)
         AfProbeZaehlen(si, vi);                       // --angriff-fahrt-check (P4-Zusatz)
         // `--beschuss-check`: hier, am Ende der Kette, faellt der Schuss
         // wirklich — nicht dort, wo die Buendnisfrage haette gestellt werden
@@ -36423,6 +36436,11 @@ public partial class MapEntityLayer : Node2D
                         continue;
                     }
                 }
+                // ⭐ bug-688 (30.10.2026) — der Ankunftsarm UKOL 4 ruft die Fussvolk-Uhr
+                // (C @0x407D27) und haelt an, wenn sie das Auftragsziel genommen hat
+                // (0x407D3B..0x407D52: POHYB 0xFF, kolik 0, Richtung 0xFF). Der Halt ist kein
+                // Wegende: kein NextQueued. Simulation/FussvolkUhr.cs, --fussvolk-uhr-alt.
+                if (FussUhrAnkunft(i, e)) { e.Path = null; e.StepCost = 0; e.Progress = 0; continue; }
                 if (_stuckOn && _stuckTrail.TryGetValue(i, out var trail))
                 {
                     _stuckCells[i] = _stuckCells.GetValueOrDefault(i) + 1;
