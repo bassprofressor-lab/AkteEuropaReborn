@@ -45,7 +45,7 @@ using Godot;
 /// was found the constant is simply absent — no sound is better than the wrong
 /// sound in the wrong place.</para>
 /// </summary>
-public static class GameSounds
+public static partial class GameSounds
 {
     // ---- interface ---------------------------------------------------------
 
@@ -172,12 +172,21 @@ public static class GameSounds
         Play(nr);
     }
 
-    /// <summary>Briefing opens — @0x44d8b9, immediately after the game prints
-    /// "End of briefing starts".</summary>
+    /// <summary>306 — Briefing, Knopf 1 »Start«: C <c>0x44D8B9</c> / F <c>0x44C891</c>,
+    /// unmittelbar NACH der Protokollzeile »End of briefing starts« (0x4FE88C),
+    /// also beim Missionsstart, nicht beim Oeffnen. ⚠ 30.10.2026 (bug-679)
+    /// berichtigt: hier stand »Briefing opens«.</summary>
     public const int BriefingStart = 306;
 
-    /// <summary>Briefing closes — @0x44d976, after "End of briefing".</summary>
+    /// <summary>350 — Briefing, Knopf 5 (Arm 4 der Tafel <c>0x44E0B0</c>, C
+    /// <c>0x44D969</c>, Ruf <c>0x44D976</c>). ⚠ 30.10.2026 (bug-679) berichtigt:
+    /// hier stand »Briefing closes« — das Schliessen ist Knopf 1 (306).</summary>
     public const int BriefingEnd = 350;
+
+    /// <summary>351 — Briefing, Knopf 4 (Arm 3, C <c>0x44D95C</c>, Ruf
+    /// <c>0x44D976</c>). Was Knopf 2..5 bei uns sind, ist NICHT gelesen
+    /// (nur der Umschalter <c>+0x8C3CDC</c>), darum nicht verdrahtet.</summary>
+    public const int BriefingKnopf4 = 351;
 
     // ---- combat ------------------------------------------------------------
 
@@ -236,10 +245,13 @@ public static class GameSounds
     public static readonly int[] InfantryDiesBank = { 77, 78, 79 };
 
     /// <summary>Eines der drei, wie das Original waehlt: <c>rand() % 3</c>.
-    /// ⚠ Ueber den Wuerfel der SIMULATION, nicht ueber ein eigenes
-    /// <c>System.Random</c> — sonst reisst der Determinismus an der Naht.</summary>
+    /// ⚠⚠ 30.10.2026, bug-677 (berichte/klangabgleich-rest-opus.md §3): hier
+    /// stand »ueber den Wuerfel der SIMULATION« — das war die Verwechslung, die
+    /// cerebrum [c-c70748] dreimal beschreibt: ein KLANG, der den Wuerfelstand
+    /// der Simulation verschiebt. Jetzt <see cref="KlangRoll"/> (Klangwuerfel);
+    /// Nullmodell <c>--klangwuerfel-alt</c>.</summary>
     public static int InfantryDiesPick()
-        => InfantryDiesBank[Simulation.Determinism.Roll(InfantryDiesBank.Length)];
+        => InfantryDiesBank[KlangRoll(InfantryDiesBank.Length)];
 
     /// <summary>A target was acquired — @0x411ab0 in the seeker function
     /// @0x4119d0, whose own trace lines are "Check seeker" and
@@ -420,9 +432,17 @@ public static class GameSounds
     /// erfunden".</summary>
     public const int ResearchDone = 136;
 
-    /// <summary>Mirror switched on — @0x43a9b9, inside @0x43a978, the routine
-    /// already known as the Spiegelung (it sets UKOL to 0x16).</summary>
-    public const int MirrorOn = 59;
+    /// <summary>59 — der AUFBAU DER ABWEHRSTELLUNG beginnt: C <c>0x43A9B9</c> /
+    /// F <c>0x439B29</c>, Modus 1 an der Einheit, in <c>0x43A978</c>, das die
+    /// Warteschlange <c>0x834B70</c> (Befehl 26, P2 ≠ 0) einloest und UKOL := 0x16
+    /// setzt. ⚠ 30.10.2026 (bug-680) umbenannt: hier stand <c>MirrorOn</c>
+    /// (»Spiegelung«) — 0x16 ist das Eingraben, nicht die Spiegelung (die ist
+    /// Befehl 24, Klang 52/53). Gespielt in <c>ApplyEingraben</c>.</summary>
+    public const int EingrabenBeginnt = 59;
+
+    /// <summary>60 — AUSGRABEN, Befehl 26 mit P2 = 0: C <c>0x4C3643</c> / F
+    /// <c>0x4C31BA</c>, Modus 1 an der Einheit, UKOL := 0x17.</summary>
+    public const int AusgrabenBeginnt = 60;
 
     // ---- the spoken word ----------------------------------------------------
 

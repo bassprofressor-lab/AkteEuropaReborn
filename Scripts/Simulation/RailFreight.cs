@@ -3288,7 +3288,9 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>
     /// <b>Ein Stück Gleis wieder heil machen.</b> @0x4099E7 rechnet
-    /// <c>bild := bild % 10</c> (<c>div 10</c>), spielt Effekt <c>0x2d</c> und
+    /// <c>bild := bild % 10</c> (<c>div 10</c>), spielt KLANG <c>0x2d</c> = 45 (⚠ 30.10.2026,
+    /// bug-680: hier stand »Effekt« — @0x409A04 ist der Klangruf, gebaut in
+    /// FinishRailRepair) und
     /// lässt <see cref="RailPylonPass"/> laufen (@0x409A04, @0x409A0C).
     ///
     /// <para>⚠ Die TREFFERPUNKTE bleiben, wie sie sind — das Original setzt sie

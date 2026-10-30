@@ -572,14 +572,24 @@ public sealed partial class HelpWindow : PanelContainer
     /// <see cref="Settings.Announcements"/>. Dass es DERSELBE ist, ist nicht
     /// gelesen — es ist der einzige Sprachschalter, den wir haben.</para>
     /// </summary>
-    private static void Stimme(int id)
+    /// <para>⭐⚠ 30.10.2026, bug-678 (Paket R4) — <b>BERICHTIGT</b>: die Grenze
+    /// <c>cmp si,0x226</c> steht NICHT in show_text2, sondern in show_text
+    /// (<c>0x443490</c>, C 0x443587..0x4435A9), und sie ist zweiseitig:
+    /// 500 &lt; n &lt; 550 → n, sonst 1000 + n, ohne Sprachschalter. show_text2
+    /// (diese Routine, 0x4432E0) spricht immer 1000 + n. Die Regel steht in
+    /// <see cref="Audio.GameSounds.HilfeStimme"/>; Nullmodell <c>--hilfeklang-alt</c>.</para>
+    private static void Stimme(int id, bool ohneRiegel = false)
     {
-        if (!Settings.Announcements || id < 0) return;
-        int platz = id < 550 ? id + 1000 : id;
+        int platz = Audio.GameSounds.HilfeStimme(id, ohneRiegel);
+        if (platz < 0) return;
         Audio.SoundBankPlayer.PlayVoice(platz);
     }
 
-    public static HelpWindow? Show(Node host, int id, int ox, int oy)
+    /// <param name="ohneRiegelStimme">bug-678 (R4): das Missionsskript ruft mit
+    /// Art 1 eigentlich show_text (0x443490) — es spricht dann nach dessen Regel.
+    /// ⚠ Der Riegel bleibt bei uns auch fuer Art 1 (Stand wie bisher, nicht Teil
+    /// von Paket R).</param>
+    public static HelpWindow? Show(Node host, int id, int ox, int oy, bool ohneRiegelStimme = false)
     {
         if (Suppressed) { SuppressedCount++; return null; }
         // Vom Spieler weggeklickt? Dann kommt es nicht wieder.
@@ -610,7 +620,7 @@ public sealed partial class HelpWindow : PanelContainer
         // wieder verschwindet, OHNE weggeklickt zu werden — beim Missionsende
         // etwa. Vorher kam es danach wieder, jetzt nicht mehr.
         Dismissed.Add(id);
-        Stimme(id);
+        Stimme(id, ohneRiegelStimme);
         NachDemOeffnen(host);   // Paket N2: 993 wie F 0x442407
         return w;
     }
@@ -621,8 +631,10 @@ public sealed partial class HelpWindow : PanelContainer
     /// show_text2 (<see cref="Show"/>, Riegel <c>byte[0x87AE00+id]</c>) prueft er
     /// NUR, ob ein Fenster mit demselben Text schon offen ist (@0x4434E7, dann
     /// raus), und setzt keinen Riegel — der Spieler kann eine Untermission also
-    /// beliebig oft nachlesen. ⚠ (V): ob show_text die Stimme spielt, ist
-    /// ungelesen; wir spielen sie nicht. Das Anhalten bei offenem Hilfefenster
+    /// beliebig oft nachlesen. ⭐ 30.10.2026 (bug-678, R4) GELESEN: show_text
+    /// spricht (C 0x4435A9, 500 &lt; n &lt; 550 → n, sonst 1000 + n, ohne
+    /// Sprachschalter) — vorher stand hier »ungelesen, wir spielen sie nicht«.
+    /// Unter <c>--hilfeklang-alt</c> wieder stumm. Das Anhalten bei offenem Hilfefenster
     /// gilt wie bei <see cref="Show"/> (unsere Einstellung PauseOnHelp).
     /// </summary>
     public static HelpWindow? ShowOhneRiegel(Node host, int id, int ox, int oy)
@@ -639,6 +651,7 @@ public sealed partial class HelpWindow : PanelContainer
         var w = new HelpWindow(id, paras, ox, oy);
         Layer(host).AddChild(w);
         Open.Add(w);
+        Stimme(id, ohneRiegel: true);   // bug-678 (R4): C 0x4435A9
         NachDemOeffnen(host);   // Paket N2: 993 wie F 0x4425A7
         return w;
     }

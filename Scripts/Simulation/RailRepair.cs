@@ -176,6 +176,12 @@ public partial class MapEntityLayer
         // Effekt 0x2D an der Stelle (@0x409A04). Unsere Effekte laufen ueber
         // Namen, nicht ueber die Nummer des Originals — der Kopfkommentar von
         // ANIM.CWA nennt 0x2D als Reparaturfunken.
+        // ⭐⚠ 30.10.2026, bug-680 (Paket R7): @0x409A04 ist KEIN Effekt, sondern
+        // der KLANGRUF `push 0x2D; push 2; call 0x40162C` — Klang 45, Modus 2 an der
+        // Zelle der Einheit (x/y aus +0/+1). Das Bild bleibt (unsere Lesung von
+        // vorher, nicht Teil von Paket R). Gegenschalter --gleisklang-aus.
+        if (healed && !Audio.GameSounds.GleisklangAus)
+            Audio.GameSounds.PlayAt(Audio.GameSounds.GleisRepariert, e.Col, e.Row);
         if (healed)
             _effects.Add(new Effect
             {

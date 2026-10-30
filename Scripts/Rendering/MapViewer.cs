@@ -1405,6 +1405,7 @@ public partial class MapViewer : Node2D
         if (MapEntityLayer.M2UntermissionCheckAn) { _ = M2UntermissionLauf(); return; }
         if (MapEntityLayer.FeindNahtCheckSzenario.Length > 0) { _ = FeindNahtLauf(); return; }
         if (MapEntityLayer.KlangAbgleichCheckAn) { _ = KlangAbgleichLauf(); return; }
+        if (MapEntityLayer.KlangRestCheckAn) { _ = KlangRestLauf(); return; }
         if (MapEntityLayer.WerferPoseCheckAn && _shotPath.Length > 0) { _ = WerferPoseBildLauf(); return; }
         if (MapEntityLayer.ZugEinfahrtCheckAn && _shotPath.Length > 0) { _ = ZugEinfahrtBildLauf(); return; }
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
@@ -2252,6 +2253,67 @@ public partial class MapViewer : Node2D
     {
         for (int i = 0; i < 10; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         GD.Print(_entities.KlangAbgleichCheck());
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--klang-rest-check</c> (Paket R): siehe Simulation/KlangRest.cs.
+    /// Die Teile, die die Oberflaeche brauchen (Briefing, Menuezeile, Missionsende),
+    /// laufen hier; die Simulationsteile in <c>KlangRestCheck</c>.</summary>
+    private async System.Threading.Tasks.Task KlangRestLauf()
+    {
+        for (int i = 0; i < 10; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder(_entities.KlangRestCheck());
+        // ---- Oberflaeche: Briefing (R5), Menuezeile (306), Missionsende (R11) ----
+        var gehoert = new System.Collections.Generic.List<int>();
+        var vorher = Audio.SoundBankPlayer.Horcher;
+        Audio.SoundBankPlayer.Horcher = (slot, c, r) => gehoert.Add(slot);
+        try
+        {
+            // R5: ein Briefing oeffnen, 10 Bilder stehen lassen, »Start«.
+            int ab = gehoert.Count;
+            bool weiter = false;
+            var br = new UI.BriefingScreen("Pruefstand", new System.Collections.Generic.List<string> { "Pruefstand" },
+                                           () => weiter = true, mission: 0);
+            GetTree().Root.AddChild(br);
+            for (int i = 0; i < 10; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string offen = string.Join(",", gehoert.GetRange(ab, gehoert.Count - ab));
+            int ab2 = gehoert.Count;
+            br.StartFuerProbe();
+            string start = string.Join(",", gehoert.GetRange(ab2, gehoert.Count - ab2));
+            string folge = string.Join(",", gehoert.GetRange(ab, gehoert.Count - ab));
+            bool r5 = folge == "306,306" && offen.Length == 0 && weiter;
+            _entities.KlangRestUrteil(sb, 'E', r5, $"Briefing (R5): beim Oeffnen [{offen}] (Soll leer), »Start« [{start}] "
+                + $"(Soll 306,306 = Element 0x448608 + Arm 0x44D8B9), Folge [{folge}], weiter {(weiter ? "ja" : "NEIN")}"
+                + (Audio.GameSounds.BriefingklangAlt ? "  [NULLMODELL --briefingklang-alt: Soll 306 / 350]" : ""));
+
+            // 306 an der Menuezeile: CodeBewegen (harmlos: der Zeiger wird scharf).
+            int ab3 = gehoert.Count;
+            int sel = _entities.ErsteEigeneEinheit();
+            if (_unitMenu?.OnCode == null || sel < 0)
+                _entities.KlangRestKeinUrteil(sb, 'M', $"kein Einheitenmenue oder keine eigene Einheit (sel {sel})");
+            else
+            {
+                _entities.WaehleFuerProbe(sel);
+                _unitMenu.OnCode(MapEntityLayer.CodeBewegen);
+                int n306 = 0; for (int k = ab3; k < gehoert.Count; k++) if (gehoert[k] == 306) n306++;
+                _entities.KlangRestUrteil(sb, 'M', n306 == 1, $"Menuezeile »Bewegen« (Einheitenmenue): Klang 306 x{n306} (Soll 1, C 0x448608)");
+                _entities.ClearSelection();
+            }
+
+            // R11: Missionsende — die Regel fuer beide Ausgaenge, dann das echte Fenster (Sieg).
+            int ab4 = gehoert.Count;
+            Audio.GameSounds.Missionsende(false);
+            string verloren = string.Join(",", gehoert.GetRange(ab4, gehoert.Count - ab4));
+            int ab5 = gehoert.Count;
+            ShowEnd(true, "Pruefstand", record: false);
+            string sieg = string.Join(",", gehoert.GetRange(ab5, gehoert.Count - ab5));
+            bool s360 = System.Array.IndexOf(sieg.Split(','), "360") >= 0;
+            _entities.KlangRestUrteil(sb, 'K', verloren == "361" && s360,
+                $"Missionsende (R11): Niederlage [{verloren}] (Soll 361), Sieg ueber ShowEnd [{sieg}] (Soll enthaelt 360)");
+        }
+        finally { Audio.SoundBankPlayer.Horcher = vorher; }
+        sb.Append(_entities.KlangRestErgebnis());
+        GD.Print(sb.ToString());
         GetTree().Quit(0);
     }
 
@@ -5343,6 +5405,25 @@ _mausProbePunkt = karte;
             else if (a == "--minenausbau-klang-alt") Audio.GameSounds.MinenausbauKlangAlt = true;
             else if (a == "--raketenklang-aus") Audio.GameSounds.RaketenklangAus = true;
             else if (a == "--gebaeudezerstoert-klang-aus") Audio.GameSounds.GebaeudeZerstoertKlangAus = true;
+            // ⭐ 30.10.2026 — Paket R, der Klangabgleich ausserhalb 120..143
+            // (Audio/GameSoundsRest.cs, Simulation/KlangRest.cs), bug-677..681.
+            else if (a == "--klang-rest-check") MapEntityLayer.KlangRestCheckAn = true;
+            else if (a == "--klangwuerfel-alt") Audio.GameSounds.KlangwuerfelAlt = true;
+            else if (a == "--anwahlstimme-alt") Audio.GameSounds.AnwahlstimmeAlt = true;
+            else if (a == "--fusstodstimme-alt") Audio.GameSounds.FusstodstimmeAlt = true;
+            else if (a == "--hilfeklang-alt") Audio.GameSounds.HilfeklangAlt = true;
+            else if (a == "--briefingklang-alt") Audio.GameSounds.BriefingklangAlt = true;
+            else if (a == "--mechanikerklang-aus") Audio.GameSounds.MechanikerklangAus = true;
+            else if (a == "--gleisklang-aus") Audio.GameSounds.GleisklangAus = true;
+            else if (a == "--depotklang-aus") Audio.GameSounds.DepotklangAus = true;
+            else if (a == "--nachschubklang-aus") Audio.GameSounds.NachschubklangAus = true;
+            else if (a == "--flugklang-aus") Audio.GameSounds.FlugklangAus = true;
+            else if (a == "--endklang-aus") Audio.GameSounds.EndklangAus = true;
+            else if (a == "--grabklang-aus") Audio.GameSounds.GrabklangAus = true;
+            else if (a == "--handstimme-aus") Audio.GameSounds.HandstimmeAus = true;
+            else if (a == "--waldbrandklang-aus") Audio.GameSounds.WaldbrandklangAus = true;
+            else if (a == "--truemmerklang-aus") Audio.GameSounds.TruemmerklangAus = true;
+            else if (a == "--menuezeilenklang-aus") Audio.GameSounds.MenuezeilenklangAus = true;
             else if (a == "--ki-wegtor-alt") MapEntityLayer.KiWegtorAlt = true;
             // ⭐ Paket W (22.10.2026, bug-621): die Marschwege der KI, Simulation/KiMarschwege.cs.
             else if (a == "--ki-sektoranker-alt") MapEntityLayer.KiSektorankerAlt = true;
@@ -8253,6 +8334,11 @@ _mausProbePunkt = karte;
         _unitMenu.OnCode = code =>
         {
             _unitMenu!.Visible = false;
+            // ⭐ 30.10.2026, bug-679 (Paket R, »306 an allen Menuezeilen«): der
+            // Elementbehandler 0x4485D0 spielt fuer JEDES Element zuerst 306
+            // (C 0x448608), auch fuer die Zeilen des Einheitenmenues. Bis 0.6.12
+            // waren sie stumm. Gegenschalter --menuezeilenklang-aus.
+            if (!Audio.GameSounds.MenuezeilenklangAus) UI.WindowManager.Elementklang();
             // ⚠ Die Rueckmeldung geht in den BEDIENBLOCK, nicht mehr in die
             // Leiste: seit sie weg ist, ist das die einzige Zeile, die der
             // Spieler ohnehin liest. Im Original steht dafuer die Hilfezeile
@@ -8829,6 +8915,10 @@ _mausProbePunkt = karte;
         // letzte Fenster der Mission.
         UI.HelpWindow.CloseAll();
         UI.HelpWindow.CommitClose();
+        // ⭐ 30.10.2026, bug-680 (Paket R11): das Missionsendefenster 0x441FD0 spielt
+        // 0x169 − Argument: 360 beim SIEG (Rufer C 0x41697C), 361 bei der NIEDERLAGE
+        // (C 0x416C9D), Modus 0. Gegenschalter --endklang-aus.
+        Audio.GameSounds.Missionsende(won);
         int mission = UI.SkirmishSetup.CampaignMission;
         // 0x4D0012: cmp word[0x539934],0x21 — siehe Abschlussfilm.cs.
         _letzteMissionGewonnen = won && mission == 33;

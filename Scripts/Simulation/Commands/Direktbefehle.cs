@@ -204,6 +204,14 @@ public partial class MapEntityLayer
         bool ein = c.P2 != 0;
         if (e.DugIn == ein) return false;          // schon so — nichts zu tun
         DigInSetzen(i, ein);
+        // ⭐ 30.10.2026, bug-680 (Paket R12): 59 beim Eingraben (C 0x43A9B9, wenn
+        // die Warteschlange 0x834B70 eingeloest wird und der Aufbau beginnt), 60
+        // beim Ausgraben (C 0x4C3643, im Behandler selbst), Modus 1 an der
+        // Einheit, kein Tor. ⚠ UNSERE SETZUNG: ohne Bauphase klingt 59 im
+        // Befehlstakt, nicht beim Einloesen. Gegenschalter --grabklang-aus.
+        if (!Audio.GameSounds.GrabklangAus)
+            Audio.GameSounds.PlayAt(ein ? Audio.GameSounds.EingrabenBeginnt
+                                        : Audio.GameSounds.AusgrabenBeginnt, e.Col, e.Row);
         if (_selected == i || _sel.Contains(i)) UpdatePanel();
         QueueRedraw();
         return true;

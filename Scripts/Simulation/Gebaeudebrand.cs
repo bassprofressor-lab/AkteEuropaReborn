@@ -231,8 +231,16 @@ public partial class MapEntityLayer : Node2D
     /// Klangroutine macht @0x4048F8 (F 0x4048D8) daraus <c>400 + rand%6</c>.
     /// Wir würfeln an derselben Stelle der Folge (der Ruf steht VOR den
     /// Bildwürfen rand%9 / rand%6).</summary>
+    /// <para>⭐ 30.10.2026, bug-677 (Paket R1): der Wurf ist der KLANGWUERFEL
+    /// (<see cref="Audio.GameSounds.KlangRoll"/>), nicht Determinism — vorher
+    /// aenderte <c>--brandklang-aus</c> mit dem Klang auch den Wuerfelstand des
+    /// Spiels (berichte/klangabgleich-rest-opus.md §3). Nullmodell
+    /// <c>--klangwuerfel-alt</c>.</para>
     private void BrandKlang399(int c, int r)
-        => Audio.GameSounds.PlayAt(400 + Simulation.Determinism.Roll(6), c, r);
+    {
+        int k = 400 + Audio.GameSounds.KlangRoll(6);
+        if (!BrandklangAus) Audio.GameSounds.PlayAt(k, c, r);
+    }
 
     /// <summary>bug-482 (E): die Feinlage der Brandbilder — <c>rand%40</c>
     /// Bildpunkte nach rechts ab der linken Zellkante, <c>rand%20</c> auf die
@@ -241,7 +249,8 @@ public partial class MapEntityLayer : Node2D
     /// Effektleger 0x4357F0 ist ungelesen.</summary>
     private Vector2 BrandFeinlage(int c, int r)
     {
-        int fx = Simulation.Determinism.Roll(40), fy = Simulation.Determinism.Roll(20);   // @0x4AE625
+        // bug-677 (R1): reine BILDlage — Klangwuerfel (unter --klangwuerfel-alt Determinism).
+        int fx = Audio.GameSounds.KlangRoll(40), fy = Audio.GameSounds.KlangRoll(20);   // @0x4AE625
         return CellCenter(c, r) + new Vector2((fx - 20) * TileW / 40f, -6f - fy * TileH / 20f);
     }
 
@@ -256,12 +265,18 @@ public partial class MapEntityLayer : Node2D
         _gbrand.Add(new Gebaeudebrand { Col = c, Row = r, Alter = 1, Lebensdauer = leben });
 
         Vector2 pos;
-        if (BrandklangAus) pos = CellCenter(c, r) - new Vector2(0, 6);
+        // ⚠ bug-677 (R1): --brandklang-aus steht nur noch vor dem PlayAt. Die Wuerfe
+        // (Feinlage, 399 -> 400+rand%6) laufen auf dem Klangwuerfel, ob mit oder ohne
+        // Klang — der Schalter aendert damit das Spiel nicht mehr. Unter
+        // --klangwuerfel-alt der alte Weg (Wuerfe hinter dem Tor, Determinism).
+        if (Audio.GameSounds.KlangwuerfelAlt ? BrandklangAus : false)
+            pos = CellCenter(c, r) - new Vector2(0, 6);
         else
         {
             pos = BrandFeinlage(c, r);                           // rand%40, rand%20 @0x4AE625
             BrandKlang399(c, r);                                 // rand%6  @0x4AE664 -> 0x4048F8
-            BrandZuendKlaenge++;
+            if (!BrandklangAus) BrandZuendKlaenge++;
+            else pos = CellCenter(c, r) - new Vector2(0, 6);     // Stand bis 0.6.7: ohne Feinlage
         }
         _effects.Add(new Effect
         {
@@ -300,12 +315,18 @@ public partial class MapEntityLayer : Node2D
                     // bug-482 (C): rand%40, rand%20, dann rand%3 != 0 -> 399
                     // (-> 400+rand%6) | == 0 -> 410+rand%6, beide Modus 2 an der
                     // Zelle (@0x4AE8C8); erst danach das Bild 510+rand%9.
-                    if (!BrandklangAus)
+                    // bug-677 (R1): Wuerfe auf dem Klangwuerfel, das Tor nur vor dem Klang.
+                    if (!(Audio.GameSounds.KlangwuerfelAlt && BrandklangAus))
                     {
-                        pos = BrandFeinlage(f.Col, f.Row);
-                        if (Simulation.Determinism.Roll(3) != 0) BrandKlang399(f.Col, f.Row);
-                        else { Audio.GameSounds.PlayAt(410 + Simulation.Determinism.Roll(6), f.Col, f.Row); BrandTickerKlaenge410++; }
-                        BrandTickerKlaenge++;
+                        var fein = BrandFeinlage(f.Col, f.Row);
+                        if (!BrandklangAus) pos = fein;
+                        if (Audio.GameSounds.KlangRoll(3) != 0) BrandKlang399(f.Col, f.Row);
+                        else
+                        {
+                            int k410 = 410 + Audio.GameSounds.KlangRoll(6);
+                            if (!BrandklangAus) { Audio.GameSounds.PlayAt(k410, f.Col, f.Row); BrandTickerKlaenge410++; }
+                        }
+                        if (!BrandklangAus) BrandTickerKlaenge++;
                     }
                     _effects.Add(new Effect { Pos = pos, FrameTime = 0.04f,
                                               Kind = "sprengung" + Simulation.Determinism.Roll(9) });
@@ -316,11 +337,11 @@ public partial class MapEntityLayer : Node2D
                 {
                     // bug-482 (C): rand%40, rand%20, Klang 399 (@0x4AE970), dann
                     // die Flamme 310+rand%6.
-                    if (!BrandklangAus)
+                    if (!(Audio.GameSounds.KlangwuerfelAlt && BrandklangAus))   // bug-677 (R1)
                     {
-                        pos = BrandFeinlage(f.Col, f.Row);
+                        var fein = BrandFeinlage(f.Col, f.Row);
+                        if (!BrandklangAus) { pos = fein; BrandTickerKlaenge++; }
                         BrandKlang399(f.Col, f.Row);
-                        BrandTickerKlaenge++;
                     }
                     _effects.Add(new Effect { Pos = pos, FrameTime = 0.05f,
                                               Kind = "flamme" + Simulation.Determinism.Roll(6) });

@@ -454,6 +454,10 @@ public static class SoundBankPlayer
     /// the next explosion would take.</summary>
     public static bool PlayVoice(int slot, float volumeDb = 0f)
     {
+        // ⭐ 30.10.2026 (bug-681, Paket R): auch die STIMME meldet an den
+        // Horcher, vor jedem Riegel — sonst waren Briefing- und Hilfestimme fuer
+        // keinen Pruefstand messbar (nur der Zaehler ohne Takt und Ort).
+        Horcher?.Invoke(slot, float.NaN, float.NaN);
         Mitschnitt(slot, "STIMME");
         StopVoice();
         if (!UI.Settings.SoundOn) return false;

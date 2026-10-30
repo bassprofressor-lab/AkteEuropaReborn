@@ -117,9 +117,13 @@ public partial class MapEntityLayer
         public bool Brocken;                  // Stil 1 (Folge 25..38): Aufschlagbild
         public float Strecke, MaxBogen;       // fuer den Pruefstand
         public int Wurf;                      // welche Sprengung (Pruefstand)
+        public bool Stil2;                    // bug-680 (R15): Folge >= 39, landet mit Klang 399
     }
 
     private readonly List<Truemmer> _truemmer = new();
+
+    /// <summary>Pruefstand R15: wie viele Teile mit Klang gelandet sind.</summary>
+    public int TruemmerLandeklaenge;
 
     /// <summary>Wie viele Teile gerade fliegen — fuer den Pruefstand.</summary>
     public int TruemmerZahl => _truemmer.Count;
@@ -434,6 +438,7 @@ public partial class MapEntityLayer
             Brocken = brocken,
             Strecke = d,
             Wurf = _truemmerWurf,
+            Stil2 = seq >= 39,                // @0x4AD9D6 cmp di,0x27 -> +0x23 := 2
         });
         TruemmerGeworfen++;
     }
@@ -502,6 +507,7 @@ public partial class MapEntityLayer
             t.Zeit += dt;
             bool gelandet = false;
             Vector2 boden = t.Nach;
+            Vector2 landeFlach = t.FlachNach;     // bug-680 (R15): Zelle der Landung
             if (TruemmerAufschlagAus)
             {
                 // Stand feec479: feste Dauer, kein Bodentest
@@ -527,6 +533,7 @@ public partial class MapEntityLayer
                     bool angekommen = t.Takt >= t.N;
                     if (grund + (int)bogen > bodenHoehe && !angekommen) continue;
                     gelandet = true;
+                    landeFlach = p;
                     boden = p - new Vector2(0, bodenHoehe);
                     if (TruemmerBogenAlt && angekommen) boden = t.Nach;
                 }
@@ -536,6 +543,18 @@ public partial class MapEntityLayer
                 if (TruemmerMitschreiben)
                     TruemmerGelandet.Add((t.Wurf, t.Brocken, t.Zeit, t.Strecke, t.MaxBogen));
                 if (t.Brocken && !TruemmerAufschlagAus) Aufschlag(boden);   // @0x4AE0DE
+                // ⭐ 30.10.2026, bug-680 (Paket R15): Landeart 2 (+0x23, gesetzt im
+                // Erzeuger C 0x4AD9DC fuer Folge >= 39 — bei uns die Gebaeudesplitter
+                // 200..204) spielt bei der Landung Klang 399 an der Zelle (C 0x4AE08F
+                // cmp eax,2 -> 0x4AE135, Ruf 0x4AE160, Modus 2); die Klangroutine macht
+                // daraus 400 + rand%6 (0x4048F8). Wurf: Klangwuerfel. Gegenschalter
+                // --truemmerklang-aus.
+                if (t.Stil2 && !Audio.GameSounds.TruemmerklangAus)
+                {
+                    int lc = Mathf.FloorToInt((landeFlach.X - _ox) / TileW), lr = Mathf.FloorToInt((landeFlach.Y - _oy) / TileH);
+                    Audio.GameSounds.PlayAt(400 + Audio.GameSounds.KlangWuerfel(6), lc, lr);
+                    TruemmerLandeklaenge++;
+                }
                 _truemmer.RemoveAt(i);
                 continue;
             }

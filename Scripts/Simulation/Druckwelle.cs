@@ -143,7 +143,8 @@ public partial class MapEntityLayer : Node2D
                         _effects.Add(new Effect { Pos = ZellMitte(col, row),
                                                   Kind = "sprengung" + Simulation.Determinism.Roll(9),
                                                   FrameTime = 0.04f });
-                    if (Simulation.Determinism.Roll(2 * soll + 2) < 1)            // @0x454930
+                    // bug-677 (R1): der Wurf entscheidet nur, OB 400 klingt — Klangwuerfel.
+                    if (Audio.GameSounds.KlangRoll(2 * soll + 2) < 1)             // @0x454930
                         Audio.GameSounds.PlayAt(Audio.GameSounds.ExplosionHigh, col, row);
                 }
             DwZellen += n;

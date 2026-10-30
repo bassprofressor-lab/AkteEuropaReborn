@@ -40,9 +40,13 @@ public partial class BriefingScreen : CanvasLayer
 
     public override void _Ready()
     {
-        // the original's own two sounds for this screen: @0x44d8b9 right after
-        // it prints "End of briefing starts", @0x44d976 after "End of briefing"
-        Audio.GameSounds.Play(Audio.GameSounds.BriefingStart);
+        // ⭐⚠ 30.10.2026, bug-679 (Paket R5): BEIM OEFFNEN BLEIBT ES STILL. Hier
+        // spielte 306, weil »@0x44d8b9« als Oeffnen gelesen war — die Stelle ist
+        // aber Arm 0 der Knopftafel 0x44E0B0 (Knopf 1 »Start«), gleich hinter der
+        // Protokollzeile »End of briefing starts«. Fuer das Oeffnen hat keine der
+        // 111 Klangstellen einen Ruf. Nur noch unter --briefingklang-alt.
+        if (Audio.GameSounds.BriefingklangAlt)
+            Audio.GameSounds.Play(Audio.GameSounds.BriefingStart);
 
         // and the mission read aloud — sound 500 + mission, see
         // GameSounds.BriefingVoice for how that was pinned down
@@ -666,12 +670,29 @@ public partial class BriefingScreen : CanvasLayer
 
     private bool _done;
 
+    /// <summary>Pruefstand <c>--klang-rest-check</c> (R5): »Start« druecken wie der
+    /// Knopf, ohne Maus.</summary>
+    public void StartFuerProbe() => Continue();
+
     private void Continue()
     {
         if (_done) return;
         _done = true;
         Audio.SoundBankPlayer.StopVoice();       // the narration goes with the screen
-        Audio.GameSounds.Play(Audio.GameSounds.BriefingEnd);
+        // ⭐ bug-679 (R5): »Start« ist Knopf 1 der Tafel 0x44E0B0. Er geht durch den
+        // Elementbehandler 0x4485D0, der fuer JEDES Element zuerst 306 spielt
+        // (C 0x448608), und sein Arm spielt danach selbst 306 (C 0x44D8B9) — im
+        // Original also zweimal derselbe Klick im selben Takt. 350 gehoert Knopf 5,
+        // nicht dem Schliessen. ⚠ UNSERE SETZUNG: Enter/Leertaste/ESC nehmen
+        // denselben Weg wie der Knopf (ob die Tasten im Original Knopf 1 sind,
+        // ist ungelesen). Nullmodell --briefingklang-alt (350 beim Schliessen).
+        if (Audio.GameSounds.BriefingklangAlt)
+            Audio.GameSounds.Play(Audio.GameSounds.BriefingEnd);
+        else
+        {
+            WindowManager.Elementklang();                         // C 0x448608
+            Audio.GameSounds.Play(Audio.GameSounds.BriefingStart);  // C 0x44D8B9
+        }
         QueueFree();
         _go();
     }

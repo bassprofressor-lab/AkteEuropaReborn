@@ -7324,6 +7324,7 @@ public partial class MapEntityLayer : Node2D
                 _sel.Clear();
                 _selAir = air;
                 SetPrimary();
+                SpeakSelectedAir(air);                  // bug-678 (R2): 183
                 QueueRedraw();
                 return;
             }
@@ -7373,8 +7374,29 @@ public partial class MapEntityLayer : Node2D
         var e = _entities[i];
         if (e.IsBuilding || e.IsProp || e.Dead || e.Chassis < 0) return;
         if (e.Owner != ViewPlayer) return;
-        int s = Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28);
-        if (s >= 0) Audio.SoundBankPlayer.Play(s);
+        // ⭐ 30.10.2026, bug-678 (Paket R2): das ANWAEHLEN spricht nach 0x4331E0
+        // (Audio.GameSounds.SelectVoice), Modus 1 an der Einheit (C 0x433397). Bis
+        // 0.6.12 stand hier die Fahrbefehlstafel 0x429290 — 2 daneben. Nullmodell
+        // --anwahlstimme-alt.
+        if (Audio.GameSounds.AnwahlstimmeAlt)
+        {
+            int alt = Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28);
+            if (alt >= 0) Audio.SoundBankPlayer.Play(alt);
+            return;
+        }
+        Audio.GameSounds.PlayAt(Audio.GameSounds.SelectVoice(e.GameUnitType, e.Chassis, e.Field28),
+                                e.Col, e.Row);
+    }
+
+    /// <summary>bug-678 (R2): ein FLUGZEUG wird angewaehlt — 0x4331E0 mit Auswahl
+    /// ≥ 20000 (C 0x433309..0x433326): 183, Modus 1 am Flugzeug. Rufer im Original
+    /// der Klickverteiler 0x4373EB und die Flugzeugliste 0x44BE29.</summary>
+    private void SpeakSelectedAir(int air)
+    {
+        if (Audio.GameSounds.AnwahlstimmeAlt || !UI.Settings.Announcements) return;
+        if (air < 0 || air >= _special.Count) return;
+        var a = _special[air];
+        Audio.GameSounds.PlayAt(Audio.GameSounds.SelectVoice(-1, -1, 0, flugzeug: true), a.Col, a.Row);
     }
 
     /// <summary>
@@ -13772,8 +13794,24 @@ public partial class MapEntityLayer : Node2D
                 victim.HaltenTakt = _taktNr;
                 return;
             }
-            Audio.GameSounds.PlayAt(Audio.GameSounds.InfantryDiesPick(),
-                                    victim.Col, victim.Row);
+            // ⭐ 30.10.2026, bug-678 (Paket R3): der ERSCHOSSENE spricht die
+            // Todesstimme 0x40B2E0 (Gattung 1 aus 0x40B530, Ruf C 0x40B358), je
+            // Infanterieart (+0x0B). 77..79 gehoert allein dem UEBERFAHRENEN am Ende
+            // des Haltens (0x406E4D, UeberfahrenHaltEnde). Der Schalter »Meldungen«
+            // (byte[0x991708]) gilt fuer 150..253 schon in der Klangroutine
+            // (0x4047FA). Nullmodell --fusstodstimme-alt.
+            if (ueberfahren || Audio.GameSounds.FusstodstimmeAlt)
+                Audio.GameSounds.PlayAt(Audio.GameSounds.InfantryDiesPick(),
+                                        victim.Col, victim.Row);
+            else
+            {
+                // Nullmodell R1: der alte Wurf (InfantryDiesPick, Roll 3), damit
+                // --klangwuerfel-alt den Wuerfelstand bis 0.6.12 wiederherstellt.
+                if (Audio.GameSounds.KlangwuerfelAlt) Simulation.Determinism.Roll(3);
+                if (UI.Settings.Announcements)
+                    Audio.GameSounds.PlayAt(Audio.GameSounds.InfantryDeathVoice(victim.Chassis),
+                                            victim.Col, victim.Row);
+            }
             return;
         }
         // ⭐⭐ 24.08.2026 — DIE RICHTIGE EXPLOSION. Hier stand "explosion",
@@ -15471,7 +15509,9 @@ public partial class MapEntityLayer : Node2D
                 _mscript.ShowText = (id, art, x, y) =>
                 {
                     GD.Print($"Missionstext {id} (Art {art}) bei {x},{y}");
-                    UI.HelpWindow.Show(GetTree().Root, id, x, y);
+                    // bug-678 (R4): Art 1 = show_text 0x443490, Art 2 = show_text2
+                    // 0x4432E0 (mission_logic.py) — sie sprechen verschieden.
+                    UI.HelpWindow.Show(GetTree().Root, id, x, y, ohneRiegelStimme: art == 1);
                 };
                 _mscript.CloseTexts = UI.HelpWindow.CloseAll;
                 _mscript.PlaySound = slot => Audio.GameSounds.Play(slot);
@@ -26635,6 +26675,12 @@ public partial class MapEntityLayer : Node2D
             t.Hp = Mathf.Min(t.Hp + (t.IsBuilding ? RepairPerTickBuilding
                                                   : RepairPerTickUnit), t.HpMax);
             MechanicRepairs++;
+            // ⭐ 30.10.2026, bug-680 (Paket R6): 44 (Einheit, C 0x411E9D) bzw. 43
+            // (Gebaeude, C 0x411EF1), Modus 2 an DIESER Zelle, je gelungenem Punkt,
+            // kein Tor. Gegenschalter --mechanikerklang-aus.
+            if (!Audio.GameSounds.MechanikerklangAus)
+                Audio.GameSounds.PlayAt(t.IsBuilding ? Audio.GameSounds.MechanikerGebaeude
+                                                     : Audio.GameSounds.MechanikerEinheit, col, row);
             return;                                       // eine Zelle, ein Ziel
         }
     }
@@ -40637,6 +40683,11 @@ public partial class MapEntityLayer : Node2D
         int cost = max > 0 ? SupplyFullCost * missing / max : 0;
         a.Cargo = Mathf.Max(0, a.Cargo - cost);
         SupplyRuns++;
+        // ⭐ 30.10.2026, bug-680 (Paket R9): 72 je Abgabe, Modus 1 AM HELI —
+        // Tanken C 0x424952 (+0x2E := +0x30), Munition C 0x424B8C (+0x39 := +0x3A).
+        // Gegenschalter --nachschubklang-aus.
+        if (!Audio.GameSounds.NachschubklangAus)
+            Audio.GameSounds.PlayAt(Audio.GameSounds.NachschubAbgabe, a.Col, a.Row);
         // ⚠ 11.08.2026 — hier stand ein "muzzle"-Aufblitzen als Quittung fuer
         // die Uebergabe. Gemeldet als »es erscheint wieder so ein treffer
         // sprite (wie bei einem kanonentreffer) wenn die versorgungshelis an

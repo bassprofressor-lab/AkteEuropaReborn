@@ -1112,6 +1112,29 @@ public partial class MapEntityLayer
         _flammen.Clear();
     }
 
+    /// <summary>
+    /// ⭐ 30.10.2026, bug-680 (Paket R14) — <b>Klang 300 »Waldbrand«</b>. Der
+    /// Einreiher der Flamme C <c>0x42E6D0</c> wuerfelt je brennender, SICHTBARER
+    /// (byte[0x678B58+…] ≠ 0, 0x42E706) und im Bild liegender Waldzelle
+    /// <c>rand()%80</c> und spielt bei 0 Klang 300, Modus 2 an der Zelle
+    /// (0x42E81B..0x42E844). Hier, weil <see cref="Flamme"/> genau diese Zellen
+    /// zeichnet (Nebeltor wie 0x42E706). ⚠ UNSERE SETZUNG: je gezeichnetem BILD
+    /// (unser Bildtakt statt des Zeichentakts des Originals) und nur fuer
+    /// Waldzellen (<c>IstWald</c>; die zerstoerbaren Objekte haben eine eigene
+    /// Liste 0xC03A30 ohne diesen Ruf). Wurf: Klangwuerfel. Gegenschalter
+    /// <c>--waldbrandklang-aus</c>.
+    /// </summary>
+    private void WaldbrandKlang(Kartenobjekt e)
+    {
+        if (Audio.GameSounds.WaldbrandklangAus || !e.IstWald) return;
+        WaldbrandWuerfe++;
+        if (Audio.GameSounds.KlangWuerfel(80) != 0) return;
+        Audio.GameSounds.PlayAt(Audio.GameSounds.Waldbrand, e.Col, e.Row);
+    }
+
+    /// <summary>Pruefstand R14: wie oft gewuerfelt wurde (Bezugsgroesse).</summary>
+    public int WaldbrandWuerfe;
+
     private void Flamme(Kartenobjekt e)
     {
         // ⚠ 24.08.2026 — KEINE FLAMME IM NEBEL. Gemeldet: »man sieht eine
@@ -1130,6 +1153,7 @@ public partial class MapEntityLayer
         // Befund. Die Kachel darunter (verkohlt bzw. Asche) bleibt sichtbar wie
         // jedes andere erinnerte Gelaende; nur das Feuer selbst schweigt.
         if (FogActive && !Watched(e.Col, e.Row)) return;
+        WaldbrandKlang(e);                                  // bug-680 (R14), C 0x42E81B
 
         // ⚠ 19.08.2026 — ZWEI FLAMMEN, nach der Parität des Index. Der Zeichner
         // @0x42B461 rechnet `edi = (index & 1) * 2 + 0x226` — also Folge 550

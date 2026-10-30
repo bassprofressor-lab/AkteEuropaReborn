@@ -46,8 +46,19 @@ public partial class MapEntityLayer
     private void StartuhrTakt(Special a)
     {
         if (StartzustandAlt || a.Order != 4) return;
-        a.StartUhr++;
         bool heli = a.Kind >= 10;
+        // ⭐ 30.10.2026, bug-680 (Paket R10): die Startklaenge, Modus 1 am Flieger.
+        // 303 — FLUGZEUG (Typ < 10) bekommt die Bahn: Uhr +0x12 == 0 (C 0x423411..
+        // 0x423467). 304 — HELI bei Uhr == 39 (C 0x42361F..0x42363C). ⚠ UNSERE
+        // SETZUNG: die Bahnfreigabe (Tafel 0x879441) ist nicht gebaut, 303 kommt im
+        // ersten Starttakt; und nur ein Start mit uk 4 klingt — der Spielerstart
+        // (LaunchAircraft, Hangar) geht bei uns nicht durch uk 4 und bleibt stumm.
+        // Gegenschalter --flugklang-aus.
+        if (!heli && a.StartUhr == 0 && !Audio.GameSounds.FlugklangAus)
+            Audio.GameSounds.PlayAt(Audio.GameSounds.FlugzeugStartbahn, a.Col, a.Row);
+        a.StartUhr++;
+        if (heli && a.StartUhr == 39 && !Audio.GameSounds.FlugklangAus)
+            Audio.GameSounds.PlayAt(Audio.GameSounds.HeliStartSteigen, a.Col, a.Row);
         if (a.StartUhr <= (heli ? StartUhrHeli : StartUhrFlugzeug)) return;
         a.Order = !heli && a.Order2 == 6 ? 3 : a.Order2;           // 0x423498 / 0x4234EE / 0x4235D8
         StartsBeendet++;

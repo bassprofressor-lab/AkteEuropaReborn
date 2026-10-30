@@ -25,8 +25,8 @@ using AkteEuropaReborn.Simulation.Commands;
 /// gewoehnliche Nachschubflug. <b>Keine Kampagnensperre.</b></item>
 /// </list>
 ///
-/// <para>⚠ UNSERE SETZUNGEN: die Quittung <c>0x40162C(0x4B, …)</c> ist ungelesen und
-/// fehlt; P2 ist bei uns der Einheitenindex (ob das Original ihn als Byte liest,
+/// <para>⚠ UNSERE SETZUNGEN: die Quittung <c>0x40162C(0x4B, …)</c> ist seit 30.10.2026
+/// gelesen und gebaut (Klang 75, bug-680); P2 ist bei uns der Einheitenindex (ob das Original ihn als Byte liest,
 /// ist offen); ein voller Kunde wird wie bisher in <see cref="UpdateSupply"/>
 /// sofort wieder losgelassen (die Abgabe 0x424845 ist ungelesen).</para>
 ///
@@ -75,6 +75,12 @@ public partial class MapEntityLayer
     {
         Special? a = null;
         foreach (var s in _special) if (s.Slot == c.P1) { a = s; break; }
+        // ⭐ 30.10.2026, bug-680 (Paket R9): die QUITTUNG ist jetzt gelesen — Klang 75,
+        // Modus 1 am Heli (20000 + P1), als ERSTE Zeile beider Behandler (C 0x427E50 /
+        // 0x427F00), vor jeder Pruefung. ⚠ UNSERE SETZUNG: nur wenn es den Platz gibt
+        // (sonst haetten wir keinen Ort). Gegenschalter --nachschubklang-aus.
+        if (a != null && !Audio.GameSounds.NachschubklangAus)
+            Audio.GameSounds.PlayAt(Audio.GameSounds.NachschubBefehl, a.Col, a.Row);
         if (a == null || a.Dead || a.Stored || a.Owner != c.Player) return false;
         if (a.Kind != (c.Op == CommandOp.NachschubTanken ? 13 : 14)) return false;
         if (c.P2 < 0 || c.P2 >= _entities.Count) return false;

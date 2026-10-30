@@ -492,7 +492,12 @@ public partial class MapEntityLayer
             e.Dead = true;                                  // 0x410E60
             e.Path = null; e.Orders.Clear();
             // ⭐ 13.09.2026 — Klang 42, Modus 2, an der Zelle des Bauers (@0x40837A).
+            // ⭐ 30.10.2026, bug-680 (Paket R8): dasselbe beim DEPOT, C 0x408111 —
+            // nach 0x401A46(…, 5, …) gelungen und dem Entfernen des Bauers, kein Tor.
+            // Gegenschalter --depotklang-aus.
             if (order == OrderGenerator && !BauauftragAlt) Audio.GameSounds.PlayAt(42, e.Col, e.Row);
+            else if (order == OrderDepot && !Audio.GameSounds.DepotklangAus)
+                Audio.GameSounds.PlayAt(Audio.GameSounds.BauauftragGesetzt, e.Col, e.Row);
 
             var bld = PlaceBuilding(Patterns, typ, col, row, owner);
             if (bld == null)

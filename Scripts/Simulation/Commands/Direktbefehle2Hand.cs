@@ -118,6 +118,7 @@ public partial class MapEntityLayer
         }
         if (!_entities[idx].Mobile) return "diese Einheit faehrt nicht";
         HandsteuerungIdx = idx;
+        HandStimme(_entities[idx].GameUnitType, _entities[idx].Field28, false, _entities[idx].Col, _entities[idx].Row);
         Emit(CommandRecord.Make(CommandOp.HandUebernehmen, (byte)ViewPlayer, (short)idx));
         return "Handsteuerung: mit den Pfeiltasten fahren, nochmal druecken beendet sie";
     }
@@ -199,7 +200,30 @@ public partial class MapEntityLayer
         if (idx < 0 || idx >= _special.Count) return false;
         var a = _special[idx];
         if (a.Dead || a.Stored || a.Absturz || a.IsSupply) return false;
+        HandStimme(-1, 0, true, a.Col, a.Row);
         return Emit(CommandRecord.Make(CommandOp.HandUebernehmen, (byte)ViewPlayer, S(FlugGriff + a.Slot)));
+    }
+
+    /// <summary>
+    /// ⭐ 30.10.2026, bug-680 (Paket R13) — die Stimme beim UEBERNEHMEN,
+    /// <see cref="Audio.GameSounds.HandVoice"/> (C 0x429760), ÖRTLICH beim
+    /// Drueckenden und VOR dem Bus wie C 0x4337F7 → 0x433805 (Befehl 4). Das
+    /// Beenden (Befehl 5, C 0x4337E4) schweigt.
+    /// <para>⚠ UNSERE SETZUNG: im Original ist es die Taste H (0x433750) fuer
+    /// Einheit UND Flugzeug; bei uns nimmt H nur das Flugzeug, die Einheit geht
+    /// ueber die Menuezeile »Handsteuerung« — dort spricht sie stellvertretend.
+    /// Der Schalter »Meldungen« (byte[0x991708]) gilt fuer 150..253 (0x4047FA);
+    /// 260 liegt darueber und klingt auch ohne ihn. Gegenschalter
+    /// <c>--handstimme-aus</c>.</para>
+    /// </summary>
+    private void HandStimme(int gattung, int feld28, bool objekt, float col, float row)
+    {
+        if (Audio.GameSounds.HandstimmeAus) return;
+        int nr = Audio.GameSounds.HandVoice(gattung, feld28, objekt);
+        if (nr < 0) return;
+        if (nr is >= Audio.GameSounds.AnnounceFirst and <= Audio.GameSounds.AnnounceLast
+            && !UI.Settings.Announcements) return;
+        Audio.GameSounds.PlayAt(nr, col, row);
     }
 
     /// <summary>Rechtsklick/ESC unter Handsteuerung Luft: Befehl 30 (die

@@ -51,7 +51,9 @@ public partial class MapEntityLayer
             VeteranenstimmeGespielt++;
         }
         if (v.Infantry >= 0) return;                     // Gattung 1: eigener Weg
-        int k = 400 + (Simulation.Determinism.Roll(4));  // rand & 3
+        // ⚠ bug-677 (Paket R1): Klangwuerfel statt Determinism — ein Klang darf den
+        // Wuerfelstand nicht verschieben. Nullmodell --klangwuerfel-alt.
+        int k = 400 + Audio.GameSounds.KlangRoll(4);     // rand & 3 @0x40B500
         Audio.GameSounds.PlayAt(k, v.Col, v.Row);
         TodesklangGespielt++;
         TodesklangLetzter = k;
