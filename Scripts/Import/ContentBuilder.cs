@@ -936,7 +936,9 @@ public sealed class ContentBuilder
                   // ueber alle Karten genau 20, alle auf map_16.
                   + $", {baker.KohleAusArttafel} Brandkacheln aus der Arttafel"
                   // bug-644: Fahrbahnzellen der Kartenbruecken, nicht mehr gebacken.
-                  + $", {baker.BrueckeLebendZellen} Brueckenfahrbahnzellen lebend");
+                  + $", {baker.BrueckeLebendZellen} Brueckenfahrbahnzellen lebend"
+                  // bug-685: Kartenrampen, nicht mehr gebacken.
+                  + $", {baker.RampeLebendZellen} Rampenzellen lebend");
             }
             catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
         }

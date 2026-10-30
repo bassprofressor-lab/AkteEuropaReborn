@@ -175,10 +175,14 @@ public static class InhaltsStand
     /// Fahrbahn der Kartenbruecken (Lage 100..199) im Bodenbild weg, sie wird lebend
     /// gezeichnet (Simulation/KartenbrueckeLebend.cs). Ohne Neueinlesen bleibt nach einem
     /// Brueckenabriss der Streifen stehen.</para>
+    /// <para>⭐ 30.10.2026 (bug-685, pruefung-rest-b-opus.md §5): <b>karten → 4</b> — der
+    /// Backofen laesst auch die Kartenrampen (Lage 200..249, Kachel 10723..10730) im
+    /// Bodenbild weg, sie werden lebend gezeichnet (Simulation/KartenrampeLebend.cs). Ohne
+    /// Neueinlesen bleiben nach einem Rampenabriss 1..174 Punkte der Rampe stehen.</para>
     /// </summary>
     public static readonly IReadOnlyDictionary<string, int> Noetig = new Dictionary<string, int>
     {
-        ["karten"] = 3,
+        ["karten"] = 4,
         ["spielstaende"] = 1,
         ["gebaeude"] = 1,
         ["kachelsaetze"] = 1,

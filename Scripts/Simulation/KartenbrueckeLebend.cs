@@ -108,6 +108,7 @@ public partial class MapEntityLayer
             l.Add((new Rect2(new Vector2(ziel.Position.X, ziel.Position.Y + Import.MapBaker.BlitAnchor + k.YOff),
                              k.Feld.Size), k.Feld));
         }
+        l.AddRange(KartenrampenUebersicht());      // bug-685, KartenrampeLebend.cs
         return l;
     }
 

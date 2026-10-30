@@ -198,7 +198,29 @@ public partial class MapEntityLayer
         public Vector2 Start;
         public float Laenge;
         public int N = 1, Punkte, Takte;
+        /// <summary>bug-686 (30.10.2026): der HUBSCHRAUBERZWEIG desselben Strahltakts —
+        /// Marke +0x25 &gt; 0x80 (der Anleger 0x455320 setzt sie fuer Schuetzen &gt; 20000):
+        /// Schritt 40, Zuschlag 6, Art 73. <see cref="BildHoehe"/> = die Hoehe des
+        /// Hubschrauberbildes ueber dem Boden beim Anlegen; der Strich laeuft von dort
+        /// schraeg zur Zielhoehe (0x455048). Nicht gesetzt mit <c>--heli-strahl-alt</c>.</summary>
+        public bool Heli;
+        public float BildHoehe;
+        /// <summary>Erster und letzter gesetzter Punkt (fuer den Pruefstand).</summary>
+        public Vector2 ErsterPunkt, LetzterPunkt;
     }
+
+    /// <summary><c>--heli-strahl-alt</c> — der Hubschrauberstrahl wieder wie bis 30.10.2026:
+    /// ein Punkt je Takt, 40 px je Takt am Boden, Treffer nach ⌈L/40⌉ Takten. bug-686.</summary>
+    public static bool HeliStrahlAlt;
+
+    /// <summary>Schritt und Zuschlag des Hubschrauberzweigs (0x454DD1: <c>mov esi,0x28 /
+    /// mov ebx,6 / Art 0x49</c>).</summary>
+    private const int HeliSchritt = 40, HeliZuschlag = 6;
+
+    /// <summary>Zaehler fuer den Pruefstand <c>--helistrahl-check</c>: jeder angekommene
+    /// Hubschrauberstrahl mit Laenge, Punkten und Takten (neuer und alter Weg).</summary>
+    public int HsAngekommen;
+    public readonly List<(float Laenge, int Punkte, int Takte)> HsMessung = new();
 
     /// <summary><c>--bodenstrahl-alt</c> — der Fussvolk-Laser wieder wie bis 29.10.2026:
     /// ein 2×2-Punkt je Takt, 40 px je Takt (doppelt so schnell wie das Original).</summary>
@@ -240,6 +262,11 @@ public partial class MapEntityLayer
                 Pos = a.Pos, Ziel = aim + quer,
                 Zielgriff = a.Target, Schaden = a.Attack, Owner = a.Owner,
                 Name = a.Name,
+                // bug-686: der Hubschrauberzweig des Strahltakts (HeliStrahlTakt). L ist die
+                // Laenge am BODEN wie im Original (dx, dy der Kartenlage, 0x454D72), die Hoehe
+                // laeuft getrennt. Start/Laenge auch im alten Weg — nur fuer den Pruefstand.
+                Heli = !HeliStrahlAlt, Start = a.Pos, Laenge = (aim + quer - a.Pos).Length(),
+                BildHoehe = HeliBildHoehe(a),
             });
             LuftStrahlen++;
         }
@@ -267,6 +294,8 @@ public partial class MapEntityLayer
         {
             var s = _strahlen[i];
             if (s.Boden && !BodenstrahlAlt) { if (BodenstrahlTakt(s)) _strahlen.RemoveAt(i); continue; }
+            // bug-686: der Hubschrauber durch dieselbe Punktschleife (40 Punkte je Takt).
+            if (s.Heli) { if (BodenstrahlTakt(s)) _strahlen.RemoveAt(i); continue; }
             var weg = s.Ziel - s.Pos;
             float rest = weg.Length();
             s.Takte++;                       // bug-658: Zaehler auch im alten Weg (Nullmodell)
@@ -279,6 +308,7 @@ public partial class MapEntityLayer
                     BsAngekommen++; BsPunkteSumme += s.Punkte; BsTakteSumme += s.Takte;
                     BsLetzter = (s.Laenge, s.Punkte, s.Takte);
                 }
+                else { HsAngekommen++; HsMessung.Add((s.Laenge, s.Punkte, s.Takte)); }   // bug-686, Nullmodell
                 if (CellAt(s.Ziel) is { } zc)
                 {
                     int c = Mathf.RoundToInt(zc.X), r = Mathf.RoundToInt(zc.Y);
@@ -323,14 +353,24 @@ public partial class MapEntityLayer
     /// Original rechnet −40 Feineinheiten @0x455048, wir ziehen von der Muendung zum
     /// Bildpunkt des Ziels). Der gelbe Sonderfall <c>+0x43 == 0xBF</c> der Zieleinheit
     /// ist ungedeutet und nicht gebaut. ⚠ Der Hubschrauberstrahl laeuft durch dieselbe
-    /// Punktschleife (40 Punkte je Takt), bleibt hier aber beim alten Weg — nicht
-    /// Teil des Auftrags, im Bericht vermerkt.</para>
+    /// Punktschleife (40 Punkte je Takt) — seit 30.10.2026 auch bei uns (bug-686, siehe
+    /// unten; <c>--heli-strahl-alt</c> = der Stand davor).</para>
+    /// <para>⭐ 30.10.2026, bug-686 (pruefung-rest-b-opus.md §2) — <b>der HUBSCHRAUBERZWEIG</b>
+    /// laeuft durch dieselbe Schleife: Schritt 40, Zuschlag 6 (0x454DD1), also L − 6 Punkte
+    /// und Treffer nach ⌈(L − 6)/40⌉ Takten (bei uns stand ⌈L/40⌉ und ein Punkt je Takt).
+    /// Die Hoehe: <c>Quellhoehe + (Zielhoehe − Quellhoehe)·t/L − 40</c> (0x455048), Quelle
+    /// = Flughoehe +0x6DDF7E, Ziel = Gelaende·15 (0x4276xx, Anleger-Aufruf @0x4276B6) — der
+    /// Strich laeuft also SCHRAEG vom Hubschrauber zum Boden. ⚠ UNSERE SETZUNG: wir ziehen
+    /// vom Bildpunkt des Hubschraubers (Kartenlage − <see cref="BildHoehe"/>) linear zum
+    /// Zielpunkt am Boden; die −40 von 0x455048 nehmen wir wie beim Bodenstrahl nicht.
+    /// Beim Treffer ohne Zelle bleibt der alte Rueckfall auf das angepeilte Ziel.</para>
     /// <para>true = angekommen (der Satz ist frei).</para></summary>
     private bool BodenstrahlTakt(Strahl s)
     {
+        int schritt = s.Heli ? HeliSchritt : BodenSchritt, zuschlag = s.Heli ? HeliZuschlag : BodenZuschlag;
         float L = Mathf.Max(1f, s.Laenge);
-        int vorher = (s.N - 1) * BodenSchritt + BodenZuschlag;
-        int jetzt = s.N * BodenSchritt + BodenZuschlag;
+        int vorher = (s.N - 1) * schritt + zuschlag;
+        int jetzt = s.N * schritt + zuschlag;
         bool an = jetzt >= L;
         if (an) jetzt = (int)L;
         else s.N++;
@@ -338,15 +378,37 @@ public partial class MapEntityLayer
         var d = s.Ziel - s.Start;
         for (int t = vorher; t < jetzt; t++)
         {
-            _effects.Add(new Effect { Pos = s.Start + d * (t / L), Kind = s.Punkt, FrameTime = 0.08f });
+            float f = t / L;
+            var hoch = s.Heli ? new Vector2(0f, s.BildHoehe * (1f - f)) : Vector2.Zero;
+            var pos = s.Start + d * f - hoch;
+            _effects.Add(new Effect { Pos = pos, Kind = s.Punkt, FrameTime = 0.08f });
+            if (s.Punkte == 0) s.ErsterPunkt = pos;
+            s.LetzterPunkt = pos;
             s.Punkte++;
         }
         if (!an) return false;
-        BsAngekommen++; BsPunkteSumme += s.Punkte; BsTakteSumme += s.Takte;
-        BsLetzter = (s.Laenge, s.Punkte, s.Takte);
+        if (s.Heli) { HsAngekommen++; HsMessung.Add((s.Laenge, s.Punkte, s.Takte)); }
+        else
+        {
+            BsAngekommen++; BsPunkteSumme += s.Punkte; BsTakteSumme += s.Takte;
+            BsLetzter = (s.Laenge, s.Punkte, s.Takte);
+        }
         if (CellAt(s.Ziel) is { } zc)
             ZellEinschlag(s.Schuetze, Mathf.RoundToInt(zc.X), Mathf.RoundToInt(zc.Y), s.Schaden, 0);
+        else if (s.Heli && s.Zielgriff >= 0 && s.Zielgriff < _entities.Count && !_entities[s.Zielgriff].Dead)
+            ApplyHit(-1, s.Zielgriff, _entities[s.Zielgriff], s.Schaden,
+                     $"LUFTSTRAHL {s.Name} (Spieler {s.Owner})");
         return true;
+    }
+
+    /// <summary>bug-686: wie hoch das Hubschrauberbild ueber dem Boden steht — dieselbe
+    /// Rechnung wie <see cref="AirHoehePx"/>, aber ohne deren Nachfuehrung (die hat
+    /// Zustand; ein Pruefstands- oder Schussaufruf darf ihn nicht verschieben).</summary>
+    private float HeliBildHoehe(Special a)
+    {
+        if (FlughoeheBildAlt) return AirShadowDrop;
+        float hub = !FlughuepfenAlt && !float.IsNaN(a.HubPx) ? a.HubPx : ElevOf(a.Col, a.Row) * 15f;
+        return Mathf.Max(0f, a.Alt - hub);
     }
 
     /// <summary>

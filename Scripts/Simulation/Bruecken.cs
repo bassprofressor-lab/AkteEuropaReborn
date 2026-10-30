@@ -112,6 +112,8 @@ public partial class MapEntityLayer
                     Bild = mark, Tp = GetI(r, "count", 200),
                 });
             }
+        // ⭐ 30.10.2026, bug-685 — welche davon lebend gezeichnet werden (KartenrampeLebend.cs).
+        KartenRampenAnlegen();
         if (saetze.Count == 0) return;
         // Die Zahl gehoert in den Start-Mitschnitt: an ihr haengt, ob die
         // Regel `bridge` schweigt oder feuert, und genau das war der Fehler.

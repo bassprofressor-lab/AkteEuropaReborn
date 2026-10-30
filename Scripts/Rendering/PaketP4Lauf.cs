@@ -9,7 +9,7 @@ using Godot;
 /// </summary>
 public partial class MapViewer
 {
-    private bool _p4Gf, _p4Sr, _p4Bs, _p4Af;
+    private bool _p4Gf, _p4Sr, _p4Bs, _p4Af, _p4Hs;
     private string _p4BsBild = "";
 
     /// <summary>Die Schalter von P4; true = verbraucht.</summary>
@@ -27,6 +27,11 @@ public partial class MapViewer
             case "--gelegenheitsfeuer-check": _p4Gf = true; return true;
             case "--sichtradius-check": _p4Sr = true; return true;
             case "--bodenstrahl-check": _p4Bs = true; return true;
+            // ⭐ 30.10.2026, bug-686 — der Hubschrauberstrahl als Punktlinie (Luftschuss.cs).
+            case "--heli-strahl-alt": MapEntityLayer.HeliStrahlAlt = true; return true;
+            case "--helistrahl-check": _p4Hs = true; return true;
+            // bug-687: Nullmodell der Gruppenangriff-Probe (Simulation/GruppenangriffProbe.cs).
+            case "--gruppenangriff-probe-alt": MapEntityLayer.GruppenProbeAlt = true; return true;
         }
         if (a.StartsWith("--bodenstrahl-bild=")) { _p4BsBild = a["--bodenstrahl-bild=".Length..]; UI.HelpWindow.Suppressed = true; return true; }
         return false;
@@ -50,6 +55,7 @@ public partial class MapViewer
         else if (_p4Sr) zeile = _entities.SichtradiusCheck();
         else if (_p4Bs) zeile = _entities.BodenstrahlCheck();
         else if (_p4Af) zeile = _entities.AngriffFahrtCheck();
+        else if (_p4Hs) zeile = _entities.HelistrahlCheck();
         if (zeile == null) return false;
         GD.Print(zeile);
         GetTree().Quit(0);

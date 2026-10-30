@@ -26,11 +26,15 @@ using Godot;
 ///   blockiert), ein Fahrzeug kommt danach hinueber. Nullmodell
 ///   <c>--bruecke-sofort --bruecke-flanken-alt --bruecke-erschlaegt-alt</c>: der Soldat stirbt,
 ///   ein toter Stempel bleibt auf dem Brueckenkopf, das Fahrzeug kommt nicht an.</item>
+/// <item><b><c>--rampen-streifen-check</c></b> (bug-685, 30.10.2026, kopflos, z. B.
+///   <c>-- --campaign=5</c>): je heiler Kartenrampe die Punkte, die nach dem Abriss noch im
+///   Bild stehen und die Truemmerkachel nicht deckt (gerechnet aus Bodenbild und Streifen,
+///   Simulation/KartenrampeLebend.cs). Soll 0. Nullmodell <c>--rampen-gebacken-alt</c>.</item>
 /// </list>
 /// </summary>
 public partial class MapViewer
 {
-    private static bool _p3Nebel, _p3Baustelle, _p3Streifen;
+    private static bool _p3Nebel, _p3Baustelle, _p3Streifen, _p3Rampen;
 
     /// <summary>Die Schalter von P3; true = verbraucht.</summary>
     private bool P3Schalter(string a)
@@ -47,6 +51,9 @@ public partial class MapViewer
             case "--bruecken-nebel-check": _p3Nebel = true; return true;
             case "--bruecke-baustelle-check": _p3Baustelle = true; UI.HelpWindow.Suppressed = true; return true;
             case "--bruecke-streifen-check": _p3Streifen = true; UI.HelpWindow.Suppressed = true; return true;
+            // ⭐ 30.10.2026, bug-685 — die Kartenrampen wie K2 (Simulation/KartenrampeLebend.cs).
+            case "--rampen-gebacken-alt": MapEntityLayer.RampenGebackenAlt = true; return true;
+            case "--rampen-streifen-check": _p3Rampen = true; UI.HelpWindow.Suppressed = true; return true;
         }
         return false;
     }
@@ -63,6 +70,17 @@ public partial class MapViewer
         string? zeile = null;
         if (_p3Nebel) zeile = _entities.BrueckenNebelCheck();
         else if (_p3Baustelle) zeile = _entities.BrueckeBaustelleCheck();
+        else if (_p3Rampen)
+        {
+            // bug-685: das Bodenbild und die Objektebene so, wie sie beim Spieler liegen.
+            string name = MapNames[_mapIndex];
+            Image? Lies(string datei)
+            {
+                string pfad = ProjectSettings.GlobalizePath(MapFile(datei));
+                return FileAccess.FileExists(MapFile(datei)) ? Image.LoadFromFile(pfad) : null;
+            }
+            zeile = $"rampen-streifen-check: Karte {name}\n" + _entities.RampenStreifenCheck(Lies(name + ".png"), Lies(name + ".objects.png"));
+        }
         if (zeile == null) return false;
         GD.Print(zeile);
         GetTree().Quit(0);

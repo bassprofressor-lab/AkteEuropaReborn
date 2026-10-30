@@ -102,6 +102,18 @@ public sealed class MapBaker
     /// mehr gebacken, sondern zur Laufzeit lebend gezeichnet werden.</summary>
     public int BrueckeLebendZellen;
 
+    /// <summary>bug-685 (30.10.2026): Kartenrampen (Lage 200..249 mit einer Rampenkachel
+    /// 10723..10730), die NICHT mehr gebacken, sondern lebend gezeichnet werden
+    /// (Simulation/KartenrampeLebend.cs). Vor dem Bau gezaehlt: 69 auf 8 Karten.</summary>
+    public int RampeLebendZellen;
+
+    /// <summary>bug-685: traegt diese Zelle eine Kartenrampe, die lebend gezeichnet wird?
+    /// Lagenbyte 200 + Platz (sec21 hat 50 Plaetze) UND das Stufe-0-Bild der Rampe
+    /// (<c>10723 + v</c>, v = 0..7). Die 21 Rampenzellen ohne Rampenkachel (map_08,
+    /// map_09, map_NET07) bleiben gebacken, wie sie sind — dort steht keine Rampe im Bild.</summary>
+    public static bool RampeLebend(int lage, int code)
+        => lage >= 200 && lage < 250 && code >= RampenKachelBasis && code < RampenKachelBasis + 8;
+
     /// <summary>Wieviele Zellen als GELAENDER erkannt wurden (imap 0xFFFF mit
     /// Lagenbyte >= 100) und damit ins Zeilenfach gehoeren statt flach gebacken
     /// zu werden. ⚠ Steht sie auf 0, waehrend BefahrbarFlach > 0 ist, dann
@@ -1027,6 +1039,11 @@ public sealed class MapBaker
                 // basis-Fuellung. Rampen (200+) bleiben gebacken.
                 bool brueckeLebend = befahrbar && lageC >= 100 && lageC < 200;
                 if (brueckeLebend) BrueckeLebendZellen++;
+                // ⭐ 30.10.2026, bug-685 — DIE KARTENRAMPE EBENSO (pruefung-rest-b-opus.md §5):
+                // ihr Bild ragt 1..5 Zeilen ueber die Zelle, die Truemmerkachel 10747 + v des
+                // Abrisses deckt das nicht, und 1..174 Punkte blieben im Bodenbild stehen.
+                bool rampeLebend = befahrbar && RampeLebend(lageC, code[i]);
+                if (rampeLebend) { RampeLebendZellen++; brueckeLebend = true; }
                 if (!isObj) Blit(Frame(code[i]), c, r, elev[i]);
                 else if ((befahrbar || eigenFlach) && !brueckeLebend)
                 {
@@ -1266,6 +1283,8 @@ public sealed class MapBaker
                     // Kartenbruecken. Sie wird lebend gezeichnet (siehe Durchgang A/B).
                     // ⚠ Der erste Neuexport ohne diese Zeile ergab ein BYTEGLEICHES map_04.png.
                     if (MapForest.ImFlachenDurchgang(imap, lage) && lage >= 100 && lage < 200) continue;
+                    // ⭐ 30.10.2026, bug-685 — und die Kartenrampe (siehe Durchgang A/B).
+                    if (MapForest.ImFlachenDurchgang(imap, lage) && RampeLebend(lage, code[i])) continue;
                     Blit(sp, c, r, elev[i]);
                 }
 

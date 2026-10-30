@@ -564,12 +564,16 @@ public partial class MapEntityLayer
     private void ZeichneMolen()
     {
         if (ObjektEbene is not { } tex) return;
+        // ⭐ 30.10.2026, bug-685 — die heilen Kartenrampen, lebend und als unterste Lage
+        // (Simulation/KartenrampeLebend.cs).
+        ZeichneKartenrampen(tex);
         ZeichneMolenVorschau(tex);
         if (_moleSaetze.Count == 0) return;
         MolenGezeichnet = 0;
         foreach (var r in _moleSaetze)
         {
-            // Eine Rampe der Karte steht heil im gebackenen Bild.
+            // Eine heile Rampe der Karte malt seit bug-685 ZeichneKartenrampen (vorher
+            // stand sie im gebackenen Bild).
             if (r.Karte && r.Tp >= 200) continue;
             // Die Schadensstufe steckt im Bild: 10723 + Richtung + 8*Stufe.
             int stufe = Mathf.Clamp((200 - r.Tp) / 67, 0, 2);
