@@ -19057,6 +19057,7 @@ public partial class MapEntityLayer : Node2D
         InfanterieAnlegen(u, d.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
+        SatzBeimErzeugen(u);   // bug-676: 0x4B1840 -> 0x436190
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         e.Garage.Add(u);
         NeubauInListeGelegt++;
@@ -22805,6 +22806,7 @@ public partial class MapEntityLayer : Node2D
         if (_nav == null) return false;
         var u = MarketEinheit(o, at, owner);
         _entities.Add(u);
+        SatzBeimErzeugen(u);   // bug-676: 0x4B1840 -> 0x436190
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         return true;
@@ -33516,6 +33518,7 @@ public partial class MapEntityLayer : Node2D
         InfanterieAnlegen(u, d.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
+        SatzBeimErzeugen(u);   // bug-676: 0x4B1840 -> 0x436190
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
         // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
         // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
@@ -33699,6 +33702,7 @@ public partial class MapEntityLayer : Node2D
         InfanterieAnlegen(u, d.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
+        SatzBeimErzeugen(u);   // bug-676: 0x4B1840 -> 0x436190
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
         // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
         // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.

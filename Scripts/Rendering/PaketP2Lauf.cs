@@ -41,6 +41,7 @@ public partial class MapViewer
         switch (a)
         {
             case "--laden-befehle-alt": MapEntityLayer.LadenBefehleAlt = true; return true;            // bug-650
+            case "--route-erzeugen-alt": MapEntityLayer.RouteErzeugenAlt = true; return true;          // bug-676
             case "--forschung-uebertrag-alt": MapEntityLayer.ForschungUebertragAlt = true; return true; // bug-665
             case "--ki-erbt-forschung-alt": MapEntityLayer.KiErbtForschungAlt = true; return true;     // bug-665
             case "--spielstand-bauteile-alt": MapEntityLayer.SpielstandBauteileAlt = true; return true; // bug-665

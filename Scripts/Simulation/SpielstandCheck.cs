@@ -47,6 +47,8 @@ public partial class MapViewer
             _ssGelegt = _entities.SpielstandProbeVorbereiten();
             _ssVorher = _entities.SpielstandFingerabdruck();
             _ssSkriptVorher = _entities.SkriptZustandJetzt();
+            // bug-676: Transporter ohne Umschlagsatz VOR dem Speichern — sie bekommen beim Laden einen.
+            GD.Print("spielstand-check: Transporter ohne Satz vorher " + _entities.TransporterOhneSatzListe());
             string name = SpielstandSchreiben();
             if (name.Length == 0) { GD.Print("spielstand-check: Speichern fehlgeschlagen"); _ssPhase = 3; return; }
             _ssPhase = 1;
@@ -87,6 +89,8 @@ public partial class MapViewer
         _ssPhase = 2;
         _ssUhr = 0f;
         string nachher = _entities.SpielstandFingerabdruck();
+        GD.Print($"spielstand-check: Routensaetze nachgelegt {MapEntityLayer.RoutenNachgelegt}" +
+                 (MapEntityLayer.RouteErzeugenAlt ? "  ⚠ --route-erzeugen-alt" : ""));
         var sb = new StringBuilder($"spielstand-check: {_ssGelegt}\n   Baum angehalten nach dem Laden: {GetTree().Paused}, " +
                                    $"Vorlagen {MapEntityLayer.LadenVorlagen}" +
                                    (MapEntityLayer.LadenVorlageAlt ? "  ⚠ --laden-vorlage-alt" : "") +
@@ -107,6 +111,19 @@ public partial class MapViewer
 
 public partial class MapEntityLayer
 {
+    /// <summary>bug-676: lebende Transporter ohne Umschlagsatz (Platz, Besitzer, Zelle).</summary>
+    public string TransporterOhneSatzListe()
+    {
+        var sb = new StringBuilder(); int n = 0, mit = 0;
+        foreach (var e in _entities)
+        {
+            if (e.Dead || !IstTransporter(e)) continue;
+            if (e.Route != null) { mit++; continue; }
+            n++; sb.Append($"[Slot {e.Slot} Besitzer {e.Owner} Ukol {e.Ukol} ({e.Col},{e.Row})] ");
+        }
+        return $"{n} ohne, {mit} mit: {sb}";
+    }
+
     public string SkriptZustandJetzt() => _mscript?.ZustandJson() ?? "";
 
     /// <summary>Legt hin, was beim Laden verloren gehen KANN.</summary>

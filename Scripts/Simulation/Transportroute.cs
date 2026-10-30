@@ -164,6 +164,26 @@ public partial class MapEntityLayer : Node2D
         return r;
     }
 
+    /// <summary>
+    /// ⭐ bug-676 (30.10.2026): <b>der Satz beim ERZEUGEN</b>. Der Erzeuger
+    /// <c>0x4B1840</c> ruft den Anleger <c>0x436190</c> selbst (Anhang
+    /// <c>@0x4B1D73</c>, GAMESTATE_RE 2375: »It is allocated inside the unit spawn
+    /// routine 0x4b1840«) — jeder gebaute, gekaufte oder ausgesandte Transporter hat
+    /// ihn ab dem ersten Takt. Bei uns bekamen nur die Karteneinheiten ihn sofort
+    /// (<see cref="RoutenAufbauen"/>), ein Neubau erst, wenn ihn jemand brauchte
+    /// (<c>RouteVon(u) ?? RouteAnlegen(u)</c>); <c>RoutenNachLaden</c> legte ihn
+    /// nach dem Laden nach — darum stand in K27 nach dem Laden »Routen 1 -> 3«.
+    /// Gegenschalter <c>--route-erzeugen-alt</c> (Stand bis eeb2907: kein Satz beim
+    /// Erzeugen).
+    /// </summary>
+    private void SatzBeimErzeugen(Entity u)
+    {
+        if (!RouteErzeugenAlt) RouteAnlegen(u);
+    }
+
+    /// <summary><c>--route-erzeugen-alt</c>, siehe <see cref="SatzBeimErzeugen"/>.</summary>
+    public static bool RouteErzeugenAlt;
+
     /// <summary>Den Satz freigeben — <c>0x436260</c>.</summary>
     public void RouteFreigeben(Entity e)
     {
