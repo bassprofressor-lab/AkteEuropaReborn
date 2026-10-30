@@ -32,9 +32,11 @@ using AkteEuropaReborn.Simulation.Commands;
 /// Behandler auf allen Maschinen im selben Takt eingespielt — nach dem Vorbild des
 /// netzfesten Ladens 990 (<see cref="NetzStandEinspielen"/>). Dazu wie der Reset
 /// <c>0x44FE10(1)</c>: alle Fenster zu, die Pause (Art 40) aus.</item>
-/// <item>⚠ SETZUNG: Würfel (<c>Determinism</c>), Taktzähler und Ring laufen weiter — beide
-/// Maschinen haben ohnehin denselben Stand. Der KI-Zustand steht nicht im Spielstand
-/// (bekannt, wie bei 990).</item>
+/// <item>⚠ SETZUNG: Würfel (<c>Determinism</c>) und Ring laufen weiter — beide
+/// Maschinen haben ohnehin denselben Stand. ⭐ Seit bug-683 (30.10.2026) gehen der
+/// Taktzähler und die KI-Uhren (AttackTimer, Think, Feind-naht-Sperre, KI-Nebel …) mit dem
+/// Startstand zurück (Simulation/KiUhrenSpielstand.cs) — für die KI ein echter Neubeginn;
+/// <c>--ki-uhren-spielstand-alt</c> = der Stand davor.</item>
 /// </list>
 ///
 /// <para>Gegenschalter: <c>--neustart-alt</c> (Stand bis 0.6.11: Knopf lädt sofort neu,

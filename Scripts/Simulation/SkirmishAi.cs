@@ -265,6 +265,7 @@ public partial class MapEntityLayer : Node2D
             if (p is < 0 or > 7) continue;
             var a = new AiPlayer(p) { Level = level, Think = 0.5f + p * 0.13f };
             AiLoadPlan(a);
+            KiUhrenUebernehmen(a);   // bug-683: nach dem Laden die Uhren aus dem Stand (KiUhrenSpielstand.cs)
             _ai.Add(a);
             // ⭐ Paket W3 (bug-631): im Gefecht mit Gruppen ist die Betriebsart (sec61,
             // pro_style) der Verteidigerregler der Stufe. UNSERE SETZUNG, siehe

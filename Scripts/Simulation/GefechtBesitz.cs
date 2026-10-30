@@ -58,6 +58,10 @@ public partial class MapEntityLayer
     /// weiter dem Techstandard.</summary>
     public static bool AlleEinheitenBauteileAlt;
 
+    /// <summary><c>--gefecht-laden-besitz-alt</c> — der Stand bis bug-682: der Gefechtsstart
+    /// verteilt den Besitz auch nach dem Laden neu und ueberschreibt die geladenen Bloecke.</summary>
+    public static bool GefechtLadenBesitzAlt;
+
     /// <summary>Ob <see cref="GefechtBesitzStart"/> auf dieser Ebene gelaufen ist —
     /// nur dann filtert <c>LoadDesignParts</c> im Gefecht nach Besitz. Eine Ebene
     /// ohne Gefechtsstart (<c>--map=</c> zum Ansehen) bleibt beim alten Stand.</summary>
@@ -77,6 +81,25 @@ public partial class MapEntityLayer
     public int GefechtBesitzStart(int techstufe)
     {
         if (GefechtBesitzAlt) return -1;
+        // ⭐ 30.10.2026, bug-682 — NICHT NACH EINEM SPIELSTAND, der seine Bloecke selbst
+        // traegt (Format 4+, bug-665). Bis heute lief der Gefechtsstart auch nach dem Laden
+        // (MapViewer: ApplySaveState, danach StartSkirmish) und schrieb Block 0 neu und auf
+        // Spieler 1..7 — jede Aufwertung im Gefecht war nach dem Laden weg
+        // (--spielstand-check NET07: »Bauteile Pruefzahl 74921336 -> 74935342«; Gegenprobe
+        // --gefecht-besitz-alt DECKUNGSGLEICH). Das Original springt nach dem Laden hinter
+        // die Vorbereitung (0x41EE04, siehe MapViewer); die Kampagne schuetzt dieselbe Stelle
+        // mit BauteileAusSpielstand (MapViewer, ForschungMissionsstart). Der Besitzfilter des
+        // Erstellen-Fensters bleibt an (GefechtBesitzVerteilt). --gefecht-laden-besitz-alt.
+        if (AusSpielstand && BauteileAusSpielstand && !GefechtLadenBesitzAlt)
+        {
+            BauteileVorbereiten();
+            int besessen = 0;
+            for (int r = 0; r < 200; r++) if (_bauteile![0][r] is { Length: >= 1 } c0 && c0[0] != 0) besessen++;
+            GefechtBesitzVerteilt = true;
+            GefechtBesitzZeilen = besessen;
+            GD.Print($"gefecht-besitz: aus dem Spielstand — {besessen} Bauteilzeilen besessen, nichts neu verteilt (bug-682)");
+            return besessen;
+        }
         // ⭐ 12.10.2026 (bug-489) — UNSERE OPTION »Alle Einheiten« (es gibt sie im
         // Original nicht) gibt auf seine Entscheidung auch ALLE Bauteile frei:
         // gerechnet wird mit Stufe 8, der hoechsten des Gefechtsschirms. Stufe 8

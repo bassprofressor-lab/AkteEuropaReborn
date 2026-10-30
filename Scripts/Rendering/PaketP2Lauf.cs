@@ -38,6 +38,7 @@ public partial class MapViewer
     {
         if (LfSchalter(a)) return true;                       // bug-666, LaufendeForschungLauf.cs
         if (FaSchalter(a)) return true;                       // bug-667, NeueKampagneLauf.cs
+        if (SkkSchalter(a)) return true;                      // bug-682..684, KiUhrenLadenCheck.cs
         switch (a)
         {
             case "--laden-befehle-alt": MapEntityLayer.LadenBefehleAlt = true; return true;            // bug-650
@@ -96,6 +97,7 @@ public partial class MapViewer
         if (_fuAn) ForschungUebertragCheckTakt();
         if (_lfAn) LaufendeForschungCheckTakt(delta);         // bug-666
         if (_faAn) ForschungAnfangsstandCheckTakt();          // bug-667
+        SkkTakt(delta);                                       // bug-683/684, KiUhrenLadenCheck.cs
     }
 
     private void BefehleLadenCheckTakt(double delta)
@@ -187,6 +189,7 @@ public partial class MapViewer
         if (_fuAn) ForschungUebertragCheckNachLaden();
         if (_lfAn) LaufendeForschungCheckNachLaden();          // bug-666
         if (_faAn) ForschungAnfangsstandCheckNachLaden();      // bug-667
+        SkkNachLaden();                                        // bug-683, KiUhrenLadenCheck.cs
         if (_alName.Length > 0 && _alPhase == 1)
         {
             _alPhase = 2;

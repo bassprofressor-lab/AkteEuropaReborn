@@ -34,8 +34,10 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Flache Kopie — fuer den Spielstand (bug-506): ein geladenes
         /// Gebaeude beginnt als Kopie seines frisch geladenen Kartensatzes. ⚠ Die
         /// Listen (readonly) teilt die Kopie mit der Vorlage; die Vorlage wird
-        /// danach verworfen, der Leser leert und fuellt sie neu.</summary>
-        public Entity Klon() => (Entity)MemberwiseClone();
+        /// danach verworfen, der Leser leert und fuellt sie neu.
+        /// ⭐ bug-684: seit 30.10.2026 TIEF — Listen, Felder und der Routensatz sind eigene
+        /// Objekte (Simulation/KlonTief.cs); <c>--klon-flach</c> = die flache Kopie.</summary>
+        public Entity Klon() { var k = (Entity)MemberwiseClone(); if (!KlonFlach) KlonTiefNachziehen(k); return k; }
 
         // ⚠ `Attack` stand hier ein zweites Mal (frueher `Category`) und war
         // tot — siehe die Fundstelle im Lader. Das echte Feld ist weiter unten,

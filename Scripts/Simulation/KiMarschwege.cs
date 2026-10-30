@@ -913,6 +913,8 @@ public partial class MapEntityLayer
                 w.ItemEnd();
             }
         w.ArrayEnd();
+        // ⭐ bug-683: die KI-Uhren (Simulation/KiUhrenSpielstand.cs); --ki-uhren-spielstand-alt.
+        KiUhrenSchreiben(w, stelle);
     }
 
     /// <summary>Gegenstück zu <see cref="KiZustandSchreiben"/>. Ein Stand ohne KI-Teil
@@ -1007,6 +1009,8 @@ public partial class MapEntityLayer
                         if (st >= 0 && st < listenstelle.Count) gr.Einheiten.Add(listenstelle[st]);
                     }
             }
+        // ⭐ bug-683: die KI-Uhren (Simulation/KiUhrenSpielstand.cs); --ki-uhren-spielstand-alt.
+        KiUhrenLesen(root, listenstelle);
     }
 
     /// <summary>Hat das letzte Laden einen KI-Teil gelesen?</summary>
@@ -1059,6 +1063,7 @@ public partial class MapEntityLayer
             $"{(_kiProduktionFrei[p] ? 1 : 0)}/{KiProgrammZaehler(p)}/{KiBausperre(p)}"));
         return $"KI: {gruppen} Gruppen, {mitglieder} Mitglieder (Pruefzahl {gzellen}, Auftraege {auftraege}), " +
                $"{ziele} Ziele ({zpruef}), sec108 {s108}, CPU {cpu}, Betriebsart {ba}, Freigabe/Zaehler/Bausperre {prod}" +
-               (KiHelikaufAus ? "" : $", sec131 {string.Join(",", _aiSec131)}");   // bug-675
+               (KiHelikaufAus ? "" : $", sec131 {string.Join(",", _aiSec131)}")    // bug-675
+               + KiUhrenAbdruck();                                                    // bug-683
     }
 }
