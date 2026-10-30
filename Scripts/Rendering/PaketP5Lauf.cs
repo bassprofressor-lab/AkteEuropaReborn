@@ -10,7 +10,7 @@ using Godot;
 /// </summary>
 public partial class MapViewer
 {
-    private bool _p5Trupp, _p5Verteil;
+    private bool _p5Trupp, _p5Verteil, _p5Voll;
 
     /// <summary>Die Schalter von P5; true = verbraucht.</summary>
     private bool P5Schalter(string a)
@@ -22,6 +22,8 @@ public partial class MapViewer
             case "--einnahme-ein-ziel-alt": MapEntityLayer.EinnahmeEinZielAlt = true; return true; // bug-660
             case "--vorplatz-stempel-alt": MapEntityLayer.VorplatzStempelAlt = true; return true;  // bug-660
             case "--torlog": MapEntityLayer.Torlog = true; return true;                            // bug-657
+            case "--tuer-voll-alt": MapEntityLayer.TuerVollAlt = true; return true;                // Nachtrag 30.10.
+            case "--tuer-voll-check": _p5Voll = true; return true;
             case "--tuer-trupp-check": _p5Trupp = true; return true;
             case "--einnahme-verteil-check": _p5Verteil = true; return true;
         }
@@ -34,6 +36,7 @@ public partial class MapViewer
         string? zeile = null;
         if (_p5Trupp) zeile = _entities.TuerTruppCheck();
         else if (_p5Verteil) zeile = _entities.EinnahmeVerteilCheck();
+        else if (_p5Voll) zeile = _entities.TuerVollCheck();
         if (zeile == null) return false;
         GD.Print(zeile);
         GetTree().Quit(0);
@@ -208,6 +211,92 @@ public partial class MapEntityLayer
         if (artMerk >= 0) basis.BType = artMerk;
         sb.AppendLine(c);
         sb.Append(okA && okB && okC ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <b>--tuer-voll-check</b> (Nachtrag 30.10., volle Garage). Je Gebaeudeart (Basis, Depot,
+    /// Bahnhof) wird die Garage auf 6/6 gefuellt und ein EIGENER Soldat ruhend auf Tuer 0
+    /// gestellt; gemessen nach EINEM Takt. Soll Basis: geloescht (tot, verbraucht), keine
+    /// Flamme, TP gleich. Soll Depot/Bahnhof: nicht tot, UKOL 50, InGebaeude = Gebaeude, aber
+    /// NICHT in der Garage, Tuerzelle ohne seinen Stempel. Nullmodell <c>--tuer-voll-alt</c>:
+    /// alle drei bleiben sichtbar auf der Tuer stehen.
+    /// <para>⚠ EINGRIFFE: Garage mit Platzhalter-Zeilen (Depot-Liste, Entwurf 0) gefuellt und
+    /// danach zurueckgesetzt; Besitzer des Soldaten umgeschrieben; fehlt ein Depot oder
+    /// Bahnhof, spielt die Basis es (Art 5 / 6), danach zurueck.</para>
+    /// </summary>
+    public string TuerVollCheck()
+    {
+        int m = UI.SkirmishSetup.CampaignMission;
+        var sb = new System.Text.StringBuilder($"tuer-voll-check K{m}" + (TuerVollAlt ? " — NULLMODELL --tuer-voll-alt" : "") + "\n");
+        if (_nav == null) return sb.Append("  KEIN URTEIL: keine Karte").ToString();
+        int bi = -1;
+        for (int pass = 0; pass < 2 && bi < 0; pass++)
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var b = _entities[i];
+                if (!b.IsBuilding || b.Dead || b.BType != 1 || b.Built == 0 || b.DoorCells.Count == 0) continue;
+                if (pass == 0 && b.Owner != ViewPlayer) continue;
+                bi = i; break;
+            }
+        if (bi < 0) return sb.Append("  KEIN URTEIL: keine Basis mit Tuer").ToString();
+        var benutzt = new HashSet<int>();
+        bool alle = true; int teile = 0;
+        foreach (int art in new[] { 1, 5, 6 })
+        {
+            int gi = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var b = _entities[i];
+                if (b.IsBuilding && !b.Dead && b.BType == art && b.Built > 0 && b.DoorCells.Count > 0) { gi = i; break; }
+            }
+            int artMerk = -1;
+            if (gi < 0) { gi = bi; artMerk = _entities[bi].BType; _entities[bi].BType = art; sb.AppendLine($"  EINGRIFF: keine Art {art} auf der Karte — die Basis wird als Art {art} gefuehrt"); }
+            var geb = _entities[gi];
+            int si = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (e.IsBuilding || e.IsProp || e.Dead || e.Infantry < 0 || Untergestellt(e) || e.InGebaeude != null || benutzt.Contains(i)) continue;
+                if (e.Owner == geb.Owner) { si = i; break; }
+                if (si < 0) si = i;
+            }
+            if (si < 0) { if (artMerk >= 0) geb.BType = artMerk; sb.AppendLine($"  Art {art}: kein Soldat — entfaellt"); alle = false; continue; }
+            benutzt.Add(si);
+            var s = _entities[si];
+            if (s.Owner != geb.Owner) { sb.AppendLine($"  EINGRIFF: Soldat Platz {s.Slot} Spieler {s.Owner} -> {geb.Owner}"); s.Owner = s.Team = geb.Owner; }
+            var depotMerk = new List<int>(geb.Depot);
+            while (GarageBelegt(geb) < DepotSlots) geb.Depot.Add(0);
+            int voll0 = GarageBelegt(geb), garage0 = geb.Garage.Count, hp0 = geb.Hp, fl0 = TuerFremdFlammen, lo0 = TuerVollGeloescht, ve0 = TuerVollVerschwunden;
+            int tc = geb.Col + geb.DoorCells[0].Col, tr = geb.Row + geb.DoorCells[0].Row;
+            s.Path = null; s.Orders.Clear(); s.Target = -1; s.Ukol = UkolFrei;
+            ProbeVersetzen(si, tc, tr);
+            SimTickFuerProbe();
+            int stempel = _nav.OccupantAt(tc, tr);
+            bool aufTuer = !s.Dead && s.InGebaeude == null && s.Col == tc && s.Row == tr && !Untergestellt(s);
+            string name = BuildingTypeName(geb.BType);
+            bool ok;
+            if (art == 1)
+            {
+                ok = s.Dead && s.Verbraucht && TuerFremdFlammen == fl0 && geb.Hp == hp0 && TuerVollGeloescht == lo0 + 1;
+                sb.AppendLine($"  {name} Platz {geb.Slot} (Spieler {geb.Owner}) Tuer 0 ({tc},{tr}), Garage {voll0}/{DepotSlots}: Soldat Platz {s.Slot} "
+                            + $"tot {s.Dead} verbraucht {s.Verbraucht} (Soll beide True), noch auf der Tuer {aufTuer}, Flammen {TuerFremdFlammen - fl0} (Soll 0), "
+                            + $"TP {hp0} -> {geb.Hp} (Soll gleich), Garage danach {GarageBelegt(geb)}, Stempel {stempel}");
+            }
+            else
+            {
+                bool inListe = geb.Garage.Contains(s);
+                ok = !s.Dead && s.Ukol == UkolUntergestellt && s.InGebaeude == geb && !inListe && Untergestellt(s) && stempel != si
+                     && geb.Garage.Count == garage0 && TuerVollVerschwunden == ve0 + 1;
+                sb.AppendLine($"  {name} Platz {geb.Slot} (Spieler {geb.Owner}) Tuer 0 ({tc},{tr}), Garage {voll0}/{DepotSlots}: Soldat Platz {s.Slot} "
+                            + $"tot {s.Dead} (Soll False), UKOL {s.Ukol} (Soll 50), im Gebaeude {s.InGebaeude == geb} (Soll True), in der Liste {inListe} (Soll False), "
+                            + $"unsichtbar {Untergestellt(s)}, noch auf der Tuer {aufTuer}, Stempel {stempel} (Soll != {si}), Garage danach {GarageBelegt(geb)}");
+            }
+            geb.Depot.Clear(); geb.Depot.AddRange(depotMerk);
+            if (artMerk >= 0) geb.BType = artMerk;
+            alle &= ok; teile++;
+        }
+        sb.Append(alle && teile == 3 ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
 

@@ -39,9 +39,10 @@ using Godot;
 /// beschaedigt die Basis um ~50.</para>
 ///
 /// <para>⚠ <b>UNSERE SETZUNGEN:</b> (a) UKOL 0 ist bei uns »Ukol 0 oder 48, kein Weg,
-/// keine Befehle« (48 nur noch aus alten Spielstaenden); (b) volle Garage: der Soldat
-/// bleibt draussen (wie bisher, <see cref="GarageVoll"/>), das Original loescht ihn
-/// (<c>0x43BFC0 @0x43BFE6</c>); (c) nach dem Herausnehmen wird die Tuerzelle aus den
+/// keine Befehle« (48 nur noch aus alten Spielstaenden); (b) ENTFALLEN am 30.10.2026
+/// (Spielerentscheidung »so wie im Original«): volle Garage → Basis loescht
+/// (<c>0x43BFC0 @0x43BFE6</c>), Depot/Bahnhof lassen ihn als Geist verschwinden, siehe
+/// <see cref="TuerVollArm"/>; Gegenschalter <c>--tuer-voll-alt</c> (bleibt draussen); (c) nach dem Herausnehmen wird die Tuerzelle aus den
 /// Ankern der Uebrigen neu gestempelt (das Original hat Trupps statt Stempel).</para>
 ///
 /// <para>Gegenschalter: <c>--tuer-trupp-alt</c> (nur der Stempeltraeger, mit Torzyklus,
@@ -77,6 +78,12 @@ public partial class MapEntityLayer
             if (u.Path is { Count: > 0 } || u.Orders.Count > 0 || u.Reserved != null) continue;
             if (u.Owner == b.Owner)                                                // @0x43D6F1
             {
+                if (!TuerVollAlt && GarageBelegt(b) >= DepotSlots)
+                {
+                    TuerVollArm(b, i, u);
+                    angefasst = true;
+                    continue;
+                }
                 int vor = Eingefahren;
                 Einfahren(b, i, u);
                 if (Eingefahren > vor) { TuerTruppEingefahren++; angefasst = true; }
@@ -102,6 +109,64 @@ public partial class MapEntityLayer
             angefasst = true;
         }
         if (angefasst) TuerZelleNeuStempeln(dc, dr);
+    }
+
+    /// <summary><c>--tuer-voll-alt</c> — Nachtrag 30.10.: eigener Soldat auf Tuer 0 bei voller
+    /// Garage bleibt draussen stehen (Setzung b, Stand P5).</summary>
+    public static bool TuerVollAlt;
+
+    /// <summary>Zaehler fuer Pruefstand und Meldezeile (Nachtrag 30.10.).</summary>
+    public int TuerVollGeloescht, TuerVollVerschwunden;
+
+    /// <summary>
+    /// ⭐ 30.10.2026 — <b>volle Garage im Infanteriearm</b> (Spielerentscheidung »so wie im
+    /// Original«, berichte/bau-p5-0-6-12.md »Nachtrag 30.10.«). Der Arm nimmt den Soldaten
+    /// IMMER aus dem Trupp (<c>0x4021D0</c>) und ruft das Andocken; erst darin wird »voll«
+    /// geprueft = alle sechs Platzworte != 0xFFFF:
+    /// <list type="bullet">
+    /// <item><b>Basis</b> <c>0x43BFC0</c> (C; F <c>0x43B130</c>): Schleife <c>@0x43BFD6…0x43BFE4</c>,
+    /// voll → <c>@0x43BFE6</c> <c>0x4011B3 → 0x410E60</c> LOESCHEN, danach jedes imap-Wort
+    /// == Satz auf 0xFFFE. Kein Bild, kein Treffer, kein Verlustzaehler.</item>
+    /// <item><b>Depot</b> <c>0x43C630</c> (F <c>0x43B7C0</c>) und <b>Bahnhof</b> <c>0x43C370</c>
+    /// (F <c>0x43B500</c>): voll → nur die Fehlerzeile »Can't add robot to depo depo« /
+    /// »… rail depo« (<c>0x4010C3 → 0x41CDB0</c>, Fehlerprotokoll) und Ruecksprung, OHNE
+    /// Loeschen. Der Arm schreibt danach trotzdem UKOL 0x32 und AKCE := Gebaeude
+    /// (<c>@0x43D998/@0x43D9A2</c>, <c>@0x43DBBE/@0x43DBC8</c>). Der Soldat ist damit aus
+    /// der Karte, unsichtbar »untergestellt«, aber in KEINEM Platz: ein Geist, der nie
+    /// wieder herauskommt, der Satz lebt weiter.</item>
+    /// </list>
+    /// Bei uns: Basis = <see cref="RemoveSoldUnit"/> + Verbraucht (wie der Fremdzweig ohne
+    /// Flamme/Treffer); Depot/Bahnhof = UKOL 50, InGebaeude = b, NICHT in die Garage.
+    /// </summary>
+    private void TuerVollArm(Entity b, int i, Entity u)
+    {
+        if (b.BType == 1)
+        {
+            GD.Print($"tuer: eigener Soldat {LabelOf(u)} (Platz {u.Slot}, Spieler {u.Owner}) auf Tuer 0 von "
+                   + $"Basis {b.Slot}: Garage voll ({GarageBelegt(b)}/{DepotSlots}) -> GELOESCHT (0x43BFE6)");
+            RemoveSoldUnit(i, u);            // 0x4011B3 -> 0x410E60
+            u.Verbraucht = true;
+            TuerVollGeloescht++;
+            return;
+        }
+        // Depot/Bahnhof: aus der Karte, UKOL 0x32, AKCE := Gebaeude, kein Platz.
+        _nav?.ClearOccupant(u.Col, u.Row, i);
+        if (u.Reserved is { } rc) _nav?.ClearOccupant(rc.X, rc.Y, i);
+        u.Reserved = null;
+        u.Path = null;
+        u.Orders.Clear();
+        AuftragLoeschen(u);
+        u.Target = -1;
+        u.Ukol = UkolUntergestellt;
+        u.InGebaeude = b;                    // AKCE := Gebaeude, aber NICHT in b.Garage
+        foreach (var x in _entities)
+            if (x.Target == i) x.Target = -1;
+        if (_sel.Remove(i) && _selected == i) _selected = _sel.Count > 0 ? System.Linq.Enumerable.First(_sel) : -1;
+        TuerVollVerschwunden++;
+        GD.Print($"tuer: eigener Soldat {LabelOf(u)} (Platz {u.Slot}, Spieler {u.Owner}) auf Tuer 0 von "
+               + $"{BuildingTypeName(b.BType)} {b.Slot}: Garage voll ({GarageBelegt(b)}/{DepotSlots}) -> VERSCHWUNDEN "
+               + "(\"Can't add robot to ...\", UKOL 50 ohne Platz)");
+        UpdatePanel();
     }
 
     /// <summary>Setzung (c): traegt die Zelle keinen Stempel mehr, aber steht dort noch
