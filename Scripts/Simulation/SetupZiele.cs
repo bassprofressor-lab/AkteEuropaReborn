@@ -74,7 +74,8 @@ public partial class MapEntityLayer
     {
         if (spieler is < 0 or > 7) return;
         _aiSec131[spieler] = wert & 0xFF;
-        GD.Print($"set_ai P{spieler} = {wert} ({herkunft}; sec131, Leser KI-Takt 10 0x4BE330 bei uns nicht gebaut)");
+        GD.Print($"set_ai P{spieler} = {wert} ({herkunft}; sec131, Leser KI-Takt 10 0x4BE330" +
+                 (KiHelikaufAus ? ", --ki-helikauf-aus: ohne Wirkung)" : ", Simulation/KiHelikauf.cs)"));
     }
 
     /// <summary>
@@ -83,8 +84,13 @@ public partial class MapEntityLayer
     /// </summary>
     public void SetupZieleAnwenden(Campaign.MissionScript ms, int mission)
     {
-        foreach (var (kind, a, b, at) in ms.SetupSetAi)
-            if (kind == "set_ai") SetAiSec131(a, b, $"Setup M{mission} @{at}");
+        // bug-675: nach dem Laden eines Stands MIT sec131 traegt der Stand den Wert
+        // (auch was das Missionsskript spaeter per set_ai gesetzt hat).
+        if (_standGeladen && KiZustandGeladen && _sec131Geladen)
+            GD.Print($"set_ai M{mission}: sec131 aus dem Spielstand ({string.Join(",", _aiSec131)}), Setup nicht erneut");
+        else
+            foreach (var (kind, a, b, at) in ms.SetupSetAi)
+                if (kind == "set_ai") SetAiSec131(a, b, $"Setup M{mission} @{at}");
         if (SetupZieleAus)
         {
             if (ms.SetupZiele.Count > 0)

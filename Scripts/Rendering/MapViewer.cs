@@ -1463,6 +1463,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_kiHelikaufCheck.Length > 0)
+        {
+            GD.Print(_entities.KiHelikaufCheck(_kiHelikaufCheck, _kiHelikaufSekunden));
+            GetTree().Quit(0);
+            return;
+        }
         if (_bahnhofleerungCheck > 0)
         {
             GD.Print(_entities.BahnhofleerungCheck(_bahnhofleerungCheck));
@@ -1788,6 +1794,10 @@ public partial class MapViewer : Node2D
     private bool _setupZieleCheck;
     /// <summary><c>--bahnhofleerung-check[=takte]</c> — Paket W4, Simulation/Bahnhofleerung.cs.</summary>
     private int _bahnhofleerungCheck;
+    /// <summary><c>--ki-helikauf-check[=standard|sec131null|postentot|fabriken]</c> — bug-675,
+    /// Simulation/KiHelikauf.cs; Laufzeit <c>--ki-helikauf-sekunden=S</c> (Vorgabe 8).</summary>
+    private string _kiHelikaufCheck = "";
+    private int _kiHelikaufSekunden = 8;
     /// <summary><c>--untermission-check=N</c> — siehe Simulation/Skriptvariablen.cs
     /// (02.10.2026, bug-392). 0 = aus.</summary>
     private int _untermissionCheck;
@@ -5359,6 +5369,13 @@ _mausProbePunkt = karte;
             else if (a == "--setup-ziele-aus") MapEntityLayer.SetupZieleAus = true;
             else if (a == "--setup-ziele-check") _setupZieleCheck = true;
             else if (a.StartsWith("--setup-ziele-soll=")) MapEntityLayer.SetupZieleSoll = a["--setup-ziele-soll=".Length..];
+            // ⭐ bug-675 (30.10.2026): KI-Takt 10 Versorgungshelikauf, Flughafen-Geldkauf in der Kampagne aus.
+            else if (a == "--ki-helikauf-aus") MapEntityLayer.KiHelikaufAus = true;
+            else if (a == "--ki-flughafenheli-alt") MapEntityLayer.KiFlughafenheliAlt = true;
+            else if (a == "--ki-helikauf-check") _kiHelikaufCheck = "standard";
+            else if (a.StartsWith("--ki-helikauf-check=")) _kiHelikaufCheck = a["--ki-helikauf-check=".Length..];
+            else if (a.StartsWith("--ki-helikauf-sekunden=") &&
+                     int.TryParse(a["--ki-helikauf-sekunden=".Length..], out int khs)) _kiHelikaufSekunden = khs;
             else if (a == "--bahnhofleerung-aus") MapEntityLayer.BahnhofleerungAus = true;
             else if (a == "--bahnhofleerung") MapEntityLayer.BahnhofleerungAus = false;   // W4: vorerst Standard aus
             else if (a == "--bahnhofleerung-check") _bahnhofleerungCheck = 13300;

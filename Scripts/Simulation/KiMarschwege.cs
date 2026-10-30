@@ -874,6 +874,11 @@ public partial class MapEntityLayer
         w.Raw("ki_wegcode", "[" + string.Join(",", _kiWegCode) + "]");
         w.Raw("ki_betriebsart", "[" + string.Join(",", _aiSec61) + "]");
         w.Raw("ki_sperre", "[" + string.Join(",", _aiSec106) + "]");
+        // ⭐ bug-675: sec131 (set_ai, byte[0x538BB8+p]) — das Original speichert es
+        // (0x41DD66) und laedt es (0x41EDF7); seit KI-Takt 10 hat es bei uns einen Leser.
+        // Zusaetzlicher Schluessel, kein Formatwechsel: ein Stand ohne ihn laedt wie bisher
+        // (sec131 dann aus dem Setup der Mission).
+        if (!KiHelikaufAus) w.Raw("ki_sec131", "[" + string.Join(",", _aiSec131) + "]");
         // ⭐ Paket W2 (bug-628): sec57 Bausperre 0xB461A0, sec58 Programmzaehler
         // 0xB38D40 (2 B je Spieler, das Original speichert beide mit), sec59 Freigabe
         // 0xB46950. Ohne sie sprang die Freigabe beim Laden auf 0 und der Zaehler an
@@ -939,6 +944,9 @@ public partial class MapEntityLayer
         Bytes("ki_wegcode", _kiWegCode);
         Ints("ki_betriebsart", _aiSec61);
         Ints("ki_sperre", _aiSec106);
+        // bug-675: sec131 — fehlt der Schluessel, setzt ihn das Setup wie bisher.
+        _sec131Geladen = root.ContainsKey("ki_sec131");
+        if (_sec131Geladen) Ints("ki_sec131", _aiSec131);
         // Paket W2 (bug-628): sec57/58/59 — fehlen sie (Stand aus Paket W), bleibt
         // der Anfangszustand (Freigabe 0, Sperre 0, Zaehler 0), wie bisher.
         var frei = new int[8];
@@ -1050,6 +1058,7 @@ public partial class MapEntityLayer
         string prod = string.Join(" ", Enumerable.Range(0, 8).Select(p =>
             $"{(_kiProduktionFrei[p] ? 1 : 0)}/{KiProgrammZaehler(p)}/{KiBausperre(p)}"));
         return $"KI: {gruppen} Gruppen, {mitglieder} Mitglieder (Pruefzahl {gzellen}, Auftraege {auftraege}), " +
-               $"{ziele} Ziele ({zpruef}), sec108 {s108}, CPU {cpu}, Betriebsart {ba}, Freigabe/Zaehler/Bausperre {prod}";
+               $"{ziele} Ziele ({zpruef}), sec108 {s108}, CPU {cpu}, Betriebsart {ba}, Freigabe/Zaehler/Bausperre {prod}" +
+               (KiHelikaufAus ? "" : $", sec131 {string.Join(",", _aiSec131)}");   // bug-675
     }
 }

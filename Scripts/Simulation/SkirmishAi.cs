@@ -1337,6 +1337,10 @@ public partial class MapEntityLayer : Node2D
             // ⭐ 22.10.2026 (Paket W4, bug-637) — TAKT 14, die BAHNHOFLEERUNG 0x4BFA30
             // (Simulation/Bahnhofleerung.cs): hinter derselben Sperre, ohne sec61-Tor.
             if (_taktNr % 50 == 14 && !AiGesperrt(a.Player)) Bahnhofleerung(a.Player);
+            // ⭐ 30.10.2026 (bug-675) — TAKT 10, der VERSORGUNGSHELIKAUF 0x4BE330
+            // (Simulation/KiHelikauf.cs): Tor sec61 != 10, lebt, sec131 != 0 (C 0x4BFD59).
+            // Im Gefecht ruft niemand set_ai -> sec131 = 0 -> ohne Wirkung.
+            if (_taktNr % 50 == 10 && !AiGesperrt(a.Player)) KiHelikauf(a.Player);
 
             // Der Einheitendurchlauf haengt NICHT am Denk-Takt. Im Original ist
             // er ein eigener Eintrag der KI-Runde (Takte 16,20,…,44) und laeuft
@@ -2072,11 +2076,16 @@ public partial class MapEntityLayer : Node2D
             }
 
             // an airfield buys a supply helicopter when it can afford one
+            // ⚠ UNSERE ZUTAT aus dem Gefecht: das Original kennt diesen Kauf nicht. Der
+            // Rechner bekommt Versorgungshelis nur ueber KI-Takt 10 (0x4BE330, umsonst, am
+            // Posten Typ 14). ⭐ 30.10.2026 (bug-675, Spielerentscheidung): in der KAMPAGNE
+            // aus; im Gefecht unveraendert. Gegenschalter --ki-flughafenheli-alt.
             if (e.BType == 9 && AirMenu(e).Count > 0 &&
                 _money[Mathf.Clamp(e.Owner, 0, 7)] >= HeliPrice &&
                 (e.Hangar?.Count ?? 0) < Mathf.Max(1, e.HangarSize))
             {
-                if (BuyAircraft(e)) a.Built++;
+                if (InCampaign && !KiFlughafenheliAlt) { KiFlughafenheliGesperrt++; continue; }
+                if (BuyAircraft(e)) { a.Built++; if (InCampaign) KiFlughafenheliKaeufe++; }
             }
         }
     }
