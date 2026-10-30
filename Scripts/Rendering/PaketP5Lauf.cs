@@ -24,6 +24,7 @@ public partial class MapViewer
             case "--torlog": MapEntityLayer.Torlog = true; return true;                            // bug-657
             case "--tuer-voll-alt": MapEntityLayer.TuerVollAlt = true; return true;                // Nachtrag 30.10.
             case "--tuer-voll-check": _p5Voll = true; return true;
+            case "--tuer-geist-original": MapEntityLayer.TuerGeistOriginal = true; return true;   // Originalfehler Depot/Bahnhof
             case "--tuer-trupp-check": _p5Trupp = true; return true;
             case "--einnahme-verteil-check": _p5Verteil = true; return true;
         }
@@ -218,9 +219,10 @@ public partial class MapEntityLayer
     /// <b>--tuer-voll-check</b> (Nachtrag 30.10., volle Garage). Je Gebaeudeart (Basis, Depot,
     /// Bahnhof) wird die Garage auf 6/6 gefuellt und ein EIGENER Soldat ruhend auf Tuer 0
     /// gestellt; gemessen nach EINEM Takt. Soll Basis: geloescht (tot, verbraucht), keine
-    /// Flamme, TP gleich. Soll Depot/Bahnhof: nicht tot, UKOL 50, InGebaeude = Gebaeude, aber
-    /// NICHT in der Garage, Tuerzelle ohne seinen Stempel. Nullmodell <c>--tuer-voll-alt</c>:
-    /// alle drei bleiben sichtbar auf der Tuer stehen.
+    /// Flamme, TP gleich. Soll Depot/Bahnhof: bleibt sichtbar auf der Tuer stehen (Originalfehler
+    /// behoben, Spieler 30.10.); unter <c>--tuer-geist-original</c> stattdessen der Geist: nicht
+    /// tot, UKOL 50, InGebaeude = Gebaeude, aber NICHT in der Garage, Tuerzelle ohne seinen
+    /// Stempel. Nullmodell <c>--tuer-voll-alt</c>: auch die Basis laesst ihn stehen.
     /// <para>⚠ EINGRIFFE: Garage mit Platzhalter-Zeilen (Depot-Liste, Entwurf 0) gefuellt und
     /// danach zurueckgesetzt; Besitzer des Soldaten umgeschrieben; fehlt ein Depot oder
     /// Bahnhof, spielt die Basis es (Art 5 / 6), danach zurueck.</para>
@@ -228,7 +230,8 @@ public partial class MapEntityLayer
     public string TuerVollCheck()
     {
         int m = UI.SkirmishSetup.CampaignMission;
-        var sb = new System.Text.StringBuilder($"tuer-voll-check K{m}" + (TuerVollAlt ? " — NULLMODELL --tuer-voll-alt" : "") + "\n");
+        var sb = new System.Text.StringBuilder($"tuer-voll-check K{m}" + (TuerVollAlt ? " — NULLMODELL --tuer-voll-alt" : "")
+                                               + (TuerGeistOriginal ? " — Originalfehler --tuer-geist-original" : "") + "\n");
         if (_nav == null) return sb.Append("  KEIN URTEIL: keine Karte").ToString();
         int bi = -1;
         for (int pass = 0; pass < 2 && bi < 0; pass++)
@@ -282,6 +285,12 @@ public partial class MapEntityLayer
                 sb.AppendLine($"  {name} Platz {geb.Slot} (Spieler {geb.Owner}) Tuer 0 ({tc},{tr}), Garage {voll0}/{DepotSlots}: Soldat Platz {s.Slot} "
                             + $"tot {s.Dead} verbraucht {s.Verbraucht} (Soll beide True), noch auf der Tuer {aufTuer}, Flammen {TuerFremdFlammen - fl0} (Soll 0), "
                             + $"TP {hp0} -> {geb.Hp} (Soll gleich), Garage danach {GarageBelegt(geb)}, Stempel {stempel}");
+            }
+            else if (!TuerGeistOriginal)
+            {
+                ok = aufTuer && !s.Dead && s.Ukol == UkolFrei && TuerVollVerschwunden == ve0 && geb.Garage.Count == garage0;
+                sb.AppendLine($"  {name} Platz {geb.Slot} (Spieler {geb.Owner}) Tuer 0 ({tc},{tr}), Garage {voll0}/{DepotSlots}: Soldat Platz {s.Slot} "
+                            + $"noch auf der Tuer {aufTuer} (Soll True, Originalfehler behoben), tot {s.Dead}, UKOL {s.Ukol} (Soll 0), Garage danach {GarageBelegt(geb)}");
             }
             else
             {

@@ -41,8 +41,11 @@ using Godot;
 /// <para>⚠ <b>UNSERE SETZUNGEN:</b> (a) UKOL 0 ist bei uns »Ukol 0 oder 48, kein Weg,
 /// keine Befehle« (48 nur noch aus alten Spielstaenden); (b) ENTFALLEN am 30.10.2026
 /// (Spielerentscheidung »so wie im Original«): volle Garage → Basis loescht
-/// (<c>0x43BFC0 @0x43BFE6</c>), Depot/Bahnhof lassen ihn als Geist verschwinden, siehe
-/// <see cref="TuerVollArm"/>; Gegenschalter <c>--tuer-voll-alt</c> (bleibt draussen); (c) nach dem Herausnehmen wird die Tuerzelle aus den
+/// (<c>0x43BFC0 @0x43BFE6</c>), Depot/Bahnhof machen ihn im Original zum Geist — dieser
+/// ORIGINALFEHLER ist behoben (Spieler 30.10.: »sollten wir ihn mit fixen«), der Soldat
+/// bleibt dort draussen; siehe <see cref="TuerVollArm"/>; Gegenschalter <c>--tuer-voll-alt</c>
+/// (bleibt auch an der Basis draussen), <c>--tuer-geist-original</c> (der Geist des
+/// Originals); (c) nach dem Herausnehmen wird die Tuerzelle aus den
 /// Ankern der Uebrigen neu gestempelt (das Original hat Trupps statt Stempel).</para>
 ///
 /// <para>Gegenschalter: <c>--tuer-trupp-alt</c> (nur der Stempeltraeger, mit Torzyklus,
@@ -80,8 +83,7 @@ public partial class MapEntityLayer
             {
                 if (!TuerVollAlt && GarageBelegt(b) >= DepotSlots)
                 {
-                    TuerVollArm(b, i, u);
-                    angefasst = true;
+                    if (TuerVollArm(b, i, u)) angefasst = true;
                     continue;
                 }
                 int vor = Eingefahren;
@@ -115,6 +117,10 @@ public partial class MapEntityLayer
     /// Garage bleibt draussen stehen (Setzung b, Stand P5).</summary>
     public static bool TuerVollAlt;
 
+    /// <summary><c>--tuer-geist-original</c> — der Originalfehler an Depot/Bahnhof: der Soldat
+    /// verschwindet als Geist (UKOL 50 ohne Platz). Standard AUS: er bleibt draussen.</summary>
+    public static bool TuerGeistOriginal;
+
     /// <summary>Zaehler fuer Pruefstand und Meldezeile (Nachtrag 30.10.).</summary>
     public int TuerVollGeloescht, TuerVollVerschwunden;
 
@@ -136,9 +142,11 @@ public partial class MapEntityLayer
     /// wieder herauskommt, der Satz lebt weiter.</item>
     /// </list>
     /// Bei uns: Basis = <see cref="RemoveSoldUnit"/> + Verbraucht (wie der Fremdzweig ohne
-    /// Flamme/Treffer); Depot/Bahnhof = UKOL 50, InGebaeude = b, NICHT in die Garage.
+    /// Flamme/Treffer); Depot/Bahnhof = nichts, der Soldat bleibt draussen (⚠ ORIGINALFEHLER
+    /// BEHOBEN, Spieler 30.10.); nur unter <c>--tuer-geist-original</c> UKOL 50, InGebaeude = b,
+    /// NICHT in die Garage. Rueckgabe: false = nichts getan (Soldat bleibt stehen).
     /// </summary>
-    private void TuerVollArm(Entity b, int i, Entity u)
+    private bool TuerVollArm(Entity b, int i, Entity u)
     {
         if (b.BType == 1)
         {
@@ -147,8 +155,10 @@ public partial class MapEntityLayer
             RemoveSoldUnit(i, u);            // 0x4011B3 -> 0x410E60
             u.Verbraucht = true;
             TuerVollGeloescht++;
-            return;
+            return true;
         }
+        if (!TuerGeistOriginal) return false;   // Originalfehler behoben: bleibt draussen
+
         // Depot/Bahnhof: aus der Karte, UKOL 0x32, AKCE := Gebaeude, kein Platz.
         _nav?.ClearOccupant(u.Col, u.Row, i);
         if (u.Reserved is { } rc) _nav?.ClearOccupant(rc.X, rc.Y, i);
@@ -167,6 +177,7 @@ public partial class MapEntityLayer
                + $"{BuildingTypeName(b.BType)} {b.Slot}: Garage voll ({GarageBelegt(b)}/{DepotSlots}) -> VERSCHWUNDEN "
                + "(\"Can't add robot to ...\", UKOL 50 ohne Platz)");
         UpdatePanel();
+        return true;
     }
 
     /// <summary>Setzung (c): traegt die Zelle keinen Stempel mehr, aber steht dort noch
