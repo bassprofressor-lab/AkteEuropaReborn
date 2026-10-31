@@ -66,9 +66,10 @@ using Godot;
 /// <item><b>Wasser und Gegenufer</b> fragen wir am Geländeraster ab; das
 ///   Original erkennt beides über die Eckhöhen. Dieselbe Aussage, anderes
 ///   Raster.</item>
-/// <item>Die <b>Zellhöhe +1</b> der Fahrbahn über dem Wasser lassen wir weg —
-///   unsere Höhe steht je Zelle und wird vom Zeichner anders benutzt. Die
-///   Brücke liegt dadurch flach auf; sichtbar ist das nur im Vergleich.</item>
+/// <item><s>Die <b>Zellhöhe +1</b> der Fahrbahn über dem Wasser lassen wir weg</s> —
+///   ⭐ seit 30.10.2026 (bug-695) gebaut: Zellhöhe +1, Kopfbytes und
+///   Geländerstempel wie <c>0x4CC280</c>, siehe Simulation/PionierbrueckeHoch.cs.
+///   Der alte flache Stand bleibt als <c>--pionierbruecke-flach-alt</c>.</item>
 /// </list>
 ///
 /// <para>Gegenschalter <c>--bruecke-aus</c>. Prüfstand
@@ -134,6 +135,13 @@ public partial class MapEntityLayer
         /// Untergrund, der vorher dort stand.</summary>
         public readonly List<(Vector2I Zelle, bool Mitte, Simulation.NavGrid.Ground Alt)>
             Zellen = new();
+
+        /// <summary>bug-695 — was vor der Anhebung auf den Satzzellen stand (Zeichenhoehe,
+        /// Gitterhoehe, Byte +3, Posentafel); null = nicht angehoben (Kartenbruecke oder
+        /// <c>--pionierbruecke-flach-alt</c>). Simulation/PionierbrueckeHoch.cs.</summary>
+        public List<(Vector2I Zelle, int Elev, int NavElev, int Flag, int Pose)>? Vorher;
+        /// <summary>bug-695: Zahl der gestempelten Gelaenderzellen (0x421F90 @0x4CCA8A).</summary>
+        public int Gestempelt;
     }
 
     private readonly List<Steg> _stege = new();
@@ -495,6 +503,10 @@ public partial class MapEntityLayer
             // also BELADEN ja, ENTLADEN nein (das faengt erst bei 200 an).
             _rampen[z.X * 1024 + z.Y] = 100 + nr;
         }
+        // ⭐ 30.10.2026, bug-695 — Zellhoehe +1 der Fahrbahn (@0x4CC63D/0x4CC9C0), Kopfbytes
+        // (@0x4CC6DC/0x4CCA5C/0x4CCA6E) und Gelaenderstempel 0x421F90 (@0x4CCA8A).
+        // Simulation/PionierbrueckeHoch.cs; Gegenschalter --pionierbruecke-flach-alt.
+        PionierbrueckeAnheben(s);
 
         BrueckeGebaut++;
         // ⭐ 22.10.2026 (Paket W2, bug-627) — die KI-Sektorkanten: 0x41CAD0 @0x4CCA8F,
@@ -635,6 +647,7 @@ public partial class MapEntityLayer
             _nav?.BrueckeLoesen(z.X, z.Y, alt);
             _rampen.Remove(z.X * 1024 + z.Y);
         }
+        PionierbrueckeZuruecksetzen(s);       // bug-695: Hoehen und Bytes wie vor dem Bau
         _stege.Remove(s);
         KiBrueckeGeaendert($"Bruecke ({s.Col},{s.Row}) zerstoert (--bauwerke-unzerstoerbar)");
         GD.Print($"bruecke: Bruecke ({s.Col},{s.Row}) zerstoert — "
@@ -706,10 +719,19 @@ public partial class MapEntityLayer
         // ⚠ Die Zufallsvariante steht erst beim Bauen fest; die Vorschau nimmt
         // die 0 — Richtung und Ausdehnung sind es, worauf es ankommt.
         var s = new Steg { Col = _previewCol, Row = _previewRow, Richtung = d, Wasser = k };
-        foreach (var (z, _) in BrueckenZellen(_previewCol, _previewRow, d, k))
+        foreach (var (z, mitte) in BrueckenZellen(_previewCol, _previewRow, d, k))
         {
             if (StreifenKachel(BrueckenKachel(s, z)) is not { } kk) continue;
-            var ziel = CellRect(_ox, _oy, z.X, z.Y, ElevOf(z.X, z.Y));
+            // bug-695: die Vorschau zeigt die Fahrbahn schon in der Hoehe, die sie bekommt
+            // (UNSERE SETZUNG wie die ganze Bildvorschau; das Original setzt nur Marken).
+            int hoch = 0;
+            if (!PionierbrueckeFlachAlt && !PionierbrueckeNurStempel && mitte)
+            {
+                var (pos, _) = BrueckenLage(s, z);
+                if (pos >= 1 && pos <= k)
+                    hoch = ElevOf(Mittelzelle(s, pos).Quelle.X, Mittelzelle(s, pos).Quelle.Y) + 1 - ElevOf(z.X, z.Y);
+            }
+            var ziel = CellRect(_ox, _oy, z.X, z.Y, ElevOf(z.X, z.Y) + hoch);
             DrawTextureRectRegion(tex,
                 new Rect2(new Vector2(ziel.Position.X,
                                       ziel.Position.Y + Import.MapBaker.BlitAnchor + kk.YOff),

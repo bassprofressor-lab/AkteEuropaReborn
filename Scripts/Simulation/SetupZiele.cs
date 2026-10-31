@@ -56,6 +56,28 @@ public partial class MapEntityLayer
     /// <summary><c>--setup-ziele-aus</c> — der Stand vor Paket W4: keine Setup-Ziele.</summary>
     public static bool SetupZieleAus;
 
+    /// <summary>
+    /// ⭐ 30.10.2026 (bug-705) — <c>--setup-ziele-eigen-alt</c>: die 13 REGISTERSCHLEIFEN
+    /// des Setups (C und F gleich, in M2 M3 M6 M7 M10 M11 M14 M15 M16 M17×2 M19 M20) wieder
+    /// als je EINEN festen Ruf, wie mission_setupziele.py sie las.
+    ///
+    /// <para>Die vier Mustervorlagen des Werkzeugs kennen nur die Schleife mit dem Zaehler
+    /// im Stapel (<c>[esp+0x10]</c>, M21 ff.). Die Schleifen der fruehen Missionen fuehren
+    /// den Spieler in einem Register (<c>xor edi,edi … inc edi / cmp edi,8 / jl</c>) und den
+    /// Satz als Zeiger (<c>mov esi,0xC06914 … add esi,0x4C / cmp esi,0xC0B4C8 / jb</c>;
+    /// F <c>0xC05974..0xC0A528</c>) — das Werkzeug sah darin einen einzelnen Ruf mit den
+    /// Anfangswerten 0 (Spieler 0, Platz 0). Belegt an drei Originalstaenden, Eintrag fuer
+    /// Eintrag ueber sec3 der Originalkarte gerechnet: 12.DM (M2) P1 1 / P2 2, 11.DM (M3)
+    /// P1 2 / P2 2 / P5 1, 8.DM (M14) P0 5 / P1 13 / P2 6 / P3 1 — 3/3 gleich; die alte
+    /// Lesung (je ein P0-Eintrag) trifft 0/3. berichte/bau-ki-takt7.md §3.</para>
+    ///
+    /// <para>Die Formen (C, selbst gelesen): »eigene« M2 M3 M6 M7 M10 M14 M19 M20
+    /// (<c>Besitzer == p → (p,1,6,g,0)</c>), M11 <c>Besitzer != 0xFF</c> (Vorrang 6),
+    /// M15 eigene 6 sonst 3, M16 jeder Platz Vorrang 2, M17 nur P1 (eigene 6, sonst 2)
+    /// und nur P2 (eigene 6, P1-Gebaeude 2).</para>
+    /// </summary>
+    public static bool SetupZieleEigenAlt;
+
     /// <summary>sec131 je Spieler (<c>byte[0x538BB8+p]</c>), geschrieben von
     /// <c>set_ai</c> aus Setup und Skript. ⚠ Ohne Leser bei uns — siehe Klassenkopf.</summary>
     private readonly int[] _aiSec131 = new int[8];
@@ -134,14 +156,38 @@ public partial class MapEntityLayer
                     }
                     break;
                 case "gebaeude":
+                    // ⭐ bug-705: eine Registerschleife, die bis heute als EIN fester Ruf
+                    // gelesen war — mit --setup-ziele-eigen-alt wieder dieser Ruf.
+                    if (SetupZieleEigenAlt && z.Alt is { } alt)
+                    {
+                        AddMissionTarget(alt.A, alt.B, alt.C, alt.D, alt.E);
+                        if (alt.A is >= 0 and <= 7) SetupZieleAngelegt[alt.A]++;
+                        n++;
+                        break;
+                    }
                     for (int p = z.SpielerVon; p <= z.SpielerBis; p++)
                         foreach (var (g, e) in platz)
                         {
                             if (!TypDa(e)) continue;
                             if (z.Gebaut && e.Built == 0) continue;
                             int bes = BesitzerByte(e);
-                            if (z.BesitzerIstSpieler ? bes != p : !z.Besitzer.Contains(bes)) continue;
-                            AddMissionTarget(p, z.B, z.C, g, z.E);
+                            int vorrang;
+                            if (z.Zweige.Count > 0)
+                            {
+                                // bug-705: der erste passende Zweig gewinnt (M15, M17).
+                                vorrang = -1;
+                                foreach (var (art, liste, v) in z.Zweige)
+                                    if (art == "spieler" ? bes == p : art == "alle" || liste.Contains(bes)) { vorrang = v; break; }
+                                if (vorrang < 0) continue;
+                            }
+                            else
+                            {
+                                bool passt = z.BesitzerAlle || (z.BesitzerNichtHerrenlos ? bes != 255
+                                           : z.BesitzerIstSpieler ? bes == p : z.Besitzer.Contains(bes));
+                                if (!passt) continue;
+                                vorrang = z.C;
+                            }
+                            AddMissionTarget(p, z.B, vorrang, g, z.E);
                             if (p is >= 0 and <= 7) SetupZieleAngelegt[p]++;
                             n++;
                         }
@@ -159,8 +205,14 @@ public partial class MapEntityLayer
 
     // ================= der Pruefstand ==========================================
 
-    /// <summary><c>--setup-ziele-soll=PFAD</c> — die Sollwerte (JSON) des Prüfstands.</summary>
+    /// <summary><c>--setup-ziele-soll=PFAD</c> — die Sollwerte (JSON) des Prüfstands.
+    /// ⭐ bug-705 (30.10.2026): ohne Angabe gilt <see cref="SetupZieleSollStandard"/>.</summary>
     public static string SetupZieleSoll = "";
+
+    /// <summary>bug-705: der feste Ort der Sollwerte im Projekt, gebaut von
+    /// <c>aekernel-tools/soll/soll_n3.py</c> (Schleifen ueber sec3 der Originalkarte, dazu
+    /// sec69 aus 12/11/8.DM, 3/5/6/7/10.DM und 1.DM). ⚠ aekernel-tools/ steht in .gitignore.</summary>
+    public const string SetupZieleSollStandard = "res://aekernel-tools/soll/soll_n3.json";
 
     /// <summary>
     /// <c>--setup-ziele-check</c> — die Zieltafel jedes Spielers nach dem Setup
@@ -187,7 +239,9 @@ public partial class MapEntityLayer
             ist[p] = _missionTargets[p].Select(t => (t.Kind, t.Priority, t.Word, t.Second)).ToList();
         sb.AppendLine("  Ist: " + string.Join(" ", Enumerable.Range(0, 8).Select(p => $"P{p}:{ist[p].Count}")));
 
-        if (SetupZieleSoll.Length == 0 || !System.IO.File.Exists(SetupZieleSoll))
+        if (SetupZieleSoll.Length == 0) SetupZieleSoll = ProjectSettings.GlobalizePath(SetupZieleSollStandard);   // bug-705
+        sb.AppendLine($"  Solldatei: {SetupZieleSoll}");
+        if (!System.IO.File.Exists(SetupZieleSoll))
             return sb.Append($"setup-ziele-check K{m}: KEIN URTEIL (Solldatei fehlt: »{SetupZieleSoll}«)").ToString();
         var json = new Json();
         if (json.Parse(System.IO.File.ReadAllText(SetupZieleSoll)) != Error.Ok)

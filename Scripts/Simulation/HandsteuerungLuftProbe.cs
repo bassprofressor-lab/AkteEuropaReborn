@@ -236,7 +236,7 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = slot, Kind = 1, Name = "Probeflieger",
             Owner = feld.Owner, HomeSlot = feld.Slot,
-            Col = feld.Col, Row = feld.Row, Pos = feld.Pos,
+            Col = feld.Col, Row = feld.Row, Pos = FlugPunkt(feld),   // bug-696
             Stored = true,
             Speed = 10,          // sp_oben
             StufeUnten = 2,      // sp_unten

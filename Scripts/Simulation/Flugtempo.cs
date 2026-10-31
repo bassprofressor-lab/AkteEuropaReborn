@@ -165,7 +165,7 @@ public partial class MapEntityLayer : Node2D
             // dieser Stelle IMMER einen Wert im Rahmen, wir nicht. Ohne Ziel
             // fliegt die Maschine geradeaus (AirDrift), und dafuer ist
             // »beschleunigen bis sp_oben« der Fall > 6.
-            float dz = a.Goal is { } g ? a.Pos.DistanceTo(g) / TileW : float.MaxValue;
+            float dz = a.Goal is { } ? FlugZellenZumZiel(a) : float.MaxValue;   // bug-718: Zellen wie 0x423FB8
             if (dz > AnflugZellen) schneller = true;         // @0x424EAD jg
             else if (dz <= 0f) schneller = false;            // @0x424EB1 jle
             else schneller = a.Stufe < AnflugStufe;          // @0x424EBB jae
@@ -203,7 +203,7 @@ public partial class MapEntityLayer : Node2D
         else if (a.Order2 == 3) schneller = false;               // @0x424F02
         else
         {
-            float dz = a.Goal is { } g ? a.Pos.DistanceTo(g) / TileW : float.MaxValue;
+            float dz = a.Goal is { } ? FlugZellenZumZiel(a) : float.MaxValue;   // bug-718: Zellen wie 0x423FB8
             if (dz > HeliAnflugZellen) schneller = true;         // @0x424F0D jg
             else if (dz <= 0f) schneller = false;                // @0x424F11 jle
             else schneller = a.Stufe < AnflugStufe;              // @0x424F1B jae

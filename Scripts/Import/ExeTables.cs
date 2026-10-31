@@ -312,9 +312,15 @@ public sealed class ExeTables
     /// <c>MuzzleReach = 14</c> ersetzen kann: Waffenindex = <c>ZBRAN − 1</c>
     /// (0x429B8E), Bild = dasselbe wie beim Turm, Muendung = Einheitenanker +
     /// <c>(x − 25, y − 68)</c> (0x42A188). Gemessen an der Datei: 9600 Saetze,
-    /// davon 413 mit Flag 0 (werden gezeichnet), 756 mit Flag 1 (Punkt liegt
-    /// hinter dem Turm), 8431 leer. Belegt sind genau die Plaetze 0..17 — und
-    /// das Spiel hat 18 Waffenbauteile. Steht in OFFENE_FRAGEN.md.</para>
+    /// davon 413 mit Flag 0, 756 mit Flag 1, 8431 leer (Flag 2).
+    /// ⚠⚠ bug-689 (30.10.2026), BERICHTIGT: hier stand »Flag 0 = wird gezeichnet,
+    /// Flag 1 = Punkt liegt hinter dem Turm«. Umgekehrt: BEIDE werden gezeichnet,
+    /// Flag 0 VOR dem Turm (C 0x42A188 <c>test al,al / jne</c>, also unter ihm —
+    /// das sind die nach Norden zeigenden Bilder 3/4/5), Flag 1 NACH dem Turm
+    /// (C 0x42A686 <c>cmp al,1</c>). In C und F gleich (F 0x429371 / 0x429866).
+    /// Belegt sind die Waffen 0..6, 9..17, 40, 41 (nicht »genau 0..17«);
+    /// gezeichnet wird nur, wo die Folgentafel 0x4FA4F8 eine Folge nennt.
+    /// Gebaut in Simulation/Muendungsfeuer.cs.</para>
     /// </summary>
     /// <summary>Die Marke »keine Folge« in den Feldern +0x02 und +0x06.
     /// ANIM.CWA fuehrt 1000 Folgen (<see cref="AnimFile.SeqCount"/>) — 30000 ist

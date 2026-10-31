@@ -108,10 +108,35 @@ public partial class MapEntityLayer
             ok &= tr;
             sb.AppendLine($"  d {d}: L {L:0.0} px — Punkte {p}, Takte bis Treffer {tk}; Soll {sollP} / {sollT} (0x454CF0), "
                         + $"Nullmodell {altP} / {altT} -> {(tr ? "ja" : "NEIN")}");
+            ok &= BsHoeheTeil(sb, d);
         }
         sb.AppendLine("  " + BodenstrahlLine());
         sb.Append(gemessen == 0 ? "  KEIN URTEIL" : ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
+    }
+
+    /// <summary>bug-692: wo der ERSTE Punkt (t = Zuschlag 4) des letzten Bodenstrahls steht —
+    /// gegen die Lage, die 0x455048 (Hoehe Gelaende·15 + 8 − 40) und der Zeichner 0x42E8D0
+    /// ergeben, hier unabhaengig von <see cref="StrahlPunktLage"/> nachgerechnet: Punkt =
+    /// Schuetze + (Ziel − Schuetze)·4/L + (−20, −8 + 5) + Leinwand/2. Ohne die −40 laege er
+    /// 40 px hoeher; Nullmodell <c>--strahlhoehe-alt</c>: der alte Strich ab der Muendung.</summary>
+    private bool BsHoeheTeil(System.Text.StringBuilder sb, int d)
+    {
+        if (BsLetzterStrahl is not { } s || s.Punkte == 0) { sb.AppendLine($"  d {d}: Hoehe — kein Punkt, ohne Urteil"); return true; }
+        float L = Mathf.Max(1f, s.Laenge), f0 = BodenZuschlag / L;
+        var q = s.Fuss ?? s.Start; var z = s.ZielFuss ?? s.Ziel;
+        var fuss = q + (z - q) * f0;
+        EffectFrames(s.Punkt);   // Anker auch im Nullmodell (dort ruft ihn niemand)
+        var anker = _fxAnchor.TryGetValue(s.Punkt, out var an) ? an : Vector2.Zero;
+        var soll = fuss + new Vector2(-20f, -BodenstrahlUeberGrund + 5f) + anker;
+        var alt = s.Start + (s.Ziel - s.Start) * f0;
+        var ist = s.ErsterPunkt;
+        bool hoch = (ist - soll).Length() < 0.5f;
+        sb.AppendLine($"  d {d}: Hoehe (bug-692) — erster Punkt gegen Schuetzenlage ({ist.X - fuss.X:0.0}, {ist.Y - fuss.Y:0.0}), "
+                    + $"Soll ({soll.X - fuss.X:0.0}, {soll.Y - fuss.Y:0.0}) [Leinwand/2 {anker.X:0.0}/{anker.Y:0.0}], "
+                    + $"ohne die −40 ({soll.X - fuss.X:0.0}, {soll.Y - 40f - fuss.Y:0.0}), alter Strich ({alt.X - fuss.X:0.0}, {alt.Y - fuss.Y:0.0}) "
+                    + $"-> {(hoch ? "ja" : "NEIN")}");
+        return hoch;
     }
 
     /// <summary>Fuer den Bildlauf: ist ein Bodenstrahl im dritten Takt unterwegs?</summary>

@@ -219,7 +219,7 @@ public partial class MapEntityLayer : Node2D
             var home = GebaeudeMitSlot(a.HomeSlot);
             if (home == null) { _order = "Kein Flughafen fuer diese Maschine."; return false; }
             a.Stored = false;
-            a.Pos = home.Pos;
+            a.Pos = FlugPunkt(home);   // bug-696
             a.Col = home.Col; a.Row = home.Row;
             a.Alt = ElevOf(a.Col, a.Row) * 15;      // air_takeoff @0x4260B9
             a.Sollhoehe = FlughoeheMax;
@@ -420,7 +420,8 @@ public partial class MapEntityLayer : Node2D
 
         float rad = Mathf.DegToRad(a.Dir);
         float weite = Mathf.Max(2, a.Sight) * TileW;
-        var aim = a.Pos + new Vector2(Mathf.Sin(rad), Mathf.Cos(rad)) * weite;
+        // bug-696: vom Bodenpunkt unter dem Flugzeug aus (der Zielpunkt liegt im Bodenraum)
+        var aim = AirSchatten(a) + new Vector2(Mathf.Sin(rad), Mathf.Cos(rad)) * weite;
 
         // Wer nahe genug an der Schusslinie steht, ist das Trefferziel. ⚠ Die
         // halbe Zellbreite ist unsere Wahl; ohne Ziel fliegt das Geschoss auf

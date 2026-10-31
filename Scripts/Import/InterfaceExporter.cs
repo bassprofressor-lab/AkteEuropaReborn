@@ -665,11 +665,20 @@ public sealed class InterfaceExporter
         // (Folge 73, ein Bild mit 4 Bildpunkten). Falle Art 16 C 0x42CFAD: Folge 94
         // bzw. Punkt 61. berichte/minen-opus.md §2.
         ("mine", 93), ("minenpunkt", 73), ("falle", 94), ("fallenpunkt", 61),
+        // ⭐ 30.10.2026 (bug-708) — DIE GASWOLKE. Zeichner Art 14 C 0x42B6E4: Bild =
+        // word[0x7A415E] + (Takt + Platz) % 20, 0x7A415E = 0x7A404A + 4·69 — Folge 69.
+        // Der Blitter 0x4AC830 nimmt das Bild nur als Schablone (Tafel NN.CWG).
+        ("gas", 69),
         // ⭐ 13.09.2026 — DER RAUMFRACHTER und sein LICHTBLITZ. Zeichner 0x42C7E0:
         // dword[0x815580 + 4·word[0x7A4E82]], 0x7A4E82 = 0x7A4048 + 4·910 + 2 —
         // Folge 910, ein Bild (Rahmen 1512). Abladen 0x4C158D: 0x435950(…, 0x60) —
         // Folge 96, sieben Bilder. geschaeftszentrum-lieferung-fable.md §6.
         ("frachter", 910), ("lichtblitz", 96),
+        // ⭐ 30.10.2026 (bug-726) — SPIEGEL- UND TARNBLITZ. Befehl 24 ruft 0x435950(…, 0x61),
+        // Befehl 25 0x435950(…, 0x62); der Effektzeichner @0x42B11F nimmt das Argument als
+        // Folge (word[0x7A404A + 4·Art]). ANIM.CWA: Folge 97 = 10 Bilder ab 507, Folge 98 =
+        // 9 Bilder ab 517 — gleich hinter dem Lichtblitz (96: 7 ab 500). Simulation/Illusion.cs.
+        ("spiegelblitz", 97), ("tarnblitz", 98),
         // ⭐ 04.10.2026 (bug-426) — DIE 16 WRACKSORTEN. Der Wrackzeichner
         // @0x42D0AD nimmt die Variante rand&15 (@0x406F47) als ANIM-FOLGE
         // (word[0x7A404A + 4·folge] @0x42D0E2); in ANIM.CWA haben die Folgen

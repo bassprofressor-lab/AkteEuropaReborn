@@ -603,6 +603,11 @@ public partial class MapViewer : Node2D
         _keyPanSpeed = UI.Settings.PanSpeed;
 
         ParseCmdline();
+        // ⭐ bug-734: im Netzspiel gewinnt die PARTIE auch gegen die Schalter dieser
+        // Maschine — --konto=, --no-start-base und --gefecht-startbasis-aus wurden eben
+        // erst hier gelesen und haetten die Werte des Vermittlers ueberschrieben (zwei
+        // verschiedene Partien ab Takt 0). Ohne Netz tut die Zeile nichts.
+        Network.NetworkManager.OverrideSetup();
         // --skirmish: den Gefechtsmodus von der Kommandozeile aus anwerfen,
         // damit ein Prueflauf ihn ueberhaupt erreichen kann. Steht hier und
         // nicht in ParseCmdline(), weil --map= und --skirmish= in beliebiger
@@ -1306,6 +1311,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_muendungsfeuerCheck)   // bug-689, Simulation/Muendungsfeuer.cs
+        {
+            GD.Print(_entities.MuendungsfeuerCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_einheitenankerCheck)
         {
             GD.Print(_entities.EinheitenankerCheck());
@@ -1365,6 +1376,55 @@ public partial class MapViewer : Node2D
         {
             if (_shotPath.Length > 0) { _ = MinenBildLauf(); return; }
             GD.Print(_entities.MinenbildCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_imapAbgleichCheck)                 // bug-706
+        {
+            // bug-733: im Gefecht lief der Abgleich schon VOR dem Aufstellen der Startbasis
+            GD.Print(_entities.ImapAbgleichErgebnis ?? _entities.ImapAbgleichCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_startbasisCheck)                   // bug-733
+        {
+            GD.Print(_entities.StartbasisCheck(UI.SkirmishSetup.Map, _entities.StartbasisMitspieler));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_minenhaltCheck)                    // bug-707
+        {
+            GD.Print(_entities.MinenhaltCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_dmMinenCheck)                      // bug-709
+        {
+            GD.Print(_entities.DmMinenCheck(MapNames[_mapIndex]));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_radarmastZelleCheck)               // bug-722
+        {
+            GD.Print(_entities.RadarmastZelleCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_gaswolkeCheck)                     // bug-708
+        {
+            GD.Print(_entities.GaswolkeCheck(UI.SkirmishSetup.CampaignMission));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_fallenCheck)                       // bug-697
+        {
+            GD.Print(_entities.FallenCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_legeauftragCheck)                  // bug-698
+        {
+            GD.Print(_entities.LegeauftragCheck());
             GetTree().Quit(0);
             return;
         }
@@ -1523,7 +1583,13 @@ public partial class MapViewer : Node2D
         // ⭐ 29.10.2026 — Paket P1 (Testerrunde 0.6.12), Rendering/PaketP1Lauf.cs.
         // ⭐ 29.10.2026 — Paket P4 Kampf (Testerrunde 0.6.12), Rendering/PaketP4Lauf.cs.
         if (P4Pruefstaende()) return;
+        if (FluglagePruefstaende()) return;   // bug-696 flache Fluglage, Rendering/FluglageLauf.cs
         if (FussUhrPruefstaende()) return; // bug-688 Fussvolk-Uhr, Rendering/FussvolkUhrLauf.cs
+        if (MagnetbombePruefstaende()) return;   // bug-710..713 Magnetbombe, Rendering/MagnetbombeLauf.cs
+        if (TeleporterPruefstaende()) return;    // bug-719..721 Teleporter/Illusion/Spiegel, Rendering/TeleporterLauf.cs
+        if (KiGruppenangriffPruefstaende()) return;   // bug-690 Angriffsarm, Rendering/KiGruppenangriffLauf.cs
+        if (KiTakt7Pruefstaende()) return;   // bug-703 KI-Platz 7, Rendering/KiTakt7Lauf.cs
+        if (KiSpaehenPruefstaende()) return;   // bug-729..732 Spaehen/Sprit/Skriptplatz, Rendering/KiSpaehenLauf.cs
         if (P5Pruefstaende()) return;      // Paket P5 Tueren, Rendering/PaketP5Lauf.cs
         if (P1Pruefstaende()) return;
         if (P3Pruefstaende()) return;      // Paket P3 Bruecken, Rendering/PaketP3Lauf.cs
@@ -1576,6 +1642,7 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_radarmastCheck && _shotPath.Length > 0) { _ = RadarMastBildLauf(); return; }
+        if (_gasbildProbe && _shotPath.Length > 0) { _ = GasbildLauf(); return; }   // bug-723
         if (_radarmastCheck)
         {
             GD.Print(_entities.RadarMastCheck());
@@ -2514,6 +2581,30 @@ public partial class MapViewer : Node2D
         GetViewport().GetTexture().GetImage().SavePng(_shotPath);
         GD.Print($"minenbild-lauf: {(p == null ? "KEINE MINE" : $"Kamera {p.Value}, Bild nach " + _shotPath)}, "
                + $"gezeichnet: Scheiben {_entities.MinenScheiben}, Punkte {_entities.MinenPunkte}, Umrisse {_entities.MinenUmrisse}");
+        GetTree().Quit(0);
+    }
+
+    /// <summary><c>--gasbild-probe --shot=&lt;vorsilbe&gt;</c> (bug-723, Rendering/GasBild.cs): eine
+    /// dichte Wolke an die erste eigene Einheit (EINGRIFF), Zeit angehalten, dann drei Bilder:
+    /// derselbe Rahmen ohne Gas, die Zaehlleinwand, mit Gas. Ausgewertet von
+    /// aekernel-tools/gasbild_rest.py gegen <c>Palette[CWG^n[Index]]</c>.</summary>
+    private async System.Threading.Tasks.Task GasbildLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var z = _entities.GasbildProbeZelle();
+        _camera.Position = _entities.GasbildProbeLegen(z.X, z.Y);
+        _camera.Zoom = Vector2.One;
+        Engine.TimeScale = 0;
+        for (int i = 0; i < 8; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        _entities.GasbildVerbergen = true; _entities.QueueRedraw();
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetViewport().GetTexture().GetImage().SavePng(_shotPath + "_ohne.png");
+        _entities.GasbildVerbergen = false; _entities.QueueRedraw();
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetViewport().GetTexture().GetImage().SavePng(_shotPath + "_mit.png");
+        _entities.GasMaskeBild()?.SavePng(_shotPath + "_maske.png");
+        GD.Print($"gasbild-probe: Zelle {z}, {_entities.GasbildTeilchen} Schablonen, Tafel {_entities.GasbildHerkunft}, "
+               + $"--gasbild-mischung {MapEntityLayer.GasbildMischung}; Bilder {_shotPath}_ohne/_mit/_maske.png");
         GetTree().Quit(0);
     }
 
@@ -4160,8 +4251,16 @@ _mausProbePunkt = karte;
             if (P1Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P4 Kampf (bug-645/646/658/664/669), Rendering/PaketP4Lauf.cs.
             if (P4Schalter(a)) continue;
+            if (FluglageSchalter(a)) continue;   // bug-696 flache Fluglage, Rendering/FluglageLauf.cs
             // ⭐ 30.10.2026 — bug-688 Fussvolk-Uhr 0x40F0A0, Rendering/FussvolkUhrLauf.cs.
             if (FussUhrSchalter(a)) continue;
+            if (MagnetbombeSchalter(a)) continue;   // bug-710..713 Magnetbombe, Rendering/MagnetbombeLauf.cs
+            if (TeleporterSchalter(a)) continue;    // bug-719..721 Teleporter/Illusion/Spiegel, Rendering/TeleporterLauf.cs
+            // ⭐ 30.10.2026 — bug-690 Angriffsarm des KI-Gruppenlaufs, Rendering/KiGruppenangriffLauf.cs.
+            if (KiGruppenangriffSchalter(a)) continue;
+            // ⭐ 30.10.2026 — bug-703..705 KI-Platz 7, Denktakt, Setup-Schleifen, Rendering/KiTakt7Lauf.cs.
+            if (KiTakt7Schalter(a)) continue;   // bug-703
+            if (KiSpaehenSchalter(a)) continue;   // bug-729..732 Spaehen/Sprit/Skriptplatz, Rendering/KiSpaehenLauf.cs
             // ⭐ 29.10.2026 — Paket P5 Tueren (bug-648/657/660), Rendering/PaketP5Lauf.cs.
             if (P5Schalter(a)) continue;
             // ⭐ 29.10.2026 — Paket P2 (bug-650/665), Rendering/PaketP2Lauf.cs.
@@ -4493,6 +4592,13 @@ _mausProbePunkt = karte;
             else if (a == "--art7-einzeltreffer") MapEntityLayer.Art7Einzeltreffer = true;
             else if (a == "--gaswerfer-check") _gwCheck = true;
             else if (a == "--gaswerfer-als-schuss") MapEntityLayer.GaswerferAlsSchuss = true;
+            else if (a == "--gaswolke-aus") MapEntityLayer.GaswolkeAus = true;                 // bug-708
+            else if (a == "--gaswolke-check") _gaswolkeCheck = true;                           // bug-708
+            else if (a == "--gas-spielstand-alt") MapEntityLayer.GasSpielstandAlt = true;      // bug-715
+            else if (a == "--radarmast-zelle-alt") MapEntityLayer.RadarmastZelleAlt = true;    // bug-722
+            else if (a == "--radarmast-zelle-check") _radarmastZelleCheck = true;              // bug-722
+            else if (a == "--gasbild-mischung") MapEntityLayer.GasbildMischung = true;         // bug-723
+            else if (a == "--gasbild-probe") _gasbildProbe = true;                             // bug-723
             else if (a == "--routentuer-check") _rtCheck = true;
             else if (a == "--routentuer-alt") MapEntityLayer.RoutentuerAlt = true;
             else if (a == "--einnahme-check") _enCheck = true;
@@ -4558,6 +4664,8 @@ _mausProbePunkt = karte;
             else if (a == "--fahrziel-check") MapEntityLayer.FahrzielCheckAn = true;
             else if (a == "--handsteuerung-klick-alt") MapEntityLayer.HandsteuerungKlickAlt = true;
             else if (a == "--muendung-alt") MapEntityLayer.MuendungAlt = true;
+            else if (a == "--muendungsfeuer-alt") MapEntityLayer.MuendungsfeuerAlt = true;   // bug-689
+            else if (a == "--muendungsfeuer-check") _muendungsfeuerCheck = true;          // bug-689
             else if (a == "--torphase-alt") MapEntityLayer.TorphaseAlt = true;
             else if (a == "--auslass-unsichtbar-alt") MapEntityLayer.AuslassUnsichtbarAlt = true;
             else if (a == "--auslass-nur-tuer-alt") MapEntityLayer.AuslassNurTuerAlt = true;
@@ -4703,6 +4811,25 @@ _mausProbePunkt = karte;
             else if (a == "--minen-ohne-tor") MapEntityLayer.MinenTor = false;
             else if (a == "--missionsminen-check") _missionsminenCheck = true;
             else if (a == "--minenfahrt-check") _minenfahrtCheck = true;
+            // ⭐ 30.10.2026 — bug-697 Fallen, bug-698 Legeauftrag, bug-699 Minen/Fallen im Spielstand.
+            else if (a == "--fallen-aus") MapEntityLayer.FallenAus = true;                     // bug-697
+            else if (a == "--fallen-check") _fallenCheck = true;                               // bug-697
+            else if (a == "--legeauftrag-aus") MapEntityLayer.LegeauftragAus = true;           // bug-698
+            else if (a == "--legeauftrag-check") _legeauftragCheck = true;                     // bug-698
+            else if (a == "--minen-spielstand-alt") MapEntityLayer.MinenSpielstandAlt = true;  // bug-699
+            else if (a == "--dm-minen-alt") MapEntityLayer.DmMinenAlt = true;                  // bug-709
+            else if (a == "--minenhalt-alt") MapEntityLayer.MinenhaltAlt = true;              // bug-707
+            else if (a == "--minenhalt-check") _minenhaltCheck = true;                         // bug-707
+            else if (a == "--imap-abgleich-alt") MapEntityLayer.ImapAbgleichAlt = true;        // bug-706
+            else if (a == "--imap-abgleich-check")                                             // bug-706
+            { _imapAbgleichCheck = true; MapEntityLayer.ImapAbgleichVorStartbasis = true; }   // bug-733
+            else if (a == "--gefecht-startbasis-aus") MapEntityLayer.GefechtStartbasisAus = true;   // bug-733
+            else if (a.StartsWith("--gefecht-startbasis-fabrik="))                             // bug-733
+                MapEntityLayer.StartbasisFabrikTyp = a["--gefecht-startbasis-fabrik=".Length..].ToInt();
+            else if (a == "--startbasis-check") _startbasisCheck = true;                       // bug-733
+            else if (a == "--startbasis-heim-alt") MapEntityLayer.StartbasisHeimAlt = true;    // bug-735
+            else if (a == "--netz-sitzung-alt") Network.NetworkManager.SitzungAlt = true;     // bug-734
+            else if (a == "--dm-minen-check") _dmMinenCheck = true;                            // bug-709
             else if (a == "--minenbild-check") _minenbildCheck = true;
             else if (a == "--minen-unsichtbar") MapEntityLayer.MinenUnsichtbar = true;
             else if (a == "--minen-nebel-alt") MapEntityLayer.MinenNebelAlt = true;
@@ -5421,6 +5548,7 @@ _mausProbePunkt = karte;
             else if (a == "--depotklang-aus") Audio.GameSounds.DepotklangAus = true;
             else if (a == "--nachschubklang-aus") Audio.GameSounds.NachschubklangAus = true;
             else if (a == "--flugklang-aus") Audio.GameSounds.FlugklangAus = true;
+            else if (a == "--landeklang-aus") Audio.GameSounds.LandeklangAus = true;   // bug-691, 308 beim Aufsetzen
             else if (a == "--endklang-aus") Audio.GameSounds.EndklangAus = true;
             else if (a == "--grabklang-aus") Audio.GameSounds.GrabklangAus = true;
             else if (a == "--handstimme-aus") Audio.GameSounds.HandstimmeAus = true;
@@ -5888,6 +6016,20 @@ _mausProbePunkt = karte;
     private bool _minenCheck;
     /// <summary><c>--missionsminen-check</c>, <c>--minenfahrt-check</c> — siehe Simulation/MinenRaeumen.cs.</summary>
     private bool _missionsminenCheck, _minenfahrtCheck, _minenbildCheck;
+
+    /// <summary><c>--fallen-check</c> (bug-697, Simulation/Fallen.cs), <c>--legeauftrag-check</c>
+    /// (bug-698, Simulation/Legeauftrag.cs).</summary>
+    private bool _fallenCheck, _legeauftragCheck;
+
+    /// <summary><c>--gaswolke-check</c> (bug-708, Simulation/Gaswolke.cs).</summary>
+    private bool _gaswolkeCheck;
+    private bool _radarmastZelleCheck;             // bug-722, Simulation/RadarmastZelle.cs
+    private bool _gasbildProbe;                    // bug-723, Rendering/GasBild.cs
+
+    /// <summary><c>--dm-minen-check</c> (bug-709, Simulation/MinenFallenSpielstand.cs).</summary>
+    private bool _dmMinenCheck, _minenhaltCheck;   // bug-709, bug-707
+    private bool _imapAbgleichCheck;               // bug-706
+    private bool _startbasisCheck;                 // bug-733, --startbasis-check
     /// <summary><c>--flammenwerfer-wald-check</c> — siehe Simulation/FlammenwerferWald.cs.</summary>
     private bool _flammenwaldCheck;
 
@@ -5918,6 +6060,8 @@ _mausProbePunkt = karte;
     private bool _tuerfachCheck;
     /// <summary><c>--einheitenanker-check</c> — siehe Simulation/Einheitenanker.cs.</summary>
     private bool _einheitenankerCheck;
+    /// <summary>bug-689: <c>--muendungsfeuer-check</c> — siehe Simulation/Muendungsfeuer.cs.</summary>
+    private bool _muendungsfeuerCheck;
     /// <summary><c>--reparaturklick-check</c> — siehe Simulation/Reparatur.cs.</summary>
     private bool _reparaturklickCheck;
     /// <summary><c>--spuren-check</c> — siehe Simulation/Fahrspuren.cs.</summary>
@@ -6498,6 +6642,8 @@ _mausProbePunkt = karte;
             if (ai.Length > 0) GD.Print(ai);
             string plan = _entities.AiPlanLine();
             if (plan.Length > 0) GD.Print(plan);
+            string sbl = _entities.StartbasisLagerZeile();   // bug-733
+            if (sbl.Length > 0) GD.Print(sbl);
             string sicht = _entities.AiSichtLine();
             if (sicht.Length > 0) GD.Print(sicht);
             GD.Print(_entities.ChaseWatchLine());
@@ -9915,6 +10061,11 @@ _mausProbePunkt = karte;
             // das ist `0x421200` mit `Merken = 1`, die jede gepruefte Zelle mit
             // ihrem Ja/Nein nach 0xA32188 schreibt. Unsere Vorschau war schon
             // da (Simulation/Construction.cs), sie hatte nur nie einen Bediener.
+            // ⭐ bug-698 — Befehlsart 8: der Rahmen haengt an der Zelle, an der die
+            // linke Taste gedrueckt wurde (Zustand 1 -> 2, @0x43196B); losgelassen
+            // schickt PlacementClick Befehl 22 (Simulation/Legeauftrag.cs).
+            if (_entities.PlacementMode == MapEntityLayer.OrderLegen)
+                _entities.LegeAnker = _leftDown ? _entities.CellAt(_bandStart) : null;
             if (_entities.PlacementMode != 0 &&
                 _entities.CellAt(KartenMaus()) is { } hover)
                 _entities.PlacementHover(hover.X, hover.Y);

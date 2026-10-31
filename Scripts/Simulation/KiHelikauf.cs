@@ -139,7 +139,7 @@ public partial class MapEntityLayer
         int slot = 0;
         foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
         int col = posten.Col + 4, row = posten.Row + 1;                 // 0x4B3089 / 0x4B3093
-        var pos = CellCenter(col, row);
+        var pos = FlugZelle(col, row);   // bug-696: flache Lage
         var a = new Special
         {
             Slot = slot, Kind = d.Kind, Name = d.Name, TypeName = d.Name,

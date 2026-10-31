@@ -538,6 +538,7 @@ public partial class MapEntityLayer : Node2D
                 var e = _entities[i];
                 if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p) continue;
                 if (e.Faze != 0 || e.Ukol >= 0x2D || e.AiCpu0 >= 5) continue;
+                if (KiSpritleerNichtFrei(e)) continue;   // bug-731, nur Gefecht (GefechtKiMarsch.cs)
                 summe++;
                 (sx, sy) = AiSektorVon(e.Col, e.Row);
             }
@@ -545,12 +546,27 @@ public partial class MapEntityLayer : Node2D
             return summe;
         }
 
+        // ⭐ bug-731 — UNSERE SETZUNG im Gefecht: Einheiten ohne Sprit fuellen zuerst die
+        // Verteidigerplaetze ihres Sektors (CPU1, wie GefechtAufnehmbar), der Ueberschuss ist
+        // also Belegt − max(DefRobots, trocken). Ohne trockene Einheiten derselbe Wert.
+        bool spritRegel = !InCampaign && !KiSpritAufnahmeAlt;
+        if (spritRegel)
+        {
+            System.Array.Clear(_gefTrocken);
+            foreach (var e in _entities)
+            {
+                if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || !e.Mobile) continue;
+                if (e.AiCpu0 is not (1 or 2) || !KiSpritleerNichtFrei(e)) continue;
+                _gefTrocken[AiSektorAus(e.AiCpu1)]++;
+            }
+        }
         for (int x = 0; x < SektorKante; x++)
             for (int y = 0; y < SektorKante; y++)
             {
                 var s = r[SektorIndex(x, y)];
-                if (s.DefRobots >= s.Belegt) continue;
-                int ueber = s.Belegt - s.DefRobots;
+                int def = spritRegel ? Math.Max(s.DefRobots, _gefTrocken[SektorIndex(x, y)]) : s.DefRobots;   // bug-731
+                if (def >= s.Belegt) continue;
+                int ueber = s.Belegt - def;
                 summe += ueber;
                 if (ueber > best) { best = ueber; sx = x; sy = y; }
             }
@@ -713,7 +729,10 @@ public partial class MapEntityLayer : Node2D
         /// <summary>⭐ Paket W (22.10.2026): hat die Gruppe ihren Angriff schon
         /// bekommen? Mit Marschweg (sec108 Ende != 0) erst nach dem Marsch —
         /// siehe Simulation/KiMarschwege.cs. UNSERE Buchführung: das Original
-        /// befiehlt in jedem Gruppenlauf neu (Sprungtafel 0x4BD7CC), wir einmal.</summary>
+        /// befiehlt in jedem Gruppenlauf neu (Sprungtafel 0x4BD7CC), wir einmal.
+        /// ⭐ bug-690 (30.10.2026): in der Kampagne befiehlt jetzt auch bei uns der Arm in
+        /// jedem Lauf (Simulation/KiGruppenangriff.cs); das Feld zaehlt dort nur noch die
+        /// Welle (Buchführung). Es gilt weiter im Gefecht und mit --ki-gruppenangriff-einmal.</summary>
         public bool Losgeschickt = true;
 
         /// <summary>⭐ Paket W3 (23.10.2026, bug-631) — NUR IM GEFECHT: die Stärke beim
@@ -809,6 +828,9 @@ public partial class MapEntityLayer : Node2D
             // Paket W3 — im Gefecht: keine Unbewaffneten (AiUnarmed), keine Eingegrabenen,
             // nicht der Gebaeudegreifer (AiGrab). UNSERE SETZUNG.
             if (gefecht != null && (AiUnarmed(e) || e.DugIn || i == gefecht.Grabber)) continue;
+            // ⭐ bug-731 — UNSERE SETZUNG im Gefecht: ohne Sprit nicht frei (GefechtKiMarsch.cs,
+            // KiSpritleerNichtFrei; das Original liest +0x2E hier nicht). --ki-sprit-aufnahme-alt.
+            if (gefecht != null && KiSpritleerNichtFrei(e)) continue;
 
             int s;
             if (_aiSec110[p] == 0)
@@ -841,6 +863,7 @@ public partial class MapEntityLayer : Node2D
 
             if (gruppe.Einheiten.Count >= AiGruppe.MaxEinheiten) break;
             gruppe.Einheiten.Add(i);
+            if (gefecht != null && SpritLeer(e)) KiSpritleerAufgenommen++;   // bug-731 Messpunkt
             e.AiCpu0 = 10;                 // »in einer Gruppe«
             e.AiCpu1 = frei;
             if (s >= 0) r[s].Belegt--;
@@ -901,6 +924,19 @@ public partial class MapEntityLayer : Node2D
             if (!(IstTuergriff(gruppe.Auftrag) && _entities[zi].Owner == p))
                 FeindNahtMelden(p, 2);
 
+            // ⭐⭐ bug-690 (30.10.2026) — DER ANGRIFFSARM C 0x4BD1E6…0x4BD5F7 (Sprungtafel
+            // 0x4BD7CC, F 0x4BCCA6/0x4BD28C): in der Kampagne befiehlt er JEDEM Mitglied in
+            // JEDEM Lauf neu, das nicht angreift oder steht — alle vier Arme samt Tuergriff,
+            // siehe Simulation/KiGruppenangriff.cs. Seit bug-714 auch das Gefecht (W3);
+            // --gefecht-gruppenangriff-alt (nur Gefecht) und --ki-gruppenangriff-einmal
+            // behalten den Stand davor (unten).
+            if (KiGaPruefAn) KiGaPruefVorher(p, g, gruppe, zi);   // --ki-gruppenangriff-check
+            if (KiGruppenangriffJeLauf)
+            {
+                KiGruppenAngriffsarm(p, g, gruppe, zi);
+                continue;
+            }
+
             // Paket W: nach dem Marsch greift die Gruppe an (vorher sofort beim Bilden).
             KiGruppeNachMarsch(p, g, gruppe, zi);
 
@@ -930,6 +966,7 @@ public partial class MapEntityLayer : Node2D
                 }
             }
         }
+        if (KiGaPruefAn) KiGaPruefAbschluss();   // bug-690, --ki-gruppenangriff-check
     }
 
     /// <summary>

@@ -159,7 +159,7 @@ public partial class MapEntityLayer
         if (c.P2 != ZielModusZiel && c.P2 != ZielModusZelle) return false;
         if (_nav == null || !_nav.InBounds(c.P3, c.P4)) return false;
         int ziel = c.P2 == ZielModusZiel && c.P5 >= 0 && c.P5 < _entities.Count ? c.P5 : -1;
-        return FlugzeugAngreifen(a, ziel, ZellMitte(c.P3, c.P4));
+        return FlugzeugAngreifen(a, ziel, FlugZellmitte(c.P3, c.P4));   // bug-696
     }
 
     // ================= TRANSPORTROUTE (Fensterart 16) =========================

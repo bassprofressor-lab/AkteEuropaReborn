@@ -43,6 +43,9 @@ public partial class MapEntityLayer
     /// <summary>Pruefstand: wie viele Starts geendet haben.</summary>
     public int StartsBeendet;
 
+    /// <summary>bug-691: wie oft 308 (Aufsetzen) gespielt wurde — Pruefstand.</summary>
+    public int LandeklangGespielt;
+
     private void StartuhrTakt(Special a)
     {
         if (StartzustandAlt || a.Order != 4) return;

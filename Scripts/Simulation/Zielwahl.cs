@@ -239,7 +239,7 @@ public partial class MapEntityLayer : Node2D
     private int StaffelStarten(int flughafen, int marke, int ziel, int col, int row)
     {
         var maschinen = StaffelMaschinen(flughafen, marke);
-        var mitte = ZellMitte(col, row);
+        var mitte = FlugZellmitte(col, row);   // bug-696
         int n = 0;
         foreach (var a in maschinen)
         {
@@ -277,7 +277,7 @@ public partial class MapEntityLayer : Node2D
                 var home = GebaeudeMitSlot(a.HomeSlot);
                 if (home == null) return false;
                 a.Stored = false;
-                a.Pos = home.Pos;
+                a.Pos = FlugPunkt(home);   // bug-696
                 a.Col = home.Col; a.Row = home.Row;
                 a.Alt = ElevOf(a.Col, a.Row) * 15;      // air_takeoff @0x4260B9
                 a.Sollhoehe = FlughoeheMax;             // air_order @0x425E6B

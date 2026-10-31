@@ -30,6 +30,8 @@ public partial class MapViewer
             // ⭐ 30.10.2026, bug-686 — der Hubschrauberstrahl als Punktlinie (Luftschuss.cs).
             case "--heli-strahl-alt": MapEntityLayer.HeliStrahlAlt = true; return true;
             case "--helistrahl-check": _p4Hs = true; return true;
+            // bug-692: die −40 der Strahlhoehe (0x455048) — Stand davor (Luftschuss.cs).
+            case "--strahlhoehe-alt": MapEntityLayer.StrahlhoeheAlt = true; return true;
             // bug-687: Nullmodell der Gruppenangriff-Probe (Simulation/GruppenangriffProbe.cs).
             case "--gruppenangriff-probe-alt": MapEntityLayer.GruppenProbeAlt = true; return true;
         }

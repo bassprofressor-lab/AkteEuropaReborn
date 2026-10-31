@@ -169,7 +169,7 @@ public partial class MapEntityLayer
             PostAlleStarten(a.Owner);
             RingLeeren();
         }
-        SelectAt(a.Pos - new Vector2(0, AirHoehePx(a)));
+        SelectAt(AirRumpf(a));   // bug-696
         bool gewaehlt = _selAir >= 0 && _special[_selAir] == a;
         sb.AppendLine($"  angewaehlt: {(gewaehlt ? "JA" : "⚠ NEIN — SelectAt trifft das Flugzeug nicht")}");
         if (!gewaehlt)
@@ -188,11 +188,11 @@ public partial class MapEntityLayer
 
         // ein Ziel weit weg und QUER zur bisherigen Richtung, damit »es waere
         // sowieso dorthin geflogen« als Erklaerung ausscheidet
-        int zc = Mathf.Clamp((int)(a.Pos.X / TileW) + (a.Pos.X < _ox + _nav!.Width * TileW / 2 ? 20 : -20),
+        int zc = Mathf.Clamp((LageFlach ? a.Col : (int)(a.Pos.X / TileW)) + (a.Pos.X < _ox + _nav!.Width * TileW / 2 ? 20 : -20),   // bug-696
                              2, _nav.Width - 3);
-        int zr = Mathf.Clamp((int)(a.Pos.Y / TileH), 2, _nav.Height - 3);
+        int zr = Mathf.Clamp(LageFlach ? a.Row : (int)(a.Pos.Y / TileH), 2, _nav.Height - 3);   // bug-696
         _flugZiel = new Vector2I(zc, zr);
-        _flugVor = a.Pos.DistanceTo(CellCenterFor(_flugZiel.Value));
+        _flugVor = a.Pos.DistanceTo(FlugZelle(zc, zr));   // bug-696
         int n = PostAirMove(CellCenterFor(_flugZiel.Value));
         sb.AppendLine($"  Flugbefehl auf ({zc},{zr}), Entfernung {_flugVor / TileW:0.0} Felder: " +
                       $"{n} Satz/Saetze abgesetzt, Kampagne={UI.SkirmishSetup.CampaignMission}");
@@ -225,13 +225,13 @@ public partial class MapEntityLayer
         {
             Slot = slot, Kind = 1, Name = "Pruefstand", TypeName = "Pruefstand",
             Col = 10, Row = 10, Stored = false, Owner = me, HomeSlot = -1,
-            Pos = CellCenter(10, 10), Speed = 20,
+            Pos = FlugZelle(10, 10), Speed = 20,   // bug-696
             Hp = 100, HpMax = 100, Ammo = 10, AmmoMax = 10, Fuel = 999, FuelMax = 999,
             Attack = 10, Defence = 1, Sight = 10,
         };
         _special.Add(a);
 
-        SelectAt(a.Pos - new Vector2(0, AirHoehePx(a)));
+        SelectAt(AirRumpf(a));   // bug-696
         bool gewaehlt = _selAir >= 0 && _special[_selAir] == a;
         int vorher = AirOrdersGiven;
         int n = PostAirMove(CellCenterFor(new Vector2I(30, 10)));
@@ -261,7 +261,7 @@ public partial class MapEntityLayer
         if (a == null || _flugZiel == null || _nav == null)
         { sb.Append("  KEIN URTEIL: die Probe ist weg"); GD.Print(sb); return; }
 
-        float jetzt = a.Pos.DistanceTo(CellCenterFor(_flugZiel.Value));
+        float jetzt = a.Pos.DistanceTo(FlugZelle(_flugZiel.Value.X, _flugZiel.Value.Y));   // bug-696
         sb.AppendLine($"  nach weiteren {FlugWartetakte} Schritten:");
         sb.AppendLine($"    Entfernung zum befohlenen Ziel: {_flugVor / TileW:0.0} -> " +
                       $"{jetzt / TileW:0.0} Felder");

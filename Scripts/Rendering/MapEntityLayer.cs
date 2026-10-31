@@ -87,6 +87,14 @@ public partial class MapEntityLayer : Node2D
         /// UNSERE Zutat: das Original hat dafuer einen eigenen Zaehler, den wir
         /// nicht gelesen haben.</summary>
         public float FireUntil;
+        /// <summary>bug-689: der Muendungsfeuer-ZAEHLER der Einheit, Satzfeld <b>+0x42</b>
+        /// (C <c>0x6E270A</c>). 0 = kein Feuer; sonst zeigt der Zeichner Bild
+        /// <c>Zaehler − 1</c> und zaehlt hoch (Simulation/Muendungsfeuer.cs). Reiner
+        /// ZEICHNERZUSTAND — geht in keine Pruefsumme und in keinen Spielstand.</summary>
+        public int Muendungsbild;
+        /// <summary>bug-689: Uhr bis zum naechsten Zaehlerschritt (UNSERE SETZUNG, siehe
+        /// <c>MuendungsSchritt</c>).</summary>
+        public float MuendungsUhr;
         public int Facing;         // 0-7, from the entity heading byte (+0x08)
         public int Weapon;         // weapon component id (record +0x0c); 0 = none
 
@@ -357,6 +365,29 @@ public partial class MapEntityLayer : Node2D
         /// lesen dasselbe Byte +0x0D, aber als Fahne bzw. als Bildvariante.
         /// </summary>
         public int Comp0D, Comp0F;
+
+        /// <summary>⭐ 30.10.2026, bug-710 — <b>+0x40, das SUCHZIEL des Stahlsuchers</b> (Fahrwerk 173):
+        /// ein Satzplatz oder 0xFFFF = keins. Die drei Erzeuger setzen 0xFFFF (0x4B1D8B, 0x4B393E,
+        /// 0x4C118A) — darum die Vorgabe; der Kartenlader nimmt den Wert ROH aus dem Satz (0x41D391,
+        /// auf NET07 0 = Einheit 0). Simulation/Magnetbombe.cs.</summary>
+        public int SuchZiel = 0xFFFF;
+
+        /// <summary>bug-712: der Satz wurde frei (+0x09 := 0xFF, Membrandroid 0x4126B3) — tot,
+        /// aber ohne Todesweg und ohne Leiche. Simulation/Magnetbombe.cs.</summary>
+        public bool OhneLeiche;
+
+        /// <summary>⭐ 30.10.2026, bug-719 — <b>+0x40, der ZWILLING des Teleporters</b> (Teil 65):
+        /// der Satzplatz des Gegenstuecks, −1 = keiner. Gesetzt nur vom Aufsteller 0x4B1840
+        /// (C 0x4B1DA7 / F 0x4B16E3). UNSERE SETZUNG: ein eigenes Feld statt des geteilten
+        /// Satzworts +0x40. Simulation/Teleporter.cs.</summary>
+        public int Zwilling = -1;
+
+        /// <summary>⭐ 30.10.2026, bug-720/bug-721 — <b>+0x40 an/aus</b> der Spiegelung
+        /// (Ausruestung 0x53, <see cref="SpiegelAn"/>) und der Illusion (0x54,
+        /// <see cref="IllusionAn"/>), dazu <b>+0x4A/+0x4B</b> (Bildpunktversatz des Spiegels bzw.
+        /// Rumpf- und Aufsatzbild der Tarnung). UNSERE SETZUNG: eigene Felder statt des geteilten
+        /// Satzworts +0x40. Reine Zeichnerdaten. Simulation/Illusion.cs.</summary>
+        public int SpiegelAn, IllusionAn, Bild4A, Bild4B;
 
         /// <summary><b>Der WAFFENUNTERTYP des Fussvolks, Satz +0x0B</b> — roh,
         /// ohne Ableitung (12.09.2026, bug-219).
@@ -849,6 +880,18 @@ public partial class MapEntityLayer : Node2D
         /// to 2 now reads as what it plainly is: a unit slowed when struck.
         /// </summary>
         public int Speed;
+
+        /// <summary>⭐ bug-697 — in einer FALLE gefangen: das Original setzt
+        /// <c>word[+0x20] := 0</c> (C 0x421872). Bei uns heisst Tempo 0 sonst »kein
+        /// eigener Wert«; mit dieser Marke gibt <c>RawSpeedOf</c> eine echte 0.
+        /// Simulation/Fallen.cs.</summary>
+        public bool Gefangen;
+
+        /// <summary>⭐ bug-698 — der LEGEAUFTRAG des Minen-/Fallenlegers, Befehl 22:
+        /// <c>word[+0x40] = (Zeile&lt;&lt;8)|Spalte</c> (hier LegeX/LegeY),
+        /// <c>+0x48</c> Breite, <c>+0x49</c> Hoehe (C 0x4C3412..0x4C341F).
+        /// <c>LegeB == 0</c> heisst: kein Auftrag. Simulation/Legeauftrag.cs.</summary>
+        public int LegeX, LegeY, LegeB, LegeH;
 
         // ---- combat state (Step B) ----
         public int AimFacing = -1;       // turret facing (-1 = follow the hull)
@@ -2698,6 +2741,8 @@ public partial class MapEntityLayer : Node2D
             foreach (var m in _minen)
                 if (m.Aktiv && DecktAuf(m.Player, betrachter))
                     yield return (m.Col, m.Row, 1, 0);
+        // ⭐ bug-697 — und die FALLEN, gleich danach (C 0x420945..0x4209A7), Radius 0.
+        foreach (var w in FallenAufdecker(betrachter)) yield return w;
 
         // ⭐ 04.10.2026 (bug-434) — UND DIE LICHTQUELLEN (Tafel 0x6786A8, @0x420A14),
         // nach allen anderen Oeffnern und vor dem Antiradar. Nur fuer den
@@ -2997,7 +3042,8 @@ public partial class MapEntityLayer : Node2D
     /// The per-chassis figure from the stats table stands in where a unit
     /// carries none.</summary>
     private static float SpeedOf(Entity e)
-        => e.Speed > 0 ? e.Speed * PxPerSpeedUnit : SpeedOf(e.UnitType);
+        => e.Gefangen && e.Speed <= 0 ? 0f                     // bug-697, Simulation/Fallen.cs
+         : e.Speed > 0 ? e.Speed * PxPerSpeedUnit : SpeedOf(e.UnitType);
 
     /// <summary>Dieselbe Geschwindigkeit ROH, so wie sie in Satzfeld
     /// <b>+0x20</b> steht — das ist die Zahl, die das Original je Takt auf
@@ -3010,6 +3056,9 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private static int RawSpeedOf(Entity e)
     {
+        // ⭐ bug-697 — die Falle (C 0x421872): Tempo 0 ist hier eine echte 0, die
+        // Einheit kommt nicht mehr voran. Simulation/Fallen.cs.
+        if (e.Gefangen && e.Speed <= 0) return 0;
         if (e.Speed > 0) return e.Speed;
         if (_speeds.TryGetValue(e.UnitType, out int raw) && raw > 0) return raw;
         return Mathf.Max(1, Mathf.RoundToInt(MoveSpeed / PxPerSpeedUnit));
@@ -3455,6 +3504,7 @@ public partial class MapEntityLayer : Node2D
         _originY = GetI(meta, "origin_y");
         if (!meta.ContainsKey("tileset")) return;
         int ts = GetI(meta, "tileset");
+        _gasTileset = ts;              // ⭐ bug-723: NN.PAL/NN.CWG fuer das Gasbild, Rendering/GasBild.cs
         NebelmaskenLaden(ts);          // ⭐ 04.10.2026 (bug-427), Rendering/NebelKante.cs
         string path = Core.Content.Path($"Buildings/tileset_{ts:00}.json");
         if (!FileAccess.FileExists(path)) return;
@@ -3603,6 +3653,9 @@ public partial class MapEntityLayer : Node2D
         // Original legt ihn beim ERZEUGEN an (0x436190); eine Karteneinheit ist
         // beim Laden schon da. Siehe Simulation/Transportroute.cs.
         RoutenAufbauen();
+        // ⭐ bug-709 — eine .DM-Karte bringt ihr Minen- und Fallenfeld mit (sec84/sec85).
+        // Simulation/MinenFallenSpielstand.cs, Gegenschalter --dm-minen-alt.
+        DmMinenLaden(name);
 
         QueueRedraw();
         UpdatePanel();
@@ -4282,6 +4335,10 @@ public partial class MapEntityLayer : Node2D
                     // je Einheit, und +0x0E ist NICHT darunter.
                     Comp0D = haveRaw ? HexByte(raw, 0x0d) : 0,
                     Comp0F = haveRaw ? HexByte(raw, 0x0f) : 0,
+                    // ⭐ bug-710: +0x40 ROH (der Lader 0x41D391 liest die Tafel als Block, der
+                    // Nachlauf 0x41F318 setzt nichts zurueck). Nur der Stahlsucher liest es.
+                    SuchZiel = haveRaw && HexByte(raw, 0x0f) == StahlsucherFahrwerk
+                        ? (SeekerZiel0Leer && Hex16(raw, 0x40) == 0 ? 0xFFFF : Hex16(raw, 0x40)) : 0xFFFF,
                     // +0x0b ist der WAFFENUNTERTYP des Fussvolks, an dem die
                     // Menuezusammenstellung @0x441810 haengt — siehe Entity.Comp0B.
                     Comp0B = haveRaw ? HexByte(raw, 0x0b) : -1,
@@ -4849,7 +4906,9 @@ public partial class MapEntityLayer : Node2D
                     Order = GetI(sp2, "order"), Order2 = GetI(sp2, "order2"),
                     Footprint = CellRect(ox, oy, col, row, el),
                 };
-                sp.Pos = sp.Footprint.Position + new Vector2(TileW / 2f, TileH / 2f);
+                // bug-696: flach aus Zelle und Feinlage (0x42E340/0x42B8A6), alt angehoben
+                sp.Pos = LageFlach ? FlugLageAusSatz(ox, oy, col, row, sp.FineX, sp.FineY)
+                                   : sp.Footprint.Position + new Vector2(TileW / 2f, TileH / 2f);
                 LoadAircraft();
                 if (_aircraft != null && _aircraft.TryGetValue(sp.Payload, out var tp))
                     sp.TypeName = tp;
@@ -4893,7 +4952,7 @@ public partial class MapEntityLayer : Node2D
                 var a = _special.Find(x => x.Slot == s);
                 if (a == null) continue;
                 a.Owner = e.Owner; a.HomeSlot = e.Slot;
-                a.Pos = e.Pos; a.Col = e.Col; a.Row = e.Row; a.Stored = true;
+                a.Pos = FlugPunkt(e); a.Col = e.Col; a.Row = e.Row; a.Stored = true; // bug-696
             }
         }
         // an airborne aircraft has no hangar entry — give it the nearest airport
@@ -13167,8 +13226,14 @@ public partial class MapEntityLayer : Node2D
         // Waffenbauteile tragen aktive Punkte, und zwar nur fuer die Bilder
         // 0,1,2,6,7 je Neigungsblock — die nach NORDEN zeigenden Richtungen
         // 3,4,5 haben keinen, dort liegt die Muendung hinter dem Turm.
-        // Solange dieser Satz nicht durch den Import laeuft, steht hier eine
-        // Laenge und keine Tabelle, und das ist so gekennzeichnet.
+        // ⚠⚠ bug-689 (30.10.2026): DIESE DEUTUNG WAR VERKEHRT HERUM. Die Bilder
+        // 3,4,5 tragen sehr wohl Punkte, und zwar mit FAHNE 0 — und Fahne 0 wird
+        // VOR dem Turm gezeichnet (C 0x42A188 `test al,al / jne`), liegt also
+        // unter ihm, hinter dem Turm. Fahne 1 (Bilder 0,1,2,6,7) kommt NACH dem
+        // Turm (C 0x42A686 `cmp al,1`), Fahne 2 ist leer. Gezaehlt an der Datei
+        // (F, 28 800 B): 413 / 756 / 8 431. Gebaut ist das jetzt in
+        // Simulation/Muendungsfeuer.cs; die Laenge hier gilt nur noch fuer
+        // --muendungsfeuer-alt und den Geschossstart.
         //
         // ACHTUNG, unveraendert und belegt: INFANTERIE bekommt KEIN
         // zusaetzliches Muendungsfeuer — ihre Schusspose (Bilder 9 und 10)
@@ -13203,12 +13268,12 @@ public partial class MapEntityLayer : Node2D
         // ACHTUNG, unveraendert und belegt: INFANTERIE bekommt ohnehin keines —
         // ihre Schusspose traegt den roten Blitz schon im Sprite.
         int mzf = MuendungsFolge(shooter.Weapon);
+        // bug-689: im Original setzt der Schuss nur den Zaehler +0x42 := 1
+        // (0x40C5AC -> 0x436420), gezeichnet wird am Turmbild aus SHOOT.CWT —
+        // siehe Simulation/Muendungsfeuer.cs. Der Weltfest-Effekt bleibt fuer
+        // --muendungsfeuer-alt und fuer alles, was nicht am Turm haengt.
         if (shooter.Weapon < InfantryWeaponFirst && mzf >= 0)
-            _effects.Add(new Effect
-            {
-                Pos = ShotOrigin(shooter) + MuendungsRichtung(shooter, dir) * MuzzleReach,
-                Kind = $"mzf{mzf}", FrameTime = 0.035f,
-            });
+            MuendungsfeuerAusloesen(shooter, dir, mzf);   // bug-689
 
         // the weapon's own report, out of the game's own table: a component
         // names a sound class at stats +0x1c, the class picks a row of the
@@ -13771,6 +13836,7 @@ public partial class MapEntityLayer : Node2D
         victim.Reserved = null;
         if (victim.Infantry >= 0)
         {
+            TodDesMembrandroiden(vi, victim);   // bug-712: @0x40B82E, Simulation/Magnetbombe.cs
             // A foot soldier has its own falling-over frames (blocks 12..14 of
             // its set) and leaves a body. NOTHING else is drawn on top.
             //
@@ -13870,6 +13936,8 @@ public partial class MapEntityLayer : Node2D
         {
             TodDerMittelstreckenrakete(victim);
             TodDesGaswerfers(victim);
+            TodDerMagnetbombe(vi, victim);   // bug-711: @0x40B7DA ZBRAN 19, Simulation/Magnetbombe.cs
+            TodDesTeleporters(vi, victim);   // bug-719: @0x40B7FF +0x0E 0x41, der Zwilling stirbt mit (Simulation/Teleporter.cs)
         }
         // ⚠⚠ 19.08.2026 — EIN SCHIFF HINTERLAESST KEIN WRACK.
         //
@@ -15680,6 +15748,7 @@ public partial class MapEntityLayer : Node2D
                 // licht: die Lichtquelle 0x4222C0 der Skripte (bug-434),
                 // Simulation/Todeslicht.cs.
                 _mscript.Licht = SkriptLicht;
+                _mscript.AddGas = SkriptGas;                    // bug-708, Simulation/Gaswolke.cs
                 _mscript.Kopf = SkriptKopf;                     // bug-436, Simulation/Lebenspruefung.cs
                 _mscript.KopfWert = KopfWert;
                 // ⭐ 25.08.2026 - die zwei Haken zu den Wirkungsarten, die aus dem
@@ -15784,6 +15853,12 @@ public partial class MapEntityLayer : Node2D
                 // ohne diese Zeile lag in Kampagne 15 keine einzige.
                 // Simulation/MinenRaeumen.cs, Gegenschalter --missionsminen-aus.
                 MissionsMinenLegen(_mscript.Minen);
+                // ⭐ bug-697 — und die FALLEN des Aufbaus (lay_trap C 0x421A40, M20 4, M25 6),
+                // im Original direkt nach den Minen. Simulation/Fallen.cs, --fallen-aus.
+                MissionsFallenLegen(_mscript.Fallen);
+                // ⭐ bug-708 — und die GASWOLKEN des Aufbaus (add_gas C 0x439410, M20 6, M21 12,
+                // M25 17), im Original direkt nach den Fallen. Simulation/Gaswolke.cs, --gaswolke-aus.
+                MissionsGasLegen(_mscript.Gas);
                 // ⭐ 02.10.2026 (bug-384) — die Betriebsart des Setup-Blocks:
                 // erst der Vorspann (alle acht := 2, @0x48843F), dann die Rufe
                 // der Mission. Simulation/SkirmishAiSectors.cs, --ki-betriebsart5-aus.
@@ -19122,6 +19197,7 @@ public partial class MapEntityLayer : Node2D
             NoteEvent(e, $"{d.Name} gebaut und ausgesandt");
         }
         else NoteEvent(e, $"{d.Name} ausgesandt");
+        TeleporterZwillingBauen(e, designIdx, u, d);   // bug-719: 0x4B1840 @0x4B1DA7, Simulation/Teleporter.cs
         return u;
     }
 
@@ -23103,7 +23179,7 @@ public partial class MapEntityLayer : Node2D
             if (a == null) { e.Hangar.RemoveAt(k); _order = "der Platz war leer"; return; }
             e.Hangar.RemoveAt(k);
             a.Stored = false;
-            a.Pos = e.Pos;
+            a.Pos = FlugPunkt(e); // bug-696
             a.Col = e.Col + 5; a.Row = e.Row + 2;   // wie spawn_aircraft, @0x426067
             a.Target = -1; a.Goal = null;
             _order = $"{(a.Name.Length > 0 ? a.Name : AirKindName(a.Kind))} gestartet " +
@@ -24991,7 +25067,7 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = slot, Kind = d.Kind, Name = d.Name, TypeName = d.Name,
             Col = depot.Col, Row = depot.Row, Stored = false, Owner = depot.Owner,
-            HomeSlot = depot.Slot, Pos = depot.Pos, Footprint = depot.Footprint,
+            HomeSlot = depot.Slot, Pos = FlugPunkt(depot), Footprint = depot.Footprint, // bug-696
             Speed = d.Speed, Hp = d.Hp, HpMax = d.Hp,
             Ammo = d.Ammo, AmmoMax = d.Ammo, Fuel = d.Fuel, FuelMax = d.Fuel,
             Payload = d.Payload, Airframe = d.Airframe,
@@ -25066,7 +25142,7 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = slot, Kind = d.Kind, Name = d.Name, TypeName = d.Name,
             Col = e.Col, Row = e.Row, Stored = true, Owner = e.Owner,
-            HomeSlot = e.Slot, Pos = e.Pos, Footprint = e.Footprint,
+            HomeSlot = e.Slot, Pos = FlugPunkt(e), Footprint = e.Footprint, // bug-696
             Speed = d.Speed, Hp = d.Hp, HpMax = d.Hp,
             StufeUnten = SpUntenVorlage(d.Kind),   // bug-598 C, spawn_aircraft @0x4B15B6
             Ammo = d.Ammo, AmmoMax = d.Ammo, Fuel = d.Fuel, FuelMax = d.Fuel,
@@ -26355,7 +26431,7 @@ public partial class MapEntityLayer : Node2D
             // mehr im Depot.«, VOR dem Bezahlen), dann sofort ein Satz in der Liste.
             if (!BauzeitAlt)
             {
-                if (GarageBelegt(e) >= DepotSlots)
+                if (GarageBelegt(e) + TeleporterDepotBedarf(chosen) > DepotSlots)   // bug-724: Teleporter braucht 2 (0x44A692), Simulation/Teleporter.cs
                 {
                     MeldungBasis(DepotFullWord);
                     _order = DepotFullWord;
@@ -31835,6 +31911,7 @@ public partial class MapEntityLayer : Node2D
             if (SpurenUeberEinheiten) SpurenZeichnen(r);
             // (2b') die Minen, Korb Zeile + 2 (0x42F2B0). MinenBild.cs.
             MinenZeichnen(r);
+            FallenZeichnen(r);          // bug-697: Zeichenliste 0x42F4A0, Art 16 — Fallen.cs
             // (2c) die Raumfrachter, ebenfalls Zeile + 2 (0x42F95F). Frachter.cs.
             FrachterZeichnen(r);
             // (3) die Gebäude, deren Fach in dieser Zeile liegt.
@@ -31985,7 +32062,7 @@ public partial class MapEntityLayer : Node2D
             // denselben Platz, den die Wracks schon haben.
             if (e.Dead)
             {
-                if (e.Infantry >= 0) _leichenDraw.Add(i);   // Wracks macht DrawEffects
+                if (e.Infantry >= 0 && !e.OhneLeiche) _leichenDraw.Add(i);   // Wracks macht DrawEffects; bug-712 ohne Leiche
                 // ⭐ 04.10.2026 (bug-426): der sterbende Rumpf bleibt im
                 // Zeilendurchgang, bis das Wrack kommt (Simulation/Truemmer.cs).
                 else if (e.Sterbend && !NoUnitOcclusion) _unitDraw.Add(i);
@@ -33354,7 +33431,7 @@ public partial class MapEntityLayer : Node2D
         // ⚠ 30.08.2026 — der Deckel zählt BEIDE: die produzierten Stücke und
         // die hereingefahrenen Sätze. Im Original ist es eine einzige Liste von
         // sechs Einheitennummern, also gibt es auch nur einen Deckel.
-        if (GarageBelegt(e) >= DepotSlots)
+        if (GarageBelegt(e) + TeleporterDepotBedarf(_designs[e.BuildIndex % _designs.Count]) > DepotSlots)   // bug-724: auch der Aufsteller 0x4B18ED prueft beim Teleporter zwei Plaetze
         {
             // Voll: die Fertigstellung WARTET, sie verfällt nicht. Bezahlt ist
             // längst, und eine verfallene Bestellung wäre ein echter Verlust —
@@ -33490,6 +33567,7 @@ public partial class MapEntityLayer : Node2D
             _order = $"{d.Name} kann nicht heraus — kein freier Platz an der Tuer";
             return false;
         }
+        int zwillingsEntwurf = e.Depot[k];   // bug-725: fuer den Zwilling (Simulation/Teleporter.cs)
         e.Depot.RemoveAt(k);
         NoteEvent(e, $"{d.Name} ausgesandt");
 
@@ -33591,6 +33669,7 @@ public partial class MapEntityLayer : Node2D
         // SetOccupant stehen: die Wegsuche fragt das Belegungsgitter, und eine
         // Einheit, die noch nicht darin steht, plant durch sich selbst hindurch.
         if (!NoStepOutOfDoor) StepOutOfDoor(_entities.Count - 1, u, e);
+        TeleporterZwillingAussenden(e, zwillingsEntwurf, u, d, nurTuer);   // bug-725: 0x4B1840 @0x4B1DA7, Simulation/Teleporter.cs
 
         // ⚠ Das Nachrücken der Warteschlange steht NICHT mehr hier, sondern in
         // NextFromQueue an der FERTIGSTELLUNG. Es hängt am Bauen, nicht am
@@ -34428,7 +34507,7 @@ public partial class MapEntityLayer : Node2D
                 if (s.Dead || s.Stored) continue;
                 if (pass < 1 && UI.PortraitBank.PictureOfAircraft(s.Kind) <= 0) continue;
                 tried++;
-                SelectAt(s.Pos - new Vector2(0, AirHoehePx(s)));
+                SelectAt(AirRumpf(s));   // bug-696
                 if (_selAir != i) continue;              // etwas anderes lag davor
                 pick = i;
                 break;
@@ -34446,7 +34525,7 @@ public partial class MapEntityLayer : Node2D
                  $"({a.KindName}) P{a.Owner} {(a.Stored ? "im Hangar" : "fliegt")} " +
                  $"-> Bild {(p.ChassisPic > 0 ? "p" + p.ChassisPic.ToString("00") : "keines")}" +
                  (p.Why.Length > 0 ? $" ({p.Why})" : ""));
-        return a.Pos - new Vector2(0, AirHoehePx(a));
+        return AirRumpf(a);   // bug-696
     }
 
     /// <summary>
@@ -35895,7 +35974,12 @@ public partial class MapEntityLayer : Node2D
             // der Einheitentakt — genau der, in dem das Original die beiden
             // Weichen hat (@0x40730B, @0x40731B). Der Prüfstand hat es gezeigt
             // ("nebenan +0 TP"), gelesen hätte ich es nicht.
+            // ⭐ 30.10.2026, bug-710..713 — Seeker @0x4072E1 und Antimagnetiker @0x4072FB VOR den
+            // Reparaturen, Naehezuender @0x40733E und Membrandroid @0x40736A danach.
+            // Simulation/Magnetbombe.cs, Gegenschalter --magnetbombe-alt.
+            MagnetVorTakt(i, e);                                    // bug-710, bug-713
             UnitRepairTick(i, e, dt);
+            if (MagnetNachTakt(i, e)) continue;                     // bug-711, bug-712
 
             // ⭐ 12.09.2026 — UKOL 20, der Arbeitstakt des Pioniers
             // (Simulation/Landungsbruecke.cs, bug-219). Er steht hier und nicht
@@ -36356,7 +36440,9 @@ public partial class MapEntityLayer : Node2D
                 // steht der Ruf hinter Geduld und Sprit; hier davor, weil der
                 // Spritzweig unten die Ankunftsbehandlung verlaesst — die zwei
                 // beruehren sich nicht. Simulation/MinenRaeumen.cs, --minenraeumen-aus.
-                MinenRaeumerAnkunft(e);
+                // bug-707: true = der Wissenschaftler (Teil 0xC1) haelt vor Mine/Falle — raus aus der
+                // Ankunft wie 0x409FF6 (kein Sprit, kein Wegende). Simulation/MinenRaeumen.cs.
+                if (MinenRaeumerAnkunft(e)) { e.Path = null; e.StepCost = 0; e.Progress = 0; continue; }
                 // ⭐⭐ 25.08.2026 — UND DER SPRIT. Der Kommentar darueber nennt
                 // @0x407aa7 seit jeher als die Stelle »unmittelbar nach« dem
                 // Geduldszaehler — gebaut war sie nie. Bodenfahrzeuge fuhren
@@ -36517,6 +36603,7 @@ public partial class MapEntityLayer : Node2D
         RetryPath();
         UpdateProjectiles(dt);
         UpdateEffects(dt);
+        MuendungsfeuerTakt(dt);   // bug-689: Zaehler +0x42 weiter, reiner Zeichnerzustand
 
         // ---- die Stationen NACH der Bewegung ---------------------------------
         //
@@ -38934,7 +39021,7 @@ public partial class MapEntityLayer : Node2D
         // Damit ist `Pos` fuer den Treffer gleichgueltig, und der Riss zwischen
         // BodyCenter und BodyCenterAt kann hier nichts mehr anrichten.
         var pz = GebaeudepickRechteck ? null : CellAt(p);
-        if (!PickVordersterAlt) return PickWieOriginal(p, pz);
+        if (!PickVordersterAlt) return SpiegelPick(p, PickWieOriginal(p, pz));   // bug-721: 0x431D3D, Simulation/Illusion.cs
         int best = -1, bestRow = int.MinValue;
         for (int i = 0; i < _entities.Count; i++)
         {
@@ -39493,8 +39580,8 @@ public partial class MapEntityLayer : Node2D
             // anwählen, auch das des Gegners; mit dem neuen Flugbefehl wäre das
             // dasselbe Loch, das `Commandable` für Einheiten längst schliesst.
             if (s.Owner != ViewPlayer) continue;
-            if (!AirRect(s).HasPoint(p)) continue;
-            float d = p.DistanceTo(s.Pos - new Vector2(0, AirHoehePx(s)));
+            if (!AirKlickTrifft(s, p)) continue;   // bug-717: Kasten wie 0x431F7F
+            float d = p.DistanceTo(AirRumpf(s));   // bug-696
             if (d < bd) { bd = d; best = i; }
         }
         return best;
@@ -39502,7 +39589,7 @@ public partial class MapEntityLayer : Node2D
 
     private Rect2 AirRect(Special s)
     {
-        var at = s.Pos - new Vector2(0, AirHoehePx(s));
+        var at = AirRumpf(s);   // bug-696: am Rumpf, flache Lage − alt
         return new Rect2(at - new Vector2(TileW / 2f, TileH / 2f),
                          new Vector2(TileW, TileH));
     }
@@ -40410,7 +40497,11 @@ public partial class MapEntityLayer : Node2D
         if (FlughoeheBildAlt) return AirShadowDrop;
         Vector2 vorher = s.HubLetztePos;
         float hub;
-        if (FlughuepfenAlt) { hub = ElevOf(s.Col, s.Row) * 15f; s.HubLetztePos = s.Pos; }
+        // bug-696: flache Lage (0x42E340) — der Rumpf haengt an Lage − alt, NICHT am
+        // Gelaende; sein Versatz gegen die Lage hat also keinen Hub (0). Zurueck kommt
+        // der Abstand Rumpf–Schatten, alt − Bodenanhebung (Fluglage.cs).
+        if (LageFlach) { hub = 0f; s.HubLetztePos = s.Pos; }
+        else if (FlughuepfenAlt) { hub = ElevOf(s.Col, s.Row) * 15f; s.HubLetztePos = s.Pos; }
         else { AirHubNachfuehren(s); hub = s.HubPx; }
         // Pruefzeile: bei gleicher Alt und kleinem Schritt springt das Bild nicht.
         if (s.Alt == s.HuepfAlt && s.Pos != vorher && s.Pos.DistanceTo(vorher) < TileW
@@ -40420,6 +40511,7 @@ public partial class MapEntityLayer : Node2D
             if (Mathf.Abs(hub - s.HuepfHub) >= 5f) FlugHuepfer++;
         }
         s.HuepfAlt = s.Alt; s.HuepfHub = hub;
+        if (LageFlach) return Mathf.Max(0f, s.Alt - AirBodenHub(s));   // bug-696
         return Mathf.Max(0f, s.Alt - hub);
     }
 
@@ -40455,6 +40547,8 @@ public partial class MapEntityLayer : Node2D
     /// dem Ziel stimmt der Wert genau. ⚠ UNSERE SETZUNG bis zum richtigen Weg
     /// (Lage flach fuehren, wie das Original; berichte/kayelgee-runde5-heli.md
     /// Vorschlag A, dafuer 0x42E340 lesen).</para>
+    /// <para>⭐ bug-696 (30.10.2026): der richtige Weg ist gebaut (Simulation/Fluglage.cs);
+    /// diese Schaetzung laeuft nur noch mit <c>--fluglage-alt</c>.</para>
     /// </summary>
     private void AirHubNachfuehren(Special s)
     {
@@ -40496,7 +40590,7 @@ public partial class MapEntityLayer : Node2D
         {
             if (!e.IsBuilding || e.BType != 9 || e.Dead || e.Owner is < 0 or > 7) continue;
             if (a.Owner is >= 0 and <= 7 && !Allied(a.Owner, e.Owner)) continue;
-            float dd = a.Pos.DistanceTo(e.Pos);
+            float dd = a.Pos.DistanceTo(FlugPunkt(e)); // bug-696
             if (dd < bd) { bd = dd; best = e; }
         }
         return best;
@@ -40554,7 +40648,7 @@ public partial class MapEntityLayer : Node2D
         foreach (var e in _entities)
         {
             if (!e.IsBuilding || e.BType != 14 || e.Dead) continue;
-            float dd = a.Pos.DistanceTo(e.Pos);
+            float dd = a.Pos.DistanceTo(FlugPunkt(e)); // bug-696
             if (dd < bd) { bd = dd; best = e; }
         }
         if (best != null) return best;
@@ -40592,7 +40686,7 @@ public partial class MapEntityLayer : Node2D
         {
             if (!e.IsBuilding || e.Dead || e.Owner != a.Owner) continue;
             if (e.BType != 9 && e.BType != 1) continue;
-            float dd = a.Pos.DistanceTo(e.Pos);
+            float dd = a.Pos.DistanceTo(FlugPunkt(e)); // bug-696
             if (dd < bd) { bd = dd; best = e; }
         }
         return best;
@@ -40613,8 +40707,8 @@ public partial class MapEntityLayer : Node2D
             depot ??= NearestDepot(a);
             if (depot == null) { a.Goal = null; a.DepotSlot = -1; return; }
             a.DepotSlot = depot.Slot;
-            a.Goal = depot.Pos;
-            if (a.Pos.DistanceTo(depot.Pos) < reach)
+            a.Goal = FlugPunkt(depot); // bug-696
+            if (a.Pos.DistanceTo(a.Goal.Value) < reach)
             {
                 a.Cargo = SupplyCargoFull;
                 a.DepotSlot = -1;
@@ -40677,7 +40771,7 @@ public partial class MapEntityLayer : Node2D
         if (a.Customer < 0) { AirHeadHome(a); return; }
 
         var c = _entities[a.Customer];
-        a.Goal = c.Pos;
+        a.Goal = FlugPunkt(c); // bug-696
         // ⭐ 06.10.2026, bug-465 (KayelGee R4, Meldung 17): »Nachschubhelis fliegen
         // im Original auf hoeherer Hoehe zu ihrem Ziel, bevor sie kurz vor dem Ziel
         // absenken, und wenn andere Ziele in der Naehe sind, bleiben sie unten«.
@@ -40686,7 +40780,7 @@ public partial class MapEntityLayer : Node2D
         // darunter ±1 je Takt auf die Soll — daraus folgt sein Satz. Bei uns blieb
         // die Soll auf 135. --nachschubhoehe-alt.
         if (!NachschubhoeheAlt) a.Sollhoehe = (ElevOf(c.Col, c.Row) + 2) * 15;
-        if (a.Pos.DistanceTo(c.Pos) >= reach) return;
+        if (a.Pos.DistanceTo(FlugPunkt(c)) >= reach) return; // bug-696
         // Abgabe erst auf der Soll (@0x42489C/0x424AED). ⚠ UNSERE SETZUNG: das
         // Original verlangt dazu Stufe 0, und die erreicht es nur, weil die Einheit
         // auf »halt still« (+0x44) wartet — das haben wir nicht; mit der
@@ -40867,7 +40961,8 @@ public partial class MapEntityLayer : Node2D
         if (FlughoeheAlt) return;
 
         // Abstand zum Flugziel in ZELLEN, Schwelle 6 (@0x425002, float 6.0)
-        float zellen = a.Goal is { } g ? a.Pos.DistanceTo(g) / TileW : 0f;
+        // bug-718: in Zellen wie das Original (FlugZellenZumZiel, Fluglage.cs)
+        float zellen = a.Goal is { } ? FlugZellenZumZiel(a) : 0f;
 
         if (zellen > FlughoeheSteigAb)
         {
@@ -40951,7 +41046,7 @@ public partial class MapEntityLayer : Node2D
                     // ⭐ 21.08.2026 gekeimt: welches Gebäude der Heli ansteuert,
                     // ist eine Ortsentscheidung und damit simulationsrelevant.
                     home = mine[Simulation.Determinism.Roll(mine.Count)];
-                    a.HomePoint = home.Pos + new Vector2(
+                    a.HomePoint = FlugPunkt(home) + new Vector2(   // bug-696
                         Simulation.Determinism.Roll(6) * TileW,
                         Simulation.Determinism.Roll(6) * TileH);
                 }
@@ -40990,7 +41085,7 @@ public partial class MapEntityLayer : Node2D
                     {
                         var neu = mine[Simulation.Determinism.Roll(mine.Count)];
                         a.HomeSlot = neu.Slot;
-                        a.HomePoint = neu.Pos + new Vector2(
+                        a.HomePoint = FlugPunkt(neu) + new Vector2(   // bug-696
                             Simulation.Determinism.Roll(6) * TileW,
                             Simulation.Determinism.Roll(6) * TileH);
                         a.Goal = a.HomePoint;
@@ -41009,7 +41104,7 @@ public partial class MapEntityLayer : Node2D
                 if (a.HomePoint is not Vector2 zp || a.Pos.DistanceTo(zp) < TileW * 0.6f)
                 {
                     int zc = Simulation.Determinism.Roll(_nav.Width), zr = Simulation.Determinism.Roll(_nav.Height);
-                    a.HomePoint = CellCenter(zc, zr);
+                    a.HomePoint = FlugZelle(zc, zr); // bug-696
                     HeliGehuepft++;
                 }
                 a.Goal = a.HomePoint;
@@ -41022,8 +41117,8 @@ public partial class MapEntityLayer : Node2D
         home ??= NearestAirfield(a);
         if (home == null) { a.Goal = null; return false; }   // no field left
         a.HomeSlot = home.Slot;
-        a.Goal = home.Pos;
-        if (a.Pos.DistanceTo(home.Pos) >= TileW * 0.6f) return false;
+        a.Goal = FlugPunkt(home); // bug-696
+        if (a.Pos.DistanceTo(a.Goal.Value) >= TileW * 0.6f) return false;
         a.Goal = null; a.Col = home.Col; a.Row = home.Row;
         // ⚠ EIN NACHSCHUBHELI WIRD NICHT EINGELAGERT. Das steht schon bei
         // SpawnSupplyHeli und ist gelesen: »Art 13 und 14 parken nie —
@@ -41034,6 +41129,17 @@ public partial class MapEntityLayer : Node2D
         // er beheben sollte.
         if (a.IsSupply) return false;
         a.Stored = true;
+        // bug-691 (30.10.2026): 308 beim Aufsetzen eines FLUGZEUGS (Typ < 10), C 0x42439F /
+        // F 0x423565, Modus 1 am Flieger — siehe GameSounds.FlugzeugAufsetzen. ⚠ UNSERE
+        // SETZUNG: wir fuehren m_uk 3/4 (Aufsetzen auf Gebaeude +2/+2, Rollen nach +4/+2)
+        // nicht; der Klang kommt beim Einlagern, also im Original ein Rollweg spaeter
+        // (dort folgt »air Db« erst nach der Ankunft auf +4/+2). Helis bleiben still
+        // (309 = leerer Platz). Klang ohne Wurf, kein Spielzustand. --landeklang-aus.
+        if (a.Kind < 10 && !Audio.GameSounds.LandeklangAus)
+        {
+            Audio.GameSounds.PlayAt(Audio.GameSounds.FlugzeugAufsetzen, a.Col, a.Row);
+            LandeklangGespielt++;
+        }
 
         // ⚠⚠ 20.08.2026 — HIER FEHLTE DER EINTRAG IN DEN HANGAR, und das war
         // ein Einwegventil.
@@ -41223,7 +41329,7 @@ public partial class MapEntityLayer : Node2D
                     if (e.IsProp || e.Dead || e.HpMax <= 0) continue;
                     if (e.Owner is < 0 or > 7 || a.Owner is < 0 or > 7) continue;
                     if (Allied(a.Owner, e.Owner)) continue;
-                    float dd = a.Pos.DistanceTo(e.Pos);
+                    float dd = a.Pos.DistanceTo(FlugPunkt(e)); // bug-696
                     if (dd < best) { best = dd; a.Target = j; }
                 }
             }
@@ -41308,14 +41414,14 @@ public partial class MapEntityLayer : Node2D
                 else
                 {
                     var aim = AirAimPoint(t);
-                    a.Goal = aim;
+                    a.Goal = FlugPunkt(aim, t.Col, t.Row); // bug-696: angeflogen wird flach, geschossen auf aim
                     a.Cooldown -= dt;
                     if (t.Dead) { a.Target = -1; }
                     // bug-551: der Bomber wirft, wenn die vorausberechnete Bombe die
                     // Zielzelle trifft (test_all_bomber 0x426A00), und dreht erst UEBER
                     // dem Ziel ab (0x424540). Simulation/Luftschuss.cs.
                     else if (BomberNachOriginal(a)) BomberAnflug(a, t, aim);
-                    else if (a.Pos.DistanceTo(aim) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
+                    else if (a.Pos.DistanceTo(FlugPunkt(aim, t.Col, t.Row)) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0) // bug-696
                     {
                         // ⭐⭐⭐ 20.09.2026 — DIE SALVE, nach ART getrennt.
                         // Hier stand eine Explosion aufs Ziel plus ApplyHit, also
@@ -41373,7 +41479,10 @@ public partial class MapEntityLayer : Node2D
             // sp_oben (+0x0D, bei uns `Speed`). --flugtempo-alt gibt das alte
             // Verhalten zurueck.
             float step = FlugStufe(a) * AirPxPerSpeed * dt;
-            if (delta.Length() <= step)
+            // bug-718: geflogen wird in FEINEINHEITEN, 40 je Zelle in x UND y (0x425085,
+            // F 0x424253); im Bild ist y halb (FeinY/2). Abstand und Schritt darum im Feinraum.
+            var deltaFein = FlugtempoYAlt ? delta : new Vector2(delta.X, delta.Y * 2f);
+            if (deltaFein.Length() <= step)
             {
                 // ⚠ 14.08.2026 — DIE BLICKRICHTUNG FEHLTE IM LETZTEN SCHRITT.
                 // Sie stand nur im `else`, also ueberall AUSSER beim Ankommen.
@@ -41386,7 +41495,8 @@ public partial class MapEntityLayer : Node2D
             }
             else
             {
-                a.Pos += delta.Normalized() * step;
+                var uFein = deltaFein.Normalized() * step;   // bug-718
+                a.Pos += FlugtempoYAlt ? uFein : new Vector2(uFein.X, uFein.Y * 0.5f);
                 a.Facing = AirDirToFacing(delta);
                 // Fuel is spent per TILE, not per second: the move code takes one
                 // unit off at every cell crossing (@0x4250ab, @0x425100), which is
@@ -41399,8 +41509,7 @@ public partial class MapEntityLayer : Node2D
                 // the supply helicopters never run dry
                 if (a.Kind > 12) a.Fuel = a.FuelMax;
             }
-            a.Col = Mathf.Clamp((int)(a.Pos.X / TileW), 0, 255);
-            a.Row = Mathf.Clamp((int)(a.Pos.Y / TileH), 0, 255);
+            AirZelleNachLage(a);   // bug-696: Zelle aus der FLACHEN Lage, mit _ox/_oy
         }
         if (FliegerStehtAktiv) FliegerStehtTakt();   // bug-598, nur lesend
     }
@@ -41477,7 +41586,7 @@ public partial class MapEntityLayer : Node2D
         a.HomeSlot = feld.Slot;
         a.PatrolPhase += PatrolStep;
         if (a.PatrolPhase >= Mathf.Tau) a.PatrolPhase -= Mathf.Tau;
-        a.Goal = feld.Pos + new Vector2(Mathf.Cos(a.PatrolPhase) * PatrolRadiusX,
+        a.Goal = FlugPunkt(feld) + new Vector2(Mathf.Cos(a.PatrolPhase) * PatrolRadiusX,   // bug-696
                                         Mathf.Sin(a.PatrolPhase) * PatrolRadiusY);
     }
 
@@ -41549,10 +41658,9 @@ public partial class MapEntityLayer : Node2D
         var step = new Vector2(Mathf.Sin(rad), Mathf.Cos(rad))
                  * FlugStufe(a) * AirPxPerSpeed * dt;   // bug-348: sp, nicht sp_oben
         if (step.LengthSquared() <= 0.000001f) return;
-        a.Pos += step;
+        a.Pos += FlugtempoYAlt ? step : new Vector2(step.X, step.Y * 0.5f);   // bug-718: FeinY/2 im Bild
         a.Facing = AirDirToFacing(step);
-        a.Col = Mathf.Clamp((int)(a.Pos.X / TileW), 0, 255);
-        a.Row = Mathf.Clamp((int)(a.Pos.Y / TileH), 0, 255);
+        AirZelleNachLage(a);   // bug-696
         // Sprit je zurückgelegter Zellbreite, siehe Kopf.
         a.DriftRest += step.Length();
         while (a.DriftRest >= TileW && a.Fuel > 0) { a.DriftRest -= TileW; a.Fuel--; }
@@ -41632,7 +41740,7 @@ public partial class MapEntityLayer : Node2D
                 var home = _entities.Find(x => x.IsBuilding && x.Slot == a.HomeSlot);
                 if (home == null) continue;
                 a.Stored = false;
-                a.Pos = home.Pos;
+                a.Pos = FlugPunkt(home); // bug-696
                 a.Col = home.Col; a.Row = home.Row;
                 // ⭐ 19.09.2026 — die Hoehe beim Start: air_takeoff @0x4260B9
                 // setzt alt := Gelaende·15. Die Sollhoehe setzt es NICHT; sie
@@ -41663,8 +41771,8 @@ public partial class MapEntityLayer : Node2D
             {
                 if (e.IsProp || e.Dead || e.HpMax <= 0) continue;
                 if (e.Owner is < 0 or > 7 || Allied(owner, e.Owner)) continue;
-                float dd = a.Pos.DistanceTo(e.Pos);
-                if (dd < bd) { bd = dd; a.Goal = e.Pos; }
+                float dd = a.Pos.DistanceTo(FlugPunkt(e)); // bug-696
+                if (dd < bd) { bd = dd; a.Goal = FlugPunkt(e); } // bug-696
             }
             n++;
         }
@@ -41760,7 +41868,7 @@ public partial class MapEntityLayer : Node2D
                 if (!b.IsBuilding || b.Dead || b.Owner != s.Owner) continue;
                 any = true;
                 // 5 Zellen Streuung plus die 1,2 Zellen Ankunftsschwelle.
-                if (s.Pos.DistanceTo(b.Pos) < TileW * 6.2f) { home = true; break; }
+                if (s.Pos.DistanceTo(FlugPunkt(b)) < TileW * 6.2f) { home = true; break; } // bug-696
             }
             // ⚠ WER KEIN EIGENES GEBAEUDE HAT, KANN NICHT HEIMKEHREN, und das
             // ist keine Beanstandung. Auf map_DM_4 gehoeren 6 der 19 Helis den
@@ -42701,6 +42809,7 @@ public partial class MapEntityLayer : Node2D
         // Einheit wird ueberhaupt nicht gezeichnet, weder Koerper noch Leiche
         // noch Auswahlring. Siehe Entity.Verbraucht.
         if (e.Verbraucht) return;
+        if (TarnZeichnen(e)) return;   // bug-720/bug-721: Illusion 0x429A25, Spiegel 0x4299C3 (Simulation/Illusion.cs)
         Zeichenfolge?.Add(('E', e.Row));
         UnitsDrawnInOrder++;
         var picC = PictureAnchor(e);
@@ -42858,9 +42967,15 @@ public partial class MapEntityLayer : Node2D
                     // ⭐ 01.10.2026 — die Gruppe nach NABYTO/RELOAD wie 0x429D8F/0x429E37
                     // (bug-378, Simulation/Werferpose.cs, --werferpose-alt).
                     var turret = GetTurretTexture(e.Weapon, aim, slope, TurmGruppe(e));
-                    if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
-                        DrawTexture(Parteifarbe(turret, e.Owner), picC - EinheitenAnker(e) + zit
-                                            + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e));
+                    // bug-689: Muendungsfeuer Fahne 0 VOR dem Turm (C 0x42A15F..0x42A1EA),
+                    // Fahne 1 NACH ihm (C 0x42A654..0x42A6DF), am selben Zeichenpunkt.
+                    var turmLo = picC - EinheitenAnker(e) + zit
+                               + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing, e);   // bug-689
+                    bool mitTurm = turret != null && !HullCarriesItsOwnGun(e.UnitType);
+                    if (mitTurm) MuendungsfeuerZeichnen(e, turmLo, aim, slope, 0);  // bug-689
+                    if (mitTurm)
+                        DrawTexture(Parteifarbe(turret!, e.Owner), turmLo);
+                    MuendungsfeuerZeichnen(e, turmLo, aim, slope, 1);                // bug-689
                     return;
                 }
                 var composed = GetComposedTexture(e.Combo, e.Facing);
@@ -43164,8 +43279,9 @@ public partial class MapEntityLayer : Node2D
             if (!FlugzeugNebelAlt && s.Owner != ViewPlayer && !Allied(ViewPlayer, s.Owner)
                 && !Watched(s.Col, s.Row))
             { FlugzeugImNebelVerborgen++; continue; }
-            var c = s.Pos;
-            var air = c - new Vector2(0, AirHoehePx(s));
+            // bug-696: Schatten auf Lage − Bodenanhebung, Rumpf auf Lage − alt (0x42D666/0x42B8A6)
+            var c = AirSchatten(s);
+            var air = AirRumpf(s);
             // flattened ground shadow, drawn as an explicit ellipse so no
             // canvas transform is involved
             var sh = new Vector2[12];
@@ -43176,7 +43292,7 @@ public partial class MapEntityLayer : Node2D
             }
             DrawColoredPolygon(sh, new Color(0, 0, 0, 0.32f));
             var tex = GetAirframeTexture(s.Kind, s.Facing);
-            if (tex != null) DrawTexture(Parteifarbe(tex, s.Owner), air - ComposedAnchor);
+            if (tex != null) DrawTexture(Parteifarbe(tex, s.Owner), air - FliegerAnker);   // bug-727
             else
             {
                 // ⚠⚠ 19.09.2026 — DIE TUERKISE RAUTE IST EIN FLUGZEUG OHNE BILD,
@@ -43259,10 +43375,12 @@ public partial class MapEntityLayer : Node2D
                 // ⚠ UNSERE SETZUNG bleibt die Drehzahl; im Original ist sie
                 // nicht gelesen.
                 int phase = Mathf.PosMod((int)(_clock * RotorFps), 8);
-                var rsh = GetAirframeTexture(111, phase);
-                if (rsh != null) DrawTexture(rsh, c - ComposedAnchor, ShadowTint);
+                // bug-728 (Spielerentscheidung 30.10.): kein Rotorschatten — 0x42D666 zeichnet
+                // keinen; --rotorschatten-alt holt ihn zurueck (Fluglage.cs).
+                var rsh = RotorschattenZeichnen(s) ? GetAirframeTexture(111, phase) : null;
+                if (rsh != null) { DrawTexture(rsh, c - FliegerAnker + RotorVersatz, ShadowTint); RotorschattenGezeichnet++; }   // bug-727/728
                 var rot = GetAirframeTexture(110, phase);
-                if (rot != null) DrawTexture(rot, air - ComposedAnchor);
+                if (rot != null) DrawTexture(rot, air - FliegerAnker + RotorVersatz);   // bug-727: Rotor 4 px ueber dem Rumpf (0x42BAC9)
             }
             // ammo left, so an emptied aircraft is visible at a glance
             if (s.AmmoMax > 0)
@@ -43388,9 +43506,9 @@ public partial class MapEntityLayer : Node2D
                 DrawRect(AirRect(sa), new Color(0.3f, 1f, 0.3f, 0.9f), false, 2f);
             else
             {
-                var air = sa.Pos - new Vector2(0, AirHoehePx(sa));
+                var air = AirRumpf(sa);   // bug-696
                 var tex = GetAirframeTexture(sa.Kind, sa.Facing);
-                DrawSelectionBrackets(tex != null ? air - ComposedAnchor + tex.GetSize() / 2f : air, primary: true);
+                DrawSelectionBrackets(tex != null ? air - FliegerAnker + tex.GetSize() / 2f : air, primary: true);   // bug-727
             }
         }
 

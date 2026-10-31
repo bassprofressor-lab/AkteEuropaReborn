@@ -58,7 +58,9 @@ public partial class MapEntityLayer : Node2D
                      CodeFeldmine = 0x12, CodeGenerator = 0x13,
                      CodeRadar = 0x14, CodeAnhalten = 0x1A,
                      // ⭐ 01.10.2026, bug-381: »Terranium suchen« (Turm 0x35, Simulation/TerraSuche.cs)
-                     CodeTerraSuchen = 0x15;
+                     CodeTerraSuchen = 0x15,
+                     // ⭐ 30.10.2026, bug-711: »-Jump« (Aufsatz 0x27), Befehl 28, Simulation/Magnetbombe.cs
+                     CodeMagnetSprengung = 0x23;
 
     // ---- die Zeilen des FUSSVOLKS (12.09.2026, bug-219) ---------------------
     //
@@ -251,6 +253,10 @@ public partial class MapEntityLayer : Node2D
         // 0x54}, die es bei uns nicht gibt — der Platz bleibt also LEER.
         // ⭐ Ein bewaffnetes Fahrzeug hat im Original kein »Anhalten« im
         // Menue; bei uns steht es weiter auf der Taste X.
+        // ⭐ 30.10.2026, bug-720/bug-721 — UND JETZT GIBT ES SIE: c4 @0x4419C9 (F 0x4409C9),
+        // +0x10 == 0x53 -> 0x16 + word[+0x40] (Spiegelung an/aus), 0x54 -> 0x18 + word[+0x40]
+        // (Illusion an/aus). Gegenschalter --spiegelung-aus / --illusion-aus: der Platz bleibt leer.
+        c[3] = TarnMenueCode(e);                        // Simulation/Illusion.cs
         // c5: Selbstzerstoerung nur oberhalb von 15 % Huelle.
         if (e.HpMax > 0 && e.Hp * 100 / e.HpMax > 15) c[4] = CodeSelbstzerstoerung;
         c[5] = CodeInfo;                                // Einheiteninformation
@@ -305,6 +311,32 @@ public partial class MapEntityLayer : Node2D
                 // Gegenschalter --terrasuche-aus (dann wie bisher »noch nicht gebaut«).
                 if (TerrasucheAus) goto default;
                 return TerraSucheBeginnen();
+            case CodeMineLegen:
+            case CodeFalleLegen:
+                // ⭐ 30.10.2026, bug-698 — @0x4488F7: Befehlsart 8, Rahmenzustand 0.
+                // Gegenschalter --legeauftrag-aus (dann wie bisher »noch nicht gebaut«).
+                if (LegeauftragAus) goto default;
+                return LegeauftragBeginnen(code);
+            case CodeMagnetSprengung:
+                // ⭐ 30.10.2026, bug-711 — @0x448BC3: Befehl 28 mit der gewaehlten Einheit.
+                // Gegenschalter --magnetbombe-alt (dann wie bisher »noch nicht gebaut«).
+                if (MagnetbombeAlt) goto default;
+                return PostMagnetSprengung();
+            case CodeTeleport:
+                // ⭐ 30.10.2026, bug-719 — @0x448BF2 (F 0x447BE6): Befehlsart 9, Menue zu.
+                // Gegenschalter --teleporter-aus (dann wie bisher »noch nicht gebaut«).
+                if (TeleporterAus) goto default;
+                return TeleporterBeginnen();
+            case CodeSpiegelAn:
+            case CodeSpiegelAus:
+                // ⭐ 30.10.2026, bug-721 — @0x448A98/0x448AE7: Befehl 24 (Simulation/Illusion.cs).
+                if (SpiegelungAus) goto default;
+                return PostSpiegelung(code == CodeSpiegelAn);
+            case CodeIllusionAn:
+            case CodeIllusionAus:
+                // ⭐ 30.10.2026, bug-720 — @0x448B1F/0x448B8B: Befehl 25 (Simulation/Illusion.cs).
+                if (IllusionAus) goto default;
+                return PostIllusion(code == CodeIllusionAn);
             case CodeRadar:
                 PlaceRadarFromPanel();
                 return BuildOrderNote.Length > 0 ? BuildOrderNote : "";

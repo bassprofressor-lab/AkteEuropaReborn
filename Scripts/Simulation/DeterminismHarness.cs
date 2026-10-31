@@ -192,6 +192,10 @@ public partial class MapEntityLayer
             DetWrite($"DET-KEIM seed={Determinism.Seed} vergiftet={Determinism.Poisoned} " +
                      $"bilder={_detFrames} mittleres_dt={(_detFrames > 0 ? _detClock / _detFrames : 0):0.000000}");
             DetWrite(GebaeudeangriffLine());   // bug-597: wieviel der Gebaeudeangriff gewuerfelt hat
+            // bug-729..732: die Gefechts-KI am Laufende — nur Ausgabe, aendert nichts.
+            if (!InCampaign && _ai.Count > 0)
+                DetWrite($"DET-KI {GefechtKiZeile()} | {KiSpaehZeile()} | Sprit aufgenommen {KiSpritleerAufgenommen}, " +
+                         $"AiPickTarget {KiPickGefecht}x, davon ohne Bauwerk {KiPickSkriptplatz} | Gruende: {GefechtGruendeZeile()}");
             _detFile?.Close();
             _detFile = null;
         }

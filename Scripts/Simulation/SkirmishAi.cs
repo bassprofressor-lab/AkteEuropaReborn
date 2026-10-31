@@ -847,6 +847,11 @@ public partial class MapEntityLayer : Node2D
         int idle = NoClearIdleSlots || !welt ? 0 : ClearIdleSlots(mine);
         int gaveBases = conquest && welt ? GrantStartingBases(mine) : 0;
         if (gaveBases > 0) prize = NeutralPrizes();
+        // ⭐ bug-733 (30.10.2026, Spielerentscheidung): wer nach B8 noch keine Basis hat,
+        // bekommt Basis + Fabrik und wird auf 6 Einheiten geduennt — UNSERE ABWEICHUNG,
+        // Simulation/GefechtStartbasis.cs. Vor der KI, damit sie auf dem richtigen Besitz
+        // plant; ein KI-Platz ohne Bauplatz faellt aus `foes`. --gefecht-startbasis-aus.
+        if (welt) GefechtStartbasisAufstellen(mine, foes, UI.SkirmishSetup.Resources);
         EnableSkirmishAi(foes, level);
         var per = BasesPerSlot();
         float spread = BaseSpread();
@@ -927,6 +932,11 @@ public partial class MapEntityLayer : Node2D
         foreach (var e in _entities)
             if (e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == p && e.BType == 1)
                 return (e.Col, e.Row);
+        // ⭐ bug-735 (30.10.2026): nur die EINHEITEN des Platzes, ohne Gebaeude und ohne
+        // Typ-0-Skriptplaetze — auf NET06 zogen die vier Skriptplaetze von P0 den
+        // Schwerpunkt an die Einheit von P6, und B8 vertauschte die Basen.
+        // Simulation/GefechtStartbasis.cs, --startbasis-heim-alt = der alte Mittelwert.
+        if (!StartbasisHeimAlt && HeimzelleMobil(p) is { } mobil) return mobil;
         long sc = 0, sr = 0; int n = 0;
         foreach (var e in _entities)
         {
@@ -1010,6 +1020,10 @@ public partial class MapEntityLayer : Node2D
             Hand(_entities[best], p);
             taken.Add(best);
             StartBasesGiven++;
+            // bug-735: die Zuteilung messbar machen (Heimpunkt, Basis, Abstand in Zellen)
+            GD.Print($"B8: P{p} Heim {(home is { } hh ? $"({hh.C},{hh.R})" : "-")} -> Basis " +
+                     $"({_entities[best].Col},{_entities[best].Row}) Abstand^2 {bd}" +
+                     (StartbasisHeimAlt ? " [--startbasis-heim-alt]" : ""));
         }
         return StartBasesGiven;
     }
@@ -1366,12 +1380,33 @@ public partial class MapEntityLayer : Node2D
 
             a.Think -= dt;
             a.AttackTimer -= dt;
-            if (a.Think > 0f) continue;
+            // ⭐⭐ 30.10.2026 (bug-704) — DER DENKTAKT DER KAMPAGNE ist jetzt der des
+            // Originals: die KI-Runde C 0x4BFB80 (F 0x4BF640) waehlt je Takt EINEN Platz
+            // `Takt % 50` (Indextafel C 0x4BFEA4, Sprungtafel 0x4BFE50, aekernel-tools/
+            // ai_tick.py) — Platz 2 Transport 0x4BB7D0, 5 Produktion 0x4BB9A0, 7 Takt 7
+            // 0x4BC900, 8 ai_player_step 0x4BE2E0. Jeder Platz laeuft also EINMAL je 50
+            // Takte = 1 s. Bis heute lief alles zusammen am Denk-Zeitgeber AiTuning
+            // (Normal 1,5 s): 267 statt 400 Auftragswahlen in 20000 Takten
+            // (berichte/ki-ohne-gruppen-opus.md N2). Ein Grund fuer die 1,5 s fand sich
+            // nicht — AiTuning ist eine Gefechtsstellschraube (»tuned, not recovered«),
+            // und k24-flucht-fable.md Vorschlag B nannte nur die Groesse des Eingriffs.
+            // Im Gefecht bleibt der Zeitgeber (Stufen 3,0/1,5/0,8 s). --ki-denktakt-alt =
+            // der Stand davor (alle Plaetze in einem Denkschritt alle 1,5 s).
+            bool taktplan = InCampaign && !KiDenktaktAlt;
+            int platz = _taktNr % 50;
+            if (taktplan)
+            {
+                if (platz is not (2 or 5 or 7 or 8)) continue;
+            }
+            else if (a.Think > 0f) continue;
             var (think, waveSize, guard) = AiTuning(a.Level);
-            a.Think += think;
-            a.Zuege++;
+            if (!taktplan) a.Think += think;
+            // »alle«: der alte Denkschritt — jeder Platz in einem Zug, in der Folge des
+            // Originals (2, 5, 7, 8). Mit dem Taktplan nur der Platz dieses Taktes.
+            bool alle = !taktplan;
+            if (alle || platz == 2) a.Zuege++;
 
-            AiProduce(a);
+            if (alle || platz == 5) AiProduce(a);
 
             // ⚠ AUF EINER KAMPAGNENKARTE MARSCHIERT NIEMAND (11.08.2026).
             //
@@ -1409,7 +1444,7 @@ public partial class MapEntityLayer : Node2D
             // gefuehrten Spieler ganz ausfaellt (@0x4BFBFA) — darum steht der
             // Ruf hinter der Sperre und nicht davor.
             // Siehe Simulation/Transportroute.cs.
-            KiTransportrouten(a.Player);
+            if (alle || platz == 2) KiTransportrouten(a.Player);   // bug-704: Platz 2
             // Paket W2: --ki-freigabe-protokoll — je KI-Spieler alle 1000 Originaltakte
             // Freigabe sec59, Zaehler sec58, Wagen (nur Messung).
             if (KiFreigabeProtokoll && a.Player is >= 0 and < 8 && _origTicks / 1000 != _kiProtokollTakt[a.Player])
@@ -1440,7 +1475,11 @@ public partial class MapEntityLayer : Node2D
                 // ein Ziel in die Liste 0xBC5A78 ein (100 je Spieler, 6 Byte),
                 // und alle Leser dieser Liste liegen im KI-Bereich. Genau so
                 // bekommt Mission 9, 13, 15, 20 und 24 ihre Angriffe.
-                AiMissionAttack(a, waveSize, guard);
+                // ⭐ bug-703/704: Platz 7 (0x4BFCAF -> 0x4BC900) und Platz 8 (0x4BFCEF ->
+                // 0x4BE2E0) sind im Original zwei Takte; im alten Denkschritt laufen sie
+                // hintereinander, 7 vor 8.
+                if (alle || platz == 7) AiTakt7(a);
+                if (alle || platz == 8) AiMissionAttack(a, waveSize, guard);
             }
 
             // ⭐⭐ 19.09.2026 — DER LUFTANGRIFF, und er steht mit Absicht HIER.
@@ -1452,9 +1491,17 @@ public partial class MapEntityLayer : Node2D
             // beide frueh aus (keine freien Angreifer, kein Ziel, Sperre), und
             // ein Flughafen soll davon nichts merken.
             // Siehe den Block bei AiAirAttackStep.
-            AiAirAttackStep(a);
+            if (alle || platz == 8) AiAirAttackStep(a);   // bug-704: Teil von Platz 8
         }
     }
+
+    /// <summary><c>--ki-denktakt-alt</c> — bug-704: die Kampagnen-KI denkt wieder am
+    /// Zeitgeber <see cref="AiTuning"/> (Normal 1,5 s), alle Plaetze in einem Schritt.</summary>
+    public static bool KiDenktaktAlt;
+
+    /// <summary><c>--ki-takt7-nur-ohne-ziele</c> — bug-703: der Gruppenangriff
+    /// <c>0x4BC540</c> laeuft nur bei leerer Zielliste (Stand bis 30.10.2026).</summary>
+    public static bool KiTakt7NurOhneZiele;
 
     /// <summary>Läuft gerade eine Kampagnenmission? Gesetzt von
     /// <see cref="StartCampaign"/>, und der einzige Schalter, der die beiden
@@ -1628,6 +1675,51 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// ⭐⭐ 30.10.2026 (bug-703) — <b>PLATZ 7 DER KI-RUNDE</b>, C <c>0x4BFCAF</c> →
+    /// <c>0x4BC900</c> = <c>0x4BBB80</c> (Bedarf + Zustandsmaschine) + <c>0x4BC540</c>
+    /// (der Gruppenangriff in den Nachbarsektor); F <c>0x4BF760</c> → <c>0x4BC3C0</c> =
+    /// <c>0x4BB640</c> + <c>0x4BC000</c>, befehlsgleich.
+    ///
+    /// <para>0x4BFCAF/0x4BFCEF: Platz 7 und 8 laufen BEIDE, unabhaengig von sec69. Das
+    /// einzige Tor davor ist <c>byte[0x538BD8+p] != 10</c> (dazu in M14 der Wurf
+    /// <c>%5 == 0</c>, siehe unten). Bei uns lief <c>AiGruppenangriff</c> nur bei LEERER
+    /// Zielliste (ueber <see cref="AiSektorAngriff"/>) — in 26 von 33 Missionen konnte
+    /// darum keine Einheit Modus 3 bekommen. Belegt an den Originalstaenden: 15 von 43
+    /// KI-Staenden eines Spielers MIT Zielliste tragen Einheiten in Modus 3, und Modus 3
+    /// setzt allein 0x4BC540 (@0x4BC7EB). berichte/ki-ohne-gruppen-opus.md §4 N1.</para>
+    ///
+    /// <para>⚠ UNSERE SETZUNG: die Drosselung von Platz 7/8 in Mission 14
+    /// (<c>word[0x539934] == 14</c> → nur bei Wurf <c>% 5 == 0</c>, C 0x4BFCAF..0x4BFCCB)
+    /// ist NICHT uebernommen — wie beim Einheitendurchlauf (AiSweep): sie gilt einer
+    /// einzigen Mission, und ein Wurf mehr verschoebe die Wuerfelfolge.</para>
+    ///
+    /// <para>Gegenschalter <c>--ki-takt7-nur-ohne-ziele</c> (Stand davor: Zustandsmaschine
+    /// ja, Gruppenangriff nur ohne Liste). Prüfstand <c>--ki-takt7-check</c>.</para>
+    /// </summary>
+    private void AiTakt7(AiPlayer a)
+    {
+        var list = _missionTargets[a.Player];
+        // Leere Liste: der alte Weg, er faehrt dieselbe Kette (AiSektorAngriff).
+        if (list.Count == 0) { AiSektorAngriff(a); return; }
+        if (AiGesperrt(a.Player)) return;   // sec106 (der KI-Zug faellt ganz aus, @0x4BFBFA)
+
+        AiGruppenPflegen(a.Player);
+        AiStaerkeraster(a.Player);
+        AiSetImpCpu(a.Player);
+        // ⭐ 01.09.2026 — auch der Skriptweg laeuft ueber die gelesene
+        // Zustandsmaschine: im Original steht sie in 0x4BBB80, und Takt 7 ruft
+        // sie fuer JEDEN Computerspieler, ob die Mission Ziele setzt oder
+        // nicht. (Unter --sektormaschine-alt springt AiSetImpCpu weiterhin auf
+        // die alte Bruecke.)
+        if (SektormaschineAlt) return;
+        AiZustandsmaschine(a);
+        // bug-703: und danach 0x4BC540, wie in AiSektorAngriff.
+        if (KiTakt7NurOhneZiele) return;
+        a.Wave.Clear();
+        AiGruppenangriff(a);
+    }
+
+    /// <summary>
     /// Die Armee eines Computerspielers auf das Ziel schicken, das ihm die
     /// Mission gegeben hat — mit dem höchsten Vorrang zuerst, wie @0x4BDCC0.
     /// Kein Ziel heisst: es geschieht nichts, und das ist der Normalfall.
@@ -1669,7 +1761,10 @@ public partial class MapEntityLayer : Node2D
         // »Enough units« / »Take all« @0x4BC900. Wir schicken statt dessen die
         // freien Angreifer DIESES Sektors — unsere Setzung, siehe
         // AiSektorAngriff.
-        if (list.Count == 0) { AiSektorAngriff(a); return; }
+        // ⭐ bug-703 (30.10.2026): der Sektorangriff laeuft jetzt in AiTakt7 (Platz 7),
+        // diese Funktion ist nur noch Platz 8. Bei leerer Liste findet 0x4BECF0 kein
+        // Ziel (r_best == 0xFF) — es geschieht hier nichts.
+        if (list.Count == 0) return;
 
         // ⭐ NEU AM 21.08.2026 — die Auftragswahl ist jetzt die des Originals.
         //
@@ -1687,15 +1782,8 @@ public partial class MapEntityLayer : Node2D
         // Die ganze Kette steht in Scripts/Simulation/SkirmishAiSectors.cs.
         if (AiGesperrt(a.Player)) { AmGrund(a.Player, "gesperrt"); return; }   // sec106: das Skript fuehrt ihn
 
-        AiGruppenPflegen(a.Player);
-        AiStaerkeraster(a.Player);
-        AiSetImpCpu(a.Player);
-        // ⭐ 01.09.2026 — auch der Skriptweg laeuft ueber die gelesene
-        // Zustandsmaschine: im Original steht sie in 0x4BBB80, und Takt 7 ruft
-        // sie fuer JEDEN Computerspieler, ob die Mission Ziele setzt oder
-        // nicht. (Unter --sektormaschine-alt springt AiSetImpCpu weiterhin auf
-        // die alte Bruecke.)
-        if (!SektormaschineAlt) AiZustandsmaschine(a);
+        // (Gruppenpflege, Staerkeraster, Bedarf und Zustandsmaschine stehen seit
+        // bug-703 in AiTakt7 — Platz 7, einen Takt vor dieser Auftragswahl.)
 
         // ⭐⭐ 02.10.2026 (bug-384) — DIE WEICHE von `ai_player_step` 0x4BE2E0:
         // `sec61[p] == 5 -> 0x4BDCC0(p)`, sonst `0x4BECF0(p)`. Betriebsart 5
@@ -1759,9 +1847,22 @@ public partial class MapEntityLayer : Node2D
         // Ohne Marschweg (Ende == 0, oder --ki-wegpunkte-aus): sofort los, wie bis 0.6.10.
         // ⚠ UNSER Anteil bleibt das FAHREN mit `AiSend` (der Angriffsarm des
         // Gruppenlaufs 0x4BD1FF ist nicht Zeile fuer Zeile nachgebaut).
+        // ⭐ bug-690: in der Kampagne seit 30.10.2026 doch — siehe oben; was hier
+        // folgt, gilt nur noch mit --ki-gruppenangriff-einmal.
         // ⭐ 02.10.2026 (bug-384) — der Gruppenlauf 0x4BCF30 verzweigt an `c`:
         // ein Türgriff FAEHRT auf die Einnahmezelle (`fahre` @0x4BD380), alles
         // andere greift an. AiWalkTo nimmt auch Unbewaffnete, wie das Original.
+        // ⭐⭐ bug-690 (30.10.2026) — DER ANGRIFFSARM IST GEBAUT (Simulation/KiGruppenangriff.cs):
+        // im Original gibt 0x4BC920 KEINEN Befehl; den ersten gibt der Gruppenlauf 0x4BCF30,
+        // den ai_player_step 0x4BE2E0 NACH der Zielwahl ruft (@0x4BE30E). Bei uns steht der
+        // Gruppenlauf vor der Zielwahl — darum laeuft der Arm fuer die neue Gruppe hier.
+        // --ki-gruppenangriff-einmal = der Stand davor (die Schleife unten).
+        if (KiGruppenangriffJeLauf)
+        {
+            KiGruppeLosBuchen(a.Player, g, ziel, $"po={po}, freie={freie}, Start-Sektor ({sx},{sy})");
+            KiGruppenAngriffsarm(a.Player, g, _aiGruppen[a.Player][g], ziel);
+            return;
+        }
         bool tuer = IstTuergriff(auftrag);
         var front = tuer ? CaptureCells(_entities[ziel]).Front : default;
         a.Wave.Clear();
@@ -2624,7 +2725,7 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = slot, Kind = d.Kind, Name = d.Name, TypeName = d.Name,
             Col = ap.Col, Row = ap.Row, Stored = true,
-            Owner = a.Player, HomeSlot = ap.Slot, Pos = ap.Pos,
+            Owner = a.Player, HomeSlot = ap.Slot, Pos = FlugPunkt(ap),   // bug-696
             Footprint = ap.Footprint,
             Speed = d.Speed, Hp = d.Hp, HpMax = d.Hp,
             StufeUnten = SpUntenVorlage(d.Kind),   // bug-598 C, KI-Spawner @0x4B3156
@@ -2812,7 +2913,7 @@ public partial class MapEntityLayer : Node2D
         int c = Mathf.Clamp(ap.Col + 5, 0, (_nav?.Width ?? 1) - 1);
         int r = Mathf.Clamp(ap.Row + 2, 0, (_nav?.Height ?? 1) - 1);
         flz.Col = c; flz.Row = r;
-        flz.Pos = CellCenter(c, r);
+        flz.Pos = FlugZelle(c, r);   // bug-696
 
         // ⭐ 19.09.2026 — die Hoehe beim Start: `alt := Gelaende·15` (@0x4260B0),
         // die Sollhoehe setzt air_takeoff NICHT. Siehe Special.Alt; gestiegen
@@ -2829,7 +2930,7 @@ public partial class MapEntityLayer : Node2D
         FlugtempoStart(flz);
 
         flz.Target = zielIdx;                 // word[+0x2E] := kunde
-        flz.Goal = ziel.Pos;                  // Flugziel := (x, y)
+        flz.Goal = FlugPunkt(ziel);           // Flugziel := (x, y) (bug-696: flach)
         flz.PlayerGoal = null;
         flz.TurnPoint = null;
         flz.Order = 4;                        // uk  := 4  (START)
@@ -3341,6 +3442,7 @@ public partial class MapEntityLayer : Node2D
     private bool AiWalkTo(int idx, Vector2I cell)
     {
         if (_nav == null || idx < 0 || idx >= _entities.Count) return false;
+        if (KiGaPruefAn) KiGaPruefSendung(idx);         // --ki-gruppenangriff-check (bug-690)
         var e = _entities[idx];
         if (e.Dead || !e.Mobile || e.DugIn) return false;
         if (e.FuelMax > 0 && e.Fuel <= 0) return false;
@@ -3452,6 +3554,14 @@ public partial class MapEntityLayer : Node2D
             var e = _entities[i];
             if (e.IsProp || e.Dead || e.Owner is < 0 or > 7 || e.Owner == p) continue;
             if (!AiHostile(p, e.Owner)) continue;
+            // ⭐ bug-732 (30.10.2026) — KEIN PLATZ OHNE BAUWERK. Typ 0 (NoStructure, »Lebork«
+            // auf NET07) hat kein Bild und keine Trefferpunkte; Gruppen fuhren 6- bis 9-mal
+            // je Lauf hin und »zerstoerten« ihn (berichte/gefecht-ki-stillstand-opus.md §5).
+            // Das Original verwirft solche Ziele selbst: target C 0x4BEE03..0x4BEE1C /
+            // F 0x4BE8B3..0x4BE8CC — `typ (76*wort+0xC06914) == 0 -> Eintrag := 0`.
+            // AiPickTarget ist UNSER Zusatz und gilt nur im Gefecht (AiFight, GefechtNeuesZiel).
+            // Gegenschalter --ki-ziel-skriptplatz-alt.
+            if (e.NoStructure && !KiZielSkriptplatzAlt) continue;
             float d = from.DistanceTo(new Vector2(e.Col, e.Row));
             float score = e.IsBuilding ? d * 0.5f : d;
             if (score < rohScore) { rohScore = score; roh = i; }
@@ -3464,8 +3574,18 @@ public partial class MapEntityLayer : Node2D
         }
         // Messpunkt: haette die alte Wahl ein ungesehenes Ziel genommen?
         if (!InCampaign && roh >= 0 && !KiKenntRoh(p, _entities[roh])) KiWahlUngesehen++;
+        // bug-732 Messpunkte (laufen auch unter dem Gegenschalter)
+        if (InCampaign) KiPickKampagne++; else KiPickGefecht++;
+        if (best >= 0 && _entities[best].NoStructure) KiPickSkriptplatz++;
         return best;
     }
+
+    /// <summary><c>--ki-ziel-skriptplatz-alt</c> (bug-732): <see cref="AiPickTarget"/> waehlt
+    /// wieder Plaetze ohne Bauwerk — der Stand bis zum 30.10.2026.</summary>
+    public static bool KiZielSkriptplatzAlt;
+    /// <summary>bug-732: Aufrufe von <see cref="AiPickTarget"/> in Kampagne/Gefecht und wie oft
+    /// es einen Platz ohne Bauwerk lieferte.</summary>
+    public int KiPickKampagne, KiPickGefecht, KiPickSkriptplatz;
 
     /// <summary>Hostility by player number — the same alliance matrix the
     /// entity test uses, without needing an entity of one's own.</summary>
@@ -3486,10 +3606,14 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Send one unit at a target: attack if it can reach, else drive
-    /// toward it. Uses the same paths and rules a clicked order would.</summary>
-    private void AiSend(int idx, int target)
+    /// toward it. Uses the same paths and rules a clicked order would.
+    /// <para>⭐ bug-690 (30.10.2026): <paramref name="zelle"/> = die Zielzelle CX/CY von
+    /// <c>order()</c> 0x410220 (der Angriffsarm des Gruppenlaufs wuerfelt sie, siehe
+    /// Simulation/KiGruppenangriff.cs). Ohne Angabe die Zelle des Ziels wie bisher.</para></summary>
+    private void AiSend(int idx, int target, Vector2I? zelle = null)
     {
         if (_nav == null || idx < 0 || idx >= _entities.Count) return;
+        if (KiGaPruefAn) KiGaPruefSendung(idx);         // --ki-gruppenangriff-check (bug-690)
         var e = _entities[idx];
         var t = _entities[target];
         if (e.Dead || !e.Mobile || e.DugIn) return;
@@ -3527,7 +3651,7 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        var goal = _nav.NearestFree(new Vector2I(t.Col, t.Row), e.Move, idx);
+        var goal = _nav.NearestFree(zelle ?? new Vector2I(t.Col, t.Row), e.Move, idx);
         if (goal == null) return;
         var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Move, idx);
         if (path == null || path.Count == 0) return;

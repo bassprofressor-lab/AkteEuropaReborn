@@ -30,10 +30,14 @@ using Godot;
 ///   0x40B785  Tod eines Gaswerfers: 50·Munition Teilchen mit v = (20, 10)
 /// </code>
 ///
-/// <para>⚠ UNSERE SETZUNGEN, benannt: WIND und HANG fehlen (Windzustand
-/// 0x4F8D68/0x4F8D6C und Hangtafel 0x4FA580 nicht ausgelesen); die Teilchen
-/// werden mit dem Rauchbild <c>smoke0..2</c> halbdurchsichtig gezeichnet (der
-/// Zeichner des Originals ist nicht gelesen); der Gassauger dreht die Einheit
+/// <para>⭐ 30.10.2026 (bug-708, Simulation/Gaswolke.cs): WIND und HANG sind jetzt
+/// gebaut (Tafeln ausgelesen, C = F), ebenso die Aufbauwolken der Missionen 20/21/25,
+/// der Zeichner (Folge 69 durch NN.CWG) und der Spielstand (bug-715). Gegenschalter
+/// <c>--gaswolke-aus</c>.</para>
+///
+/// <para>⚠ UNSERE SETZUNGEN, benannt (Stand 11.09., soweit nicht oben ersetzt): die Teilchen
+/// werden mit dem Rauchbild <c>smoke0..2</c> halbdurchsichtig gezeichnet (nur noch unter
+/// --gaswolke-aus oder ohne Effects/gas); der Gassauger dreht die Einheit
 /// nicht zur Wolke (+0x17 ueber 0x401951) und setzt kein +0x40; das 13×13-Fenster
 /// @0x439DA3 prueft die ADRESSE der Dichtekarte und laeuft darum immer — so
 /// gebaut; der Todeswolke fehlt ein gelesener Ort, sie sitzt wie der Werfer
@@ -51,7 +55,10 @@ public partial class MapEntityLayer : Node2D
     public static bool GaswerferAlsSchuss;
 
     private struct GasWerferPlatz { public int Zaehler, X, Y, Dx, Dy; }
-    private struct GasTeilchen { public bool Belegt; public int X, Y; public sbyte Vx, Vy; }
+    /// <summary>Ein Satz der Tafel 0x77CAE8 (8 B, sec82): +0 Alter/Belegt, +2/+4 X/Y
+    /// (Wort, 120 je Zelle), +6/+7 vx/vy (Byte). ⭐ bug-708/715: <see cref="Alter"/>
+    /// mitgefuehrt (250 Werfer/Bombe, 255 Skript) — fuer den Spielstand.</summary>
+    private struct GasTeilchen { public bool Belegt; public int X, Y; public sbyte Vx, Vy; public byte Alter; }
 
     private const int GasWerferPlaetze = 50, GasPlaetze = 4000, GasFein = 120;
     private readonly GasWerferPlatz[] _gasWerfer = new GasWerferPlatz[GasWerferPlaetze];
@@ -94,8 +101,9 @@ public partial class MapEntityLayer : Node2D
         return true;
     }
 
-    /// <summary>0x439410</summary>
-    private void GasAnlegen(int x, int y, int vx, int vy)
+    /// <summary>0x439410 — <paramref name="alter"/> ist das fuenfte Argument (+0, nur
+    /// Belegtmerker: 250 am Werfer und an der Bombe, 255 im Missionsskript).</summary>
+    private void GasAnlegen(int x, int y, int vx, int vy, int alter = 250)
     {
         int k = System.Array.FindIndex(_gas, g => !g.Belegt);
         if (k < 0)
@@ -104,7 +112,8 @@ public partial class MapEntityLayer : Node2D
             k = Simulation.Determinism.Roll(GasPlaetze);
         }
         if (!_gas[k].Belegt) _gasAnzahl++;
-        _gas[k] = new GasTeilchen { Belegt = true, X = x, Y = y, Vx = unchecked((sbyte)vx), Vy = unchecked((sbyte)vy) };
+        _gas[k] = new GasTeilchen { Belegt = true, X = x, Y = y, Vx = unchecked((sbyte)vx), Vy = unchecked((sbyte)vy),
+                                    Alter = (byte)System.Math.Clamp(alter, 1, 255) };
         GasAngelegt++;
     }
 
@@ -163,14 +172,20 @@ public partial class MapEntityLayer : Node2D
             if (trefferTakt && GasTrifft(cx, cy)) { GasWeg(k); continue; }
             g.X += g.Vx / 10; g.Vx = unchecked((sbyte)(g.Vx * 19 / 20));
             g.Y += g.Vy / 10; g.Vy = unchecked((sbyte)(g.Vy * 19 / 20));
-            // Wind und Hang: NICHT gebaut, siehe Kopf
+            // ⭐ bug-708 (30.10.2026): Wind und Hang wie @0x43983E..0x43994C (Gaswolke.cs).
+            // Unter --gaswolke-aus wie vorher: beide fehlen.
+            if (!GaswolkeAus) GasWindUndHang(ref g, cx, cy);
             if (Dichte(cx, cy) > 20)
             {
                 g.Vx = unchecked((sbyte)(g.Vx + 20 - Simulation.Determinism.Roll(40)));
                 g.Vy = unchecked((sbyte)(g.Vy + 20 - Simulation.Determinism.Roll(40)));
             }
+            int ax = cx, ay = cy;                                                // die Zelle VOR der Bewegung
             cx = g.X / GasFein; cy = g.Y / GasFein;
             if (g.X <= 0 || g.Y <= 0 || cx >= _nav.Width || cy >= _nav.Height) { GasWeg(k); continue; }
+            // ⭐ bug-708: 0x439500 bekommt die ALTE Zelle (@0x4399F1 [esp+0x12/0x14], vor
+            // der Bewegung gerechnet); bis 30.10. nahmen wir die neue (--gaswolke-aus).
+            if (!GaswolkeAus) { cx = ax; cy = ay; }
             if (Simulation.Determinism.Roll(10) == 0
                 && Dichte(cx, cy) + Dichte(cx - 1, cy) + Dichte(cx + 1, cy) + Dichte(cx, cy - 1) + Dichte(cx, cy + 1) < 3)
                 GasWeg(k);
@@ -199,7 +214,10 @@ public partial class MapEntityLayer : Node2D
                 return true;
             }
         }
-        return GebaeudeAufZelle(cx, r) >= 0;                                     // @0x439673
+        // @0x439673: imap 60000..60299 — nur die echten Gebaeudezellen (bug-706 a); bis
+        // 30.10. das ganze Grundrissrechteck (--gaswolke-aus).
+        if (GaswolkeAus) return GebaeudeAufZelle(cx, r) >= 0;
+        return o >= 0 && o < _entities.Count && _entities[o].IsBuilding && !_entities[o].IsProp && !_entities[o].Dead;
     }
 
     /// <summary>0x439D20</summary>
@@ -231,10 +249,13 @@ public partial class MapEntityLayer : Node2D
             GasAnlegen(v.Col * GasFein + 60, (v.Row - 1) * GasFein, 20, 10);
     }
 
-    /// <summary>Die Teilchen — Rauchbild, unsere Setzung.</summary>
+    /// <summary>Die Teilchen — Rauchbild, unsere Setzung. ⭐ bug-708: seit dem 30.10.
+    /// zeichnet <see cref="GaswolkeZeichnen"/> (Folge 69, Tafel NN.CWG); dieser Zweig
+    /// bleibt fuer --gaswolke-aus und fuer einen Datenstand ohne <c>Effects/gas</c>.</summary>
     private void GasZeichnen()
     {
-        if (_gasAnzahl == 0) return;
+        if (_gasAnzahl == 0) { if (_gasSchicht != null) _gasSchicht.Visible = false; return; }   // bug-723
+        if (GaswolkeZeichnen()) return;
         for (int k = 0; k < GasPlaetze; k++)
         {
             if (!_gas[k].Belegt) continue;

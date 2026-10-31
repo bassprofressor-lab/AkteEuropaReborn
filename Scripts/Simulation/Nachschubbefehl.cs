@@ -87,7 +87,7 @@ public partial class MapEntityLayer
         var e = _entities[c.P2];
         if (!SupplyEligible(a, e) || e.Infantry >= 0) return false;
         a.Customer = c.P2;               // Ziel +0x2E := Einheit
-        a.Goal = e.Pos;                  // Flugziel := Zelle der Einheit
+        a.Goal = FlugPunkt(e);           // Flugziel := Zelle der Einheit (bug-696: flach)
         a.Sollhoehe = FlughoeheMax;      // +0x13 := 135
         a.PlayerGoal = null;
         a.HomePoint = null;

@@ -218,6 +218,19 @@ public static partial class GameSounds
     /// +0x12 (0x423475), im Heli-Zweig (0x42347B <c>cmp al,0xA; jae 0x42356A</c>).</summary>
     public const int FlugzeugStartbahn = 303, HeliStartSteigen = 304;
 
+    /// <summary><c>--landeklang-aus</c>: bug-691 stumm (308 beim Aufsetzen).</summary>
+    public static bool LandeklangAus;
+    /// <summary>308 — FLUGZEUG (+0x08 &lt; 10) setzt auf: der Ankunftsverteiler
+    /// C <c>0x423FEB</c> (F <c>0x4231AD</c>, Tafel C <c>0x425334</c> / F <c>0x424504</c>)
+    /// springt bei <c>m_uk</c> 3 nach C <c>0x4242D6</c> / F <c>0x42349C</c> (»air Da«):
+    /// Flugziel := Gebaeude +4/+2, Sollhoehe := Gelaende·15, <c>m_uk</c> := 4, Klang
+    /// <c>push 0x134; push 1</c> (C <c>0x42439F</c>, F <c>0x423565</c>), Modus 1 am Flieger.
+    /// <c>m_uk</c> := 3 schreibt C und F je GENAU EINE Stelle (C <c>0x4241D9</c>, F
+    /// <c>0x42339F</c>), im Flugzeugzweig der Landung (<c>m_uk</c> 2, Typ &lt; 10, Stufe
+    /// unten, Hoehe = Soll, Bahn frei, »air Ca«). ⚠ Die Berichte nannten 308 »Heli«: der
+    /// Heli landet im Zweig C <c>0x4241F5</c> mit 309 (leerer Platz, still).</summary>
+    public const int FlugzeugAufsetzen = 308;
+
     /// <summary><c>--endklang-aus</c>: R11 stumm.</summary>
     public static bool EndklangAus;
     /// <summary>Missionsende-Fenster C <c>0x441FD0</c>: <c>0x169 − Argument 3</c>

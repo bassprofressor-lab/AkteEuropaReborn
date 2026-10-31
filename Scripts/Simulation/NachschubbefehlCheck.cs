@@ -67,7 +67,7 @@ public partial class MapEntityLayer
             int vorher = NachschubBefehleAngenommen;
             bool klick = PostNachschubKlick(c.Pos);
             _nbStart += $"Heli {a.Slot} (Ladung {a.Cargo}) bei ({a.Col},{a.Row}), Kunde {LabelOf(c)} Platz {c.Slot} bei ({c.Col},{c.Row}), " +
-                        $"{a.Pos.DistanceTo(c.Pos) / TileW:0.0} Zellen weit, Sprit {c.Fuel}/{c.FuelMax}; Zeiger {hint}, Klick {(klick ? "BEFIEHLT" : "nichts")}";
+                        $"{a.Pos.DistanceTo(FlugPunkt(c)) / TileW:0.0} Zellen weit, Sprit {c.Fuel}/{c.FuelMax}; Zeiger {hint}, Klick {(klick ? "BEFIEHLT" : "nichts")}";
             _ = vorher;
             return;
         }
@@ -87,7 +87,7 @@ public partial class MapEntityLayer
             GD.Print("nachschubbefehl-check" + (NachschubbefehlAlt ? " (⚠ Nullmodell --nachschubbefehl-alt)" : "") + ":" +
                      $"\n   {_nbStart}" +
                      $"\n   Befehle angenommen {NachschubBefehleAngenommen}; Heli Kunde {(heli.Customer == _nbKunde ? "= die Einheit" : heli.Customer.ToString())}, " +
-                     $"Abstand jetzt {heli.Pos.DistanceTo(kunde.Pos) / TileW:0.0} Zellen" +
+                     $"Abstand jetzt {heli.Pos.DistanceTo(FlugPunkt(kunde)) / TileW:0.0} Zellen" +
                      $"\n   Sprit {kunde.Fuel}/{kunde.FuelMax}{(_nbVoll >= 0 ? $", voll nach {_nbVoll:0.0} s" : ", NICHT voll nach 60 s")}" +
                      $"\n   {(NachschubbefehlAlt ? (_nbVoll < 0 ? "Nullmodell wie erwartet: kein Flug" : "⚠ Nullmodell tankte trotzdem") : ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
         }

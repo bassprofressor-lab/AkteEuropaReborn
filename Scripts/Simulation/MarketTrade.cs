@@ -195,6 +195,9 @@ public partial class MapEntityLayer
             // selben Verteiler: Tafel 0x40A16C Fall 4 -> 0x4083A4, jeden Takt.
             // Simulation/TerraSuche.cs.
             TerraSucheTakt();
+            // ⭐ 30.10.2026, bug-698 — und der LEGER (ZBRAN 15/16) im selben Verteiler:
+            // ohne Aufsatzfall -> 0x40877A, jeden Takt. Simulation/Legeauftrag.cs.
+            LegeauftragTakt();
             // ⭐ 08.09.2026 — UND DER TRANSPORTER haengt in DEMSELBEN
             // Leerlaufverteiler: Tafel 0x40A16C, Arm 0x47 -> 0x407F67, genau
             // neben dem Bauauftrag (0x48/0x4A). Siehe

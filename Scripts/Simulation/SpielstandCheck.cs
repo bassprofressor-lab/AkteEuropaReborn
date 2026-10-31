@@ -159,6 +159,14 @@ public partial class MapEntityLayer
             sb.Append("; " + SpielstandProbeAufwertung());
             // ⭐ bug-666: eine laufende Forschung mitten im Lauf (sec96/97).
             sb.Append("; " + SpielstandProbeForschung());
+            // ⭐ bug-701: Abriss, Schaden, Pionierbruecke (Simulation/BrueckenSpielstand.cs).
+            sb.Append("; " + SpielstandProbeBruecken());
+            // ⭐ bug-699: Minen, Fallen, gefangen, Legeauftrag (MinenFallenSpielstand.cs).
+            sb.Append("; " + SpielstandProbeMinenFallen());
+            sb.Append("; " + SpielstandProbeGas());        // bug-715 (Gaswolke.cs)
+            sb.Append("; " + SpielstandProbeMagnet());     // bug-710 Suchziel (Magnetbombe.cs)
+            sb.Append("; " + SpielstandProbeTele());       // bug-719..721 Zwilling/Spiegel/Illusion (Teleporter.cs)
+            sb.Append("; " + SpielstandProbeRampen());     // bug-702
         }
         // eine Garage: das naechste Gebaeude mit Tuer bekommt den Spieler als
         // Besitzer und nimmt eine Einheit auf — Einfahren, der Weg des Spiels
@@ -220,6 +228,11 @@ public partial class MapEntityLayer
                $" | Marken {marke}, Siegziele {ziele}, ohne Bauwerk {kein}, Ruinen {ruinen}" +
                $" | Lager {lager}" +
                $" | Garage {garage}, Ukol {ukol}, Depot {depot}" +
+               // ⭐ bug-699: Minen- und Fallenfeld, gefangene Einheiten, Legeauftraege.
+               $" | {MinenFallenFingerabdruck()}" +   // auch unter --minen-spielstand-alt: dort MUSS es abweichen
+               $" | {GasFingerabdruck()}" +   // bug-715; unter --gas-spielstand-alt MUSS es abweichen
+               $" | {MagnetFingerabdruck()}" +   // bug-710 Suchziele der Stahlsucher
+               $" | {TeleFingerabdruck()}" +     // bug-719..721 Zwillinge, Spiegel, Illusion
                $" | Flugzeuge {luft}, Sprit {lfuel}, Munition {lammo}, Arten {lart}, Hoehe {lalt}" +
                $" | {KiZustandFingerabdruck()}" +
                // ⭐ 29.10.2026, Paket P2: die Lage (bug-650 Lesung §1.5: »nicht einmal die
@@ -229,7 +242,10 @@ public partial class MapEntityLayer
                    $" | {BefehleFingerabdruck()}" +
                    $" | Bauteile Pruefzahl {BauteilePruefzahl()}" +
                    // ⭐ bug-666: die zehn Laufsaetze, Losnummer und Wuerfelstand.
-                   $" | {LaufendeForschungFingerabdruck()}");
+                   $" | {LaufendeForschungFingerabdruck()}" +
+                   // ⭐ bug-701: die Bruecken (Saetze, Hoehen/Byte, Suchkarte/Lage/Kacheln).
+                   $" | {BrueckenFingerabdruck()}" +
+                   $" | {RampenFingerabdruck()}");          // bug-702
     }
 
     /// <summary><c>--spielstand-probe-alt</c> — der Vergleich ohne die Teile von Paket P2

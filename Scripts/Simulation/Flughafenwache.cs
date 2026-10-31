@@ -222,14 +222,14 @@ public partial class MapEntityLayer : Node2D
 
         // --- 3. JEDEN bereiten Jaeger starten (@0x428BBE) ------------------
         var t = _special[ziel];
-        var mitte = ZellMitte(t.Col, t.Row);
+        var mitte = FlugZellmitte(t.Col, t.Row);   // bug-696
         int n = 0;
         foreach (int k in bereit)
         {
             var m = _special[k];
             if (!m.Stored) continue;
             m.Stored = false;
-            m.Pos = e.Pos;
+            m.Pos = FlugPunkt(e);   // bug-696
             m.Col = e.Col; m.Row = e.Row;
             m.Alt = ElevOf(m.Col, m.Row) * 15;         // air_takeoff @0x4260B9
             m.Sollhoehe = FlughoeheMax;

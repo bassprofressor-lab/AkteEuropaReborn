@@ -50,7 +50,10 @@ using Godot;
 /// Kartenschirms (siehe <c>MapViewer.KartenschirmZeiger</c>).
 /// <b>Nicht</b> angeschlossen: Befehlsart 8 (Minen/Falle legen — der
 /// Minenleger-Befehl ist nicht gebaut) und 9 (»-Dig up Bunker«, Zeiger 21…24 —
-/// die Befehlsart haben wir nicht).</para>
+/// die Befehlsart haben wir nicht).
+/// ⭐ 30.10.2026, bug-719: Befehlsart 9 ist der TELEPORTER (Menuezeile 0x26, Text »-Dig up
+/// Bunker«), Zustand 17 heisst »teleportierbar« (Fahrzeug ODER Trupp, KEINE Besitzerpruefung) —
+/// jetzt angeschlossen, Simulation/Teleporter.cs.</para>
 /// <para>⚠ (V) Die Gueltigkeit fragt UNSERE vorhandenen Pruefungen derselben
 /// Befehle (dieselben, die Vorschau und Klick fragen), nicht eine Abschrift von
 /// <c>0x40146F</c>/<c>0x401A46</c>/<c>0x4014CE</c>/<c>0x4023C9</c> — so sagen
@@ -82,6 +85,8 @@ public partial class MapEntityLayer
         switch (modus)
         {
             case OrderTerraSuche: return null;
+            case OrderLegen: return LegeVorschauZelle(col, row);           // 0x43A1B0, bug-698
+            case OrderTeleport: return TeleZeigerZustand(PlacementUnit, col, row) == TeleZustandGut;   // 0x4319DA, bug-719
             case OrderMole: return MolePlatzOk(col, row);
             case OrderAusbessern: return RampeAn(col, row) != null || StegAn(col, row) != null;
             case OrderBruecke: return BrueckePlatzOk(col, row, PlacementUnit);
@@ -114,6 +119,8 @@ public partial class MapEntityLayer
     {
         if (BefehlszeigerAus) return -1;
         if (modus == OrderTerraSuche) return ZeigerTerranium;              // Zustand 13
+        if (modus == OrderLegen) return ZeigerLegen;                       // Zustand 16 (@0x431923), bug-698
+        if (modus == OrderTeleport) return TeleZeigerbild(TeleZeigerZustand(PlacementUnit, col, row));   // 0x4319DA, bug-719
         if (modus is not (OrderMole or OrderAusbessern or OrderBruecke
                           or OrderDepot or OrderFieldMine or OrderGenerator)) return -1;
         bool gut = BefehlsartGueltig(modus, col, row) == true;

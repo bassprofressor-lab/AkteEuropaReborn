@@ -30,9 +30,12 @@ public partial class MainMenu : Control
         ("map_NET04", "Drei Haefen (NET04)"),
         ("map_NET05", "Weites Land (NET05)"),
         ("map_NET06", "Doppelhafen (NET06)"),
-        ("map_DM_4", "The Dam — Spielstand zu Level 21"),
-        ("map_DM_3", "Chanel Tunnel — Spielstand zu Level 25"),
-        ("map_DM_1", "Scandinavia — Spielstand zu Level 26"),
+        // ⭐ 30.10.2026, bug-733 (Spielerentscheidung 3): map_DM_4 »The Dam«, map_DM_3
+        // »Chanel Tunnel« und map_DM_1 »Scandinavia« sind aus dem Gefechtsmenue (und
+        // damit aus der Netzspielliste) herausgenommen. Es sind Spielstaende der Level
+        // 21/25/26 mit zerklueften Plaetzen (1 bis 114 Einheiten je Platz, DM_4 P7 und
+        // DM_1 P4 ohne Bauplatz fuer eine Startbasis; berichte/gefecht-startbasis-plan.md
+        // §1). Die Dateien bleiben; `--skirmish=map_DM_x` nimmt sie weiter auf (unten).
         // ⚠ 11.08.2026 — hier standen map_05, map_10 und map_14 als
         // "Kampagne 05/10/14". Sie gehoeren nicht ins Gefecht: eine
         // Kampagnenkarte bringt ihr Missionsskript, ihre Diplomatie und ihren
@@ -52,6 +55,10 @@ public partial class MainMenu : Control
     private Label _modeHint = null!;
     private MapPreview.Shape _mode;
     private readonly List<(MapPreview.Shape S, Button B)> _modes = new();
+
+    /// <summary>bug-733: keine Moduswahl, die Kartenliste zeigt alle Karten.
+    /// <c>--gefecht-startbasis-aus</c> bringt die alte Modusreihe zurueck.</summary>
+    private bool _ohneModus = true;
 
     /// <summary>Welche Karte hinter welcher Zeile der Kartenliste steht.</summary>
     private readonly List<int> _listed = new();
@@ -771,9 +778,18 @@ public partial class MainMenu : Control
         // Deshalb waehlt der Modus hier keine Regel aus, sondern zeigt darunter
         // die Karten, die die Maschine wirklich so spielt. Formen, zu denen
         // keine eingelesene Karte gehoert, erscheinen gar nicht erst.
+        //
+        // ⭐ 30.10.2026, bug-733 (Spielerentscheidung 6): »im gefecht sollte es nur das
+        // klassische mit startbasis geben«. Seit der Startbasis (Simulation/
+        // GefechtStartbasis.cs) startet jede Karte gleich — die Modusreihe ist weg, die
+        // Liste zeigt alle Karten. Nur mit --gefecht-startbasis-aus (dem alten Stand)
+        // erscheint sie wieder, weil die Formen dann wieder etwas Verschiedenes heissen.
+        _ohneModus = System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-startbasis-aus") < 0;
         var modeBox = new VBoxContainer();
         modeBox.AddThemeConstantOverride("separation", 4);
-        box.AddChild(Group("Spielmodus", modeBox));
+        var modeGroup = Group("Spielmodus", modeBox);
+        box.AddChild(modeGroup);
+        modeGroup.Visible = !_ohneModus;
 
         var modeRow = new HBoxContainer();
         modeRow.AddThemeConstantOverride("separation", 8);
@@ -1108,7 +1124,9 @@ public partial class MainMenu : Control
         // »Wie gezeichnet«. Der Gefechtsschirm waere also mit einer Liste von
         // genau einem Eintrag aufgegangen, was das Gegenteil von
         // uebersichtlich ist. NET07 bleibt einen Klick entfernt.
-        SelectMode(BusiestMode());
+        // bug-733: ohne Moduswahl die erste Karte der Liste (map_NET07)
+        if (_ohneModus) SelectMap(0);
+        else SelectMode(BusiestMode());
         ReadShotArgs();
         // --setup opens the skirmish panel straight away, so it can be
         // photographed without a click
@@ -2151,7 +2169,8 @@ public partial class MainMenu : Control
         _listed.Clear();
         for (int i = 0; i < Maps.Count; i++)
         {
-            if (MapPreview.ShapeOf(Maps[i].File) != _mode) continue;
+            // bug-733: ohne Moduswahl stehen alle Karten in der Liste
+            if (!_ohneModus && MapPreview.ShapeOf(Maps[i].File) != _mode) continue;
             _mapList.AddItem(Maps[i].Title);
             _mapList.SetItemTooltip(_mapList.ItemCount - 1, MapPreview.Caption(Maps[i].File));
             _listed.Add(i);

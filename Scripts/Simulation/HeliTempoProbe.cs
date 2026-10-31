@@ -50,8 +50,8 @@ public partial class MapEntityLayer
             k.Fuel = k.FuelMax / 10;
             int slot = 0;
             foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
-            var start = k.Pos + new Vector2(20 * TileW, 0);
-            if (start.X > MapZellSize().X * TileW - TileW) start = k.Pos - new Vector2(20 * TileW, 0);
+            var start = FlugPunkt(k) + new Vector2(20 * TileW, 0);   // bug-696
+            if (start.X > MapZellSize().X * TileW - TileW) start = FlugPunkt(k) - new Vector2(20 * TileW, 0);
             _htpHeli = new Special
             {
                 Slot = slot, Kind = 13, Name = "Probeheli", TypeName = "Probeheli",

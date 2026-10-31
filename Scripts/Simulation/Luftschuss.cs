@@ -131,12 +131,16 @@ public partial class MapEntityLayer
         string? flug = FlightKind(art);          // 47 -> flug_220, 49 -> keines
         int tempo = Audio.GameSounds.ProjectileSpeed(art);
         int n = SalvenZahl(a.Kind);
-        var dir = (aim - a.Pos).Normalized();
+        // bug-696: die Bahn laeuft im Bodenraum des Ziels — Start = flache Lage, in dessen
+        // angehobenen Raum geschoben (Fluglage.cs); alt = Pos.
+        var zc = ziel != null ? new Vector2I(ziel.Col, ziel.Row) : CellAt(aim) ?? new Vector2I(a.Col, a.Row);
+        var ap = AirImRahmen(a, zc.X, zc.Y);
+        var dir = (aim - ap).Normalized();
         if (dir.LengthSquared() < 0.0001f) dir = Vector2.Down;
 
         if (abwurf)
         {
-            BombeAnlegen(a, art, flug, tempo, aim);
+            BombeAnlegen(a, art, flug, tempo, aim, ap);   // bug-696
             Audio.GameSounds.PlayAt(114, a.Col, a.Row);                 // 0x42740C, fest 0x72
             return true;
         }
@@ -148,7 +152,7 @@ public partial class MapEntityLayer
             var quer = new Vector2(-dir.Y, dir.X) * seit;
             _shots.Add(new Projectile
             {
-                Pos = a.Pos,
+                Pos = ap,                        // bug-696
                 Aim = aim + quer,
                 Target = -1,                     // die ZELLE, nicht der Griff
                 Shooter = -1,                    // ⚠ siehe Klassenkopf
@@ -161,7 +165,7 @@ public partial class MapEntityLayer
                 // und »stand in der Luft«. --luftschuss-tempo-alt = alte Zahl.
                 Speed = LuftTempoPx = (tempo > 0 ? tempo : 10)
                                       * (LuftschussTempoAlt ? 1f : PxPerProjectileSpeed),
-                Weite = a.Pos.DistanceTo(aim + quer),
+                Weite = ap.DistanceTo(aim + quer),   // bug-696
                 Scheitel = 0f,                   // GERADE Bahn, kein Bogen
                 HoeheStart = a.Alt,
                 HoeheZiel = 0,                   // sinkt zu Boden
@@ -205,6 +209,10 @@ public partial class MapEntityLayer
         /// schraeg zur Zielhoehe (0x455048). Nicht gesetzt mit <c>--heli-strahl-alt</c>.</summary>
         public bool Heli;
         public float BildHoehe;
+        /// <summary>bug-692: die Lage von Schuetze und Ziel OHNE Muendungsversatz (unsere
+        /// <c>Pos</c>, = Feinlage − Gelaendehub), nur Bodenzweig — daraus die Punkthoehe
+        /// nach 0x455048. Nicht gesetzt = <see cref="Start"/>/<see cref="Ziel"/>.</summary>
+        public Vector2? Fuss, ZielFuss;
         /// <summary>Erster und letzter gesetzter Punkt (fuer den Pruefstand).</summary>
         public Vector2 ErsterPunkt, LetzterPunkt;
     }
@@ -234,6 +242,55 @@ public partial class MapEntityLayer
     /// Takte (Summe), und der letzte Strahl einzeln (Laenge, Punkte, Takte).</summary>
     public int BsAngekommen, BsPunkteSumme, BsTakteSumme;
     public (float Laenge, int Punkte, int Takte) BsLetzter;
+    /// <summary>bug-692: der letzte angekommene Bodenstrahl selbst (Pruefstand: erster Punkt).</summary>
+    private Strahl? BsLetzterStrahl;
+
+    /// <summary><c>--strahlhoehe-alt</c> — bug-692: die Punkte wieder wie bis 30.10.2026 auf
+    /// unserem Strich (Muendung → Bildpunkt des Ziels bzw. Hubschrauberbild → Boden), ohne die
+    /// Hoehenrechnung von 0x455048 und ohne den Zeichnerversatz von 0x42E8D0.</summary>
+    public static bool StrahlhoeheAlt;
+
+    /// <summary>bug-692: Hoehe eines Bodenschuetzen ueber dem Gelaende — der Anleger-Rufer
+    /// C <c>0x40EE35..0x40EE39</c> / <c>0x40EE61..0x40EE65</c>: <c>Gelaende·15 + 8</c> fuer
+    /// Quelle UND Ziel.</summary>
+    private const int BodenstrahlUeberGrund = 8;
+
+    /// <summary>bug-692: Versatz des Blitpunkts eines Strahlpunkts gegen <c>(x, y − h)</c>
+    /// (Feinlage minus Punkthoehe), selbst gelesen C/F:
+    /// <code>
+    ///   0x455048 (F 0x453CE8)  Hoehe := h_q + (h_z − h_q)·t/L − (y mod 20) − 40   (lea edx,[ecx+eax−0x28])
+    ///                          Zeile := y/20, Satz +3 := 0 (0x435AE4), Art 73/74
+    ///   0x42E8D0 Zeichner      y_blit = (Zeile+1)·20 − (+3) − Hoehe − 0x37      (0x42E907, 0x42E99D..0x42E9AB)
+    ///                          x_blit = Spalte·40 + (+2) − 20                      (Art &lt; 200: di = −20, 0x42E9B6)
+    ///   =>  y_blit = y − h + 5     (ohne die −40 waere es y − h − 35)
+    ///       x_blit = x − 20        (mit +2 = x mod 40, siehe unten)
+    /// </code>
+    /// Die Rahmen sind dieselben: unser Bild hat die Lage des Originalbildschirms
+    /// (Kachel <c>y = Zeile·20 − 50 − Hoehe·15</c>, MapBaker), siehe <see cref="ComposedAnchor"/>.
+    /// ⚠ UNSERE SETZUNG: der Fein-x <c>+2</c> ist im Original <c>y mod 40</c> (F, <c>[esp+0x38]</c>)
+    /// bzw. <c>Y0 mod 40</c> (C, <c>[esp+0x34]</c>) — beides VERMUTET ein Fehler der Vorlage
+    /// (die Punkte fielen spaltenweise zusammen); wir nehmen <c>x mod 40</c>.</summary>
+    private static readonly Vector2 StrahlBlitVersatz = new(-20f, 5f);
+
+    /// <summary>bug-692: die Effektlage eines Strahlpunkts bei <c>t/L = f</c>. Unser Zeichner
+    /// malt <c>Pos − Leinwand/2</c>, und die Leinwand der ANIM-Bilder beginnt am Blitpunkt
+    /// des Originals (Tinte 73/74 unten rechts) — also Pos = Blitpunkt + Leinwand/2.</summary>
+    private Vector2 StrahlPunktLage(Strahl s, float f)
+    {
+        Vector2 basis;   // (x, y − h) in unserem Bild
+        if (s.Heli)
+            // Quelle h = Flughoehe (+0x6DDF7E), Ziel h = Gelaende·15 (Anleger @0x4276B6): unser
+            // Pos ist Feinlage − Hub, also y − h = Pos − (Flughoehe − Hub) = das Hubschrauberbild.
+            basis = s.Start + (s.Ziel - s.Start) * f - new Vector2(0f, s.BildHoehe * (1f - f));
+        else
+        {
+            var q = s.Fuss ?? s.Start; var z = s.ZielFuss ?? s.Ziel;
+            basis = q + (z - q) * f - new Vector2(0f, BodenstrahlUeberGrund);
+        }
+        EffectFrames(s.Punkt);   // fuellt den Anker
+        var anker = _fxAnchor.TryGetValue(s.Punkt, out var an) ? an : Vector2.Zero;
+        return basis + StrahlBlitVersatz + anker;
+    }
 
     private readonly List<Strahl> _strahlen = new();
 
@@ -255,18 +312,21 @@ public partial class MapEntityLayer
         for (int k = 0; k < 2; k++)
         {
             if (_strahlen.Count >= StrahlPlaetze) break;
-            var dir = (aim - a.Pos).Normalized();
+            // bug-696: Start im Bodenraum des Ziels (Fluglage.cs) — L ist dann der flache
+            // Kartenabstand wie im Original (0x454D72), die Hoehe laeuft getrennt.
+            var ap = AirImRahmen(a, ziel.Col, ziel.Row);
+            var dir = (aim - ap).Normalized();
             var quer = new Vector2(-dir.Y, dir.X) * (k == 0 ? -20f : 20f);
             _strahlen.Add(new Strahl
             {
-                Pos = a.Pos, Ziel = aim + quer,
+                Pos = ap, Ziel = aim + quer,
                 Zielgriff = a.Target, Schaden = a.Attack, Owner = a.Owner,
                 Name = a.Name,
                 // bug-686: der Hubschrauberzweig des Strahltakts (HeliStrahlTakt). L ist die
                 // Laenge am BODEN wie im Original (dx, dy der Kartenlage, 0x454D72), die Hoehe
                 // laeuft getrennt. Start/Laenge auch im alten Weg — nur fuer den Pruefstand.
-                Heli = !HeliStrahlAlt, Start = a.Pos, Laenge = (aim + quer - a.Pos).Length(),
-                BildHoehe = HeliBildHoehe(a),
+                Heli = !HeliStrahlAlt, Start = ap, Laenge = (aim + quer - ap).Length(),
+                BildHoehe = HeliBildHoehe(a, ziel),
             });
             LuftStrahlen++;
         }
@@ -363,6 +423,9 @@ public partial class MapEntityLayer
     /// Strich laeuft also SCHRAEG vom Hubschrauber zum Boden. ⚠ UNSERE SETZUNG: wir ziehen
     /// vom Bildpunkt des Hubschraubers (Kartenlage − <see cref="BildHoehe"/>) linear zum
     /// Zielpunkt am Boden; die −40 von 0x455048 nehmen wir wie beim Bodenstrahl nicht.
+    /// ⭐ bug-692 (30.10.2026): beide Striche rechnen jetzt die Hoehe nach 0x455048 MIT den
+    /// −40 und den Blit von 0x42E8D0 (<see cref="StrahlPunktLage"/>); der Satz oben ist der Stand
+    /// von <c>--strahlhoehe-alt</c>.
     /// Beim Treffer ohne Zelle bleibt der alte Rueckfall auf das angepeilte Ziel.</para>
     /// <para>true = angekommen (der Satz ist frei).</para></summary>
     private bool BodenstrahlTakt(Strahl s)
@@ -380,7 +443,9 @@ public partial class MapEntityLayer
         {
             float f = t / L;
             var hoch = s.Heli ? new Vector2(0f, s.BildHoehe * (1f - f)) : Vector2.Zero;
-            var pos = s.Start + d * f - hoch;
+            // bug-692: die Hoehe nach 0x455048 (mit den −40) und der Blit von 0x42E8D0. Nur
+            // Bild: L, Takte und Treffer haengen nicht daran. --strahlhoehe-alt = der Stand davor.
+            var pos = StrahlhoeheAlt ? s.Start + d * f - hoch : StrahlPunktLage(s, f);
             _effects.Add(new Effect { Pos = pos, Kind = s.Punkt, FrameTime = 0.08f });
             if (s.Punkte == 0) s.ErsterPunkt = pos;
             s.LetzterPunkt = pos;
@@ -392,6 +457,7 @@ public partial class MapEntityLayer
         {
             BsAngekommen++; BsPunkteSumme += s.Punkte; BsTakteSumme += s.Takte;
             BsLetzter = (s.Laenge, s.Punkte, s.Takte);
+            BsLetzterStrahl = s;   // bug-692, Pruefstand
         }
         if (CellAt(s.Ziel) is { } zc)
             ZellEinschlag(s.Schuetze, Mathf.RoundToInt(zc.X), Mathf.RoundToInt(zc.Y), s.Schaden, 0);
@@ -404,9 +470,14 @@ public partial class MapEntityLayer
     /// <summary>bug-686: wie hoch das Hubschrauberbild ueber dem Boden steht — dieselbe
     /// Rechnung wie <see cref="AirHoehePx"/>, aber ohne deren Nachfuehrung (die hat
     /// Zustand; ein Pruefstands- oder Schussaufruf darf ihn nicht verschieben).</summary>
-    private float HeliBildHoehe(Special a)
+    /// <remarks>⭐ bug-696: in der flachen Lage die Hoehe ueber dem Bodenraum des Ziels
+    /// (<see cref="AirImRahmen"/>), also alt − Anhebung(Zielzelle); ohne Ziel die
+    /// Bodenanhebung unter dem Flugzeug. Dann liegt der erste Punkt genau am Rumpf
+    /// (Lage − alt).</remarks>
+    private float HeliBildHoehe(Special a, Entity? ziel = null)
     {
         if (FlughoeheBildAlt) return AirShadowDrop;
+        if (LageFlach) return Mathf.Max(0f, a.Alt - (ziel != null ? AirRahmenHub(a, ziel.Col, ziel.Row) : AirBodenHub(a)));   // bug-696
         float hub = !FlughuepfenAlt && !float.IsNaN(a.HubPx) ? a.HubPx : ElevOf(a.Col, a.Row) * 15f;
         return Mathf.Max(0f, a.Alt - hub);
     }

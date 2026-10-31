@@ -213,7 +213,7 @@ public partial class MapEntityLayer
             SimTickFuerProbe();
             if (a.Dead || a.Absturz) break;
             if (a.Stored) { if (gelandetTakt < 0) gelandetTakt = k + 1; letzte = a.Pos; lauf = 0; continue; }
-            if (!t.Dead && a.Pos.DistanceTo(AirAimPoint(t)) < TileW * 1.5f) ueberZiel++;
+            if (!t.Dead && a.Pos.DistanceTo(FlugPunkt(AirAimPoint(t), t.Col, t.Row)) < TileW * 1.5f) ueberZiel++;   // bug-696
             if (a.Pos.DistanceTo(letzte) < StehSchwellePx) { lauf++; laengste = System.Math.Max(laengste, lauf); }
             else lauf = 0;
             letzte = a.Pos;

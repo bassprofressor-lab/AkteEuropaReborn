@@ -146,7 +146,8 @@ public static class InhaltsStand
         new("oberflaeche", "Oberflaeche, Effekte und Mauszeiger", Bedarf.Programm, (b, p) => b.ReexportEffects(p),
             new[] { "Effects/effects_index.json", "UI/window_chrome_index.json" },
             T("2026-10-04T19:56:28+02:00"),
-            "InterfaceExporter, AnimFile, CwrFile, PalFile, ExeTables"),
+            "InterfaceExporter, AnimFile, CwrFile, PalFile, ExeTables, " +
+            "ContentBuilder.MuendungstafelKopieren (DATA/SHOOT.CWT, ab Stand 2)"),
         new("hilfe", "Hilfe, Missionsziele und Enzyklopaedie", Bedarf.Programm, (b, p) => b.ReexportHelp(p),
             new[] { "UI/help.json" },
             T("2026-10-02T07:12:21+02:00"),
@@ -179,6 +180,13 @@ public static class InhaltsStand
     /// Backofen laesst auch die Kartenrampen (Lage 200..249, Kachel 10723..10730) im
     /// Bodenbild weg, sie werden lebend gezeichnet (Simulation/KartenrampeLebend.cs). Ohne
     /// Neueinlesen bleiben nach einem Rampenabriss 1..174 Punkte der Rampe stehen.</para>
+    /// <para>⭐ 30.10.2026 (bug-689, pruefung-rest-b-opus.md §7): <b>oberflaeche → 2</b> — der
+    /// Effektteil legt jetzt die Muendungstafel <c>DATA/SHOOT.CWT</c> mit ab
+    /// (<see cref="ContentBuilder"/>.MuendungstafelKopieren). Ohne sie bleibt das
+    /// Muendungsfeuer der alte weltfeste Effekt (Simulation/Muendungsfeuer.cs).</para>
+    /// <para>⭐ 30.10.2026 (bug-708, bau-gaswolke.md): <b>oberflaeche → 3</b> — der Effektteil legt
+    /// die Gaswolke (ANIM-Folge 69, <c>Effects/gas</c>) mit ab. Ohne sie zeichnet die Wolke das
+    /// alte Rauchbild (Simulation/Gaswolke.cs).</para>
     /// </summary>
     public static readonly IReadOnlyDictionary<string, int> Noetig = new Dictionary<string, int>
     {
@@ -189,7 +197,7 @@ public static class InhaltsStand
         ["tabellen"] = 1,
         ["kampagne"] = 1,
         ["einheiten"] = 1,
-        ["oberflaeche"] = 1,
+        ["oberflaeche"] = 3,   // bug-708
         ["hilfe"] = 1,
         ["briefings"] = 1,
         ["ton"] = 1,

@@ -48,9 +48,15 @@ using Godot;
 ///   <item><b>Nach dem Marsch:</b> stirbt das Ziel oder verliert die KI es aus der Sicht,
 ///   sucht sich die Gruppe ein neues bekanntes Ziel in höchstens 48 Zellen
 ///   (<see cref="AiPickTarget"/>), sonst löst sie sich auf; stehende Mitglieder werden in
-///   jedem Lauf neu angesetzt (das Original befiehlt ohnehin in jedem Gruppenlauf).</item>
+///   jedem Lauf neu angesetzt (das Original befiehlt ohnehin in jedem Gruppenlauf).
+///   ⭐ bug-714: seit dem 30.10.2026 tut das der <b>Angriffsarm des Originals</b>
+///   (Simulation/KiGruppenangriff.cs, gewürfelte Zielzelle, »zweit«); unser Nachsetzen mit
+///   <c>AiSend</c> entfällt. Beim Umziel hält die KI die Mitglieder an, die noch das alte
+///   Ziel verfolgen — UNSERE SETZUNG, damit der Arm sie im selben Lauf auf das neue
+///   ansetzt (im Original gibt es kein Umziel, die Gruppe löst sich auf).</item>
 ///   <item><b>Auffüllen nach Verlusten:</b> eine angreifende Gruppe unter ihrer Sollstärke
-///   nimmt je Lauf bis zu 3 freie Einheiten nach derselben Aufnahmeregel nach.</item>
+///   nimmt je Lauf bis zu 3 freie Einheiten nach derselben Aufnahmeregel nach. Mit dem Arm
+///   (bug-714) ohne eigenen Befehl: den gibt ihnen der Arm im nächsten Gruppenlauf.</item>
 ///   <item><b>Nachzüglerfrist:</b> kommt eine marschierende Gruppe 60 Gruppenläufe lang
 ///   nicht weiter (ein Mitglied steckt fest), werden die Mitglieder ausserhalb des Kastens
 ///   entlassen — sonst hielte die 2/3-Regel die Gruppe für immer.</item>
@@ -133,7 +139,8 @@ public partial class MapEntityLayer
     // ---- Zähler (Statuszeile und Prüfstand) ----------------------------------
 
     public int GefechtGruppenGebildet, GefechtGruppenZuKlein, GefechtNeueZiele, GefechtAufgeloestOhneZiel,
-               GefechtAufgefuellt, GefechtNachzuegler, GefechtNachgesetzt, GefechtSpaehen;
+               GefechtAufgefuellt, GefechtNachzuegler, GefechtNachgesetzt, GefechtSpaehen,
+               GefechtUmzielAngehalten;   // bug-714
     private readonly Dictionary<string, int> _gefGruende = new();
     private void GefechtGrund(int p, string g)
     {
@@ -186,7 +193,24 @@ public partial class MapEntityLayer
                 if (e.DugIn || i == a.Grabber || e.AiCpu0 == 10) continue;
                 frei.Add(i);
             }
-            if (frei.Count > guard && KiSpaehen(a, frei, guard, AiCenter(p))) GefechtSpaehen++;
+            if (frei.Count <= guard)
+            {
+                GefechtGrund(p, $"Spaehen: frei {frei.Count} <= Wache {guard}");   // bug-730 Messpunkt
+                // bug-730 Messpunkt: WER fehlt in der Liste? (reine Abfragen)
+                foreach (int i in ArmyOf(p))
+                {
+                    var e = _entities[i];
+                    int gIn = -1;
+                    for (int g2 = 0; g2 < 4 && gIn < 0; g2++) if (_aiGruppen[p][g2].Einheiten.Contains(i)) gIn = g2;
+                    // Gemessen 31.10.: »in Gruppe, Ziel ohne Bauwerk« — siehe GefechtNachsetzenVorher.
+                    int zr = gIn < 0 || _aiGruppen[p][gIn].Auftrag == null ? -1 : ResolveTarget(p, _aiGruppen[p][gIn].Auftrag!);
+                    string w = e.DugIn ? "eingegraben" : i == a.Grabber ? "Greifer"
+                             : e.AiCpu0 == 10 ? (gIn < 0 ? "CPU0 10 ohne Gruppe"
+                                                 : zr >= 0 && _entities[zr].NoStructure ? "in Gruppe, Ziel ohne Bauwerk" : "in Gruppe") : "frei";
+                    GefechtGrund(p, $"Spaehen-Armee {w}");
+                }
+            }
+            else if (KiSpaehen(a, frei, guard, AiCenter(p))) GefechtSpaehen++;
             GefechtGrund(p, "kein bekanntes Ziel");
             return;
         }
@@ -234,7 +258,14 @@ public partial class MapEntityLayer
                      $"(Index {KiIndex(p, g)}, Ende {KiEnde(p, g)}) Richtung {_entities[ziel].Name} " +
                      $"bei ({_entities[ziel].Col},{_entities[ziel].Row}) — po={po}, freie={freie}, Start-Sektor ({sx},{sy})");
         }
-        else AiGruppeLosschicken(p, g, ziel, $"Gefecht ohne Marschweg, po={po}, freie={freie}");
+        else if (GefechtArmAn)
+        {
+            // ⭐ bug-714: wie in AiMissionAttack — 0x4BC920 gibt keinen Befehl, den ersten gibt
+            // der Angriffsarm des Gruppenlaufs (Simulation/KiGruppenangriff.cs).
+            KiGruppeLosBuchen(p, g, ziel, $"Gefecht ohne Marschweg, po={po}, freie={freie}");
+            KiGruppenAngriffsarm(p, g, gr, ziel);
+        }
+        else AiGruppeLosschicken(p, g, ziel, $"Gefecht ohne Marschweg, po={po}, freie={freie}");   // --gefecht-gruppenangriff-alt
         NoteEvent(_entities[ziel], $"KI P{p} Gruppe {g}");
     }
 
@@ -364,6 +395,19 @@ public partial class MapEntityLayer
 
             int zi = gr.Auftrag == null ? -1 : ResolveTarget(p, gr.Auftrag);
             bool gut = zi >= 0 && AiHostile(p, _entities[zi].Owner) && KiKennt(p, _entities[zi]);
+            // ⭐ bug-730 (31.10.2026) — DIE URSACHE, gemessen (NET07 ohne Startbasis,
+            // --gefecht-gruppenangriff-alt, 300 s): P3 spaehte nie, weil seine Armee leer war —
+            // 27 Einheiten standen in G0 mit dem Auftrag »Lebork« (Art 0, Platz ohne Bauwerk,
+            // aus AiPickTarget, bug-732). Das Ziel blieb lebend, feindlich und bekannt, die
+            // Gruppe also ewig »gut«: nie aufgeloest, ihre Mitglieder nie frei (CPU0 10).
+            // Das Original verwirft Art 0 in target (C 0x4BEE13 / F 0x4BE8C3). Hier dasselbe
+            // fuer schon gesetzte Auftraege: ein Platz ohne Bauwerk ist kein gutes Ziel.
+            // Gegenschalter --ki-ziel-skriptplatz-alt (wie bug-732).
+            if (gut && _entities[zi].NoStructure)
+            {
+                if (!KiZielSkriptplatzAlt) gut = false;
+                else KiGruppeAufSkriptplatz++;                                  // Messpunkt: gehalten
+            }
             if (gut) continue;
             var t = GefechtNeuesZiel(p, GefechtGruppenMitte(gr), GefechtNachsetzWeite, out int neu);
             if (t == null)
@@ -375,7 +419,22 @@ public partial class MapEntityLayer
             gr.Auftrag = t;
             GefechtNeueZiele++;
             // noch nicht losgeschickt: das tut der Gruppenlauf gleich (KiGruppeNachMarsch)
-            if (gr.Losgeschickt) AiGruppeLosschicken(p, g, neu, "Gefecht: neues Ziel nach dem Marsch");
+            if (!gr.Losgeschickt) continue;
+            if (GefechtArmAn)
+            {
+                // ⭐ bug-714, UNSERE SETZUNG: wer noch das alte Ziel verfolgt (Target >= 0,
+                // ungesehen oder uebergelaufen — ein totes Ziel raeumt Kill selbst), wird
+                // angehalten; der Arm setzt ihn gleich danach im Gruppenlauf auf das neue an.
+                foreach (int i in gr.Einheiten)
+                {
+                    if (i < 0 || i >= _entities.Count) continue;
+                    var e = _entities[i];
+                    if (e.Dead || e.Ukol != UkolFrei || e.Target < 0 || e.Target == neu) continue;
+                    AiAnhalten(i, e);
+                    GefechtUmzielAngehalten++;
+                }
+            }
+            else AiGruppeLosschicken(p, g, neu, "Gefecht: neues Ziel nach dem Marsch");   // --gefecht-gruppenangriff-alt
         }
     }
 
@@ -407,14 +466,18 @@ public partial class MapEntityLayer
             bool tuer = IstTuergriff(gr.Auftrag);
             if (tuer) continue;
 
-            foreach (int i in gr.Einheiten)
-            {
-                if (i < 0 || i >= _entities.Count) continue;
-                var e = _entities[i];
-                if (e.Dead || e.Target >= 0 || e.Path != null) continue;
-                AiSend(i, zi);
-                GefechtNachgesetzt++;
-            }
+            // ⭐ bug-714: mit dem Arm befiehlt der Gruppenlauf selbst jedem stehenden
+            // Mitglied neu (Original) — unser Nachsetzen nur noch unter --gefecht-gruppenangriff-alt.
+            bool arm = GefechtArmAn;
+            if (!arm)
+                foreach (int i in gr.Einheiten)
+                {
+                    if (i < 0 || i >= _entities.Count) continue;
+                    var e = _entities[i];
+                    if (e.Dead || e.Target >= 0 || e.Path != null) continue;
+                    AiSend(i, zi);
+                    GefechtNachgesetzt++;
+                }
 
             int fehlt = Math.Min(3, gr.Soll - gr.Einheiten.Count);
             for (int i = 0; i < _entities.Count && fehlt > 0 && gr.Einheiten.Count < AiGruppe.MaxEinheiten; i++)
@@ -422,6 +485,7 @@ public partial class MapEntityLayer
                 var e = _entities[i];
                 if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || !e.Mobile) continue;
                 if (!CanFight(e) || AiUnarmed(e) || e.DugIn || i == a.Grabber) continue;
+                if (KiSpritleerNichtFrei(e)) continue;                                  // bug-731
                 int s = -1;
                 if (_aiSec110[p] == 0)
                 {
@@ -434,17 +498,50 @@ public partial class MapEntityLayer
                     if (r[s].DefRobots >= r[s].Belegt) continue;
                 }
                 gr.Einheiten.Add(i);
+                if (SpritLeer(e)) KiSpritleerAufgenommen++;                             // bug-731 Messpunkt
                 e.AiCpu0 = 10;
                 e.AiCpu1 = g;
                 if (s >= 0) r[s].Belegt--;
-                AiSend(i, zi);
+                if (!arm) AiSend(i, zi);        // bug-714: mit dem Arm befiehlt der naechste Gruppenlauf
                 GefechtAufgefuellt++;
                 fehlt--;
             }
         }
     }
 
+    /// <summary><c>--ki-sprit-aufnahme-alt</c> (bug-731): Einheiten ohne Sprit zaehlen
+    /// im Gefecht wieder als frei — der Stand bis zum 30.10.2026.</summary>
+    public static bool KiSpritAufnahmeAlt;
+
+    /// <summary>Messpunkt bug-730: Gruppenlaeufe, in denen eine Gruppe einen Platz ohne
+    /// Bauwerk als Ziel BEHIELT (nur unter dem Gegenschalter moeglich).</summary>
+    public int KiGruppeAufSkriptplatz;
+
+    /// <summary>Messpunkt bug-731: wie oft eine Einheit ohne Sprit in eine Gruppe kam
+    /// (Bilden und Auffuellen) — laeuft auch unter dem Gegenschalter.</summary>
+    public int KiSpritleerAufgenommen;
+
+    /// <summary>
+    /// ⭐ bug-731 (30.10.2026) — <b>OHNE SPRIT NICHT FREI</b>, NUR IM GEFECHT. Gemessen auf
+    /// NET07 (<c>berichte/gefecht-ki-stillstand-opus.md</c> 3a/4): P3 bildete eine Gruppe aus 8
+    /// Einheiten mit <c>sprit=0</c>, die nicht losfuhr (AiWalkTo/ApplyMove brechen bei
+    /// <c>Fuel &lt;= 0</c> ab), entliess sie nach der Nachzueglerfrist und bildete sie sofort neu —
+    /// 11- bis 12-mal in 1800 s.
+    ///
+    /// <para><b>Gelesen, C UND F:</b> weder <c>ai_units</c> (C 0x4BF4E0 / F 0x4BEF90: Felder
+    /// +0x09 faze, +0x14 UKOL, +0x2C/+0x2B Reichweite, +0x00/+0x01 Ort, +0x0A Klasse) noch die
+    /// Gruppenaufnahme (C 0x4BC920 / F 0x4BC3E0: +0x09, +0x0F Antrieb 0xAB, +0x14) lesen den
+    /// Sprit +0x2E (C 0x6E26F6 / F 0x6E1756). Das Original nimmt Trockene also mit. Darum
+    /// <b>UNSERE SETZUNG</b>, nur im Gefecht (Wettkampfmodus); die Kampagne bleibt beim
+    /// Original. Gegenschalter <c>--ki-sprit-aufnahme-alt</c>.</para>
+    /// </summary>
+    private bool KiSpritleerNichtFrei(Entity e)
+        => !InCampaign && !KiSpritAufnahmeAlt && e.FuelMax > 0 && e.Fuel <= 0;
+
+    private static bool SpritLeer(Entity e) => e.FuelMax > 0 && e.Fuel <= 0;
+
     private readonly int[] _gefRest = new int[SektorZahl];
+    private readonly int[] _gefTrocken = new int[SektorZahl];   // bug-731, AiFreieAngreifer
 
     /// <summary>Wie viele Einheiten <see cref="AiGruppeBilden"/> mit
     /// <c>gefecht != null</c> jetzt aufnehmen würde — dieselbe Regel, ohne etwas zu ändern.</summary>
@@ -459,6 +556,7 @@ public partial class MapEntityLayer
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || !e.Mobile) continue;
             if (!CanFight(e) || AiUnarmed(e) || e.DugIn || i == a.Grabber) continue;
+            if (KiSpritleerNichtFrei(e)) continue;                                      // bug-731
             if (_aiSec110[p] == 0) { if (e.AiCpu0 < 5) n++; continue; }
             if (e.AiCpu0 is not (1 or 2)) continue;
             int s2 = AiSektorAus(e.AiCpu1);
@@ -474,5 +572,7 @@ public partial class MapEntityLayer
         => $"Gefechts-KI: {(GefechtKiMarschAn ? "Gruppen/Marsch" : "AiFight (--gefecht-ki-marsch-aus)")}, " +
            $"Gruppen {GefechtGruppenGebildet} (zu klein {GefechtGruppenZuKlein}), neue Ziele nach dem Marsch {GefechtNeueZiele}, " +
            $"aufgeloest ohne Ziel {GefechtAufgeloestOhneZiel}, aufgefuellt {GefechtAufgefuellt}, nachgesetzt {GefechtNachgesetzt}, " +
-           $"Nachzuegler {GefechtNachzuegler}, Spaehfahrten {GefechtSpaehen}";
+           $"Nachzuegler {GefechtNachzuegler}, Spaehfahrten {GefechtSpaehen}; " +
+           $"Angriffsarm {(GefechtArmAn ? "je Lauf" : "aus (--gefecht-gruppenangriff-alt)")}, Befehle Tuer/1/2/3/4 {string.Join("/", KiArmBefehle)}, " +
+           $"beim Umziel angehalten {GefechtUmzielAngehalten}";   // bug-714
 }

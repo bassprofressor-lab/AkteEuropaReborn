@@ -138,7 +138,7 @@ public partial class MapEntityLayer : Node2D
         // Den Jaeger zurueck in den Hangar — jeder Fall beginnt gleich.
         var j = _special[jaeger];
         j.Stored = true; j.Dead = false; j.Absturz = false;
-        j.Col = feld.Col; j.Row = feld.Row; j.Pos = feld.Pos;
+        j.Col = feld.Col; j.Row = feld.Row; j.Pos = FlugPunkt(feld);   // bug-696
         j.Target = -1; j.Goal = null; j.PlayerGoal = null; j.Angriffsauftrag = false;
         feld.Hangar ??= new System.Collections.Generic.List<int>();
         if (!feld.Hangar.Contains(j.Slot)) feld.Hangar.Add(j.Slot);
@@ -204,7 +204,7 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = slot, Kind = art, Name = "Probejaeger",
             Owner = owner, HomeSlot = feld.Slot,
-            Col = feld.Col, Row = feld.Row, Pos = feld.Pos,
+            Col = feld.Col, Row = feld.Row, Pos = FlugPunkt(feld),   // bug-696
             Stored = stored,
             Speed = 10, StufeUnten = 2, Stufe = stored ? 0 : 5,
             Hp = 100, HpMax = 100, Ammo = 4, AmmoMax = 4, Fuel = 800, FuelMax = 800,

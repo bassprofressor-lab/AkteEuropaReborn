@@ -361,7 +361,7 @@ public partial class MapEntityLayer
 
                 // Der Schuetze dreht sich hin — IMMER, auch beim Nachladen
                 // (@0x4284CB vor @0x4284D1).
-                s.AimFacing = DirToFacing(a.Pos - s.Pos);
+                s.AimFacing = DirToFacing(a.Pos - FlugPunkt(s));   // bug-696: flach gegen flach
                 FlakGedreht++;
                 // …aber angelegt wird nur, wenn er geladen hat (@0x4284D9).
                 if (laedt) { FlakDrehungOhneSchuss++; break; }
@@ -424,12 +424,16 @@ public partial class MapEntityLayer
             }
             if (rohr < 0) { _flak.RemoveAt(k); continue; }
             auf.Rohr[rohr] = true;
+            // bug-689: die Station setzt den Muendungszaehler auf ROHR + 1
+            // (C 0x42878E `lea ecx,[ebx+1]` / 0x428791), der Zeichner nimmt fuer
+            // ZBRAN 18 daraus den SHOOT.CWT-Punkt (0x42A0EC ff.).
+            MuendungsfeuerStart(s, rohr + 1);
             auf.Schuesse--;
             FlakSchuesse++;
             FlakSchuesseMax = Mathf.Max(FlakSchuesseMax, FlakRohre - auf.Schuesse);
 
             // die Sprengwolke am Flugzeug, verstreut um ±30 Feineinheiten
-            var wolke = ziel.Pos + new Vector2(30 - Simulation.Determinism.Roll(60),
+            var wolke = AirSchatten(ziel) + new Vector2(30 - Simulation.Determinism.Roll(60),   // bug-696: wie bisher am Bodenpunkt
                                                30 - Simulation.Determinism.Roll(60)) * 0.5f;
             _effects.Add(new Effect { Pos = wolke, Kind = "schlag_91", FrameTime = 0.05f });
             Audio.GameSounds.PlayAt(2, s.Col, s.Row);
@@ -546,7 +550,38 @@ public partial class MapEntityLayer
         if (FlakKegelAus) sb.Append("   ⚠ Nullmodell --flak-kegel-aus: Auftraege muessen 0 sein");
         if (FlakTrefferAus) sb.Append("   ⚠ Nullmodell --flak-treffer-aus: Schuesse muessen 0 sein");
         if (FlughoeheAlt) sb.Append("   ⚠ Nullmodell --flughoehe-alt: ohne Hoehe kein Ring");
+        // bug-727 Nachtrag (30.10.2026): ein URTEIL am Ende. Seit bug-718 (Flieger nordsuedlich
+        // halb so schnell) erreicht in K17 in 400 s keiner mehr den Ring — die Zeile hatte dann
+        // gar keinen ABGLEICH und sagte trotzdem nichts dazu. Die Regel bleibt, wie sie ist.
+        sb.Append("  -> " + FlakUrteil());
         return sb.ToString();
+    }
+
+    /// <summary>bug-727 Nachtrag: das Urteil der Zeile. Kein Flieger im Ring → KEIN URTEIL.
+    /// Sonst muss die Kette laufen (Auftrag → Schuss), jeder ABGLEICH ok sein und das Rohr
+    /// beim Nachladen nachdrehen (0x4284CB vor 0x4284D1). Nullmodelle, die rot werden:
+    /// <c>--flak-treffer-aus</c> (Auftraege ohne Schuss), <c>--flak-drehung-alt</c> (keine
+    /// Drehung beim Nachladen).</summary>
+    private string FlakUrteil()
+    {
+        if (FlakRingTreffer == 0)
+            return "KEIN URTEIL — kein Flieger im Ring (Lauf verlaengern: K17 braucht seit bug-718 rund 1200 s)";
+        var fehl = new System.Collections.Generic.List<string>();
+        if (FlakAuftraege == 0) fehl.Add("Ring ohne Auftrag");
+        if (FlakSchuesse == 0) fehl.Add("Auftraege ohne Schuss");
+        if (FlakSchuesse > 0)
+        {
+            float takte = (float)FlakAuftragTakte / FlakSchuesse;
+            if (FlakSchuesseMax > FlakRohre) fehl.Add("zu viele Schuesse je Auftrag");
+            if (!(takte > 1.5f && takte < 2.8f)) fehl.Add("Takte je Schuss daneben");
+        }
+        if (FlakNachladeZahl > 0)
+        {
+            float m = (float)FlakNachladeSumme / FlakNachladeZahl;
+            if (!(FlakNachladeMin >= 12 && FlakNachladeMax <= 17 && m > 13f && m < 16f)) fehl.Add("Nachladen daneben");
+        }
+        if (FlakDrehungOhneSchuss == 0) fehl.Add("keine Drehung beim Nachladen");
+        return fehl.Count == 0 ? "BESTANDEN" : "DURCHGEFALLEN (" + string.Join(", ", fehl) + ")";
     }
 
     // ================= --flak-probe: der Ring mit festen Zahlen ==============
@@ -683,7 +718,7 @@ public partial class MapEntityLayer
                 Slot = slot++, Kind = 4, Name = "Probeflieger (Start)", TypeName = "Probeflieger",
                 Owner = gegner, Stored = false,
                 Col = s.Col - 5, Row = s.Row,
-                Pos = s.Pos + new Vector2(-5 * TileW, 0),
+                Pos = FlugPunkt(s) + new Vector2(-5 * TileW, 0),   // bug-696
                 Hp = 100000, HpMax = 100000, Defence = 0, Attack = 0,
                 Ammo = 0, AmmoMax = 0, Fuel = 9999, FuelMax = 9999,
                 Alt = alt, Sollhoehe = alt, Order = 4, Order2 = 7, StartUhr = 0,
@@ -713,7 +748,7 @@ public partial class MapEntityLayer
                 Slot = slot++, Kind = 4, Name = "Probeflieger", TypeName = "Probeflieger",
                 Owner = gegner, Stored = false,
                 Col = s.Col + f.Dc, Row = s.Row + f.Dr,
-                Pos = s.Pos + new Vector2(f.Dc * TileW, f.Dr * TileH),
+                Pos = FlugPunkt(s) + new Vector2(f.Dc * TileW, f.Dr * TileH),   // bug-696
                 Hp = FlakProbeHuelle, HpMax = FlakProbeHuelle, Defence = 0, Attack = 0,
                 Ammo = 0, AmmoMax = 0, Fuel = 9999, FuelMax = 9999,
                 Alt = alt, Sollhoehe = alt,

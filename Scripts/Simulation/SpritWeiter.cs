@@ -143,8 +143,8 @@ public partial class MapEntityLayer
         // Teil 4: der Probeheli tankt sie, ohne neuen Befehl
         int slot = 0;
         foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
-        var start = e.Pos + new Vector2(10 * TileW, 0);
-        if (start.X > MapZellSize().X * TileW - TileW) start = e.Pos - new Vector2(10 * TileW, 0);
+        var start = FlugPunkt(e) + new Vector2(10 * TileW, 0);   // bug-696
+        if (start.X > MapZellSize().X * TileW - TileW) start = FlugPunkt(e) - new Vector2(10 * TileW, 0);
         var heli = new Special
         {
             Slot = slot, Kind = 13, Name = "Probeheli", TypeName = "Probeheli",

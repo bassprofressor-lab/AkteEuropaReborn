@@ -1023,6 +1023,58 @@ public sealed class ContentBuilder
     }
 
     /// <summary>
+    /// ⭐ bug-723 (30.10.2026) — <b>die Gastafeln <c>NN.CWG</c></b> nach <c>&lt;dst&gt;/DATA</c>,
+    /// unveraendert, je 256 Byte. Der Lader C @0x4B5829 liest sie nach 0xB136B8; der
+    /// Gasblitter 0x4AC830 schickt damit den Untergrund um (Rendering/GasBild.cs). Gehoert
+    /// zum Teil »oberflaeche« (InhaltsStand Stand 3).
+    /// </summary>
+    private void GastafelnKopieren(Action<string> say)
+    {
+        try
+        {
+            string dir = _dst + "/DATA";
+            Directory.CreateDirectory(dir);
+            int n = 0;
+            for (int ts = 0; ts < 100; ts++)
+            {
+                string? q = Find($"DATA/{ts:00}.CWG");
+                if (q == null) continue;
+                var b = File.ReadAllBytes(q);
+                if (b.Length != 256) { say($"{ts:00}.CWG: {b.Length} Byte statt 256 — uebergangen"); continue; }
+                File.WriteAllBytes($"{dir}/{ts:00}.CWG", b);
+                n++;
+            }
+            say($"Gastafeln: {n} NN.CWG nach {dir}" + (n == 0 ? " — KEINE gefunden, das Gas bleibt gemischt" : ""));
+        }
+        catch (Exception e) { say("Gastafeln: " + e.Message); }
+    }
+
+    /// <summary>
+    /// ⭐ bug-689 (30.10.2026) — <b>die Muendungstafel <c>SHOOT.CWT</c></b> nach
+    /// <c>&lt;dst&gt;/DATA</c>, unveraendert. Der Lader des Originals C <c>0x4544F0</c>
+    /// liest 0x7080 Byte nach <c>0x87D6B0</c>; die Datei liegt lose neben der GAME.EXE
+    /// (F: 28 800 B vom 09.06.1997, die C-Installation hat keine) — <c>Asset</c> sieht
+    /// lose, unter DATA/ und im Archiv nach. Gehoert zum Teil »oberflaeche«
+    /// (InhaltsStand Stand 2). Gezeichnet wird daraus in Simulation/Muendungsfeuer.cs.
+    /// </summary>
+    private void MuendungstafelKopieren(Action<string> say)
+    {
+        try
+        {
+            var b = Asset("SHOOT.CWT");
+            if (b == null) { say("Muendungstafel SHOOT.CWT nicht gefunden — das Muendungsfeuer bleibt weltfest"); return; }
+            if (b.Length != 0x7080) { say($"SHOOT.CWT: {b.Length} Byte statt {0x7080} — uebergangen"); return; }
+            string dir = _dst + "/DATA";
+            Directory.CreateDirectory(dir);
+            string ziel = dir + "/SHOOT.CWT";
+            bool gleich = File.Exists(ziel) && File.ReadAllBytes(ziel).AsSpan().SequenceEqual(b);
+            if (!gleich) File.WriteAllBytes(ziel, b);
+            say($"Muendungstafel: SHOOT.CWT nach {dir}{(gleich ? " (lag schon gleich da)" : "")}");
+        }
+        catch (Exception e) { say("Muendungstafel: " + e.Message); }
+    }
+
+    /// <summary>
     /// <b>DER PRÜFSTAND ZU BEIDEN FRAGEN</b> — »ab wann ragt ein Objekt auf«
     /// und »welche Kachel brennt«. Erreichbar über <c>--objekt-hoehen=</c>.
     ///
@@ -1402,6 +1454,8 @@ public sealed class ContentBuilder
                     // die Fenster selbst aus Godot-Bausteinen gebaut.
                     if (cww != null) ui.WriteWindowChrome(cww);
                     if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
+                    MuendungstafelKopieren(Say);   // bug-689: SHOOT.CWT nach DATA/
+                    GastafelnKopieren(Say);        // bug-723: NN.CWG nach DATA/
                     // Die SACHBILDER zu Hilfe und Enzyklopaedie. Die Texte hatten
                     // wir laengst, die Bilder lagen ungenutzt. Sie liegen NICHT
                     // unter DATA/, sondern neben der GAME.EXE im Spielordner —
@@ -1594,6 +1648,8 @@ public sealed class ContentBuilder
             if (fnt2 != null) ui.WriteFont(fnt2, InterfaceExporter.Font2Name, "FONT2.CWD");
             if (fnt == null && fnt2 == null) Say("⚠ FONT.CWD/FONT2.CWD nicht gefunden");
             ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
+            MuendungstafelKopieren(Say);   // bug-689: SHOOT.CWT nach DATA/
+            GastafelnKopieren(Say);        // bug-723: NN.CWG nach DATA/
             // Die Windfahne haengt am selben Weg: sie ist ein Bild der
             // Oberflaeche und soll ohne vollen Neuimport nachziehbar sein.
             var cww = Asset("WINDOWS.CWW");

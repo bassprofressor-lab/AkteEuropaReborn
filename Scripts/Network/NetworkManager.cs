@@ -495,6 +495,13 @@ public partial class NetworkManager : Node
             Techstandard = UI.SkirmishSetup.Techstandard,
             Resources = UI.SkirmishSetup.Resources,
             AllUnits = UI.SkirmishSetup.AllUnits,
+            // ⭐ bug-734: Konto, B8 und Startbasis. ⚠ Die Schalter liest der MapViewer erst
+            // NACH dem Szenenwechsel; hier, im Menue, stehen sie noch nicht in den
+            // statischen Feldern. Darum die Befehlszeile selbst.
+            StartMoney = KontoDesVermittlers(),
+            NoStartBase = Rendering.MapEntityLayer.NoStartBase || HatSchalter("--no-start-base"),
+            StartbasisAus = Rendering.MapEntityLayer.GefechtStartbasisAus
+                            || HatSchalter("--gefecht-startbasis-aus"),
         };
 
         Determinism.EnsureConfigured();
@@ -533,6 +540,24 @@ public partial class NetworkManager : Node
     ///
     /// <para>Ohne Netzschalter tut diese Methode nichts.</para>
     /// </summary>
+    /// <summary><c>--netz-sitzung-alt</c> — bug-734: Konto, B8 und Startbasis NICHT aus der
+    /// Partie uebernehmen (das Nullmodell: ein anderes Konto laeuft auseinander).</summary>
+    public static bool SitzungAlt;
+
+    private static bool HatSchalter(string s)
+        => System.Array.IndexOf(Core.CommandLine.Args, s) >= 0;
+
+    /// <summary>Das Konto, das der Vermittler verteilt: <c>--konto=</c> der Befehlszeile,
+    /// sonst der Regler des Gefechtsschirms (<see cref="UI.SkirmishSetup.StartMoney"/>).
+    /// Auf 0..10000 begrenzt wie der Knopf des Originals (@0x44D425).</summary>
+    private static int KontoDesVermittlers()
+    {
+        int v = UI.SkirmishSetup.StartMoney;
+        foreach (string a in Core.CommandLine.Args)
+            if (a.StartsWith("--konto=") && int.TryParse(a["--konto=".Length..], out int k)) v = k;
+        return System.Math.Clamp(v, 0, 10000);
+    }
+
     public static void OverrideSetup()
     {
         if (Instance == null || Link?.Session == null) return;
@@ -565,6 +590,14 @@ public partial class NetworkManager : Node
         UI.SkirmishSetup.Techstandard = s.Techstandard;
         UI.SkirmishSetup.Resources = s.Resources;
         UI.SkirmishSetup.AllUnits = s.AllUnits;
+        // ⭐ bug-734: Konto, B8 und Startbasis kommen ebenfalls aus der Partie.
+        // --netz-sitzung-alt = der Stand bis Protokoll 2 (jeder nimmt seine eigenen).
+        if (!SitzungAlt)
+        {
+            UI.SkirmishSetup.StartMoney = s.StartMoney;
+            Rendering.MapEntityLayer.NoStartBase = s.NoStartBase;
+            Rendering.MapEntityLayer.GefechtStartbasisAus = s.StartbasisAus;
+        }
         UI.SkirmishSetup.Human = s.MySlot;
         UI.SkirmishSetup.CampaignMission = 0;   // Netz ist immer Gefecht
 

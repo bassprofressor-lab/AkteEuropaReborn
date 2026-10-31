@@ -317,7 +317,7 @@ public partial class MapEntityLayer
         if (AbsturzAus)
         {
             a.Hp = 0; a.Dead = true; a.Target = -1; a.Goal = null;
-            _effects.Add(new Effect { Pos = a.Pos, Kind = "explosion", FrameTime = 0.05f });
+            _effects.Add(new Effect { Pos = AirSchatten(a), Kind = "explosion", FrameTime = 0.05f });   // bug-696: am Boden
             AbstuerzeSofortTot++;
             AbschussKlang(a);                        // derselbe Abschuss, nur ohne Fall
             GD.Print($"absturz-aus: {a.Name} (Platz {a.Slot}, Spieler {a.Owner}) " +
@@ -386,12 +386,13 @@ public partial class MapEntityLayer
                 int w = Simulation.Determinism.Roll(4);
                 if (w is 1 or 2)
                 {
-                    int feinY = AbsturzAlt ? 0 : (int)Mathf.PosMod(a.Pos.Y, TileH) * 40 / TileH;
+                    // bug-696: flach ist FeinY die Satz-Feinlage (Fluglage.cs)
+                    int feinY = AbsturzAlt ? 0 : LageFlach ? a.FineY : (int)Mathf.PosMod(a.Pos.Y, TileH) * 40 / TileH;
                     float h = Mathf.Max(0f, AirHoehePx(a) - Simulation.Determinism.Roll(20)
                                             - (AbsturzAlt ? 0 : AbsturzFahneAbzug + feinY / 2));
                     _effects.Add(new Effect
                     {
-                        Pos = a.Pos - new Vector2(0, h),
+                        Pos = AirSchatten(a) - new Vector2(0, h),   // bug-696: h steht ueber dem Schatten
                         Kind = (w == 1 ? "feuerstoss" : "rauch") + Simulation.Determinism.Roll(3),
                         FrameTime = 0.06f,
                     });
@@ -429,7 +430,7 @@ public partial class MapEntityLayer
         var step = new Vector2(Mathf.Sin(rad), Mathf.Cos(rad))
                  * FlugStufe(a) * AirPxPerSpeed * dt;   // dieselbe Stufe wie AirDrift
         if (step.LengthSquared() <= 0.000001f) return;
-        a.Pos += step;
+        a.Pos += FlugtempoYAlt ? step : new Vector2(step.X, step.Y * 0.5f);   // bug-718: FeinY/2 im Bild
         if (_nav != null)
         {
             float rand = TileW * 0.5f;
@@ -437,8 +438,9 @@ public partial class MapEntityLayer
                                 Mathf.Clamp(a.Pos.Y, _oy + rand, _oy + _nav.Height * TileH - rand));
         }
         a.Facing = AirDirToFacing(step);
-        int c = Mathf.Clamp((int)(a.Pos.X / TileW), 0, 255), r = Mathf.Clamp((int)(a.Pos.Y / TileH), 0, 255);
-        if (c != a.Col || r != a.Row) { a.Col = c; a.Row = r; if (a.Fuel > 0) a.Fuel--; }
+        int c0 = a.Col, r0 = a.Row;
+        AirZelleNachLage(a);                             // bug-696: Zelle aus der flachen Lage
+        if (c0 != a.Col || r0 != a.Row) { if (a.Fuel > 0) a.Fuel--; }
         AbsturzDriftSchritte++;
     }
 
@@ -473,7 +475,7 @@ public partial class MapEntityLayer
         // in der Reihenfolge von 0x423A2F..0x423AC9 (siehe Klassenkopf).
         if (AbsturzWrackAlt)
         {
-            _effects.Add(new Effect { Pos = a.Pos, Kind = "explosion", FrameTime = 0.05f });
+            _effects.Add(new Effect { Pos = AirSchatten(a), Kind = "explosion", FrameTime = 0.05f });   // bug-696
             _aufprallZuletzt = (0, 0, 0, 0);
         }
         else

@@ -46,6 +46,7 @@ public partial class MapEntityLayer
                       : LadenBefehleAlt && SpielstandBauteileAlt && LaufendeForschungAlt ? 3
                       : LaufendeForschungAlt ? 4 : Core.SaveGame.Format);
         if (!LadenBefehleAlt) w.Num("befehle", 1);   // Marke: fehlender Schluessel = Vorgabewert
+        if (LageFlach) w.Num("fluglage", 1);         // bug-696: Flugzeuglage flach (Fluglage.cs)
         w.Str("label", label);
         // bug-522: der Kopf des Originals (Schreiber 0x41D210) — +5 Name, +26
         // Mission, +55 Spielername; bei uns als JSON-Felder (Format bleibt UNSERES).
@@ -77,6 +78,12 @@ public partial class MapEntityLayer
         // ⭐ bug-666: die laufende Forschung (Original: sec96 Laufsaetze, sec97 Losnummer).
         // Simulation/ForschungSpielstand.cs; fehlt unter --laufende-forschung-alt.
         LaufendeForschungInSpielstand(w);
+        // ⭐ bug-699: Minen- und Fallenfeld (Original: sec84/sec85). Simulation/
+        // MinenFallenSpielstand.cs; fehlt unter --minen-spielstand-alt.
+        MinenFallenInSpielstand(w);
+        // ⭐ bug-715: die Gasteilchen (sec82) und Werferwolken (sec83). Simulation/Gaswolke.cs;
+        // fehlt unter --gas-spielstand-alt.
+        GasInSpielstand(w);
 
         // ⚠ Die Gruppen unten zeigen auf die STELLE IM SPIELSTAND, nicht auf
         // die Listenstelle im Spiel und nicht auf den Platz. Der Grund steht
@@ -161,6 +168,9 @@ public partial class MapEntityLayer
             }
             // bug-650: der Umschlagsatz (sec48) — auch fuer die Ladung an Bord.
             RouteSchreiben(w, e);
+            FallenEinheitSchreiben(w, e);   // bug-697/698: gefangen, Legeauftrag
+            MagnetEinheitSchreiben(w, e);   // bug-710/712: Suchziel, ohne Leiche (Magnetbombe.cs)
+            TeleEinheitSchreiben(w, e);     // bug-719..721: Zwilling, Spiegel, Illusion (Teleporter.cs)
         }
 
         w.ArrayStart("entities");
@@ -334,6 +344,10 @@ public partial class MapEntityLayer
         if (!KiSpielstandAlt)
             KiZustandSchreiben(w, i => i >= 0 && i < stelleImStand.Length ? stelleImStand[i] : -1);
 
+        // ⭐ 30.10.2026, bug-701 — die Brueckentafel sec17 und die Abrisskacheln
+        // (Simulation/BrueckenSpielstand.cs); --bruecken-spielstand-alt schreibt sie nicht.
+        BrueckenSchreiben(w);
+
         w.Raw("fog", FogRle());
         w.Close();
         return w.ToString();
@@ -381,6 +395,13 @@ public partial class MapEntityLayer
         // ⭐ bug-666: die laufende Forschung (nur Zahlen, die Basis als Platz — keine
         // Listenstelle, darum schon hier). Stand ohne Schluessel: das Feld bleibt leer.
         LaufendeForschungAusSpielstand(root);
+        // ⭐ bug-701: die Bruecken VOR den Einheiten — Abrisse und Pionierbruecken aendern
+        // Suchkarte und Hoehen, auf die die Einheiten danach gestellt werden.
+        BrueckenAusSpielstand(root);
+        // ⭐ bug-699: Minen und Fallen (Simulation/MinenFallenSpielstand.cs).
+        MinenFallenAusSpielstand(root);
+        // ⭐ bug-715: die Gaswolken (Simulation/Gaswolke.cs).
+        GasAusSpielstand(root);
         // ⭐ bug-650: traegt dieser Stand die Befehle (Format 4)?
         bool befehleImStand = !LadenBefehleAlt && root.ContainsKey("befehle");
 
@@ -508,6 +529,9 @@ public partial class MapEntityLayer
             e.ResearchTech = I("research_tech", e.ResearchTech);
             e.ResearchDone = I("research_done", e.ResearchDone);
             e.DepositStart = I("deposit_start", e.DepositStart);
+            FallenEinheitLesen(d, e);       // bug-697/698: gefangen, Legeauftrag
+            MagnetEinheitLesen(d, e);       // bug-710/712: Suchziel, ohne Leiche (Magnetbombe.cs)
+            TeleEinheitLesen(d, e);         // bug-719..721: Zwilling, Spiegel, Illusion (Teleporter.cs)
             if (d.ContainsKey("streu_x") && d.ContainsKey("streu_y"))
             {
                 e.StreuX = (sbyte)I("streu_x", 0); e.StreuY = (sbyte)I("streu_y", 0); e.StreuGesetzt = true;
@@ -597,6 +621,8 @@ public partial class MapEntityLayer
                 if (item.VariantType != Variant.Type.Dictionary) continue;
                 _special.Add(LeseLuft(item.AsGodotDictionary<string, Variant>(), listenstelle));
             }
+            // bug-696: ein Stand von vor der flachen Lage traegt angehobene Lagen und Ziele
+            if (LageFlach && !root.ContainsKey("fluglage")) FluglageAusAltemStand();
         }
 
         // ---- der Skriptzustand (bug-508) ------------------------------------

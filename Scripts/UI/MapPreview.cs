@@ -253,6 +253,14 @@ public static class MapPreview
         catch (System.Exception e) { GD.PrintErr("Basenzahl: " + e.Message); return ""; }
 
         if (slots.Count == 0) return "";
+        // ⭐ bug-733 (30.10.2026): jeder Mitspieler ohne Basis bekommt beim Start eine Basis
+        // und eine Fabrik (Simulation/GefechtStartbasis.cs, unsere Abweichung). Die Warnungen
+        // darunter gelten nur noch mit --gefecht-startbasis-aus.
+        if (System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-startbasis-aus") < 0)
+            return bases >= slots.Count
+                ? $"{bases} Basen fuer {slots.Count} Startplaetze"
+                : $"{bases} Basen fuer {slots.Count} Startplaetze — wer nach dem Verteilen " +
+                  "keine hat, bekommt beim Start Basis und Fabrik";
         if (bases == 0)
             return $"⚠ KEINE Basis auf dieser Karte ({slots.Count} Startplaetze) — " +
                    "hier baut niemand, es wird mit den Truppen der Karte gespielt";

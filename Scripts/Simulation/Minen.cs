@@ -67,7 +67,8 @@ using Godot;
 ///
 /// <para>⚠⚠ <b>Was NICHT gebaut ist und warum:</b> die <b>FALLE</b> (zweites
 /// Feld @0x688B58, gleiche Form, Ausnahme 0x45, Wirkung Geschwindigkeit 0) —
-/// in Kampagne 15 kommt keine vor. Das ZEICHNEN (Art 15, ANIM 93/73) ist
+/// in Kampagne 15 kommt keine vor. ⭐ Seit dem 30.10.2026 GEBAUT (bug-697,
+/// Simulation/Fallen.cs), dazu der Legeauftrag (bug-698, Simulation/Legeauftrag.cs). Das ZEICHNEN (Art 15, ANIM 93/73) ist
 /// gelesen, aber noch nicht gebaut. Das RÄUMEN ist seit dem 15.09.2026 gebaut
 /// (<see cref="MinenRaeumen"/>). Gelesen in berichte/minen-opus.md.</para>
 /// </summary>
@@ -230,8 +231,10 @@ public partial class MapEntityLayer
             // M15: 837 Zellen -> 451 frei + 7 unter Fahrzeugen = 458.
             unterFahrzeug = ding != null && !ding.IsBuilding && !ding.IsProp && !ding.Dead
                             && ding.Infantry < 0;
+            // ⭐ bug-706: kein Grundrissrechteck mehr — nur Boden und Belegung, wie die imap
+            // (Simulation/ImapAbgleich.cs, --imap-abgleich-alt).
             bool frei = ding == null && _nav.GroundAt(col, row) == Simulation.NavGrid.Ground.Free
-                        && GebaeudeAufZelle(col, row) < 0;
+                        && !GrundrissSperrt(col, row);
             if (!frei && !unterFahrzeug) return false;
         }
 
@@ -293,6 +296,9 @@ public partial class MapEntityLayer
             MinenAusgeloest++;
             m.Aktiv = false;
         }
+        // ⭐ 30.10.2026 (bug-697) — die zweite Schleife desselben Blocks, @0x4217C6:
+        // die FALLEN, nach den Minen. Simulation/Fallen.cs, --fallen-aus.
+        FallenTakt();
     }
 
     /// <summary>Dieselbe Frage wie <c>IsHostile</c>, aber auf SPIELERnummern —

@@ -85,6 +85,32 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Unsere Setzung, siehe Kopf.</summary>
     private const float KiSpaehPause = 8f;
 
+    /// <summary><c>--spaehen-sperre-alt</c> (bug-729): eine angefahrene und ungesehen
+    /// gebliebene Rasterzelle wird NICHT gesperrt — der Stand bis zum 30.10.2026.</summary>
+    public static bool SpaehenSperreAlt;
+
+    /// <summary>bug-729: die gesperrten Rasterzellen je Computerspieler. ⚠ Wie der Nebel
+    /// der KI NICHT im Spielstand — nach dem Laden spaeht sie neu.</summary>
+    private readonly Dictionary<int, HashSet<Vector2I>> _kiSpaehSperre = new();
+
+    /// <summary>bug-729: die letzte Spaehfahrt zu einer Rasterzelle je Computerspieler —
+    /// Ziel und je Spaeher die Zelle, die <c>NearestFree</c> ihm gab.</summary>
+    private readonly Dictionary<int, (Vector2I Ziel, List<(int Idx, Vector2I Goal)> Spaeher)> _kiSpaehLetzte = new();
+
+    // ---- Messpunkte bug-729 (laufen auch unter dem Gegenschalter) ----
+    /// <summary>Fahrten zu einer Zelle, an der schon ein Spaeher angekommen war und die
+    /// trotzdem ungesehen blieb — die Spaehschleife selbst.</summary>
+    public int KiSpaehLeerfahrten;
+    /// <summary>Gesperrte Zellen (nur ohne Gegenschalter).</summary>
+    public int KiSpaehGesperrt;
+    private readonly int[] _kiSpaehSerie = new int[8], _kiSpaehSerieMax = new int[8];
+    private readonly Vector2I[] _kiSpaehSerieZiel = new Vector2I[8], _kiSpaehSerieMaxZiel = new Vector2I[8];
+    private readonly int[] _kiSpaehFahrtenJe = new int[8];
+    private readonly HashSet<(int P, Vector2I Z)> _kiSpaehAngekommen = new();
+    /// <summary>Wahlen einer Zelle, die schon einmal fuer keinen Spaeher erreichbar war.</summary>
+    public int KiSpaehLeerwahlen;
+    private readonly HashSet<(int P, Vector2I Z)> _kiSpaehUnerreichbar = new();
+
     /// <summary>Gilt die Regel gerade? Gefecht, eine KI, Nebel an, kein Gegenschalter.</summary>
     private bool KiAufklaerungAn => !KiSiehtAlles && !InCampaign && _aiOn && FogActive;
 
@@ -202,18 +228,24 @@ public partial class MapEntityLayer : Node2D
             float d = von.DistanceTo(new Vector2(e.Col, e.Row));
             if (d < best) { best = d; ziel = new Vector2I(e.Col, e.Row); }
         }
+        bool rasterZiel = false;
         if (ziel == null && _kiNebel.TryGetValue(a.Player, out var g))
         {
             wohin = "naechsten nie gesehenen Zelle";
+            rasterZiel = true;
+            // bug-729: erst die letzte Fahrt pruefen — angekommen und doch ungesehen?
+            KiSpaehAnkunftPruefen(a.Player, g);
+            _kiSpaehSperre.TryGetValue(a.Player, out var sperre);
             for (int r = 4; r < g.Height; r += 8)
                 for (int c = 4; c < g.Width; c += 8)
                 {
                     if (g.IsSeen(c, r)) continue;
+                    if (!SpaehenSperreAlt && sperre != null && sperre.Contains(new Vector2I(c, r))) continue;   // bug-729
                     float d = von.DistanceTo(new Vector2(c, r));
                     if (d < best) { best = d; ziel = new Vector2I(c, r); }
                 }
         }
-        if (ziel == null) return false;
+        if (ziel == null) { GefechtGrund(a.Player, "Spaehen: kein Spaehziel"); return false; }   // bug-730 Messpunkt
 
         var z = ziel.Value;
         free.Sort((x, y) => new Vector2(_entities[x].Col - z.X, _entities[x].Row - z.Y).Length()
@@ -223,9 +255,44 @@ public partial class MapEntityLayer : Node2D
         // schwer alles, was nicht Wache ist (der bisherige Stand).
         int trupp = KiStufenAn ? ProfilOf(a.Level).SpaehTrupp : int.MaxValue;
         int los = 0;
+        var spaeher = new List<(int Idx, Vector2I Goal)>();
+        // ⚠ bug-730, VERWORFEN 31.10.2026: hier stand kurz eine Suche ueber die ganze Liste
+        // (statt nur der ersten free.Count − guard). Gemessen in vier Welten mit und ohne:
+        // in keinem Lauf ein Unterschied — die Ursache von bug-730 war eine andere
+        // (GefechtNachsetzenVorher). Darum wieder der alte Stand.
         for (int k = 0; k < free.Count - guard && los < trupp; k++)
-            if (AiWalkTo(free[k], z)) { a.Wave.Add(free[k]); los++; }
-        if (los == 0) return false;
+        {
+            int i = free[k];
+            var u = _entities[i];
+            // bug-730 Messpunkt: warum ein Kandidat NICHT faehrt (reine Abfragen, ohne Wirkung)
+            string grund = u.Dead || !u.Mobile ? "tot/unbeweglich" : u.DugIn ? "eingegraben"
+                         : u.FuelMax > 0 && u.Fuel <= 0 ? "Sprit leer" : "kein Weg";
+            if (AiWalkTo(i, z)) { a.Wave.Add(i); los++; spaeher.Add((i, _entities[i].Goal)); }
+            else GefechtGrund(a.Player, $"Spaehen-Kandidat {grund}");
+        }
+        if (los == 0)
+        {
+            // bug-730 Messpunkt: standen mehr fahrbereite Einheiten frei als die Wache?
+            int bereit = 0;
+            foreach (int i in free)
+            {
+                var u = _entities[i];
+                if (!u.Dead && u.Mobile && !u.DugIn && !(u.FuelMax > 0 && u.Fuel <= 0)) bereit++;
+            }
+            if (bereit > guard) KiSpaehAusfallMitFahrbereiten++;
+            GefechtGrund(a.Player, $"Spaehen: niemand faehrt ({bereit} fahrbereit)");
+            // ⭐ bug-729, zweiter Fall (gemessen 31.10. mit Startbasis, bug-733): hat KEIN
+            // fahrbereiter Kandidat einen Weg zur Zelle (NearestFree/FindPath leer), kommt nie
+            // ein Spaeher an — dieselbe Zelle wurde 528-mal vergeblich gewaehlt. Dann gilt sie
+            // sofort als unerreichbar und wird gesperrt. UNSERE SETZUNG, --spaehen-sperre-alt.
+            if (rasterZiel && bereit > 0)
+            {
+                if (!_kiSpaehUnerreichbar.Add((a.Player, z))) KiSpaehLeerwahlen++;   // Messpunkt, auch unter dem Gegenschalter
+                KiSpaehSperren(a.Player, z, "fuer keinen Spaeher erreichbar");
+            }
+            return false;
+        }
+        if (rasterZiel) KiSpaehFahrtBuchen(a.Player, z, spaeher);                             // bug-729
 
         a.TargetIdx = -1;
         // dieselbe Weiche fuer die Pause: leicht 20 s, normal 8 s (bisher),
@@ -237,6 +304,76 @@ public partial class MapEntityLayer : Node2D
         GD.Print($"KI P{a.Player}: kennt keinen Gegner — Spaehfahrt mit {los} Einheiten "
                + $"zur {wohin} bei ({z.X},{z.Y})");
         return true;
+    }
+
+    /// <summary>
+    /// ⭐ bug-729 (30.10.2026) — <b>DIE SPAEHSCHLEIFE</b>. Gemessen auf NET07
+    /// (<c>berichte/gefecht-ki-stillstand-opus.md</c> 3b): <see cref="KiSpaehen"/> waehlt die
+    /// naechste nie gesehene Rasterzelle, etwa (140,108). Ist sie unerreichbar, gibt
+    /// <c>NearestFree</c> den Spaehern eine Ersatzzelle (134,102), von der aus sie das Ziel
+    /// nicht sehen; alle 8 s kam derselbe Befehl (0.6.12: 152 Fahrten nach (156,100), heute
+    /// 81 nach (140,108)), und P1 erreichte den Westen nie.
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG</b> — das Original kennt keine Spaehfahrt (Kopf dieser
+    /// Datei, ai_units 0x4BF4E0 befiehlt nur innerhalb des eigenen Sichtrings). Regel: steht
+    /// bei der naechsten Wahl ein Spaeher der letzten Fahrt an seiner Ersatzzelle (Abstand
+    /// ≤ 1, kein Weg mehr) und ist die Zielzelle trotzdem ungesehen, wird sie fuer die Wahl
+    /// GESPERRT. Gegenschalter <c>--spaehen-sperre-alt</c>.</para>
+    /// </summary>
+    private void KiSpaehAnkunftPruefen(int p, Simulation.FogGrid g)
+    {
+        if (!_kiSpaehLetzte.TryGetValue(p, out var l)) return;
+        if (g.IsSeen(l.Ziel.X, l.Ziel.Y)) { _kiSpaehLetzte.Remove(p); return; }
+        bool angekommen = false;
+        foreach (var (i, goal) in l.Spaeher)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var u = _entities[i];
+            if (u.Dead || u.Owner != p || u.Path != null) continue;
+            if (Mathf.Max(Mathf.Abs(u.Col - goal.X), Mathf.Abs(u.Row - goal.Y)) > 1) continue;
+            angekommen = true;
+            break;
+        }
+        if (!angekommen) return;
+        _kiSpaehAngekommen.Add((p, l.Ziel));          // Messpunkt, auch unter dem Gegenschalter
+        if (SpaehenSperreAlt) return;
+        _kiSpaehLetzte.Remove(p);
+        KiSpaehSperren(p, l.Ziel, "angefahren und ungesehen");
+    }
+
+    /// <summary>bug-729: eine Rasterzelle fuer die Wahl sperren (nie unter dem Gegenschalter).</summary>
+    private void KiSpaehSperren(int p, Vector2I z, string warum)
+    {
+        if (SpaehenSperreAlt) return;
+        if (!_kiSpaehSperre.TryGetValue(p, out var s)) _kiSpaehSperre[p] = s = new HashSet<Vector2I>();
+        if (!s.Add(z)) return;
+        KiSpaehGesperrt++;
+        GD.Print($"KI P{p}: Spaehziel ({z.X},{z.Y}) {warum} — gesperrt (bug-729)");
+    }
+
+    /// <summary>bug-729: die Fahrt merken und die Messpunkte zaehlen.</summary>
+    private void KiSpaehFahrtBuchen(int p, Vector2I z, List<(int Idx, Vector2I Goal)> spaeher)
+    {
+        _kiSpaehLetzte[p] = (z, spaeher);
+        if (p is < 0 or > 7) return;
+        _kiSpaehFahrtenJe[p]++;
+        if (_kiSpaehAngekommen.Contains((p, z))) KiSpaehLeerfahrten++;
+        if (_kiSpaehSerie[p] > 0 && _kiSpaehSerieZiel[p] == z) _kiSpaehSerie[p]++;
+        else { _kiSpaehSerie[p] = 1; _kiSpaehSerieZiel[p] = z; }
+        if (_kiSpaehSerie[p] > _kiSpaehSerieMax[p]) { _kiSpaehSerieMax[p] = _kiSpaehSerie[p]; _kiSpaehSerieMaxZiel[p] = z; }
+    }
+
+    /// <summary>bug-729/730: eine Zeile fuer Pruefstand und DET-Ende.</summary>
+    public string KiSpaehZeile()
+    {
+        var sb = new System.Text.StringBuilder(
+            $"Spaehen: Rasterfahrten {string.Join("/", System.Linq.Enumerable.Select(_ai, a => $"P{a.Player} {(a.Player is >= 0 and <= 7 ? _kiSpaehFahrtenJe[a.Player] : 0)}"))}, " +
+            $"Leerfahrten (Ziel schon angefahren, ungesehen) {KiSpaehLeerfahrten}, Leerwahlen (Ziel schon unerreichbar) {KiSpaehLeerwahlen}, gesperrt {KiSpaehGesperrt}, " +
+            $"--spaehen-sperre-alt {SpaehenSperreAlt}; laengste Serie");
+        foreach (var a in _ai)
+            if (a.Player is >= 0 and <= 7 && _kiSpaehSerieMax[a.Player] > 0)
+                sb.Append($" P{a.Player} {_kiSpaehSerieMax[a.Player]}x ({_kiSpaehSerieMaxZiel[a.Player].X},{_kiSpaehSerieMaxZiel[a.Player].Y})");
+        return sb.ToString();
     }
 
     /// <summary><c>--ki-sicht-check</c> — die Zeile am Laufende.</summary>

@@ -202,6 +202,12 @@ public partial class MapEntityLayer
         // ⭐ 01.10.2026, bug-381 — »Terranium suchen« (Modus 3): Zeigerart 0x0D
         // OHNE Pruefung (@0x4317C9), also auch keine Vorschau.
         if (PlacementMode == OrderTerraSuche) { ClearBuildPreview(); return; }
+        // ⭐ 30.10.2026, bug-698 — Befehlsart 8: der Rahmen von der Ankerzelle bis
+        // hierher (Vorschau 0x43A1B0). Simulation/Legeauftrag.cs.
+        if (PlacementMode == OrderLegen) { LegeVorschau(col, row); return; }
+        // ⭐ 30.10.2026, bug-719 — Befehlsart 9 (Teleporter): nur der Zeiger, keine Vorschau
+        // (@0x4319DA setzt allein den Zeigerzustand). Simulation/Teleporter.cs.
+        if (PlacementMode == OrderTeleport) { ClearBuildPreview(); return; }
         // ⭐ 13.09.2026 — die BRUECKE ist 3 x (k+2) Zellen und hat ihre
         // eigene Gueltigkeit (Simulation/Pionierbruecke.cs, bug-245).
         if (PlacementMode == OrderBruecke)
@@ -259,6 +265,17 @@ public partial class MapEntityLayer
         // ⭐ 01.10.2026, bug-381 — Klickarm 0x4377D0 -> Befehl 19 (Simulation/TerraSuche.cs).
         if (order == OrderTerraSuche)
             return TerraSucheKlick(idx, col, row);
+        // ⭐ bug-698 — ein Klick ohne Ziehen ist ein Rahmen aus EINER Zelle
+        // (Anker = Mauszelle, 0x43A020). Der Kartenschirm ruft sonst LegeRahmenKlick.
+        if (order == OrderLegen)
+        {
+            PlacementMode = order; PlacementUnit = idx;
+            return LegeRahmenKlick(LegeAnker ?? new Vector2I(col, row), new Vector2I(col, row));
+        }
+        // ⭐ 30.10.2026, bug-719 — Klickarm 0x4377F7 (Zeigerart 0x11) -> Befehl 23. Der Modus
+        // BLEIBT stehen: der Klickarm nullt dword[0x502ACC] nicht. Simulation/Teleporter.cs.
+        if (order == OrderTeleport)
+            return TeleportKlick(idx, col, row);
 
         int vorkommen = -1;
         if (order == OrderFieldMine)

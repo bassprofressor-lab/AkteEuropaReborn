@@ -342,6 +342,31 @@ public static class CommandOp
     public const short RailRepairOrder = 29;
 
     /// <summary>
+    /// <b>28 = MAGNETBOMBE ZUENDEN</b> (bug-711). P1 = die Einheit. Absender Menuezeile 0x23
+    /// »-Jump« @0x448BC3 (F 0x447BB7), Behandler C <c>0x4C366E</c> / F <c>0x4C31E5</c> (Tafel
+    /// <c>0x4C4D54</c>, Eintrag 27) → Sprengung <c>0x412280</c>. Siehe Simulation/Magnetbombe.cs.</summary>
+    public const short MagnetSprengung = 28;
+
+    /// <summary>
+    /// <b>23 = TELEPORTIEREN</b> (bug-719). P1 = der Teleporter, P2/P3 = die geklickte Zelle.
+    /// Absender C <c>0x4377F7</c> / F <c>0x436957</c> (Klickarm der Zeigerart 0x11, Befehlsart 9),
+    /// Behandler C <c>0x4C342A</c> / F <c>0x4C2FA4</c> → <c>0x43A420</c> / F <c>0x439590</c>, ohne
+    /// weitere Pruefung. Siehe Simulation/Teleporter.cs.</summary>
+    public const short Teleportieren = 23;
+
+    /// <summary>
+    /// <b>24 = SPIEGELUNG an/aus</b> (bug-721). P1 = Einheit, P2 = 1 an / 0 aus, P3 = der im
+    /// MENUE gewuerfelte Versatz 0..7 (<c>rand()%8</c> @0x448AB6). Behandler C <c>0x4C344F</c> /
+    /// F <c>0x4C2FC9</c>. Siehe Simulation/Illusion.cs.</summary>
+    public const short Spiegelung = 24;
+
+    /// <summary>
+    /// <b>25 = ILLUSION an/aus</b> (bug-720). P1 = Einheit, P2 = 1 an / 0 aus, P3/P4 = Rumpf- und
+    /// Aufsatzbild der Tarnung, im MENUE gewuerfelt (0x450790 / 0x4507D0). Behandler C
+    /// <c>0x4C3503</c> / F <c>0x4C307D</c>. Siehe Simulation/Illusion.cs.</summary>
+    public const short Illusion = 25;
+
+    /// <summary>
     /// <b>19 = TERRANIUM SUCHEN.</b> P1 = die Einheit, P2/P3 = die geklickte
     /// Zelle. Absender <c>0x438920</c> (über <c>0x4017E9</c> vom Klickarm
     /// <c>0x4377D0</c> der Zeigerart 0x0D, Tafel <c>0x437994[13]</c>); er löscht
@@ -355,6 +380,15 @@ public static class CommandOp
     /// Befehlsliste, und Kommando 21 ist »Bauplatz setzen (Generatorenbauer)«.
     /// Zwei Zählungen.</para></summary>
     public const short TerraSuche = 19;
+
+    /// <summary>
+    /// <b>22 = LEGEAUFTRAG</b> des Minen-/Fallenlegers (bug-698). P1 = Einheit, P2/P3 =
+    /// linke obere Zelle, P4/P5 = Breite/Hoehe. Absender <c>0x43A134</c> (Rahmen
+    /// losgelassen, Befehlsart 8), Behandler C <c>0x4C33D0</c>: UKOL := 0, +0x1A := 0xFF,
+    /// <c>word[+0x40] := (Y&lt;&lt;8)|X</c>, <c>+0x48 := B</c>, <c>+0x49 := H</c>.
+    /// Einziger Absender ist die Bedienung (COMMAND_SENDERS.txt) — die KI legt nie.
+    /// Siehe Simulation/Legeauftrag.cs.</summary>
+    public const short Legeauftrag = 22;
 
     /// <summary>
     /// <b>DIE FÜNFZEHN GEBÄUDEBEFEHLE — vier Tafeln, eine je Gebäudeart.</b>
@@ -717,6 +751,10 @@ public static class CommandOp
         Unload => "Absetzen",
         RailRepairOrder => "Gleis reparieren",
         TerraSuche => "Terranium suchen",
+        Legeauftrag => "Minen/Fallen legen",
+        Teleportieren => "Teleportieren",      // bug-719
+        Spiegelung => "Spiegelung an/aus",     // bug-721
+        Illusion => "Illusion an/aus",         // bug-720
         EntwurfEntfernen => "Entwurf entfernen",
         EntwurfUmbenennen => "Entwurf umbenennen",
         Neustart => "Mission neu starten",

@@ -49,7 +49,7 @@ public partial class MapEntityLayer
             {
                 Slot = slot, Kind = 10, Name = "Probeheli", TypeName = "Probeheli",
                 Owner = ViewPlayer, Stored = false, HomeSlot = -1,
-                Col = 10, Row = 10, Pos = CellCenter(10, 10),
+                Col = 10, Row = 10, Pos = FlugZelle(10, 10),   // bug-696
                 Hp = 100, HpMax = 100, Attack = 20, Ammo = 99, AmmoMax = 99,
                 Fuel = 999, FuelMax = 999, Speed = 5, Alt = ElevOf(10, 10) * 15 + 60,
             };
@@ -73,14 +73,14 @@ public partial class MapEntityLayer
         {
             Z.HpMax = Z.Hp = 30000;
             var aim = AirAimPoint(Z);
-            a.Pos = aim + new Vector2(d * TileW, 0f);
+            a.Pos = FlugPunkt(aim, Z.Col, Z.Row) + new Vector2(d * TileW, 0f);   // bug-696: flach ueber dem Zielpunkt
             HsMessung.Clear();
             int vorher = _strahlen.Count;
             LuftSalve(a, Z, aim);
             var meine = _strahlen.GetRange(vorher, _strahlen.Count - vorher);
             if (meine.Count == 0) { sb.AppendLine($"  d {d}: kein Strahl angelegt"); ok = false; continue; }
             // Der Strich: erster und letzter Punkt des ersten Strahls gegen Bild und Boden.
-            float h0 = HeliBildHoehe(a);
+            float h0 = HeliBildHoehe(a, Z);   // bug-696
             for (int t = 0; t < 40 && meine.Exists(s => _strahlen.Contains(s)); t++)
             {
                 Z.HpMax = Z.Hp = 30000;
@@ -92,13 +92,23 @@ public partial class MapEntityLayer
             {
                 var s0 = meine[0];
                 float L0 = s0.Laenge;
+                // bug-692: Soll-Versatz jedes Punkts gegen (x, y − h) — Hoehe mit den −40
+                // (0x455048) und Blit des Zeichners 0x42E8D0: (−20, +5) + Leinwand/2. Unabhaengig
+                // vom Schalter; --strahlhoehe-alt (Versatz 0) faellt damit hier durch.
+                EffectFrames(s0.Punkt);   // Anker auch im Nullmodell (dort ruft ihn niemand)
+                var anker = _fxAnchor.TryGetValue(s0.Punkt, out var an) ? an : Vector2.Zero;
+                var versatz = new Vector2(-20f, 5f) + anker;
                 // Abstand ueber dem Bodenstrich am ersten (t = 6) und letzten Punkt (t = ⌊L⌋ − 1)
-                float erst = (s0.Start + (s0.Ziel - s0.Start) * (HeliZuschlag / L0)).Y - s0.ErsterPunkt.Y;
-                float rest = (s0.Start + (s0.Ziel - s0.Start) * (((int)L0 - 1) / L0)).Y - s0.LetzterPunkt.Y;
+                var boden0 = s0.Start + (s0.Ziel - s0.Start) * (HeliZuschlag / L0);
+                float erst = boden0.Y - (s0.ErsterPunkt.Y - versatz.Y);
+                float rest = (s0.Start + (s0.Ziel - s0.Start) * (((int)L0 - 1) / L0)).Y - (s0.LetzterPunkt.Y - versatz.Y);
                 float sollErst = h0 * (1f - HeliZuschlag / L0), sollRest = h0 * (1f - ((int)L0 - 1) / L0);
                 bool schraeg = Mathf.Abs(erst - sollErst) < 0.5f && Mathf.Abs(rest - sollRest) < 0.5f;
-                ok &= schraeg;
-                strich = $"; Strich von {erst:0.0} px bis {rest:0.0} px ueber dem Boden (Bildhoehe {h0:0.0}; Soll {sollErst:0.0} / {sollRest:0.0}) -> {(schraeg ? "schraeg" : "NICHT SCHRAEG")}";
+                bool spalte = Mathf.Abs(s0.ErsterPunkt.X - versatz.X - boden0.X) < 0.5f;
+                ok &= schraeg && spalte;
+                strich = $"; Strich von {erst:0.0} px bis {rest:0.0} px ueber dem Boden (Bildhoehe {h0:0.0}; Soll {sollErst:0.0} / {sollRest:0.0}) -> {(schraeg ? "schraeg" : "NICHT SCHRAEG")}"
+                       + $"; Hoehe (bug-692): Punktversatz Soll ({versatz.X:0.0}, {versatz.Y:0.0}) [Leinwand/2 {anker.X:0.0}/{anker.Y:0.0}, ohne die −40 waere y {versatz.Y - 40f:0.0}], "
+                       + $"gemessen x {s0.ErsterPunkt.X - boden0.X:0.0} -> {(spalte && schraeg ? "ja" : "NEIN")}";
             }
             foreach (var (L, p, tk) in HsMessung)
             {

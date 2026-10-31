@@ -260,6 +260,21 @@ public sealed class NavGrid
 
     public int ElevAt(int c, int r) => InBounds(c, r) ? _elev[Idx(c, r)] : 0;
 
+    /// <summary>bug-695 (Pionierbruecke erhoeht): die Zellhoehe <c>+2</c> schreiben —
+    /// <c>0x41D170</c> (F <c>0x41C330</c>), gerufen vom Brueckenbau @<c>0x4CC64A</c>/<c>0x4CC9D1</c>
+    /// und vom Abriss @<c>0x4CB333</c>. Ein direkter Schreiber wie <see cref="BrueckeSetzen"/>.</summary>
+    public void HoeheSetzen(int c, int r, int h)
+    {
+        if (InBounds(c, r)) _elev[Idx(c, r)] = (byte)Mathf.Clamp(h, 0, 255);
+    }
+
+    /// <summary>bug-695: das Brueckenbyte <c>+3</c> einer Zelle schreiben — <c>0x41D1A0</c>
+    /// (F <c>0x41C360</c>), die beiden Fahrbahnkoepfe @<c>0x4CC6DC</c>/<c>0x4CCA5C</c>/<c>0x4CCA6E</c>.</summary>
+    public void FlagSetzen(int c, int r, int v)
+    {
+        if (InBounds(c, r)) _flag[Idx(c, r)] = (byte)v;
+    }
+
     public int OccupantAt(int c, int r) => InBounds(c, r) ? _occupant[Idx(c, r)] : -1;
 
     /// <summary>Haelt die Zelle etwas FESTES (Gebaeude, Gegenstand)? — der

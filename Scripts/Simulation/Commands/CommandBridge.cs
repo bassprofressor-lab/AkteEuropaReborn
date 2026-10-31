@@ -896,6 +896,8 @@ public partial class MapEntityLayer
         // ANDEREN Spieler, gehört die Zeile nicht ihm — sie wird zurückgestellt.
         string merkOrder = _order;
         bool ok = ApplyCommandInner(c);
+        // ⭐ bug-698 — die Abbrueche der Behandler 3/4/11/12/17 (+0x48 := 0 beim Leger).
+        if (ok) LegeAbbruch(c);
         if (c.Player != ViewPlayer && c.Op is CommandOp.Eingraben or CommandOp.OursCancelBuild
                 or CommandOp.OursResearch or CommandOp.OursLaunchAll)
             _order = merkOrder;
@@ -953,6 +955,11 @@ public partial class MapEntityLayer
         CommandOp.Board => ApplyBoard(c),
         CommandOp.RailRepairOrder => ApplyRailRepairOrder(c),
         CommandOp.TerraSuche => ApplyTerraSuche(c),      // bug-381, Simulation/TerraSuche.cs
+        CommandOp.Legeauftrag => ApplyLegeauftrag(c),    // bug-698, Simulation/Legeauftrag.cs
+        CommandOp.MagnetSprengung => ApplyMagnetSprengung(c),   // bug-711, Simulation/Magnetbombe.cs
+        CommandOp.Teleportieren => ApplyTeleportieren(c),       // bug-719, Simulation/Teleporter.cs
+        CommandOp.Spiegelung => ApplySpiegelung(c),             // bug-721, Simulation/Illusion.cs
+        CommandOp.Illusion => ApplyIllusion(c),                 // bug-720, Simulation/Illusion.cs
 
         // Die fünfzehn Gebäudebefehle — vier Tafeln, eine je Gebäudeart.
         // Siehe CommandOp und ApplyBuildingJob.
@@ -1845,7 +1852,7 @@ public partial class MapEntityLayer
         int col = Mathf.Clamp(c.P2, 0, _nav.Width - 1);
         int row = Mathf.Clamp(c.P3, 0, _nav.Height - 1);
 
-        a.PlayerGoal = CellCenter(col, row);
+        a.PlayerGoal = FlugZelle(col, row);   // bug-696: flache Zellmitte
         a.Goal = a.PlayerGoal;
         a.Order = 1;                     // gelesen: 1 = »flieg nach (x,y)«
         a.Customer = -1;                 // ein Versorgungsheli lässt seine Kundschaft

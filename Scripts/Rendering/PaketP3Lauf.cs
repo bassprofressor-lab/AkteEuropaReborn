@@ -34,7 +34,7 @@ using Godot;
 /// </summary>
 public partial class MapViewer
 {
-    private static bool _p3Nebel, _p3Baustelle, _p3Streifen, _p3Rampen;
+    private static bool _p3Nebel, _p3Baustelle, _p3Streifen, _p3Rampen, _p3Pionier;
 
     /// <summary>Die Schalter von P3; true = verbraucht.</summary>
     private bool P3Schalter(string a)
@@ -54,6 +54,14 @@ public partial class MapViewer
             // ⭐ 30.10.2026, bug-685 — die Kartenrampen wie K2 (Simulation/KartenrampeLebend.cs).
             case "--rampen-gebacken-alt": MapEntityLayer.RampenGebackenAlt = true; return true;
             case "--rampen-streifen-check": _p3Rampen = true; UI.HelpWindow.Suppressed = true; return true;
+            // ⭐ 30.10.2026, bug-695 — die Pionierbruecke erhoeht (Simulation/PionierbrueckeHoch.cs).
+            case "--pionierbruecke-flach-alt": MapEntityLayer.PionierbrueckeFlachAlt = true; return true;
+            case "--pionierbruecke-nur-stempel": MapEntityLayer.PionierbrueckeNurStempel = true; return true;
+            case "--pionierbruecke-abriss-alt": MapEntityLayer.PionierbrueckeAbrissAlt = true; return true;
+            case "--pionierbruecke-check": _p3Pionier = true; UI.HelpWindow.Suppressed = true; return true;
+            case "--kartenbruecke-abriss-alt": MapEntityLayer.KartenbrueckeAbrissAlt = true; return true;   // bug-700
+            case "--bruecken-spielstand-alt": MapEntityLayer.BrueckenSpielstandAlt = true; return true;     // bug-701
+            case "--rampen-spielstand-alt": MapEntityLayer.RampenSpielstandAlt = true; return true;         // bug-702
         }
         return false;
     }
@@ -70,6 +78,7 @@ public partial class MapViewer
         string? zeile = null;
         if (_p3Nebel) zeile = _entities.BrueckenNebelCheck();
         else if (_p3Baustelle) zeile = _entities.BrueckeBaustelleCheck();
+        else if (_p3Pionier) zeile = _entities.PionierbrueckeCheck();      // bug-695
         else if (_p3Rampen)
         {
             // bug-685: das Bodenbild und die Objektebene so, wie sie beim Spieler liegen.
@@ -198,39 +207,102 @@ public partial class MapEntityLayer
             n++;
             var e = BrueckenEcke(st);
             bool senk = IstSenkrecht(st);
-            int k = st.Wasser;
             if (_nav.FlagAt(e.X, e.Y) == 9) mitEcken++;
-            int c0 = e.X, c1 = senk ? e.X + 2 : e.X + k + 1;
-            int r0 = e.Y, r1 = senk ? e.Y + k + 1 : e.Y + 2;
-            int luecke = 0, spaltenMit = 0;
-            for (int c = c0; c <= c1; c++)
-            {
-                int yTop = int.MaxValue, yBot = int.MinValue;
-                for (int r = r0; r <= r1; r++)
-                {
-                    int top = _oy + r * TileH - ElevOf(c, r) * Import.MapBaker.ElevStep;
-                    yTop = System.Math.Min(yTop, top); yBot = System.Math.Max(yBot, top + TileH);
-                }
-                int hier = 0;
-                for (int y = yTop; y < yBot; y++)
-                {
-                    bool gedeckt = false;
-                    for (int x = 0; x < TileW && !gedeckt; x++)
-                        gedeckt = MaskeDecktUnerkundet(_ox + c * TileW + x, y, c, r0 - 4, r1 + 8);
-                    if (!gedeckt) hier++;
-                }
-                if (hier > 0) spaltenMit++;
-                luecke += hier;
-            }
+            int luecke = NebelLueckeZeilen(st, out int spaltenMit, out int doppelt);
             gesamt += luecke;
             if (luecke > 0) mitLuecke++;
-            sb.AppendLine($"  Platz {st.Slot} ({e.X},{e.Y}) {(senk ? "senkrecht " : "waagerecht")} k={k}: "
-                        + $"{luecke} unverdeckte Zeilen in {spaltenMit} Spalten");
+            sb.AppendLine($"  Platz {st.Slot} ({e.X},{e.Y}) {(senk ? "senkrecht " : "waagerecht")} k={st.Wasser}: "
+                        + $"{luecke} unverdeckte Zeilen in {spaltenMit} Spalten; doppelt gedeckte Punkte {doppelt}");
         }
         sb.AppendLine($"  {n} Kartenbruecken, {mitEcken} tragen jetzt die Ecke 9; {mitLuecke} mit Luecke, "
                     + $"zusammen {gesamt} unverdeckte Zeilen (Soll 0)");
-        sb.Append(n == 0 ? "  KEINE KARTENBRUECKE — NICHT GEMESSEN" : gesamt == 0 ? "  BESTANDEN" : "  DURCHGEFALLEN");
+
+        // ⭐ 30.10.2026, bug-695 — auch die Pionierbruecke. ⚠ EINGRIFF: auf der Karte steht keine;
+        // je Achse wird die erste gueltige Stelle direkt angelegt (wie --bruecke-check), NACH der
+        // Zaehlung der Kartenbruecken, damit deren Zahlen gleich bleiben.
+        int pn = 0, pGesamt = 0;
+        foreach (bool willSenk in new[] { false, true })
+        {
+            Vector2I platz = new(-1, -1);
+            for (int r = 0; r < _nav.Height && platz.X < 0; r++)
+                for (int c = 0; c < _nav.Width && platz.X < 0; c++)
+                    if (BrueckePlatzOk(c, r) && (BrueckenLauf[BrueckenRichtung(c, r)].Y != 0) == willSenk) platz = new Vector2I(c, r);
+            if (platz.X < 0) { sb.AppendLine($"  Pionierbruecke {(willSenk ? "senkrecht" : "waagerecht")}: keine gueltige Stelle — nicht gemessen"); continue; }
+            if (!BrueckeAnlegen(-1, platz.X, platz.Y)) { sb.AppendLine($"  Pionierbruecke bei ({platz.X},{platz.Y}) abgelehnt: {BrueckeNote}"); continue; }
+            var st = _stege[^1];
+            var e = BrueckenEcke(st);
+            pn++;
+            int luecke = NebelLueckeZeilen(st, out int spaltenMit, out int doppelt);
+            pGesamt += luecke;
+            sb.AppendLine($"  ⚠ EINGRIFF Pionierbruecke ({platz.X},{platz.Y}) Ecke ({e.X},{e.Y}) {(willSenk ? "senkrecht " : "waagerecht")} k={st.Wasser}, "
+                        + $"angehoben {st.Vorher != null && !PionierbrueckeNurStempel}, gestempelt {st.Gestempelt}: "
+                        + $"{luecke} unverdeckte Zeilen in {spaltenMit} Spalten; doppelt gedeckte Punkte {doppelt}");
+        }
+        if (pn > 0)
+            sb.AppendLine($"  {pn} Pionierbruecke(n), zusammen {pGesamt} unverdeckte Zeilen (Soll 0)"
+                        + (PionierbrueckeFlachAlt ? " — NULLMODELL --pionierbruecke-flach-alt" : "")
+                        + (PionierbrueckeNurStempel ? " — MESSSCHALTER --pionierbruecke-nur-stempel" : ""));
+        sb.Append(n == 0 && pn == 0 ? "  KEINE BRUECKE — NICHT GEMESSEN" : gesamt + pGesamt == 0 ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
+    }
+
+    /// <summary>bug-695: die Zaehlung je Bruecke (vorher im Rumpf von <see cref="BrueckenNebelCheck"/>):
+    /// Zeilen je Brueckenspalte zwischen Ober- und Unterkante der Satzzellen, die KEINE
+    /// Unerkundet-Maske deckt. Dazu als Mass der »doppelten Abdunklung« die Punkte dieses
+    /// Bandes, die zwei oder mehr Masken decken.</summary>
+    private int NebelLueckeZeilen(Steg st, out int spaltenMit, out int doppelt)
+    {
+        spaltenMit = 0; doppelt = 0;
+        if (_nav == null) return 0;
+        var e = BrueckenEcke(st);
+        bool senk = IstSenkrecht(st);
+        int k = st.Wasser;
+        int c0 = e.X, c1 = senk ? e.X + 2 : e.X + k + 1;
+        int r0 = e.Y, r1 = senk ? e.Y + k + 1 : e.Y + 2;
+        int luecke = 0;
+        for (int c = c0; c <= c1; c++)
+        {
+            int yTop = int.MaxValue, yBot = int.MinValue;
+            for (int r = r0; r <= r1; r++)
+            {
+                int top = _oy + r * TileH - ElevOf(c, r) * Import.MapBaker.ElevStep;
+                yTop = System.Math.Min(yTop, top); yBot = System.Math.Max(yBot, top + TileH);
+            }
+            int hier = 0;
+            for (int y = yTop; y < yBot; y++)
+            {
+                bool gedeckt = false;
+                for (int x = 0; x < TileW; x++)
+                {
+                    int m = MaskenUnerkundet(_ox + c * TileW + x, y, c, r0 - 4, r1 + 8);
+                    if (m > 0) gedeckt = true;
+                    if (m > 1) doppelt++;
+                }
+                if (!gedeckt) hier++;
+            }
+            if (hier > 0) spaltenMit++;
+            luecke += hier;
+        }
+        return luecke;
+    }
+
+    /// <summary>bug-695: wie <see cref="MaskeDecktUnerkundet"/>, aber die ZAHL der deckenden Masken.</summary>
+    private int MaskenUnerkundet(int x, int y, int c, int rLo, int rHi)
+    {
+        if (_nebelDeckung == null || _nav == null) return 0;
+        int lx = x - (_ox + c * TileW);
+        if (lx < 0 || lx >= TileW) return 0;
+        int n = 0;
+        for (int r = System.Math.Max(0, rLo); r <= System.Math.Min(_nav.Height - 1, rHi); r++)
+        {
+            int hang = _nav.FlagAt(c, r);
+            if (hang < 0 || hang >= Import.NebelMasken.Hangformen) continue;
+            int elev = _fog != null ? NebelElev(c, r) : ElevOf(c, r);
+            int ly = y - (_oy + r * TileH - elev * Import.MapBaker.ElevStep - Import.NebelMasken.Hub);
+            if (ly < 0 || ly >= Import.NebelMasken.ZelleH) continue;
+            if (_nebelDeckung[ly * Import.NebelMasken.AtlasB + hang * TileW + lx]) n++;
+        }
+        return n;
     }
 
     // ---- K19/K20: --bruecke-baustelle-check --------------------------------------

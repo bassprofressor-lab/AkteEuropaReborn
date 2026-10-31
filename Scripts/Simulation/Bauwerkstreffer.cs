@@ -149,6 +149,7 @@ public partial class MapEntityLayer
     private void KartenStegeAnlegen(IEnumerable<(int Slot, int Col, int Row, int Dir, int Len, int Hp, int[] Feld)> saetze)
     {
         _stege.RemoveAll(s => s.Karte);
+        _kartenStegeGeladen.Clear();            // bug-701 (Simulation/BrueckenSpielstand.cs)
         _bauwerkKachel.Clear();
         _bauwerkUeberdeckt.Clear();
         _kartenFahrbahn.Clear();
@@ -168,6 +169,7 @@ public partial class MapEntityLayer
                 if (s == 1) _kartenFahrbahn.Add((z, st.Slot, ElevOf(z.X, z.Y)));
             }
             _stege.Add(st);
+            _kartenStegeGeladen.Add(st);            // bug-701: auch nach dem Abriss noch bekannt
             // bug-643 (K1): Wie viele Bruecken tragen die Ecken 9…12 schon in der Datei?
             // (Lesung: 18 von 110.) Dann der Stempel 0x421F90 @0x41F43A.
             if (_nav != null)
@@ -243,7 +245,10 @@ public partial class MapEntityLayer
     }
 
     /// <summary><c>0x4CB0A0</c>, Erase bridge — siehe Kopf, Punkt 4.</summary>
-    private void BrueckeAbreissen(Steg st)
+    /// <param name="ausSpielstand">⭐ bug-701: der Abriss wird beim Laden nachgezogen — ohne
+    /// Lichtquelle, ohne Leeren der Fahrbahn (die Einheiten kommen danach aus dem Stand) und
+    /// OHNE Wuerfel (die Wasserkacheln kommen aus <c>bauwerk_kacheln</c> des Stands).</param>
+    private void BrueckeAbreissen(Steg st, bool ausSpielstand = false)
     {
         bool senk = IstSenkrecht(st);
         int bildsatz = (st.Karte ? st.Feld[0] : 120 * BrueckeBildsatz) / 120;
@@ -252,7 +257,7 @@ public partial class MapEntityLayer
         var e = BrueckenEcke(st);
         // ⭐ 04.10.2026 (bug-434) — Lichtquelle (x0+1, y0+1, 4, 80) @0x4CB118,
         // jeder Besitzer. Simulation/Todeslicht.cs.
-        LichtAnlegen(e.X + 1, e.Y + 1, 4, 80, "Bruecke abgerissen");
+        if (!ausSpielstand) LichtAnlegen(e.X + 1, e.Y + 1, 4, 80, "Bruecke abgerissen");
         // Höhe(Fahrbahn über Wasser) := Höhe(Kopfzelle derselben Fahrbahn) —
         // @0x4CB320/0x4CB333: das nimmt das +1 des Brückenbaus zurück. Ohne das
         // säße die Wasserkachel eine Höhenstufe (15 Punkte) zu hoch.
@@ -263,14 +268,15 @@ public partial class MapEntityLayer
             if (s == 1 && p > 0 && p < st.Wasser + 1) _elevLookup[(z.X, z.Y)] = kopfHoehe;
             int key = z.X * 1024 + z.Y;
             _rampen.Remove(key);                                             // sec20 := 0
-            if (s == 1) weg += ZelleLeeren(z.X, z.Y);                        // nur die Fahrbahn
+            if (s == 1 && !ausSpielstand) weg += ZelleLeeren(z.X, z.Y);      // nur die Fahrbahn
             bool kopf = p == 0 || p == st.Wasser + 1;
             _nav?.BrueckeLoesen(z.X, z.Y, kopf ? Simulation.NavGrid.Ground.Rough
                                                : Simulation.NavGrid.Ground.Water);
             _bauwerkUeberdeckt.Add(key);
             // bug-643: Brueckenbyte +3 := 0 auf allen Satzzellen (16 Schreiber in 0x4CB0A0).
             _nav?.BrueckenbyteLoeschen(z.X, z.Y);
-            if (kopf)
+            if (ausSpielstand) { }                                           // bug-701: Kacheln aus dem Stand
+            else if (kopf)
             {
                 // senkrecht: Kopfzeile y0 -> T+s, y0+k+1 -> T+3+s;
                 // waagerecht: Kopfspalte x0 -> T+s, x0+k+1 -> T+3+s.
@@ -283,25 +289,32 @@ public partial class MapEntityLayer
                 _bauwerkKachel[key] = wurf;
             }
         }
+        // ⭐ 30.10.2026, bug-695 — eine angehobene Pionierbruecke: Gitter-/Nebelhoehe und
+        // Posentafel ebenfalls zurueck (@0x4CB333, Byte +3 := 0). Simulation/PionierbrueckeHoch.cs.
+        // bug-700: dasselbe fuer die Kartenbruecke (Gegenschalter --kartenbruecke-abriss-alt).
+        PionierbrueckeAbsenken(st, kopfHoehe);
         _stege.Remove(st);                                                   // +0x12 := 0
         BrueckenAbgerissen++;
         // ⭐ 22.10.2026 (Paket W2, bug-627) — die KI-Sektorkanten: 0x41CAD0 @0x4CB889,
         // nach sec20 := 0. Simulation/KiMarschwege.cs.
         KiBrueckeGeaendert($"Bruecke Platz {st.Slot} abgerissen");
         GD.Print($"bruecke: Bruecke Platz {st.Slot} ({e.X},{e.Y}) {(senk ? "senkrecht" : "waagerecht")} "
-               + $"eingestuerzt — {st.Zellen.Count} Zellen, {weg} Einheiten verschwunden, Truemmer {truemmer}");
+               + $"eingestuerzt — {st.Zellen.Count} Zellen, {weg} Einheiten verschwunden, Truemmer {truemmer}"
+               + (ausSpielstand ? " (aus dem Spielstand nachgezogen, bug-701)" : ""));
         QueueRedraw();
     }
 
     /// <summary><c>0x4CBAB0</c>, Destroy ramp — siehe Kopf, Punkt 5.</summary>
-    private void RampeAbreissen(Rampe rp)
+    /// <param name="ausSpielstand">⭐ bug-702: beim Laden nachgezogen — ohne Leeren der Zelle
+    /// (die Einheiten kommen danach aus dem Stand).</param>
+    private void RampeAbreissen(Rampe rp, bool ausSpielstand = false)
     {
         int key = rp.Col * 1024 + rp.Row;
         _bauwerkKachel[key] = Import.MapBaker.RampenKachelBasis + 24 + rp.Bild;    // 10747 + v
         _moleSaetze.Remove(rp);
         _rampen.Remove(key);
         _rampenKachel.Remove(key);
-        ZelleLeeren(rp.Col, rp.Row);                                              // Zasah 40500
+        if (!ausSpielstand) ZelleLeeren(rp.Col, rp.Row);                          // Zasah 40500
         _nav?.BrueckeLoesen(rp.Col, rp.Row, Simulation.NavGrid.Ground.Rough);    // 0xFFFD
         RampenAbgerissen++;
         GD.Print($"mole: Rampe Platz {rp.Slot} ({rp.Col},{rp.Row}) zerstoert — Truemmer {10747 + rp.Bild}");
@@ -360,6 +373,15 @@ public partial class MapEntityLayer
             break;
         }
 
+        // bug-700: die Hoehen VOR dem Abriss — Kopf, Mitte (Zeichen/Gitter/Nebel), Koepfe in der Posentafel.
+        var kopfZ = senk ? new Vector2I(st.Col + 1, st.Row) : new Vector2I(st.Col, st.Row + 1);
+        int kopfH0 = ElevOf(kopfZ.X, kopfZ.Y);
+        var hoeheVor = new List<string>();
+        foreach (var (z, s0, p0) in zellen)
+            if (s0 == 1 && p0 > 0 && p0 <= st.Wasser) hoeheVor.Add($"{ElevOf(z.X, z.Y)}/{_nav.ElevAt(z.X, z.Y)}/{NebelhoeheFuerProbe(z.X, z.Y)}");
+        sb.AppendLine($"  Mitte vor dem Abriss (Zeichen/Gitter/Nebel): {string.Join(" ", hoeheVor)}, Kopf {kopfZ} Hoehe {kopfH0}, "
+                    + $"Posentafel Kopf {HangArt(kopfZ.X, kopfZ.Y)}" + (KartenbrueckeAbrissAlt ? " — NULLMODELL --kartenbruecke-abriss-alt" : ""));
+
         int Stufe() => Mathf.Clamp((BrueckeTp - st.Tp) / 167, 0, 2);
         ZellEinschlag(-1, gelaender.X, gelaender.Y, 200, 0);
         sb.AppendLine($"  Einschlag 1 (200) aufs Gelaender: TP {st.Tp}");
@@ -389,6 +411,24 @@ public partial class MapEntityLayer
         }
         Soll(rau == 6 && wasser == 3 * st.Wasser, $"Gelaende: {rau}/6 Kopfzellen rau, {wasser}/{3 * st.Wasser} Wasser");
         Soll(lage == 0, $"sec20 geraeumt ({lage} Zellen tragen noch 100+)");
+        // ⭐ bug-700 (0x4CB333): die Mitte sinkt auf Kopfhoehe — in Zeichen-, Gitter- UND Nebelhoehe;
+        // die Nebelmaske jeder Zelle sitzt dann wieder auf ihrer Zelle. Posentafel := 0 (Byte +3).
+        int zeichenOk = 0, gitterOk = 0, nebelOk = 0, maskeVersatz = 0, poseNull = 0, mitten = 0;
+        foreach (var (z, s0, p0) in zellen)
+        {
+            if (HangArt(z.X, z.Y) == 0) poseNull++;
+            if (s0 != 1 || p0 == 0 || p0 > st.Wasser) continue;
+            mitten++;
+            if (ElevOf(z.X, z.Y) == kopfH0) zeichenOk++;
+            if (_nav.ElevAt(z.X, z.Y) == kopfH0) gitterOk++;
+            int nh = NebelhoeheFuerProbe(z.X, z.Y);
+            if (nh == kopfH0) nebelOk++;
+            maskeVersatz += System.Math.Abs(nh - ElevOf(z.X, z.Y)) * Import.MapBaker.ElevStep;
+        }
+        Soll(zeichenOk == mitten && gitterOk == mitten && nebelOk == mitten,
+             $"Hoehe der Mitte = Kopf {kopfH0}: Zeichen {zeichenOk}/{mitten}, Gitter {gitterOk}/{mitten}, Nebel {nebelOk}/{mitten}");
+        Soll(maskeVersatz == 0, $"Nebelmaske sitzt auf der Zelle: zusammen {maskeVersatz} px Versatz ueber {mitten} Mittelzellen");
+        Soll(poseNull == zellen.Count, $"Posentafel (Byte +3) = 0 auf {poseNull}/{zellen.Count} Satzzellen");
         Soll(kopfTr == 6 && wasserK == 3 * st.Wasser,
              $"Kacheln: {kopfTr}/6 Truemmer ab {truemmer}, {wasserK}/{3 * st.Wasser} Wasserkacheln 0..{(senk ? 7 : 6)}");
         if (opfer >= 0)

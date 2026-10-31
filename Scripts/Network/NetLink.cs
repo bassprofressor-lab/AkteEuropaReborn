@@ -208,6 +208,9 @@ public sealed class NetLink
             .U8((byte)s.Techstandard)
             .U8((byte)s.Resources)
             .Bool(s.AllUnits)
+            .U16(s.StartMoney)                // bug-734, Protokoll 3
+            .Bool(s.NoStartBase)
+            .Bool(s.StartbasisAus)
             .U8((byte)s.Slot.Length)
             .Also(w => { foreach (int sl in s.Slot) w.U8((byte)sl); })
             .Done();
@@ -363,6 +366,15 @@ public sealed class NetLink
         s.Techstandard = r.U8();
         s.Resources = r.U8();
         s.AllUnits = r.Bool();
+        // ⚠ bug-734: ab Protokoll 3. Ein Gastgeber mit Protokoll 2 liefert diese Bytes
+        // nicht — dann liest das hier die Platzzahl falsch, und die Pruefung unten
+        // verwirft die Sitzung ohnehin wegen der Nummer.
+        if (proto >= 3)
+        {
+            s.StartMoney = r.U16();
+            s.NoStartBase = r.Bool();
+            s.StartbasisAus = r.Bool();
+        }
         int n = r.U8();
         var slots = new int[n];
         for (int i = 0; i < n; i++) slots[i] = r.U8();

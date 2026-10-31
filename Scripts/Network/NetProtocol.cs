@@ -134,7 +134,8 @@ public sealed class NetSession
     /// mit verschiedener Nummer spielen NICHT zusammen — sie würden
     /// auseinanderlaufen, und ein Auseinanderlaufen aus diesem Grund ist der
     /// teuerste, weil er wie ein Rechenfehler aussieht.</summary>
-    public const int Protokoll = 2;   // 2: Paket W4, Vorlauf traegt die Tafel-Pruefzahl
+    public const int Protokoll = 3;   // 2: Paket W4, Vorlauf traegt die Tafel-Pruefzahl
+                                      // 3: bug-733/734, Sitzung traegt Konto, B8 und Startbasis
 
     public string Map = "";
     public uint Seed;
@@ -151,6 +152,16 @@ public sealed class NetSession
     public int Techstandard = 1;
     public int Resources = 2;
     public bool AllUnits;
+    /// <summary>⭐ bug-734 — »Konto«, das Startgeld aller acht Spieler. Im Original traegt
+    /// Kommando 979 es mit (<c>word[0x5407A0]</c>, Lobby-Knopf @0x44D425, 0..10000 in
+    /// Tausenderschritten; Bericht mehrspieler-original-fable.md §2.4). Fehlte bis
+    /// Protokoll 2: ein Gast mit anderem Kontowert startete mit anderem Geld.</summary>
+    public int StartMoney = 5000;
+    /// <summary>bug-734 — B8 aus (<c>--no-start-base</c>); UNSERE Abweichung, kein Feld
+    /// des Originals, aber es veraendert die Welt ab Takt 0 und muss darum mit.</summary>
+    public bool NoStartBase;
+    /// <summary>bug-733/734 — <c>--gefecht-startbasis-aus</c>, aus demselben Grund.</summary>
+    public bool StartbasisAus;
 
     public int MySlot => Me >= 0 && Me < Slot.Length ? Slot[Me] : 0;
 
@@ -159,7 +170,8 @@ public sealed class NetSession
            $"[{string.Join(",", Slot)}], ich bin Nr. {Me} (Platz {MySlot}), " +
            $"Vorlauf {Lead} Takte, KI {AiCount}, Stufe {Level}, " +
            $"Techstandard {Techstandard}, Rohstoffe {Resources}, " +
-           $"alle Einheiten {(AllUnits ? "ja" : "nein")}";
+           $"alle Einheiten {(AllUnits ? "ja" : "nein")}, Konto ${StartMoney}, " +
+           $"B8 {(NoStartBase ? "aus" : "an")}, Startbasis {(StartbasisAus ? "aus" : "an")}";
 }
 
 /// <summary>Bytes schreiben. Klein und ohne Abhängigkeiten — ein Paket ist bei

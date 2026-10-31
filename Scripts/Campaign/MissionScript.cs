@@ -74,6 +74,10 @@ public sealed class MissionScript
         /// 191 resolves to a design the game itself names "Col.Hullman".
         /// </summary>
         public int[] Types = Array.Empty<int>();
+
+        /// <summary>⭐ bug-708 — nur <c>gas</c>: die Teilchen <c>[x, y, vx, vy, alter]</c> der
+        /// add_gas-Rufe einer Regel (M21 @0x49F62B..0x49F71E, zehn).</summary>
+        public int[][] Gas = Array.Empty<int[]>();
     }
 
     /// <summary>
@@ -276,6 +280,22 @@ public sealed class MissionScript
         /// M20: 2, M25: 4 (berichte/minen-opus.md §1).
         /// </summary>
         public readonly List<(int X0, int X1, int Y0, int Y1, int Leger, bool ZeileAussen)> Minen = new();
+
+        /// <summary>
+        /// ⭐ 30.10.2026 (bug-697) — <b>DIE FALLEN</b> dieser Mission — <c>[spalte, zeile, leger]</c>
+        /// in Rufreihenfolge, aus <c>lay_trap</c> (C 0x421A40 / F 0x420C00) im SETUP-Block.
+        /// Kein Skriptbefehl im Takt: alle 10 Rufe stehen im Aufbau (M20 4, M25 6).
+        /// Ausgelesen von <c>aekernel-tools/mission_fallen.py</c>, beide GAME.EXE gleich.
+        /// </summary>
+        public readonly List<(int Col, int Row, int Leger)> Fallen = new();
+
+        /// <summary>
+        /// ⭐ 30.10.2026 (bug-708) — <b>DIE GASWOLKEN</b> des SETUP-Blocks — <c>[x, y, vx, vy, alter]</c>
+        /// in Rufreihenfolge, x/y in Feinschritten (120 je Zelle), aus <c>add_gas</c> (C 0x439410 /
+        /// F 0x438570). M20 6, M21 12, M25 17. Ausgelesen von <c>aekernel-tools/mission_gas.py</c>,
+        /// beide GAME.EXE gleich.
+        /// </summary>
+        public readonly List<int[]> Gas = new();
     }
 
     // ---- state ------------------------------------------------------------
@@ -995,6 +1015,23 @@ public sealed class MissionScript
 
     /// <summary>Siehe <see cref="Script.Minen"/>.</summary>
     public IReadOnlyList<(int X0, int X1, int Y0, int Y1, int Leger, bool ZeileAussen)> Minen => _script.Minen;
+    /// <summary>Siehe <see cref="Script.Fallen"/> (bug-697).</summary>
+    public IReadOnlyList<(int Col, int Row, int Leger)> Fallen => _script.Fallen;
+    /// <summary>Siehe <see cref="Script.Gas"/> (bug-708).</summary>
+    public IReadOnlyList<int[]> Gas => _script.Gas;
+
+    /// <summary>Wie viele Teilchen die Skriptregeln dieser Mission tragen (Pruefstand, bug-708).</summary>
+    public int SkriptGasZahl()
+    {
+        int n = 0;
+        foreach (var r in _script.Rules)
+            foreach (var a in r.Then)
+                if (a.Kind == "gas") n += a.Gas.Length;
+        return n;
+    }
+
+    /// <summary>Haengt der Haken fuer die Wirkung <c>gas</c>? (Pruefstand, bug-708)</summary>
+    public bool GasGehakt => AddGas != null;
 
     public List<Cond> PlaceConds()
     {
@@ -1386,6 +1423,16 @@ public sealed class MissionScript
         public int A, B, C, D, E, SpielerVon, SpielerBis = -1, Von, Bis = -1;
         public bool BesitzerIstSpieler, Gebaut;
         public readonly List<int> Besitzer = new();
+        /// <summary>⭐ bug-705 (30.10.2026): <c>besitzer</c> "alle" (jeder Platz mit Typ != 0)
+        /// bzw. "nicht_herrenlos" (Besitzerbyte != 0xFF, M11 C 0x4898CC).</summary>
+        public bool BesitzerAlle, BesitzerNichtHerrenlos;
+        /// <summary>⭐ bug-705: die Zweige einer Registerschleife — je Platz gewinnt der
+        /// ERSTE passende Zweig und legt <c>(p, B, Vorrang, g, E)</c> an (M15, M17).
+        /// Leer = ein Zweig aus <c>besitzer</c>/<c>C</c>.</summary>
+        public readonly List<(string Besitzer, List<int> Liste, int Vorrang)> Zweige = new();
+        /// <summary>⭐ bug-705: die alte Lesung der Schleife als EIN fester Ruf
+        /// (<c>alt</c> in der JSON) — fuer <c>--setup-ziele-eigen-alt</c>.</summary>
+        public (int A, int B, int C, int D, int E)? Alt;
     }
 
     /// <summary>Die Setup-Ziele dieser Mission, siehe Script.SetupZiele.</summary>
@@ -1761,6 +1808,26 @@ public sealed class MissionScript
                     s.Minen.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32(), q[3].AsInt32(),
                                  q[4].AsInt32(), q[5].AsString() == "yx"));
                 }
+            // ⭐ bug-697 — die Fallen des SETUP-Blocks, siehe Script.Fallen.
+            if (body.TryGetValue("fallen", out var flv) &&
+                flv.VariantType == Variant.Type.Array)
+                foreach (var e in flv.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Array) continue;
+                    var q = e.AsGodotArray();
+                    if (q.Count < 3) continue;
+                    s.Fallen.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32()));
+                }
+            // ⭐ bug-708 — die Gaswolken des SETUP-Blocks, siehe Script.Gas.
+            if (body.TryGetValue("gas", out var gsv) &&
+                gsv.VariantType == Variant.Type.Array)
+                foreach (var e in gsv.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Array) continue;
+                    var q = e.AsGodotArray();
+                    if (q.Count < 5) continue;
+                    s.Gas.Add(new[] { q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32(), q[3].AsInt32(), q[4].AsInt32() });
+                }
             // ⭐ 02.10.2026 (bug-384) — die Betriebsart des Setup-Blocks, siehe
             // Script.Betriebsart.
             if (body.TryGetValue("betriebsart", out var bav) &&
@@ -1806,8 +1873,35 @@ public sealed class MissionScript
                         {
                             if (bsv.VariantType == Variant.Type.Array)
                                 foreach (var q in bsv.AsGodotArray()) z.Besitzer.Add(q.AsInt32());
-                            else z.BesitzerIstSpieler = bsv.AsString() == "spieler";
+                            else
+                            {
+                                z.BesitzerIstSpieler = bsv.AsString() == "spieler";
+                                z.BesitzerAlle = bsv.AsString() == "alle";                       // bug-705
+                                z.BesitzerNichtHerrenlos = bsv.AsString() == "nicht_herrenlos";  // bug-705
+                            }
                         }
+                        // ⭐ bug-705 — die Zweige einer Registerschleife und die alte Lesung.
+                        if (zd.TryGetValue("zweige", out var zwv) && zwv.VariantType == Variant.Type.Array)
+                            foreach (var q in zwv.AsGodotArray())
+                            {
+                                if (q.VariantType != Variant.Type.Dictionary) continue;
+                                var qd = q.AsGodotDictionary<string, Variant>();
+                                var liste = new List<int>();
+                                string art = "";
+                                if (qd.TryGetValue("besitzer", out var qb))
+                                {
+                                    if (qb.VariantType == Variant.Type.Array)
+                                        foreach (var w in qb.AsGodotArray()) liste.Add(w.AsInt32());
+                                    else art = qb.AsString();
+                                }
+                                z.Zweige.Add((art, liste, qd.TryGetValue("c", out var qc) ? qc.AsInt32() : 0));
+                            }
+                    }
+                    if (zd.TryGetValue("alt", out var altv) && altv.VariantType == Variant.Type.Dictionary)
+                    {
+                        var ad = altv.AsGodotDictionary<string, Variant>();
+                        int AZ(string k) => ad.TryGetValue(k, out var v) ? v.AsInt32() : 0;
+                        z.Alt = (AZ("a"), AZ("b"), AZ("c"), AZ("d"), AZ("e"));
                     }
                     s.SetupZiele.Add(z);
                 }
@@ -1946,6 +2040,20 @@ public sealed class MissionScript
                             var list = new int[arr.Count];
                             for (int n = 0; n < arr.Count; n++) list[n] = arr[n].AsInt32();
                             act.Types = list;
+                        }
+                        // ⭐ bug-708 — die Teilchen der Wirkung `gas`.
+                        if (ad.TryGetValue("gas", out var gq) && gq.VariantType == Variant.Type.Array)
+                        {
+                            var arr = gq.AsGodotArray();
+                            var list = new List<int[]>();
+                            foreach (var q0 in arr)
+                            {
+                                if (q0.VariantType != Variant.Type.Array) continue;
+                                var q = q0.AsGodotArray();
+                                if (q.Count < 5) continue;
+                                list.Add(new[] { q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32(), q[3].AsInt32(), q[4].AsInt32() });
+                            }
+                            act.Gas = list.ToArray();
                         }
                         rule.Then.Add(act);
                     }
@@ -2201,6 +2309,10 @@ public sealed class MissionScript
     /// Siehe <c>MissionFireAt</c> für die Beweiskette und für das, was dabei
     /// unsere Setzung bleibt.</summary>
     public Action<int, int, int>? FireAt;            // einheit, x, y
+
+    /// <summary>⭐ bug-708 — <c>add_gas</c> aus einer Skriptregel (M21 @0x49F618: zehn
+    /// Teilchen, sobald Objekt 13 keinen Besitzer mehr hat). Simulation/Gaswolke.cs.</summary>
+    public Action<int[][]>? AddGas;
 
     /// <summary>⭐ 04.10.2026 (bug-434) — LICHTQUELLE <c>0x4222C0(x, y, Radius,
     /// Dauer)</c>: die Sicht an (x, y) fuer Dauer Takte offen. Skriptstellen
@@ -3495,6 +3607,10 @@ public sealed class MissionScript
                 }
                 break;
             // v[a] = game_time() — der Zeitstempel, auf den `time_after` zeigt
+            // ⭐ bug-708 — add_gas(x, y, vx, vy, alter) 0x439410, je Teilchen ein Ruf.
+            case "gas":
+                AddGas?.Invoke(a.Gas);
+                break;
             case "set_time":
                 if (a.A >= 0 && a.A < _var.Length) _var[a.A] = Minutes;
                 break;
@@ -4113,6 +4229,7 @@ public sealed class MissionScript
         "ai_mode" => AiMode != null,
         "fire_at" => FireAt != null,
         "licht" => Licht != null,                    // bug-434
+        "gas" => AddGas != null,                     // bug-708
         "kopf" => Kopf != null,                      // bug-436
         "hit_cell" => HitCell != null,
         "set_unit_field" => SetUnitField != null && UnitField != null,

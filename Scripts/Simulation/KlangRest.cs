@@ -27,6 +27,7 @@ using Godot;
 /// <c>--hilfeklang-alt</c>.</item>
 /// <item>F R6 Mechaniker, G R7 Gleis, H R8 Depot, I R9 Nachschub, J R10 Start,
 /// L R12 Graben, N R13 Hand, O R14 Waldbrand, P R15 Truemmer — je <c>…-aus</c>.</item>
+/// <item>Q bug-691 Aufsetzen 308 (Flugzeug ja, Heli nein) — <c>--landeklang-aus</c>.</item>
 /// </list>
 /// </summary>
 public partial class MapEntityLayer
@@ -90,6 +91,7 @@ public partial class MapEntityLayer
         Null(Audio.GameSounds.HandstimmeAus, "--handstimme-aus", 'N');
         Null(Audio.GameSounds.WaldbrandklangAus, "--waldbrandklang-aus", 'O');
         Null(Audio.GameSounds.TruemmerklangAus, "--truemmerklang-aus", 'P');
+        Null(Audio.GameSounds.LandeklangAus, "--landeklang-aus", 'Q');
         _ = G;
 
         var gehoert = new List<(int Slot, float C, float R)>();
@@ -168,7 +170,7 @@ public partial class MapEntityLayer
                     {
                         Slot = slot, Kind = 13, Name = "Probeheli", TypeName = "Probeheli",
                         Owner = ViewPlayer, Stored = false, HomeSlot = -1,
-                        Col = c.Col, Row = c.Row, Pos = c.Pos,
+                        Col = c.Col, Row = c.Row, Pos = FlugPunkt(c),   // bug-696
                         Hp = 10, HpMax = 10, Fuel = 999, FuelMax = 999, Speed = 5,
                         Alt = FlughoeheMax, Sollhoehe = FlughoeheMax, Cargo = SupplyCargoFull,
                     };
@@ -181,7 +183,7 @@ public partial class MapEntityLayer
                     int n75 = Zahl(ab, s => s == Audio.GameSounds.NachschubBefehl);
                     int fuel = c.Fuel;
                     c.Fuel = c.FuelMax / 2;                                       // ⚠ Eingriff
-                    probeHeli.Customer = kunde; probeHeli.Pos = c.Pos;
+                    probeHeli.Customer = kunde; probeHeli.Pos = FlugPunkt(c);   // bug-696
                     probeHeli.Alt = (ElevOf(c.Col, c.Row) + 2) * 15;
                     int ab2 = gehoert.Count, runs = SupplyRuns;
                     UpdateSupply(probeHeli);
@@ -284,6 +286,54 @@ public partial class MapEntityLayer
                 if (StartzustandAlt) KlangRestKeinUrteil(sb, 'J', "--startzustand-alt: die Startuhr laeuft nicht");
                 else KlangRestUrteil(sb, 'J', n303 == 1 && n304 == 1 && folge.Count == 2,
                     $"Start (R10, uk 4): 303 x{n303} (Soll 1, Flugzeug Uhr 0), 304 x{n304} (Soll 1, Heli Uhr 39) — {string.Join("; ", folge)}");
+            }
+
+            // ---- Q: bug-691 — 308 beim Aufsetzen (C 0x42439F, m_uk 3 -> »air Da«) ----
+            // Ein Probeflugzeug (Typ 1) und ein Probeheli (Typ 11) stehen schon ueber einem
+            // Flughafen und landen ueber den echten Weg AirHeadHome. Soll: Flugzeug 308 x1 an
+            // der Flughafenzelle, Heli 308 x0 (sein Landezweig 0x4241F5 spielt 309 = leer).
+            {
+                var feld = _entities.Find(x => x.IsBuilding && x.BType == 9 && !x.Dead && x.Owner is >= 0 and <= 7);
+                // ⚠ EINGRIFF ohne Flughafen (NET07 hat keinen): ein eigenes Gebaeude als Heimat —
+                // AirHeadHome nimmt die Heimat ueber HomeSlot ohne Gebaeudeart; der Hangar, den es
+                // dabei anlegt, wird unten wieder zurueckgesetzt.
+                bool ersatz = false;
+                if (feld == null)
+                {
+                    feld = _entities.Find(x => x.IsBuilding && !x.Dead && x.Owner == ViewPlayer);
+                    ersatz = feld != null;
+                    if (ersatz) sb.Append($"  ⚠ EINGRIFF: kein Flughafen — Gebaeude Platz {feld!.Slot} ({BuildingTypeName(feld.BType)}) dient als Landeplatz\n");
+                }
+                var hangarVorher = feld?.Hangar;
+                if (feld == null) KlangRestKeinUrteil(sb, 'Q', "weder Flughafen noch eigenes Gebaeude");
+                else
+                {
+                    int slot = 0; foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
+                    (int N308, bool Gelandet, bool Zelle) Lande(int kind, int sl)
+                    {
+                        var p = new Special                                            // ⚠ Eingriff, nur lokal
+                        {
+                            Slot = sl, Kind = kind, Name = "Probelander", TypeName = "Probelander",
+                            Owner = feld.Owner, Stored = false, HomeSlot = feld.Slot,
+                            Col = feld.Col, Row = feld.Row, Pos = FlugPunkt(feld),   // bug-696
+                            Hp = 10, HpMax = 10, Fuel = 999, FuelMax = 999, Speed = 5,
+                            Alt = ElevOf(feld.Col, feld.Row) * 15,
+                        };
+                        int ab = gehoert.Count;
+                        bool gelandet = AirHeadHome(p);
+                        feld.Hangar?.Remove(sl);                                       // Eingriff zurueck
+                        var n = gehoert.Skip(ab).Where(x => x.Slot == Audio.GameSounds.FlugzeugAufsetzen).ToList();
+                        bool zelle = n.All(x => Mathf.RoundToInt(x.C) == feld.Col && Mathf.RoundToInt(x.R) == feld.Row);
+                        return (n.Count, gelandet, zelle);
+                    }
+                    var flz = Lande(1, slot);
+                    var hel = Lande(11, slot + 1);
+                    if (ersatz && hangarVorher == null) feld.Hangar = null;           // Eingriff zurueck
+                    KlangRestUrteil(sb, 'Q', flz.Gelandet && hel.Gelandet && flz.N308 == 1 && flz.Zelle && hel.N308 == 0,
+                        $"Aufsetzen (bug-691, {(ersatz ? "Ersatz-Landeplatz" : "Flughafen")} Platz {feld.Slot} auf ({feld.Col},{feld.Row})): Flugzeug Typ 1 gelandet "
+                      + $"{(flz.Gelandet ? "ja" : "NEIN")}, 308 x{flz.N308} (Soll 1){(flz.Zelle ? "" : " NICHT an der Flughafenzelle")}; "
+                      + $"Heli Typ 11 gelandet {(hel.Gelandet ? "ja" : "NEIN")}, 308 x{hel.N308} (Soll 0)");
+                }
             }
 
             // ---- L: R12 — Eingraben/Ausgraben (Ring) --------------------------

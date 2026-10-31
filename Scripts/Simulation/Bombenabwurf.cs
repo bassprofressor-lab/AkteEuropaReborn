@@ -101,7 +101,10 @@ public partial class MapEntityLayer
     private void BomberAnflug(Special a, Entity t, Vector2 aim)
     {
         if (CellAt(aim) is not { } ziel) return;
-        if (a.Cooldown <= 0f && a.Ammo > 0 && BombeTrifftZiel(a, aim, ziel, out var punkt))
+        // bug-696: die Rechnung laeuft im Bodenraum des Ziels (aim ist angehoben) — die flache
+        // Lage wird dorthin geschoben (Fluglage.cs); alt = Pos.
+        var ap = AirImRahmen(a, t.Col, t.Row);
+        if (a.Cooldown <= 0f && a.Ammo > 0 && BombeTrifftZiel(a, ap, aim, ziel, out var punkt))
         {
             // 0x427410: Abklingzeit := 6 Takte. ⚠ SETZUNG »Lufttakt«: unsere Flugzeuge fliegen
             // sp·AirPxPerSpeed px/s, das Original sp Feineinheiten je Takt — ein Lufttakt ist bei
@@ -115,13 +118,14 @@ public partial class MapEntityLayer
                 _abwuerfe.Add(new AbwurfSatz
                 {
                     Slot = a.Slot, Stufe = a.Stufe, Ziel = ziel, Abwurfzeit = _clock,
-                    AbstandZellen = new Vector2((a.Pos.X - aim.X) / TileW, (a.Pos.Y - aim.Y) / TileH).Length(),
+                    AbstandZellen = new Vector2((ap.X - aim.X) / TileW, (ap.Y - aim.Y) / TileH).Length(),
                     ZielPx = aim, Zielgriff = a.Target, RestMunition = a.Ammo,
                 });
             LuftSalve(a, t, punkt, abwurf: true);
         }
         // »Over target while attack« (0x424540): erst AUF der Zielzelle wird abgedreht.
-        if (CellAt(a.Pos) is { } hier && hier == ziel || a.Pos.DistanceTo(aim) < 1f)
+        // bug-696: flach ist »auf der Zielzelle« die Satzzelle selbst (0x424540 vergleicht Zellen)
+        if ((LageFlach ? new Vector2I(a.Col, a.Row) : CellAt(a.Pos)) is { } hier && hier == ziel || ap.DistanceTo(aim) < 1f)
         {
             a.TurnPoint = AirTurnPoint(a.Pos);
             BomberUeberfluege++;
@@ -143,7 +147,7 @@ public partial class MapEntityLayer
 
     /// <summary>test_all_bomber 0x426A00 ab dem Abstandstor: trifft die vorausfallende
     /// Bombe die Zielzelle? <paramref name="punkt"/> ist P (ohne Streuung).</summary>
-    private bool BombeTrifftZiel(Special a, Vector2 aim, Vector2I ziel, out Vector2 punkt)
+    private bool BombeTrifftZiel(Special a, Vector2 ap, Vector2 aim, Vector2I ziel, out Vector2 punkt)
     {
         punkt = aim;
         // 0x426A7C..0x426AE9 — wörtlich, Y ohne ·40
@@ -151,8 +155,8 @@ public partial class MapEntityLayer
         if (Mathf.Sqrt(dx * dx + dy * dy) > 400f) return false;
         // 0x426AF8..0x426B55
         float h = a.Alt - 15f * ElevOf(a.Col, a.Row);
-        var u = FeinRichtung(aim - a.Pos);
-        punkt = a.Pos + FeinZuPx(u * h);
+        var u = FeinRichtung(aim - ap);              // bug-696: ap = Lage im Bodenraum des Ziels
+        punkt = ap + FeinZuPx(u * h);
         // 0x426BAB..0x426BF5: die Probebahn, Tempo der Art in Feineinheiten je Takt
         int tempo = Mathf.Max(1, Audio.GameSounds.ProjectileSpeed(ArtBombe));
         int schritte = h <= 0f ? 0 : Mathf.CeilToInt(h / tempo);
@@ -161,7 +165,7 @@ public partial class MapEntityLayer
         for (int k = 1; k <= schritte && auf == null; k++)
         {
             float f = Mathf.Min(1f, k * tempo / h);
-            var pos = a.Pos + FeinZuPx(u * (h * f));
+            var pos = ap + FeinZuPx(u * (h * f));
             float hoehe = Mathf.Lerp(a.Alt, 0f, f);
             if (CellAt(pos) is not { } z) continue;
             int schwelle = SchwelleAn(z.X, z.Y);
@@ -174,18 +178,18 @@ public partial class MapEntityLayer
 
     /// <summary>Der Wurf selbst (0x42741E..0x42752B): von der Lage des Bombers in seiner
     /// Hoehe nach P ± Streuung auf Hoehe 0.</summary>
-    private void BombeAnlegen(Special a, int art, string? flug, int tempo, Vector2 punkt)
+    private void BombeAnlegen(Special a, int art, string? flug, int tempo, Vector2 punkt, Vector2 ap)
     {
         var streu = new Vector2(20 - Simulation.Determinism.Roll(40), 20 - Simulation.Determinism.Roll(40));
         var ziel = punkt + FeinZuPx(streu);
-        var px = ziel - a.Pos;
+        var px = ziel - ap;                          // bug-696
         float fein = new Vector2(px.X, px.Y * 2f).Length();
         // Tempo = Feineinheiten je Takt; auf der Bildbahn umgerechnet (y gestaucht).
         float massstab = BombeGeschosstempo ? PxPerProjectileSpeed : AirPxPerSpeed;
         float schnell = (tempo > 0 ? tempo : 3) * massstab * (fein > 0.01f ? px.Length() / fein : 1f);
         _shots.Add(new Projectile
         {
-            Pos = a.Pos, Aim = ziel, Target = -1, Shooter = -1,
+            Pos = ap, Aim = ziel, Target = -1, Shooter = -1,
             Damage = a.Attack,
             Facing = DirToFacing(px.LengthSquared() > 0.0001f ? px : Vector2.Down),
             Kind = flug, Art = art,
@@ -221,7 +225,7 @@ public partial class MapEntityLayer
         _abwuerfe.Add(new AbwurfSatz
         {
             Slot = a.Slot, Stufe = a.Stufe, Ziel = ziel, Abwurfzeit = _clock,
-            AbstandZellen = new Vector2((a.Pos.X - aim.X) / TileW, (a.Pos.Y - aim.Y) / TileH).Length(),
+            AbstandZellen = new Vector2((AirImRahmen(a, ziel.X, ziel.Y).X - aim.X) / TileW, (AirImRahmen(a, ziel.X, ziel.Y).Y - aim.Y) / TileH).Length(),   // bug-696
             Startversatz = AirHoehePx(a),          // die alte Bombe steht in Bodenhoehe
             ZielPx = aim, Zielgriff = a.Target, RestMunition = System.Math.Max(0, a.Ammo - 1),
         });
@@ -262,7 +266,7 @@ public partial class MapEntityLayer
             var a = _special.Find(x => x.Slot == s.Slot && !x.Dead);
             if (a != null)
                 s.MinAbstandVorAufschlag = Mathf.Min(s.MinAbstandVorAufschlag,
-                    new Vector2((a.Pos.X - s.ZielPx.X) / TileW, (a.Pos.Y - s.ZielPx.Y) / TileH).Length());
+                    new Vector2((AirImRahmen(a, s.Ziel.X, s.Ziel.Y).X - s.ZielPx.X) / TileW, (AirImRahmen(a, s.Ziel.X, s.Ziel.Y).Y - s.ZielPx.Y) / TileH).Length());   // bug-696
             if (s.Zielgriff >= 0 && s.Zielgriff < _entities.Count && _entities[s.Zielgriff].Dead) s.ZielTotVorAufschlag = true;
             if (a != null)
             {
@@ -276,7 +280,7 @@ public partial class MapEntityLayer
                     var z = _entities[s.Zielgriff];
                     var zp = AirAimPoint(z);
                     s.MinAbstandZielJetzt = Mathf.Min(s.MinAbstandZielJetzt,
-                        new Vector2((a.Pos.X - zp.X) / TileW, (a.Pos.Y - zp.Y) / TileH).Length());
+                        new Vector2((AirImRahmen(a, z.Col, z.Row).X - zp.X) / TileW, (AirImRahmen(a, z.Col, z.Row).Y - zp.Y) / TileH).Length());   // bug-696
                     s.ZielZelleJetzt = CellAt(zp);
                 }
             }

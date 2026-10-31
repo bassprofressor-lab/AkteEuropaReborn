@@ -133,6 +133,8 @@ public partial class MapEntityLayer
                 Owner = shooter.Owner, Name = LabelOf(shooter), Schuetze = si, Punkt = "strahlpunkt_gruen",
                 // bug-658: Bodenzweig des Strahltakts (Luftschuss.BodenstrahlTakt)
                 Boden = true, Start = start, Laenge = (zielPos - start).Length(),
+                // bug-692: Punkthoehe nach 0x455048 ab der Lage von Schuetze und Ziel (Luftschuss.StrahlPunktLage)
+                Fuss = shooter.Pos, ZielFuss = zielPos,
             });
             SchussBodenstrahlen++;
             return true;

@@ -114,6 +114,8 @@ public partial class MapEntityLayer
             }
         // ⭐ 30.10.2026, bug-685 — welche davon lebend gezeichnet werden (KartenrampeLebend.cs).
         KartenRampenAnlegen();
+        // ⭐ bug-702: alle Kartenrampen merken, auch fuer nach dem Abriss (Simulation/BrueckenSpielstand.cs).
+        KartenRampenMerken();
         if (saetze.Count == 0) return;
         // Die Zahl gehoert in den Start-Mitschnitt: an ihr haengt, ob die
         // Regel `bridge` schweigt oder feuert, und genau das war der Fehler.

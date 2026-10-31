@@ -198,7 +198,7 @@ public partial class MapEntityLayer
             {
                 Slot = slot++, Kind = kind, Name = "Probeflieger", TypeName = "Probeflieger",
                 Owner = me, Stored = false, HomeSlot = -1,
-                Col = z.X, Row = z.Y, Pos = CellCenter(z.X, z.Y),
+                Col = z.X, Row = z.Y, Pos = FlugZelle(z.X, z.Y),   // bug-696
                 Hp = 10, HpMax = 10, Defence = 0, Attack = 0, Ammo = 0, AmmoMax = 0,
                 Fuel = 999, FuelMax = 999, Speed = 5, StufeUnten = 0, Stufe = stufe, Dir = 90,
                 Alt = FlughoeheMax, Sollhoehe = FlughoeheMax,

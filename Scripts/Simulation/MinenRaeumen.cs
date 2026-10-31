@@ -75,11 +75,51 @@ public partial class MapEntityLayer
 
     /// <summary>Die Zellankunft (»on square«): ein Minenräumer räumt unter sich.
     /// Gegenschalter <c>--minenraeumen-aus</c>.</summary>
-    private void MinenRaeumerAnkunft(Entity e)
+    /// <returns>true = bug-707, der Wissenschaftler haelt (der Rufer verlaesst die Ankunft wie 0x409FF6).</returns>
+    private bool MinenRaeumerAnkunft(Entity e)
     {
-        if (MinenraeumenAus || e.Dead || e.IsBuilding || e.Part != MinenImmun) return;
-        if (e.Owner is < 0 or > 7) return;
+        // ⭐ 30.10.2026 (bug-707) — der dritte Fall derselben Weiche: +0x0E == 0xC1 (der
+        // WISSENSCHAFTLER, Entwurf 193) -> 0x421C40 (F 0x420E00): liegt auf der Zelle eine
+        // FEINDLICHE Mine oder Falle, haelt er an (C 0x407B52..0x407B64 / F 0x407A7C..:
+        // +0x11 := 0, +0x47 := 0x0B, KOLIK 0, Richtung 0xFF, Sprung ans Takt-Ende).
+        // Gegenschalter --minenhalt-alt.
+        if (e.Part == MinenHaltTeil)
+        {
+            if (!MinenhaltAlt && !e.Dead && e.Owner is >= 0 and <= 7 && FeindMineOderFalle(e.Col, e.Row, e.Owner))
+            {
+                // UNSERE Uebersetzung: Schlange weg, er bleibt auf der Zelle; der Rufer setzt Weg und
+                // Schritt zurueck und springt am Sprit vorbei wie 0x409FF6. +0x47 = 0x0B ist ungelesen (V).
+                e.Orders.Clear(); e.Goal = new Vector2I(e.Col, e.Row);
+                MinenHalte++;
+                GD.Print($"minenhalt: Platz {e.Slot} »{LabelOf(e)}« haelt auf ({e.Col},{e.Row}) vor Mine/Falle (C 0x407B36)");
+                return true;
+            }
+            return false;
+        }
+        // ⭐ 30.10.2026 (bug-697) — dieselbe Weiche C 0x407A76..0x407A82 hat einen
+        // zweiten Fall: +0x0E == 0x45 -> 0x421ED0, der FALLENRAEUMER (Fallen.cs).
+        if (e.Part == FallenImmun && !FallenAus && !e.Dead && !e.IsBuilding && e.Owner is >= 0 and <= 7)
+        { FallenRaeumen(e.Col, e.Row, e.Owner); return false; }
+        if (MinenraeumenAus || e.Dead || e.IsBuilding || e.Part != MinenImmun) return false;
+        if (e.Owner is < 0 or > 7) return false;
         MinenRaeumen(e.Col, e.Row, e.Owner);
+        return false;
+    }
+
+    /// <summary>bug-707: Teil 0xC1 = 193, der Wissenschaftler (Entwurf 193).</summary>
+    public const int MinenHaltTeil = 0xC1;
+
+    /// <summary><c>--minenhalt-alt</c> — der Stand bis 30.10.2026.</summary>
+    public static bool MinenhaltAlt;
+
+    public int MinenHalte;
+
+    /// <summary><b>0x421C40</b> (F 0x420E00): eine FEINDLICHE Mine oder Falle auf der Zelle?</summary>
+    private bool FeindMineOderFalle(int col, int row, int spieler)
+    {
+        foreach (var m in _minen) if (m.Aktiv && m.Col == col && m.Row == row && MineFeindlich(m.Player, spieler)) return true;
+        foreach (var f in _fallen) if (f.Aktiv && f.Col == col && f.Row == row && MineFeindlich(f.Player, spieler)) return true;
+        return false;
     }
 
     /// <summary>
@@ -89,6 +129,9 @@ public partial class MapEntityLayer
     /// </summary>
     public void MissionsMinenLegen(IReadOnlyList<(int X0, int X1, int Y0, int Y1, int Leger, bool ZeileAussen)> felder)
     {
+        // ⭐ bug-699: ein Spielstand mit Minenfeld hat es schon gesetzt — der Aufbau
+        // legt nicht darueber (MinenFallenSpielstand.cs).
+        if (_minenStandGeladen) { GD.Print($"Minen: aus dem Spielstand ({MinenAktiv()} liegen) — der Missionsaufbau legt keine"); return; }
         MinenLeeren();
         MissionsminenFelder.Clear();
         if (MissionsminenAus || felder.Count == 0) return;
