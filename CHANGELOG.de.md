@@ -14,7 +14,7 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
-## 0.6.13 — Datum folgt · fehlende Spielfunktionen, flache Fluglage und ein Gefecht mit Startbasis
+## 0.6.13 — 31.10.2026 · fehlende Spielfunktionen, flache Fluglage und ein Gefecht mit Startbasis
 
 > **In dieser Fassung stecken die Restpunkte der Prüfung nach 0.6.12.** Wir
 > haben das Programm des Originals noch einmal Stelle für Stelle mit unserem

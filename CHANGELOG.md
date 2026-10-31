@@ -12,7 +12,7 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
-## 0.6.13 — date to follow · missing game functions, flat flight attitude, and skirmish with a starting base
+## 0.6.13 — 2026-10-31 · missing game functions, flat flight attitude, and skirmish with a starting base
 
 > **This release holds the leftover points of the review after 0.6.12.** We
 > compared the original program with ours once more, place by place. We found
