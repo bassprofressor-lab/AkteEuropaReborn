@@ -191,6 +191,10 @@ public partial class MapEntityLayer
             }
             F.Target = -1; F.Ordered = false; F.Path = null; F.RestZiel = null;
             F.RetryIn = 0; F.ChaseRetry = 0; F.Goal = new Vector2I(F.Col, F.Row); F.Orders.Clear(); F.Cooldown = 0;
+            // 31.10.2026: der Halt von Hand mitten in einer Drehung liess OTACIM stehen — es
+            // zaehlt nur im Schritt herunter, und die Fussvolk-Uhr feuert nur bei 0 (G4 kippte
+            // je nach Verlauf, 027e117). Wie KiGaEingreifen: Bremse mit loesen.
+            F.DrehWarten = 0;
             // jetzt steht er; Y neben ihn
             yz = new Vector2I(F.Col + 1, F.Row + 1 <= sr + 2 ? F.Row + 1 : F.Row - 1);
             int nachher0 = _gfpAlle;
@@ -198,7 +202,7 @@ public partial class MapEntityLayer
             for (int t = 0; t < 200; t++) { Heften(); SimTickFuerProbe(); }
             Schussgruende = sg0;
             int steh = _gfpAlle - nachher0;
-            if (steh == 0) sb.AppendLine($"    (Fusssoldat ({F.Col},{F.Row}), Y ({yz.X},{yz.Y}), Weg {(F.Path != null)}, Ziel {F.Target}, feindlich {IsHostile(F, Y)}, Abstand {CellDistance(F, Y):0.0}, Reichweite {RangeOf(F):0.0}/{RangeMinOf(F):0.0}, Ukol {F.Ukol}, Grund: {F.Schussgrund})");
+            if (steh == 0) sb.AppendLine($"    (Fusssoldat ({F.Col},{F.Row}), Y ({yz.X},{yz.Y}), Weg {(F.Path != null)}, Ziel {F.Target}, feindlich {IsHostile(F, Y)}, Abstand {CellDistance(F, Y):0.0}, Reichweite {RangeOf(F):0.0}/{RangeMinOf(F):0.0}, Ukol {F.Ukol}, Dreh {F.DrehWarten}, Grund: {F.Schussgrund})");
             // bug-688: mit der Fussvolk-Uhr schiesst er im Gehen beim Betreten einer Zelle
             // (Ankunftsarm 0x407D27) — das Soll im Gehen haengt am Schalter --fussvolk-uhr-alt.
             bool g4 = gehTakte > 0 && (FussvolkUhrAlt ? gehend == 0 : gehend > 0) && steh > 0;

@@ -4828,6 +4828,7 @@ _mausProbePunkt = karte;
                 MapEntityLayer.StartbasisFabrikTyp = a["--gefecht-startbasis-fabrik=".Length..].ToInt();
             else if (a == "--startbasis-check") _startbasisCheck = true;                       // bug-733
             else if (a == "--startbasis-heim-alt") MapEntityLayer.StartbasisHeimAlt = true;    // bug-735
+            else if (a == "--startbasis-fabrik-nur-neu") MapEntityLayer.StartbasisFabrikNurNeu = true;    // 31.10.: NET02..06 ohne Fabrik
             else if (a == "--netz-sitzung-alt") Network.NetworkManager.SitzungAlt = true;     // bug-734
             else if (a == "--dm-minen-check") _dmMinenCheck = true;                            // bug-709
             else if (a == "--minenbild-check") _minenbildCheck = true;

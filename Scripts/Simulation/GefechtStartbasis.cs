@@ -24,7 +24,8 @@ namespace AkteEuropaReborn.Rendering;
 /// <list type="number">
 ///   <item>Nach <c>ClearIdleSlots</c> und B8 (<c>GrantStartingBases</c>) bekommt jeder
 ///   Mitspieler, der dann noch <b>keine Basis</b> hat, eine neu aufgestellte <b>Basis plus
-///   eine Fabrik</b> (Spielerentscheidung 1). Wer eine hat, bekommt nichts.</item>
+///   eine Fabrik</b> (Spielerentscheidung 1). Wer eine Basis, aber keine Fabrik hat
+///   (NET02..06 nach B8), bekommt seit 31.10.2026 die Fabrik dazu (--startbasis-fabrik-nur-neu).</item>
 ///   <item>Genau diese Plaetze werden vorher auf <see cref="StarterTroop"/> = 6 Einheiten
 ///   ausgeduennt, wie <c>KeepStartingTroop(6)</c> (Spielerentscheidung 2) — je PLATZ, nicht
 ///   je Karte: ein Platz mit Kartenbasis behaelt seine Truppe.</item>
@@ -89,7 +90,30 @@ public partial class MapEntityLayer
         public int Abstand = -1;
         public int Geduennt;
         public bool Weg = true;
+        /// <summary>Basis aus Karte/B8, nur die Fabrik kam dazu (31.10.2026).</summary>
+        public bool NurFabrik;
         public string Notiz = "";
+    }
+
+    /// <summary><c>--startbasis-fabrik-nur-neu</c> — nur wer eine NEUE Basis bekommt, bekommt
+    /// auch eine Fabrik (der Stand von 027e117: NET02..06-Plaetze mit B8-Basis ohne Fabrik).</summary>
+    public static bool StartbasisFabrikNurNeu;
+
+    private bool HatFabrik(int p)
+    {
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == p && e.BType is 2 or 3 or 4) return true;
+        return false;
+    }
+
+    private int ErsteBasis(int p)
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == p && e.BType == 1) return i;
+        }
+        return -1;
     }
 
     /// <summary>Ob diese Partie ueberhaupt eine Startbasis aufstellen durfte (nicht
@@ -144,9 +168,14 @@ public partial class MapEntityLayer
         var plaetze = new List<int>(mitspieler);
         plaetze.Sort();
         var ohne = new List<int>();
+        var nurFabrik = new List<int>();
         foreach (int p in plaetze)
-            if (p is >= 0 and <= 7 && !HasBase(p)) ohne.Add(p);
-        if (ohne.Count == 0) return 0;
+        {
+            if (p is < 0 or > 7) continue;
+            if (!HasBase(p)) ohne.Add(p);
+            else if (!StartbasisFabrikNurNeu && !HatFabrik(p)) nurFabrik.Add(p);
+        }
+        if (ohne.Count == 0 && nurFabrik.Count == 0) return 0;
 
         // erst duennen, DANN suchen: CanBuild zaehlt Einheiten als belegt (Plan §1c, NET07
         // P7 hat mit voller Truppe einen einzigen Bauplatz im 40er-Quadrat)
@@ -191,6 +220,60 @@ public partial class MapEntityLayer
                 }
                 else ein.Notiz = $"kein Bauplatz fuer die Fabrik in {StartbasisFabrikRadius} Zellen";
             }
+        }
+
+        // ⭐ 31.10.2026 (Spielerentscheidung: »NET02 bis 06 auch mit Fabrik«) — wer schon eine
+        // Basis hat (Karte oder B8), aber keine Fabrik, bekommt die Fabrik dazu, neben seine
+        // erste Basis. Keine Ausduennung, keine neue Basis. Gegenschalter
+        // --startbasis-fabrik-nur-neu (der Stand von 027e117).
+        //
+        // ⚠ UNSERE SETZUNG, gemessen 31.10.: auf NET02..06 fand die Ringsuche fuer 8 von 20
+        // Plaetzen in 16 Zellen keinen Bauplatz (dicht bebaute Karten, teils nicht einmal in
+        // 40), aber JEDER davon hatte eine NEUTRALE Fabrik in 10..23 Zellen. Darum wie B8 bei
+        // der Basis: zuerst die naechste noch freie neutrale Fabrik (Art 2/3/4) innerhalb
+        // HaulRange = 40 Zellen uebergeben — Abstand in Zellen, ganzzahlig, bei Gleichstand
+        // der kleinere Satzindex, Plaetze aufsteigend (netzfest). Erst wenn keine da ist, wird
+        // eine Fabrik der Art StartbasisFabrikTyp aufgestellt.
+        var vergeben = new HashSet<int>();
+        foreach (int p in nurFabrik)
+        {
+            if (StartbasisFabrikTyp is not (2 or 3 or 4)) break;
+            int bi = ErsteBasis(p);
+            if (bi < 0) continue;
+            var ein = new StartbasisEintrag { Platz = p, Basis = bi, NurFabrik = true };
+            StartbasisProtokoll.Add(ein);
+            var bo = _entities[bi];
+            ein.Heim = (bo.Col, bo.Row);
+
+            int nb = -1; long nd = 40L * 40L + 1;
+            for (int k = 0; k < _entities.Count; k++)
+            {
+                var x = _entities[k];
+                if (!x.IsBuilding || x.IsProp || x.Dead || x.Owner != NeutralOwner || x.BType is not (2 or 3 or 4)) continue;
+                if (vergeben.Contains(k)) continue;
+                long dc = x.Col - bo.Col, dr = x.Row - bo.Row;
+                long d = dc * dc + dr * dr;
+                if (d < nd) { nd = d; nb = k; }
+            }
+            if (nb >= 0)
+            {
+                Hand(_entities[nb], p);
+                StartbasisLager(_entities[nb], r);
+                vergeben.Add(nb);
+                ein.Fabrik = nb;
+                ein.Notiz = $"neutrale Fabrik uebergeben, Abstand^2 {nd}";
+                continue;
+            }
+
+            var fb = BuildingFootprint(1);
+            var f = StartbasisPlatzSuchen(StartbasisFabrikTyp, bo.Col + fb.X / 2, bo.Row + fb.Y / 2,
+                                          StartbasisFabrikRadius, StartbasisWegbereiter(p), out _);
+            if (f is { } fo && PlaceBuilding(Patterns!, StartbasisFabrikTyp, fo.X, fo.Y, p) is { } fab)
+            {
+                StartbasisLager(fab, r);
+                ein.Fabrik = _entities.Count - 1;
+            }
+            else ein.Notiz = $"keine neutrale Fabrik in 40 und kein Bauplatz in {StartbasisFabrikRadius} Zellen";
         }
 
         // Vorschlag F4 (b): ein KI-Platz ohne Basis spielt nicht mit
@@ -240,7 +323,7 @@ public partial class MapEntityLayer
             if (e.Basis >= 0)
             {
                 var b = _entities[e.Basis];
-                s += $" -> Basis ({b.Col},{b.Row}) Ring {e.Abstand}";
+                s += e.NurFabrik ? $" Basis aus Karte/B8 ({b.Col},{b.Row})" : $" -> Basis ({b.Col},{b.Row}) Ring {e.Abstand}";
                 if (e.Fabrik >= 0) s += $", Fabrik Art {_entities[e.Fabrik].BType} ({_entities[e.Fabrik].Col},{_entities[e.Fabrik].Row})";
             }
             else s += " -> KEINE BASIS";
@@ -444,7 +527,8 @@ public partial class MapEntityLayer
     /// <c>--startbasis-check</c> (bug-733) — gleich nach dem Start:
     /// <list type="number">
     ///   <item>jeder Mitspieler hat eine lebende Basis mit Lager (W+F+S &gt; 0);</item>
-    ///   <item>wer eine NEUE Basis bekam, hat dazu eine Fabrik mit Terranium;</item>
+    ///   <item>wer eine NEUE Basis bekam, hat dazu eine Fabrik mit Terranium; ebenso, wer eine
+    ///   Basis ohne Fabrik hatte (31.10.2026);</item>
     ///   <item>an jeder neuen Basis und Fabrik sind Tuer und die drei Zellen davor frei und
     ///   von einer eigenen Bodeneinheit erreichbar; kein Grundriss ueberlappt ein anderes
     ///   Gebaeude;</item>
@@ -472,18 +556,21 @@ public partial class MapEntityLayer
                 if (e.BType is 2 or 3 or 4) { fabriken++; terra += e.StockT; }
             }
             bool pOk = basen >= 1 && lager > 0;
+            // 31.10.2026: jeder Mitspieler hat auch eine Fabrik (Nullmodell --startbasis-fabrik-nur-neu
+            // faellt auf NET02..06 durch)
+            pOk &= StartbasisFabrikTyp == 0 || (fabriken >= 1 && terra > 0);
             string z = $"  P{p}: {basen} Basis/Basen (Lager {lager}), {fabriken} Fabrik(en) (T {terra}), {einheiten} Einheiten";
             if (neu.TryGetValue(p, out var ein))
             {
                 pOk &= ein.Basis >= 0 && ein.Fabrik >= 0 && terra > 0;
-                foreach (int idx in new[] { ein.Basis, ein.Fabrik })
+                foreach (int idx in ein.NurFabrik ? new[] { ein.Fabrik } : new[] { ein.Basis, ein.Fabrik })
                 {
                     if (idx < 0) continue;
                     string t = StartbasisTuerPruefen(idx, p);
                     z += $"; {(_entities[idx].BType == 1 ? "Basis" : "Fabrik")} ({_entities[idx].Col},{_entities[idx].Row}) {t}";
                     pOk &= t.StartsWith("frei");
                 }
-                z += " [neu]";
+                z += ein.NurFabrik ? $" [Basis aus Karte/B8, Fabrik dazu: {(ein.Notiz.StartsWith("neutrale") ? "neutrale uebergeben" : "aufgestellt")}]" : " [neu]";
             }
             else z += " [Basis aus Karte/B8]";
             if (karte == "map_NET07")
