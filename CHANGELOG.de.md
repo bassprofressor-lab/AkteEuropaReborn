@@ -14,6 +14,232 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.13 — Datum folgt · fehlende Spielfunktionen, flache Fluglage und ein Gefecht mit Startbasis
+
+> **In dieser Fassung stecken die Restpunkte der Prüfung nach 0.6.12.** Wir
+> haben das Programm des Originals noch einmal Stelle für Stelle mit unserem
+> verglichen. Dabei fanden sich Spielfunktionen, die es im Original gibt und
+> bei uns noch nicht: Fallen, das Legen von Minen und Fallen, die Magnetbombe,
+> der Teleporter, Illusion und Spiegelung, die Gaswolke wie im Original. Dazu
+> kamen Fehler im Spielstand, eine falsch berechnete Fluglage der Flieger und
+> eine Gefechts-KI, die auf NET07 nie etwas baute.
+>
+> Wie immer wurde jeder Punkt zuerst im Original nachgelesen. Jede Änderung
+> hat einen Schalter, der das alte Verhalten zurückholt, und einen Prüfstand.
+> Wo das Original nichts vorgibt, steht im Quelltext »UNSERE SETZUNG«.
+>
+> ⚠ **Das Spiel fragt einmal nach dem Neueinlesen.** Neu aus deiner Fassung
+> des Spiels werden das Mündungsfeuer (`SHOOT.CWT`), das Bild der Gaswolke und
+> die Blitze von Spiegelung und Illusion geholt. Die Rampen der Karten werden
+> jetzt lebend gezeichnet (Inhaltsstand `karten=4`, `oberflaeche=3`). Halte die
+> CDs bereit oder die Installation, die das Spiel zuletzt benutzt hat.
+>
+> ⚠ **Netzspiel:** Das Protokoll steht jetzt auf Stufe 3. 0.6.12 und 0.6.13
+> können nicht miteinander spielen, beide Seiten brauchen 0.6.13.
+>
+> Spielstände von 0.6.12 laden weiter. Was sie noch nicht kennen (Brücken,
+> Rampen, Minen, Gas, die KI-Uhren), wird wie bisher aus der Mission aufgebaut.
+
+### Gefecht: nur noch klassisch, mit Startbasis
+
+- **Jeder Platz startet mit Basis und Fabrik.** Bisher gab es Gefechtskarten,
+  auf denen nur Einheiten standen, allen voran NET07. Dort hatte niemand eine
+  Basis, und die Gefechts-KI konnte nie etwas bauen: Sie »stand still«. Jetzt
+  bekommt jeder Platz ohne Basis eine Basis und eine Spezialfabrik, beide mit
+  dem Lager der gewählten Rohstoffstufe. Gesucht wird der Bauplatz in Ringen
+  um die eigenen Einheiten, ganzzahlig und in fester Reihenfolge, damit es im
+  Netz auf beiden Rechnern gleich ausfällt. Die Spezialfabrik haben wir
+  gewählt, weil der KI in den Messungen die Spezialteile zuerst ausgingen. In
+  10 Minuten NET07 bauen die drei Gegner jetzt 37, 47 und 48 Einheiten, vorher
+  keine einzige.
+- **Auf NET07 bleiben 6 Einheiten je Platz.** Die übrigen Einheiten der
+  Kartentruppe fallen weg. Das ist unsere Setzung, damit niemand mit Basis
+  *und* voller Schlachttruppe startet. Ein Platz mit Kartenbasis behält seine
+  ganze Truppe.
+- **NET02 bis NET06: auch eine Fabrik.** Dort verteilt das Spiel die
+  neutralen Kartenbasen schon länger. Jetzt bekommt jeder Platz auch die
+  nächste noch freie neutrale Fabrik (bis 40 Zellen weit). Nur wenn keine da
+  ist, wird eine neue aufgestellt. Die Karten sind dort so dicht bebaut, dass
+  für 8 von 20 Plätzen kein Bauplatz frei gewesen wäre.
+- **DM_1, DM_3 und DM_4 sind aus dem Gefechtsmenü.** Auf diesen Karten
+  starten die Plätze sehr ungleich: Auf DM_4 hat einer 114 Einheiten und eine
+  ausgebaute Basis, drei andere starten ganz ohne Gebäude. Die Moduswahl
+  ist weg, und die Vorgabe ist jetzt **5000 $ und Techstufe 8**.
+- **NET06: jeder bekommt wieder seine eigene Basis.** Die Basen von Platz 0
+  und Platz 6 waren vertauscht. Der Heimpunkt eines Platzes wurde über alle
+  seine Sätze gemittelt, auch über die vier Skriptplätze ohne Gebäude. Jetzt
+  zählen nur die Einheiten.
+- **Im Netz zählt das Startgeld des Gastgebers.** Hatten beide Seiten
+  verschiedene Beträge eingestellt, startete der Gast mit seinem eigenen Geld,
+  und die Partie lief sofort auseinander. Das Startgeld und die Schalter der
+  Startbasis gehen jetzt in der Sitzung mit (Protokoll 3).
+- Schalter: `--gefecht-startbasis-aus`, `--gefecht-startbasis-fabrik=N`,
+  `--startbasis-fabrik-nur-neu`, `--startbasis-heim-alt`,
+  `--netz-sitzung-alt`. Prüfstand `--startbasis-check`.
+
+### Gefechts-KI
+
+- **Der Angriffsarm des Gruppenlaufs.** Im Original bekommt jedes Mitglied
+  einer KI-Gruppe, das gerade nicht angreift oder steht, bei jedem Lauf der
+  Gruppe einen neuen Angriffsbefehl (`0x4BD1E6`). Bei uns bekam die Gruppe den
+  Angriff nur einmal, beim Losschicken. Das gilt jetzt in der Kampagne und,
+  auf Wunsch, auch im Gefecht. Schalter `--ki-gruppenangriff-einmal` und
+  `--gefecht-gruppenangriff-alt`.
+- **Keine Spähschleife mehr.** Die KI wählte immer wieder dieselbe
+  unerreichbare Stelle zum Spähen, bis zu 81-mal hintereinander. Eine Zelle,
+  an die kein Späher kommt, wird jetzt gesperrt. Das ist unsere Setzung, das
+  Original kennt keine Spähfahrt. Schalter `--spaehen-sperre-alt`.
+- **Keine Angriffe auf Plätze ohne Gebäude.** Eine ganze Armee hing an einem
+  Skriptplatz ohne Bauwerk fest, griff ihn ewig an und spähte darum nie. Das
+  Original verwirft solche Ziele (`0x4BEE13`), wir jetzt auch. Schalter
+  `--ki-ziel-skriptplatz-alt`.
+- **Einheiten ohne Sprit fahren nicht mehr in Gruppen mit.** Die KI bildete
+  Gruppen aus Einheiten mit leerem Tank, die nie losfuhren. Das ist unsere
+  Setzung und gilt nur im Gefecht. In der Kampagne bleibt es wie im Original,
+  das den Sprit an dieser Stelle nicht prüft. Schalter
+  `--ki-sprit-aufnahme-alt`.
+- **Die KI-Uhren stehen im Spielstand.** Nach dem Laden bildete die
+  Gefechts-KI ihre nächste Gruppe sofort, statt 18 s später. Schalter
+  `--ki-uhren-spielstand-alt`.
+
+### Kampagnen-KI
+
+- **Takt 7 mit Zielliste.** In 26 von 33 Missionen hat die KI eine Zielliste.
+  Mit Liste schickte sie bei uns nie Einheiten gegen Feinde im Nachbarsektor.
+  Das Original tut das. In Mission 21 greift die KI darum jetzt deutlich mehr
+  an (in 400 s 119 Angriffe statt 0). Schalter `--ki-takt7-nur-ohne-ziele`.
+- **Die KI denkt alle 50 Takte**, wie im Original, nicht alle 1,5 s.
+  Schalter `--ki-denktakt-alt`.
+- **Mehr Startziele in drei Missionen.** Die Spielstände des Originals für
+  Mission 2, 3 und 14 tragen mehr Zielaufträge als unsere. Die fehlenden
+  Schleifen über die Gebäude sind nachgetragen. Schalter
+  `--setup-ziele-eigen-alt`.
+
+### Neue Spielfunktionen
+
+- **Fallen.** In Mission 20 und 25 legt das Missionsskript Fallen gegen dich,
+  4 und 6 Stück. Bei uns fuhr man einfach durch. Jetzt hält eine Falle ihr
+  Opfer fest, bis ein Räumer kommt. Schalter `--fallen-aus`.
+- **Minen und Fallen legen.** Die Menüzeilen »Mine legen« und »Falle legen«
+  sagten bisher »noch nicht gebaut«. Mission 18 gibt dir je drei Minen- und
+  Fallenleger. Schalter `--legeauftrag-aus`.
+- **Minen und Fallen der Mehrspielerkarten.** Die DM-Karten des Originals
+  tragen Minen und Fallen, bei uns fehlten sie. Schalter `--dm-minen-alt`.
+- **Der Wissenschaftler hält vor einer feindlichen Mine an**, wie im Original.
+  Schalter `--minenhalt-alt`.
+- **Minen in Mission 25.** Zwei Fallen und mehrere Minen fielen weg, weil wir
+  unter Gebäudegrundrissen nichts legen ließen. Das Original prüft dort nur
+  Boden und Belegung. Mission 25 hat jetzt 203 Minen wie im Original.
+  Schalter `--imap-abgleich-alt`.
+- **Die Magnetbombe.** Sie war bisher wirkungslos. Jetzt fährt der
+  Stahlsucher selbst auf das nächste Fahrzeug zu, der Nähezünder löst aus,
+  und der Befehl »Sprengen« funktioniert. Wie im Original übersteuert die
+  Bombe dabei die Befehle des Spielers, und ihr Startziel ist anfangs
+  Einheit 0. Schalter `--magnetbombe-alt` und `--seeker-ziel0-leer`.
+- **Der Membrandroid und der Antimagnetiker** wirken jetzt, wie im Original.
+  Schalter `--membrandroid-alt` und `--antimagnet-alt`.
+- **Der Teleporter.** Die Menüzeile sagte »noch nicht gebaut«. Jetzt gibt es
+  das Paar mit Befehl. Fahrzeuge und Trupps lassen sich versetzen, und stirbt
+  der eine Teleporter, stirbt sein Zwilling mit. Wie im Original braucht er
+  zwei freie Depotplätze. Schalter `--teleporter-aus`.
+- **Illusion und Spiegelung**, zwei Ausrüstungen mit eigenem Befehl und
+  eigenem Bild. Schalter `--illusion-aus` und `--spiegelung-aus`.
+- **Die Gaswolke wie im Original**, mit Wind und Hang. Auch das Gas aus dem
+  Missionsaufbau und dem Skript (Mission 20, 21 und 25) ist jetzt da. Das
+  Bild der Gaswolke wird wie im Original aus der Palette gemischt. Gas steht
+  im Spielstand. Schalter `--gaswolke-aus`.
+- **Der Radarmast** zählt jetzt bei der Frage »liegt hier eine Mine?« mit,
+  wie im Original. Schalter `--radarmast-zelle-alt`.
+
+### Flieger
+
+- **Flache Fluglage.** Hubschrauber und Flugzeuge rechneten ihre Lage im
+  angehobenen Bildraum, mit einer geschätzten Anhebung. Das Original rechnet
+  sie flach am Boden und hebt nur das Bild an (`0x42E340`). Dabei fand sich,
+  dass die Flugzelle bei uns um 8 Zeilen falsch lag. Schalter
+  `--fluglage-alt`. Alte Spielstände werden umgerechnet.
+- **Flieger fliegen nach Süden nicht mehr doppelt so schnell.** Das Original
+  rechnet den Schritt im Feinraum, in dem eine Zeile halb so hoch ist. Wir
+  flogen im Bildraum gleich schnell in alle Richtungen. Schalter
+  `--flugtempo-y-alt`.
+- **Der Klickkasten der Flieger** ist jetzt 70 × 50 Bildpunkte an der Zellecke,
+  wie im Original (`0x431F7F`). Unsere 40 × 20 mittig am Rumpf waren erfunden.
+  Schalter `--flieger-klickkasten-alt`.
+- **Das Bild der Flieger saß 17 Bildpunkte zu weit rechts und 20 zu hoch.**
+  Rumpf, Rotor, Schatten und Auswahlrahmen nehmen jetzt den Anker des
+  Originals. Schalter `--flieger-anker-alt`.
+- **Kein Rotorschatten mehr.** Das Original zeichnet keinen. Schalter
+  `--rotorschatten-alt`.
+- **Der Hubschrauberstrahl ist eine durchgehende Punktlinie** wie im
+  Original, nicht ein Punkt je Takt. Schalter `--heli-strahl-alt`.
+- **Strahlhöhe.** Boden- und Hubschrauberstrahl setzen jetzt 40 Bildpunkte
+  höher an, wie im Original (`0x455048`). Schalter `--strahlhoehe-alt`.
+
+### Brücken und Rampen
+
+- **Die Pionierbrücke liegt erhöht und hat ein Geländer**, wie im Original.
+  Seit 0.6.3 lag sie flach. Schalter `--pionierbruecke-flach-alt`.
+- **Nach dem Abriss einer Kartenbrücke** stimmen Höhe, Nebel und Wegsuche
+  wieder. Bisher wurde nur das Bild zurückgesetzt. Schalter
+  `--kartenbruecke-abriss-alt`.
+- **Nach dem Abriss einer Kartenrampe** bleiben keine Reste mehr stehen.
+  Kartenrampen werden darum jetzt lebend gezeichnet. Das ist der Grund für das
+  Neueinlesen.
+- **Brücken und Rampen stehen im Spielstand.** Bisher stand eine abgerissene
+  Brücke nach dem Laden wieder da, und gebaute Pionierbrücken und Molen waren
+  weg. Schalter `--bruecken-spielstand-alt` und `--rampen-spielstand-alt`.
+
+### Spielstand
+
+- **Minen und Fallen stehen im Spielstand.** Bisher legte das Spiel nach dem
+  Laden alle Missionsminen neu, auch geräumte. Schalter
+  `--minen-spielstand-alt`.
+- **Gas steht im Spielstand.** Schalter `--gas-spielstand-alt`.
+- **Der Gefechts-Spielstand behält die Bauteil-Aufwertungen.** Schalter
+  `--gefecht-laden-besitz-alt`.
+- **Eine Einheitenkopie teilt nichts mehr mit ihrer Vorlage.** Das betraf den
+  Startstand beim Neustart im Netz. Schalter `--klon-flach`.
+
+### Fußvolk
+
+- **Die Fußvolk-Uhr wie im Original** (`0x40F0A0`). Ein Fußsoldat sucht jetzt
+  in jedem Takt selbst ein Ziel und schießt beim Betreten einer Zelle auch im
+  Gehen. Vorher schoss er nur alle 0,4 s, nur ohne Ziel und nur im Stand.
+  Schalter `--fussvolk-uhr-alt`.
+
+### Bild und Klang
+
+- **Mündungsfeuer aus `SHOOT.CWT`**, wie im Original am Rohr. Bisher war es
+  ein einzelner Punkt über allen Einheiten. Schalter `--muendungsfeuer-alt`.
+- **Klangabgleich, zweiter Teil.** Die Klänge außerhalb von 120 bis 143 sind
+  jetzt auch mit dem Original abgeglichen:
+  - Beim Anwählen spielt die richtige Tafel.
+  - Ein erschossener Fußsoldat schreit mit 77 bis 79.
+  - Die Hilfestimme stimmt wieder.
+  - Das Briefing klingt beim Öffnen und Schließen wie im Original.
+  - Die Menüzeilen klingen.
+  - Rund 20 fehlende Klänge sind da, darunter 308, die Landung eines
+    Flugzeugs.
+  - Der Seeker-Klang 37 kommt jetzt mit der Magnetbombe.
+  - Würfelt ein Klang, beeinflusst das das Spiel nicht mehr. Bisher lief eine
+    Partie mit und ohne Brandklang verschieden.
+
+  Schalter siehe `--klang-rest-check`.
+
+### Prüfstände
+
+- Neu: `--startbasis-check`, `--ki-spaehen-check`, `--ki-takt7-check`,
+  `--ki-gruppenangriff-check`, `--klang-rest-check`, `--fussvolk-uhr-check`,
+  `--fluglage-check`, `--flieger-anker-check`, `--flieger-klickkasten-check`,
+  `--flugtempo-y-check`, `--fallen-check`, `--legeauftrag-check`,
+  `--dm-minen-check`, `--minenhalt-check`, `--magnetbombe-check`,
+  `--teleport-check`, `--illusion-check`, `--spiegelung-check`,
+  `--gaswolke-check`, `--radarmast-zelle-check`, `--pionierbruecke-check`,
+  `--muendungsfeuer-check`, `--ki-uhren-laden-check`, `--klon-check`.
+- `--gelegenheitsfeuer-check` G4 fiel je nach Verlauf durch: Der Prüfstand
+  hielt den Soldaten mitten in einer Drehung an, und die Drehbremse blieb
+  stehen. Behoben.
+
 ## 0.6.12 — 30.10.2026 · KayelGees achte Runde, Reapers zweite, und Einheiten, die im Fahren schießen
 
 > **KayelGees achte Runde (21 Punkte) und Reapers zweite Runde (2 Punkte)

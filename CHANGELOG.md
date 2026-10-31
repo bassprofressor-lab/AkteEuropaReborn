@@ -12,6 +12,226 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.13 — date to follow · missing game functions, flat flight attitude, and skirmish with a starting base
+
+> **This release holds the leftover points of the review after 0.6.12.** We
+> compared the original program with ours once more, place by place. We found
+> game functions that the original has and we did not yet have: traps, laying
+> mines and traps, the magnet bomb, the teleporter, illusion and mirroring,
+> and the gas cloud as in the original. We also found save-game bugs, a wrongly
+> computed flight attitude for aircraft, and a skirmish AI that never built
+> anything on NET07.
+>
+> As always, every point was first read in the original. Every change has a
+> switch that brings back the old behaviour, and a test stand. Where the
+> original gives nothing to go on, the source code says »UNSERE SETZUNG« (our
+> own choice).
+>
+> ⚠ **The game asks once to re-import.** New from your copy of the game: the
+> muzzle flash (`SHOOT.CWT`), the gas cloud image, and the flashes of mirroring
+> and illusion. Map ramps are now drawn live (content level `karten=4`,
+> `oberflaeche=3`). Have the CDs ready, or the installation the game used last.
+>
+> ⚠ **Multiplayer:** the protocol is now at level 3. 0.6.12 and 0.6.13 cannot
+> play together; both sides need 0.6.13.
+>
+> Saves from 0.6.12 still load. What they do not know yet (bridges, ramps,
+> mines, gas, the AI clocks) is built from the mission as before.
+
+### Skirmish: classic only, with a starting base
+
+- **Every slot starts with a base and a factory.** Until now some skirmish
+  maps had only units on them, NET07 above all. Nobody had a base there, and
+  the skirmish AI could never build anything: it »stood still«. Now every slot
+  without a base gets a base and a special factory, both stocked at the chosen
+  resource level. The building site is searched in rings around the slot's own
+  units, in integers and in a fixed order, so both machines in a network game
+  get the same result. We chose the special factory because in our
+  measurements the AI ran out of special parts first. In 10 minutes on NET07
+  the three opponents now build 37, 47 and 48 units, where before they built
+  none.
+- **NET07 keeps 6 units per slot.** The rest of the map's troop is removed.
+  That is our own choice, so nobody starts with a base *and* a full battle
+  troop. A slot with a base from the map keeps its whole troop.
+- **NET02 to NET06: a factory as well.** There the game has been handing out
+  the neutral map bases for a while. Now every slot also gets the nearest
+  neutral factory that is still free (up to 40 cells away). Only if there is
+  none is a new one placed. These maps are so densely built up that 8 of 20
+  slots would have had no free building site.
+- **DM_1, DM_3 and DM_4 are gone from the skirmish menu.** On these maps the
+  slots start very unequally: on DM_4 one slot has 114 units and a developed
+  base, while three others start with no buildings at all. The mode choice is
+  gone, and the default is now **$5000 and tech level 8**.
+- **NET06: everyone gets their own base again.** The bases of slot 0 and
+  slot 6 were swapped. A slot's home point was averaged over all its records,
+  including four script slots without a building. Now only units count.
+- **In network games the host's starting money counts.** If both sides had set
+  different amounts, the guest started with their own money and the match
+  desynced at once. Starting money and the starting-base switches now travel
+  with the session (protocol 3).
+- Switches: `--gefecht-startbasis-aus`, `--gefecht-startbasis-fabrik=N`,
+  `--startbasis-fabrik-nur-neu`, `--startbasis-heim-alt`,
+  `--netz-sitzung-alt`. Test stand `--startbasis-check`.
+
+### Skirmish AI
+
+- **The attack arm of the group run.** In the original, every member of an AI
+  group that is not attacking or is standing gets a new attack order on each
+  run of the group (`0x4BD1E6`). Ours gave the group its attack only once,
+  when it was sent off. This now applies in the campaign and, as requested,
+  in skirmish too. Switches `--ki-gruppenangriff-einmal` and
+  `--gefecht-gruppenangriff-alt`.
+- **No more scouting loop.** The AI picked the same unreachable spot to scout
+  again and again, up to 81 times in a row. A cell no scout can reach is now
+  blocked. This is our own choice; the original has no scouting trip. Switch
+  `--spaehen-sperre-alt`.
+- **No attacks on slots without a building.** A whole army got stuck on a
+  script slot with no structure, attacked it forever and therefore never
+  scouted. The original discards such targets (`0x4BEE13`), and now so do we.
+  Switch `--ki-ziel-skriptplatz-alt`.
+- **Units without fuel no longer join groups.** The AI formed groups from
+  units with an empty tank, which never moved off. This is our own choice and
+  applies only in skirmish. The campaign stays as in the original, which does
+  not check fuel at this point. Switch `--ki-sprit-aufnahme-alt`.
+- **The AI clocks are in the save.** After loading, the skirmish AI formed its
+  next group at once instead of 18 s later. Switch
+  `--ki-uhren-spielstand-alt`.
+
+### Campaign AI
+
+- **Tick 7 with a target list.** In 26 of 33 missions the AI has a target
+  list. With a list, ours never sent units against enemies in the
+  neighbouring sector. The original does. In mission 21 the AI therefore
+  attacks much more now (119 attacks in 400 s instead of 0). Switch
+  `--ki-takt7-nur-ohne-ziele`.
+- **The AI thinks every 50 ticks**, as in the original, not every 1.5 s.
+  Switch `--ki-denktakt-alt`.
+- **More starting targets in three missions.** The original's saves for
+  missions 2, 3 and 14 carry more target orders than ours. The missing loops
+  over the buildings have been added. Switch `--setup-ziele-eigen-alt`.
+
+### New game functions
+
+- **Traps.** In missions 20 and 25 the mission script lays traps against you,
+  4 and 6 of them. Ours let you drive straight through. Now a trap holds its
+  victim until a clearer arrives. Switch `--fallen-aus`.
+- **Laying mines and traps.** The menu lines »Lay mine« and »Lay trap« used to
+  say »not built yet«. Mission 18 gives you three mine layers and three trap
+  layers. Switch `--legeauftrag-aus`.
+- **Mines and traps on the multiplayer maps.** The original's DM maps carry
+  mines and traps; ours were missing them. Switch `--dm-minen-alt`.
+- **The scientist stops in front of an enemy mine**, as in the original.
+  Switch `--minenhalt-alt`.
+- **Mines in mission 25.** Two traps and several mines were missing because we
+  laid nothing under building footprints. The original only checks ground and
+  occupancy there. Mission 25 now has 203 mines, as in the original. Switch
+  `--imap-abgleich-alt`.
+- **The magnet bomb.** It used to do nothing. Now the steel seeker drives to
+  the nearest vehicle by itself, the proximity fuse fires, and the »Detonate«
+  order works. As in the original, the bomb overrides the player's orders, and
+  its starting target is unit 0. Switches `--magnetbombe-alt` and
+  `--seeker-ziel0-leer`.
+- **The membrane droid and the anti-magnet** now work, as in the original.
+  Switches `--membrandroid-alt` and `--antimagnet-alt`.
+- **The teleporter.** The menu line said »not built yet«. There is now the
+  pair with its order. Vehicles and squads can be moved, and if one teleporter
+  dies, its twin dies too. As in the original it needs two free depot places.
+  Switch `--teleporter-aus`.
+- **Illusion and mirroring**, two pieces of equipment with their own order and
+  their own image. Switches `--illusion-aus` and `--spiegelung-aus`.
+- **The gas cloud as in the original**, with wind and slope. Gas from the
+  mission setup and the script (missions 20, 21 and 25) is now there as well.
+  The gas cloud image is mixed from the palette, as in the original. Gas is
+  stored in the save. Switch `--gaswolke-aus`.
+- **The radar mast** now counts when the game asks »is there a mine here?«, as
+  in the original. Switch `--radarmast-zelle-alt`.
+
+### Aircraft
+
+- **Flat flight attitude.** Helicopters and planes computed their position in
+  the raised image space, with an estimated lift. The original computes it
+  flat on the ground and only raises the image (`0x42E340`). Along the way we
+  found that our flight cell was 8 rows off. Switch `--fluglage-alt`. Old
+  saves are converted.
+- **Aircraft no longer fly south twice as fast.** The original computes the
+  step in the fine space, where a row is half as high. Ours flew equally fast
+  in every direction in image space. Switch `--flugtempo-y-alt`.
+- **The aircraft click box** is now 70 × 50 pixels at the cell corner, as in
+  the original (`0x431F7F`). Our 40 × 20 centred on the hull was made up.
+  Switch `--flieger-klickkasten-alt`.
+- **The aircraft image sat 17 pixels too far right and 20 too high.** Hull,
+  rotor, shadow and selection frame now use the original's anchor. Switch
+  `--flieger-anker-alt`.
+- **No more rotor shadow.** The original draws none. Switch
+  `--rotorschatten-alt`.
+- **The helicopter beam is a continuous dotted line**, as in the original, not
+  one dot per tick. Switch `--heli-strahl-alt`.
+- **Beam height.** Ground and helicopter beams now start 40 pixels higher, as
+  in the original (`0x455048`). Switch `--strahlhoehe-alt`.
+
+### Bridges and ramps
+
+- **The pioneer bridge is raised and has a railing**, as in the original. It
+  had lain flat since 0.6.3. Switch `--pionierbruecke-flach-alt`.
+- **After a map bridge is demolished**, height, fog and pathfinding are right
+  again. Before, only the image was reset. Switch
+  `--kartenbruecke-abriss-alt`.
+- **After a map ramp is demolished**, no remains are left standing. Map ramps
+  are therefore drawn live now. This is why you need to re-import.
+- **Bridges and ramps are stored in the save.** Before, a demolished bridge
+  stood again after loading, and built pioneer bridges and piers were gone.
+  Switches `--bruecken-spielstand-alt` and `--rampen-spielstand-alt`.
+
+### Saves
+
+- **Mines and traps are stored in the save.** Before, after loading, the game
+  laid all mission mines again, even cleared ones. Switch
+  `--minen-spielstand-alt`.
+- **Gas is stored in the save.** Switch `--gas-spielstand-alt`.
+- **The skirmish save keeps the part upgrades.** Switch
+  `--gefecht-laden-besitz-alt`.
+- **A unit copy no longer shares anything with its template.** This affected
+  the starting state on a network restart. Switch `--klon-flach`.
+
+### Infantry
+
+- **The infantry clock as in the original** (`0x40F0A0`). An infantryman now
+  looks for a target himself every tick, and also fires while walking when he
+  enters a cell. Before, he fired only every 0.4 s, only without a target and
+  only while standing. Switch `--fussvolk-uhr-alt`.
+
+### Image and sound
+
+- **Muzzle flash from `SHOOT.CWT`**, at the barrel as in the original. Before,
+  it was a single dot drawn above all units. Switch `--muendungsfeuer-alt`.
+- **Sound comparison, part two.** The sounds outside 120 to 143 are now
+  matched against the original as well:
+  - Selecting a unit plays the right table.
+  - An infantryman who is shot screams with 77 to 79.
+  - The help voice is right again.
+  - The briefing sounds as in the original when it opens and closes.
+  - The menu lines make a sound.
+  - About 20 missing sounds are in, among them 308, an aircraft landing.
+  - Seeker sound 37 now comes with the magnet bomb.
+  - When a sound rolls a die, that no longer affects the game. Before, a match
+    ran differently with and without the fire sound.
+
+  For the switches, see `--klang-rest-check`.
+
+### Test stands
+
+- New: `--startbasis-check`, `--ki-spaehen-check`, `--ki-takt7-check`,
+  `--ki-gruppenangriff-check`, `--klang-rest-check`, `--fussvolk-uhr-check`,
+  `--fluglage-check`, `--flieger-anker-check`, `--flieger-klickkasten-check`,
+  `--flugtempo-y-check`, `--fallen-check`, `--legeauftrag-check`,
+  `--dm-minen-check`, `--minenhalt-check`, `--magnetbombe-check`,
+  `--teleport-check`, `--illusion-check`, `--spiegelung-check`,
+  `--gaswolke-check`, `--radarmast-zelle-check`, `--pionierbruecke-check`,
+  `--muendungsfeuer-check`, `--ki-uhren-laden-check`, `--klon-check`.
+- `--gelegenheitsfeuer-check` G4 failed depending on the course of the run:
+  the test stand stopped the soldier in the middle of a turn, and the turn
+  brake stayed set. Fixed.
+
 ## 0.6.12 — 2026-10-30 · KayelGee's eighth round, Reaper's second, and units that fire on the move
 
 > **KayelGee's eighth round (21 points) and Reaper's second round (2 points) are
