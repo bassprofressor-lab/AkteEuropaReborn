@@ -385,6 +385,12 @@ public partial class SettingsScreen : Control
         box.AddChild(Check("Hilfe-Sprache (Original: byte[0x8934c4], Klaenge 1000+n)",
             Settings.HelpVoice, v => Settings.HelpVoice = v));
 
+        // 11.11.2026 — Discord-Anzeige (Core/DiscordPresence.cs), unsere Zutat.
+        box.AddChild(new HSeparator());
+        box.AddChild(Head("Discord"));
+        box.AddChild(Check("In Discord anzeigen, was ich gerade spiele (Unsere Zutat)",
+            Settings.DiscordPresence, v => Settings.DiscordPresence = v));
+
         box.AddChild(new HSeparator());
         var back = new Button
         {

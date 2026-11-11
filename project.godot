@@ -48,6 +48,8 @@ SelectionManager="*res://Scripts/UI/SelectionManager.cs"
 ; CampaignManager above: it is asked, not ticked.
 ReplayManager="*res://Scripts/Simulation/ReplayManager.cs"
 DebugOverlay="*res://Scripts/Debug/DebugOverlay.cs"
+; 11.11.2026: Discord-Anzeige, liest nur, rührt die Simulation nicht an.
+DiscordPresence="*res://Scripts/Core/DiscordPresence.cs"
 
 [display]
 

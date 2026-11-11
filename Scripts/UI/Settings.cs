@@ -368,6 +368,24 @@ public static class Settings
     /// that gates a known behaviour is a proof.</para></summary>
     public static bool HelpVoice { get => B("help_voice", false); set => Set("help_voice", value); }
 
+    /// <summary>11.11.2026 — Discord zeigt »spielt Akte Europa Reborn« mit
+    /// Modus/Mission/Karte (<see cref="Core.DiscordPresence"/>). UNSERE ZUTAT,
+    /// Vorgabe AN; ohne laufende Discord-App passiert nichts.</summary>
+    public static bool DiscordPresence { get => B("discord_presence", true); set => Set("discord_presence", value); }
+
+    /// <summary>11.11.2026 — Online-Mehrspieler: der Name in der Lobby (1..20 Zeichen, der
+    /// Server prüft) und die Serveradresse. UNSERE ZUTAT.</summary>
+    public static string OnlineName { get => S("online_name", ""); set => Set("online_name", value); }
+    public static string OnlineServer
+    {
+        get
+        {
+            foreach (string a in Core.CommandLine.Args)
+                if (a.StartsWith("--net-online=")) return a["--net-online=".Length..];
+            return S("online_server", Network.LobbyClient.StandardUrl);
+        }
+    }
+
     /// <summary>The effect volume as Godot wants it. 0 becomes silence rather
     /// than -inf arithmetic.</summary>
     /// <summary>
