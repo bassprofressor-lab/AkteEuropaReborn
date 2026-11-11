@@ -14,7 +14,7 @@ using AkteEuropaReborn.Import;
 ///                [,ohnetabelle]      Gegenprobe: ohne die gemessene Kacheltabelle
 ///                [,ohnenaht]         Gegenprobe: ohne die Nahtwahl (TileSeams)
 ///                [,naht=&lt;n&gt;]         wie viele Wuerfe je Zelle verglichen werden
-///                [,spieler=&lt;n&gt;]      wie viele Startplaetze (1..5)
+///                [,spieler=&lt;n&gt;]      wie viele Startplaetze (1..8; bis 11.11.2026 1..5, bug-744)
 ///                [,truppe=&lt;n&gt;]       Fahrzeuge je Spieler
 ///                [,wasser=&lt;prozent&gt;] Wasseranteil, sonst der Median 18,55 %
 ///                [,samen=&lt;n&gt;]        der Wuerfelsamen
@@ -94,7 +94,36 @@ public partial class MainMenu
     /// wird gerade gearbeitet, und <c>MainMenu</c> ist eine
     /// <c>partial class</c>.</summary>
     private void ShowMapEditor()
-        => AddChild(new MapEditorScreen { OnView = ViewMade, OnEdit = EditMade });
+        => AddChild(new MapEditorScreen { OnView = ViewMade, OnEdit = EditMade, OnPlay = PlayMade });
+
+    /// <summary>
+    /// ⭐ 11.11.2026 — bug-743 (Paket E2, M3): »IM GEFECHT SPIELEN«.
+    ///
+    /// <para>Derselbe Weg wie <c>--skirmish=map_&lt;name&gt;</c> (MapViewer setzt dort
+    /// Active, CampaignMission 0 und die Karte) und wie »STARTEN« im
+    /// Gefechtsaufbau (<c>OnStart</c>): SkirmishSetup fuellen, Kulisse weg,
+    /// Spielszene. Der Pinsel geht vorher aus (<see cref="MapEditSession.Leave"/>),
+    /// sonst haengte der Waechter den Ueberzug an das Gefecht (B9).</para>
+    ///
+    /// <para><b>UNSERE SETZUNG:</b> der Mensch ist Platz 0, alle anderen besetzten
+    /// Plaetze der Karte spielt die KI (<c>AiCount = 7</c>; StartSkirmish
+    /// nimmt davon nur so viele, wie die Karte lebende Plaetze hat). KI-Stufe,
+    /// Konto, Techstandard und Rohstoffe bleiben, was im Gefechtsaufbau zuletzt
+    /// stand. Kein Netzspiel — Editorkarten stehen nicht in der Netzliste (M3 Teil 2 = E5).</para>
+    /// </summary>
+    private void PlayMade(string mapName)
+    {
+        MapEditSession.Leave();
+        SkirmishSetup.ViewMap = "";
+        SkirmishSetup.Map = mapName;
+        SkirmishSetup.Human = 0;
+        SkirmishSetup.AiCount = 7;
+        SkirmishSetup.CampaignMission = 0;
+        SkirmishSetup.Active = true;
+        Say($"spielen: {mapName} im Gefecht (Platz 1 Mensch, Rest KI)");
+        StopBackdrop();
+        GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
+    }
 
     /// <summary>Eine eben erzeugte Karte ANSEHEN — kein Gefecht. Warum nicht,
     /// steht bei <see cref="SkirmishSetup.ViewMap"/>: eine erzeugte Karte hat 0
@@ -260,6 +289,33 @@ public partial class MainMenu
                 $"{cwp.ObjectCount} Objekte)");
 
             string outName = name.StartsWith("map_") ? name : "map_" + name;
+            // ⭐ 11.11.2026 — bug-739 (Paket E1, M1): OEFFNEN SCHREIBT NICHT MEHR
+            // AN ORT UND STELLE. Bis 0.6.13 rief dieser Weg nach »oeffne=« immer
+            // MapGenerator.Write unter demselben Namen — schon das Oeffnen
+            // ueberschrieb die Karte, und der Rueckweg (MapOpen) verliert
+            // sec17/18/20/21/38. Jetzt:
+            //   * gelieferte Karte (map_NN, map_NETnn, map_DM_n, map_game007):
+            //     es wird eine KOPIE map_<x>_kopie[n] angelegt und bearbeitet;
+            //   * eigene Karte unter eigenem Namen: es wird beim Oeffnen GAR
+            //     NICHTS geschrieben — erst F5 im Pinsel speichert.
+            // Gegenschalter --editor-oeffnen-alt (alter Weg).
+            bool skipWrite = false;
+            if (open != null && !MapOpen.OeffnenAlt)
+            {
+                string openFull = MapOpen.FullName(open);
+                if (outName == openFull && MapOpen.IsDelivered(openFull))
+                {
+                    outName = MapOpen.CopyName(openFull);
+                    say($"{openFull} ist eine GELIEFERTE Karte — sie wird nicht angefasst. " +
+                        $"Bearbeitet wird die Kopie {outName}. ⚠ Die Kopie traegt Bruecken, " +
+                        "Rampen, Waldtafel und aufgeschlossene Vorkommen (sec17/18/20/21/38) " +
+                        "noch NICHT — der Rueckweg liest sie nicht (Paket E4).");
+                }
+                else if (outName == openFull)
+                {
+                    skipWrite = true;
+                }
+            }
             CwmFile m;
             // ⚠ Bodenblock und Kacheltabelle ueberleben die Weiche, weil der
             // GELAENDEPINSEL sie braucht: er muss beim Malen dieselbe Kachel
@@ -282,8 +338,12 @@ public partial class MainMenu
                 say($"Quelle {source ?? open}: {m.Width}x{m.Height}, Kachelsatz {m.Tileset:00}, " +
                     $"{m.Sections.Count} Abschnitte, Mission \"{m.Mission}\"");
                 if (open != null && MapOpen.FullName(open) == outName)
-                    say($"⚠ AN ORT UND STELLE: {outName} wird beim Speichern UEBERSCHRIEBEN. " +
-                        "Dass dabei nichts verlorengeht, prueft --map-check=" + outName + ",rundlauf");
+                    say(skipWrite
+                        ? $"{outName} geoeffnet, NICHTS geschrieben (bug-739). F5 im Pinsel " +
+                          "speichert an Ort und Stelle."
+                        : $"⚠ AN ORT UND STELLE: {outName} wird beim Speichern UEBERSCHRIEBEN " +
+                          "(--editor-oeffnen-alt). Was verlorengeht, zeigt --map-check=" +
+                          outName + ",rundlauf");
                 // ⚠ STUMM gelernt. Der Pinsel braucht die Tabelle auch auf
                 // diesem Weg, aber dieser Weg ist die GEGENPROBE des
                 // Schreibwegs: kaeme hier eine Zeile mehr heraus, waere nicht
@@ -331,7 +391,7 @@ public partial class MainMenu
                                        neutrals);
                 brushPal = palette; brushModel = model; brushSeams = seams;
             }
-            MapGenerator.Write(m, cwp, pal, outName, say);
+            if (!skipWrite) MapGenerator.Write(m, cwp, pal, outName, say);
             // ⚠ Die Karte im Speicher BLEIBT — nur sie laesst sich bearbeiten
             // und zurueckschreiben. Der Kartenbetrachter zeigt gleich die
             // geschriebenen Dateien; ohne diese Zeile waere danach nichts mehr

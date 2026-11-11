@@ -42,8 +42,17 @@ using AkteEuropaReborn.Import;
 public static class MapGenerator
 {
     /// <summary>Wie viele Spieler eine erzeugte Karte bekommt, wenn keine Zahl
-    /// genannt ist. Startmarken gibt es fuer 0x70..0x74, also fuenf.</summary>
-    public const int PlayersDefault = 2, PlayersMax = 5;
+    /// genannt ist. <s>Startmarken gibt es fuer 0x70..0x74, also fuenf.</s>
+    /// ⚠ 11.11.2026 (bug-744, M6): die »Startmarken« waren eine ueberholte Lesung
+    /// (sec4 = Objekttafel). Das Spiel kennt 8 Plaetze — sec5 in acht Bloecken
+    /// zu 1000 (CwmData.EntitiesPerPlayer), Besitzer = Block. PlayersMax darum 8;
+    /// ob so viele Plaetze aufs Gelaende passen, sagt Reserve() je Platz.</summary>
+    public const int PlayersDefault = 2, PlayersMax = 8;
+
+    /// <summary>bug-744: <c>--editor-startmarke-alt</c> — wieder eine sec4-Zeile der
+    /// Art 0x70+Platz je Startplatz schreiben (und hoechstens 5 Spieler).</summary>
+    public static bool StartmarkeAlt
+        => Array.IndexOf(Core.CommandLine.Args, "--editor-startmarke-alt") >= 0;
 
     /// <summary>Wie viele Einheiten je Spieler. UNSERE Setzung.</summary>
     public const int TroopDefault = 6;
@@ -70,7 +79,10 @@ public static class MapGenerator
     /// (map_02, map_09).</summary>
     public const int BaseType = 1, BaseFootW = 6, BaseFootH = 4, BaseHp = 1200;
 
-    /// <summary>Die Fahrzeugfabrik: Typ 2, zwei Tueren auf (2,3) und (5,3) — 99
+    /// <summary>⚠ 11.11.2026 (bug-740): Typ 2 ist im Original die WAFFENFABRIK
+    /// (Capture.cs:162, »Ihre Waffenfabrik wird besetzt« @0x4faf5c), nicht die
+    /// Fahrzeugfabrik — nur der Name war falsch, gebaut wird weiter Typ 2.
+    /// Die Fahrzeugfabrik (alt): Typ 2, zwei Tueren auf (2,3) und (5,3) — 99
     /// von 99 —, 1000 Trefferpunkte, Grundflaeche 6x4 wie in den NET-Karten.
     /// Sie muss dabei sein, damit <c>SkirmishAi.PlayersWithFactory</c> den Platz
     /// ueberhaupt als Aufbauplatz kennt.</summary>
@@ -109,7 +121,7 @@ public static class MapGenerator
         if (players > 0 && !flat)
         {
             var locked = new bool[width * height];
-            starts = Reserve(t, Math.Min(players, PlayersMax), locked, say);
+            starts = Reserve(t, Math.Min(players, StartmarkeAlt ? 5 : PlayersMax), locked, say);
             t.Refresh(locked, say);
         }
         else if (players > 0)
@@ -211,7 +223,7 @@ public static class MapGenerator
 
         // ---- 4. Basen, Truppen, Marken -----------------------------------------
         int usedSlots = 0;
-        if (starts.Count > 0) usedSlots = Populate(m, t, starts, troop, say);
+        if (starts.Count > 0) usedSlots = Populate(m, t, starts, troop, say, cwp);
 
         // ---- 4b. die neutralen Gebaeude ----------------------------------------
         // ⚠ NACH den Startplaetzen (ihre Plaetze sind belegt und werden
@@ -323,20 +335,30 @@ public static class MapGenerator
     /// Ohne diese Zahl haetten die neutralen Gebaeude die Startbasen
     /// ueberschrieben, und zwar still.</summary>
     private static int Populate(CwmFile m, MapTerrain t, List<Start> starts, int troop,
-                                 Action<string> say)
+                                 Action<string> say, CwpFile? cwp = null)
     {
         int bldSlot = 0, units = 0, blds = 0;
+        // ⭐ 11.11.2026 — bug-740 (E2, M2): die Truppe aus der GEMESSENEN Tafel
+        // (MapEditUnits, Reifen 161: Angriff 6, Leben 50, Tank 440) samt
+        // Kampfsatz (PutEntity → MapEditUnits.SatzOf). Bis heute: Angriff 6,
+        // Leben 100 (die Vorgabe von PutEntity, nicht gemessen), Waffe 0.
+        // Mit --editor-einheit-alt der alte Satz.
+        var reifen = MapEditUnits.ByType(TroopUnitType);
+        bool alt = MapEditUnits.EinheitAlt || reifen == null;
+        int energie = alt ? 100 : reifen!.Value.Energy;
+        int angriff = alt ? TroopCategory : reifen!.Value.Attack;
+        int tank = alt ? TroopHp : reifen!.Value.Fuel;
         foreach (var s in starts)
         {
             int bcol = s.Col, brow = s.Row;
             int fcol = s.Col + BaseFootW + 1, frow = s.Row;
             if (MapFactory.PutBuilding(m, bldSlot, BaseType, s.Player, s.Player, bcol, brow,
                                        BaseFootW, BaseFootH, BaseHp, $"Start{s.Player + 1}",
-                                       new[] { (4, 2) }, 100, 200, 500))
+                                       new[] { (4, 2) }, 100, 200, 500, cwp: cwp))
             { bldSlot++; blds++; }
             if (MapFactory.PutBuilding(m, bldSlot, FactoryType, s.Player, s.Player, fcol, frow,
                                        FactoryFootW, FactoryFootH, FactoryHp, $"Werk{s.Player + 1}",
-                                       new[] { (2, 3), (5, 3) }, 0, 0, 0, 1000))
+                                       new[] { (2, 3), (5, 3) }, 0, 0, 0, 1000, cwp))
             { bldSlot++; blds++; }
 
             // die Truppe unter die Gebaeude, jede Zelle einzeln geprueft
@@ -353,7 +375,8 @@ public static class MapGenerator
                         BitConverter.ToUInt16(imap, at) < MapFactory.ImapWater) continue;
                 }
                 if (MapFactory.PutEntity(m, s.Player * CwmData.EntitiesPerPlayer + put, uc, ur,
-                                         TroopUnitType, TroopCategory, 0, TroopHp, k & 7))
+                                         TroopUnitType, angriff, 0, tank, k & 7,
+                                         energy: energie))
                 { put++; units++; }
             }
 
@@ -364,11 +387,17 @@ public static class MapGenerator
             // laesst die imap frei, ist aber von der eigenen Grundflaeche
             // eingeschlossen, also flutete er 1 Zelle weit. Der Zaehler
             // »erreichbare Zellen« hat beide Male genau das gesagt.
-            MapFactory.PutMarker(m, s.Player, bcol + 2, brow + BaseFootH,
-                                 MapFactory.MarkerStartBase + s.Player);
+            // ⭐ 11.11.2026 — bug-744 (E3, M6): KEINE »Startmarke« mehr. sec4 ist
+            // die Objekttafel; die Zeile der Art 0x70+p war ein Objekt ohne
+            // imap-Verweis (61000+i) und im Spiel wirkungslos — nur MapCheck
+            // flutete von ihr aus, und der nimmt jetzt die Einheiten.
+            // Gegenschalter --editor-startmarke-alt.
+            if (StartmarkeAlt)
+                MapFactory.PutMarker(m, s.Player, bcol + 2, brow + BaseFootH,
+                                     MapFactory.MarkerStartBase + s.Player);
             say($"Spieler {s.Player}: Basis ({bcol},{brow}) {BaseFootW}x{BaseFootH}, " +
-                $"Fabrik ({fcol},{frow}), {put} von {troop} Fahrzeugen, " +
-                $"Startmarke 0x{MapFactory.MarkerStartBase + s.Player:X2}");
+                $"Fabrik ({fcol},{frow}), {put} von {troop} Fahrzeugen" +
+                (StartmarkeAlt ? $", Startmarke 0x{MapFactory.MarkerStartBase + s.Player:X2}" : ""));
         }
         say($"Startplaetze: {starts.Count} Spieler, {blds} Gebaeude, {units} Einheiten " +
             "(ohne die gaebe SkirmishAi.StartSkirmish −1 und die Karte waere im ersten " +

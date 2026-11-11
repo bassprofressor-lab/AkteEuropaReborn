@@ -258,12 +258,65 @@ public static class MapCheck
         // traegt sie) und auf einer ERZEUGTEN die Zahl, die MapDeposits gelegt
         // hat. Beides ist richtig, und der Unterschied ist der Befund.
         bad += Deposits(root, w, h, ground, flag, zone, hasZones, say);
+        // bug-744 (11.11.2026): die sec38-Vorkommen der Karte, nur Auskunft
+        if (ent.RootElement.TryGetProperty("terra_places", out var tp) &&
+            tp.ValueKind == JsonValueKind.Array)
+            say($"  sec38 aufgeschlossene Vorkommen (terra_places): {tp.GetArrayLength()}");
 
         // ---- Einheiten und Gebaeude: ist die Karte spielbar? ---------------
         bad += Assets(ent.RootElement, say);
 
-        // ---- Startmarken und Erreichbarkeit --------------------------------
+        // ⭐ 11.11.2026 — bug-744 (Paket E3, M6/M8): STARTPLATZ AUS DEN EINHEITEN,
+        // FLUTUNG NACH DER KLASSENWEICHE.
+        //
+        // (M6) sec4 ist die OBJEKTTAFEL (0xC03A30, 2000x6, +2 = Art; MapBaker,
+        // MapForest, ORIGINAL seit 24.08.), keine Startmarkentafel — die
+        // »Marken 0x70..0x74« sind Objektarten (map_DM_1: 142 Baeume/Bueschen).
+        // Den Startplatz fragt im Spiel niemand ueber sec4: das Gefecht nimmt
+        // die besetzten Plaetze und den Heimpunkt aus den EINHEITEN
+        // (GefechtStartbasis.HeimzelleMobil). Darum flutet der Pruefstand jetzt
+        // von den Einheitenzellen jedes Platzes 0..7 aus.
+        // (M8) Can_go: gewoehnliches Fahrwerk nur 0xFFFE (@0x405CD8), rau
+        // (0xFFFD) nur Fussvolk/Laeufer (0x405973) — die alte Flutung liess ein
+        // »Bodenfahrzeug« ueber rau. Zwei Flutungen: FAHRZEUG (nur frei) und
+        // FUSSVOLK (frei + rau), je acht Nachbarn mit der Eckenregel der
+        // Suchkarte (0x4D118D: frei 0, rau 1 WEICH, sonst 2 hart; Schraegschritt
+        // nur, wenn BEIDE anliegenden Geraden <= 1 — NavGrid). Die
+        // Steigungsgrenze MaxClimb bleibt (UNSERE Setzung, wie bisher).
+        // Gegenschalter --mapcheck-alt (Marken 0x70..0x74, Vierer-Flutung frei+rau).
+        if (!CheckAlt)
+        {
+            var quellen = new SortedDictionary<int, List<(int Col, int Row)>>();
+            foreach (var e in ent.RootElement.GetProperty("entities").EnumerateArray())
+            {
+                int owner = e.TryGetProperty("owner", out var ow) ? ow.GetInt32() : -1;
+                if (owner is < 0 or > 7) continue;
+                if (!quellen.TryGetValue(owner, out var l)) quellen[owner] = l = new();
+                l.Add((e.GetProperty("col").GetInt32(), e.GetProperty("row").GetInt32()));
+            }
+            if (quellen.Count == 0)
+                say("  kein Platz 0..7 traegt Einheiten — kein Startplatz, keine Erreichbarkeit");
+            foreach (var (p, zellen) in quellen)
+            {
+                int fz = Flood8(w, h, ground, elev, zellen, buildable, false, out int fzSites);
+                int fv = Flood8(w, h, ground, elev, zellen, buildable, true, out int fvSites);
+                say($"  Spieler {p} ({zellen.Count} Einheiten): Fahrzeug erreicht {fz} Zellen " +
+                    $"({fzSites} Bauplaetze), Fussvolk {fv} Zellen ({fvSites} Bauplaetze)");
+            }
+            int objekte = 0;
+            foreach (var mk in ent.RootElement.GetProperty("markers").EnumerateArray())
+            {
+                int type = mk.GetProperty("type").GetInt32();
+                if (type >= MapFactory.MarkerStartBase && type <= MapFactory.MarkerStartBase + 4) objekte++;
+            }
+            if (objekte > 0)
+                say($"  sec4: {objekte} Objekte der Art 0x70..0x74 — KEINE Startmarken (Objekttafel, " +
+                    "bug-744); fuer die Erreichbarkeit nicht mehr gefragt");
+        }
+
+        // ---- Startmarken und Erreichbarkeit (bis 0.6.13, nur --mapcheck-alt) -
         var starts = new List<(int Slot, int Col, int Row, int Type)>();
+        if (CheckAlt)
         foreach (var mk in ent.RootElement.GetProperty("markers").EnumerateArray())
         {
             int type = mk.GetProperty("type").GetInt32();
@@ -271,7 +324,7 @@ public static class MapCheck
             starts.Add((mk.GetProperty("slot").GetInt32(), mk.GetProperty("col").GetInt32(),
                         mk.GetProperty("row").GetInt32(), type));
         }
-        if (starts.Count == 0)
+        if (CheckAlt && starts.Count == 0)
             say("  keine Startmarke (Typ 0x70..0x74) — bei einer erzeugten Karte ein FEHLER, " +
                 "bei 17 der 26 gelieferten der Normalfall");
 
@@ -331,10 +384,15 @@ public static class MapCheck
         if (!root.TryGetProperty("terra", out var terra) ||
             terra.ValueKind != JsonValueKind.Array || terra.GetArrayLength() == 0)
         {
-            say("  Rohstoffvorkommen: keine in der Karte — bei einer GELIEFERTEN Karte " +
-                "der Normalfall (das Missionsskript legt sie an, add_terra_place " +
-                "C:0x4D0A10, 50 Aufrufe in 8 Missionen); bei einer ERZEUGTEN Karte hat " +
-                "die Feld-Rohstoffmine damit 0 Bauplaetze");
+            // ⚠ 11.11.2026 (bug-744) berichtigt: »gelieferte Karten 0 Vorkommen«
+            // ist durch Deposits.cs widerlegt — 9 aufgeschlossene Vorkommen (sec38)
+            // auf 6 Karten, ausgegeben als `terra_places` in der .entities.json.
+            // Dieser Zaehler liest nur `meta.terra` (die Editorvorkommen).
+            say("  Rohstoffvorkommen (meta.terra, Editor): keine — eine GELIEFERTE Karte " +
+                "fuehrt ihre aufgeschlossenen Vorkommen als sec38 (terra_places, siehe " +
+                "unten), die uebrigen legt das Missionsskript (add_terra_place C:0x4D0A10, " +
+                "sec78 Erz im Boden); bei einer ERZEUGTEN Karte hat die Feld-Rohstoffmine " +
+                "damit 0 Bauplaetze");
             return 0;
         }
 
@@ -914,10 +972,15 @@ public static class MapCheck
         }
         say($"  Spielbarkeit: {units} Einheiten, {blds} echte Gebaeude ({factories} Fabriken), " +
             $"{live} besetzte Plaetze [{string.Join(" ", parts)}]");
+        // ⚠ 11.11.2026 (bug-744) berichtigt: −1 gibt StartSkirmish nur bei NULL
+        // lebenden Plaetzen (SkirmishAi.cs, `if (live.Count == 0) return -1`);
+        // mit einem Platz laeuft das Gefecht, nur ohne Gegner. Die Beanstandung
+        // unter zwei Plaetzen bleibt — ein Gefecht ohne Gegner ist keins.
         if (live < 2)
         {
-            say("  ^ ACHTUNG: unter zwei besetzten Plaetzen gibt SkirmishAi.StartSkirmish −1 " +
-                "und ein Gefecht ist im ersten Takt verloren");
+            say(live == 0
+                ? "  ^ ACHTUNG: kein besetzter Platz — SkirmishAi.StartSkirmish gibt −1"
+                : "  ^ ACHTUNG: nur ein besetzter Platz — das Gefecht laeuft ohne Gegner");
             return 1;
         }
         return 0;
@@ -980,8 +1043,65 @@ public static class MapCheck
         return n;
     }
 
+    /// <summary>bug-744: <c>--mapcheck-alt</c> — Startplatz aus den Marken 0x70..0x74
+    /// und die Vierer-Flutung ueber frei + rau, wie bis 0.6.13.</summary>
+    public static bool CheckAlt => Array.IndexOf(Core.CommandLine.Args, "--mapcheck-alt") >= 0;
+
+    /// <summary>
+    /// bug-744 (11.11.2026): Flutung nach der Klassenweiche, von mehreren
+    /// Quellzellen aus. <paramref name="fussvolk"/> = false: gewoehnliches
+    /// Fahrwerk, nur frei (Klasse 0, imap 0xFFFE, @0x405CD8); true: Fussvolk,
+    /// frei und rau (0x405973). Acht Nachbarn; ein Schraegschritt nur, wenn
+    /// beide anliegenden Geraden in der Suchkarte ≤ 1 sind, also frei oder rau
+    /// (0x4D118D, NavGrid). Steigungsgrenze <see cref="MaxClimb"/> wie bisher.
+    /// Quellzellen, die selbst nicht betretbar sind, zaehlen nicht.
+    /// </summary>
+    private static int Flood8(int w, int h, byte[] ground, int[] elev,
+                              List<(int Col, int Row)> quellen, bool[] buildable,
+                              bool fussvolk, out int sites)
+    {
+        sites = 0;
+        int max = fussvolk ? 1 : 0;
+        var open = new Queue<int>();
+        var seen = new bool[w * h];
+        foreach (var (c0, r0) in quellen)
+        {
+            if (c0 < 0 || c0 >= w || r0 < 0 || r0 >= h) continue;
+            int i0 = r0 * w + c0;
+            if (seen[i0]) continue;
+            // ⚠ Die Zelle einer Einheit steht in der Gelaendeausgabe als das, was
+            // die imap dort traegt; die Einheit selbst steht natuerlich darauf.
+            seen[i0] = true; open.Enqueue(i0);
+        }
+        int n = 0;
+        int[] dc = { 1, 1, 0, -1, -1, -1, 0, 1 }, dr = { 0, 1, 1, 1, 0, -1, -1, -1 };
+        bool Weich(int c, int r) => c >= 0 && c < w && r >= 0 && r < h && ground[r * w + c] <= 1;
+        while (open.Count > 0)
+        {
+            int i = open.Dequeue();
+            n++;
+            if (buildable[i]) sites++;
+            int c = i % w, r = i / w;
+            for (int k = 0; k < 8; k++)
+            {
+                int nc = c + dc[k], nr = r + dr[k];
+                if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                int j = nr * w + nc;
+                if (seen[j] || ground[j] > max) continue;
+                if ((k & 1) != 0 && (!Weich(c + dc[k], r) || !Weich(c, r + dr[k]))) continue;
+                if (Math.Abs(elev[j] - elev[i]) >= MaxClimb) continue;
+                seen[j] = true;
+                open.Enqueue(j);
+            }
+        }
+        return n;
+    }
+
     /// <summary>Flutet von einer Zelle aus ueber alles, was ein Bodenfahrzeug
-    /// betreten darf: Klasse frei oder rau, und kein Hoehensprung ≥ MaxClimb.</summary>
+    /// betreten darf: Klasse frei oder rau, und kein Hoehensprung ≥ MaxClimb.
+    /// ⚠ bug-744 (11.11.2026): nur noch unter <c>--mapcheck-alt</c> — rau ist
+    /// fuer gewoehnliches Fahrwerk gesperrt (Can_go @0x405CD8), siehe
+    /// <see cref="Flood8"/>.</summary>
     private static int Flood(int w, int h, byte[] ground, int[] elev, int c0, int r0,
                              bool[] buildable, out int sites)
     {

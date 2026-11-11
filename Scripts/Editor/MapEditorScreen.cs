@@ -11,6 +11,17 @@ using AkteEuropaReborn.Editor;
 /// 12.08.2026 als Schalter <c>--map-new=</c> und <c>--map-check=</c> gibt, nur
 /// ohne Befehlszeile.
 ///
+/// <para>⚠ <b>11.11.2026 (bug-739, M11): DER KOPF UNTEN IST VOM 12.08. UND IN
+/// VIER PUNKTEN UEBERHOLT.</b> (1) Der Generator setzt seit dem 13./14.08. je
+/// Spieler Basis, Fabrik und 6 Fahrzeuge, dazu neutrale Gebaeude und Vorkommen —
+/// eine erzeugte Karte hat also Einheiten und Gebaeude. (2) Es gibt den Pinsel
+/// (»Karte bearbeiten«, <see cref="MapEditOverlay"/>) und das Oeffnen einer
+/// vorhandenen Karte (<see cref="MapOpen"/>; gelieferte nur als Kopie). (3) Die
+/// »Startmarken 0x70..« sind eine ueberholte Lesung: sec4 ist die Objekttafel
+/// (Bericht M6). (4) Das Kopfstueck »kein Spielen-Knopf« gilt nicht mehr, sobald
+/// Paket E2 den Knopf »Im Gefecht spielen« bringt. Der alte Text bleibt als
+/// Vorgeschichte stehen.</para>
+///
 /// <para><b>Was dieser Schirm KANN, ist genau das, was der Editor kann</b>, und
 /// keine Zeile mehr. Nachgelesen in <see cref="MapGenerator"/>,
 /// <see cref="MapFactory"/>, <see cref="TilePalette"/> und
@@ -57,6 +68,11 @@ public partial class MapEditorScreen : Control
     /// demselben Grund wie <see cref="OnView"/>.</summary>
     public Action<string>? OnEdit { get; init; }
 
+    /// <summary>bug-743 (11.11.2026): wohin »Im Gefecht spielen« fuehrt — setzt
+    /// das Hauptmenue (MainMenu.PlayMade), aus demselben Grund wie
+    /// <see cref="OnView"/>.</summary>
+    public Action<string>? OnPlay { get; init; }
+
     // ---- UNSERE Setzungen fuer die Eingabefelder ----------------------------
     //
     // Die Obergrenze ist GELESEN: CwmFile.Create wirft ueber 254 ("die groesste
@@ -75,7 +91,7 @@ public partial class MapEditorScreen : Control
     private OptionButton _tileset = null!;
     private CheckBox _flat = null!;
     private LineEdit _from = null!;
-    private Button _create = null!, _check = null!, _view = null!, _edit = null!;
+    private Button _create = null!, _check = null!, _view = null!, _edit = null!, _play = null!;
 
     /// <summary>Die Auswahl der VORHANDENEN Karten und der Knopf dazu. Siehe
     /// <see cref="OnOpen"/>.</summary>
@@ -135,8 +151,10 @@ public partial class MapEditorScreen : Control
         {
             // Sagt in einer Zeile, was herauskommt — und was nicht. Beides ist
             // aus MapGenerator abgelesen und nicht geschaetzt.
-            Text = "Erzeugt Gelaende: Wasserrand, Strandring, Berg, See, zwei Startmarken. "
-                 + "Einheiten, Gebaeude und Gleise setzt er nicht.",
+            // bug-739 (11.11.2026) berichtigt: der Generator setzt seit dem
+            // 13./14.08. je Spieler Basis + Fabrik + Truppe und neutrale Gebaeude.
+            Text = "Erzeugt Gelaende mit Startplaetzen (je Spieler Basis, Fabrik, Truppe), "
+                 + "neutralen Gebaeuden und Vorkommen. Gleise und Gegenstaende setzt der Pinsel.",
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.7f, 0.75f, 0.8f),
         });
@@ -246,9 +264,12 @@ public partial class MapEditorScreen : Control
         {
             Text = "VORHANDENE OEFFNEN",
             CustomMinimumSize = new Vector2(0, 44),
+            // bug-739 (11.11.2026): Text berichtigt — gelieferte Karten nur als Kopie.
             TooltipText = "Liest map_*.json und map_*.entities.json wieder zu einer Karte im "
-                        + "Arbeitsspeicher zusammen. Gespeichert wird AN ORT UND STELLE — die "
-                        + "gewaehlte Karte wird beim Speichern ueberschrieben.",
+                        + "Arbeitsspeicher zusammen. Beim Oeffnen wird NICHTS geschrieben. Eine "
+                        + "GELIEFERTE Karte (01..33, NET, DM) wird nie angefasst: bearbeitet "
+                        + "wird eine Kopie <name>_kopie. Eine eigene Karte speichert F5 im Pinsel "
+                        + "an Ort und Stelle.",
         };
         _open.Pressed += OnOpen;
         openRow.AddChild(_open);
@@ -276,8 +297,11 @@ public partial class MapEditorScreen : Control
             Disabled = true,
             CustomMinimumSize = new Vector2(0, 36),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            TooltipText = "Oeffnet die Karte im Kartenbetrachter — kein Gefecht: sie traegt keine "
-                        + "Einheiten und keine Gebaeude. ESC fuehrt zurueck.",
+            // bug-739 (11.11.2026): der alte Text (»traegt keine Einheiten und
+            // keine Gebaeude«) war seit dem 13.08. falsch — der Generator setzt
+            // je Spieler Basis, Fabrik und Truppe.
+            TooltipText = "Oeffnet die Karte im Kartenbetrachter — nur ansehen, kein Gefecht, "
+                        + "keine KI. ESC fuehrt zurueck.",
         };
         _view.Pressed += OnViewPressed;
         after.AddChild(_view);
@@ -294,6 +318,21 @@ public partial class MapEditorScreen : Control
         };
         _edit.Pressed += OnEditPressed;
         after.AddChild(_edit);
+
+        // ⭐ 11.11.2026 — bug-743 (E2, M3): der Weg ins Gefecht. Bis heute gab es
+        // nur »Ansehen«; die Gefechts- und die Netzliste sind fest (NET-Karten).
+        _play = new Button
+        {
+            Text = "Im Gefecht spielen",
+            Disabled = true,
+            CustomMinimumSize = new Vector2(0, 36),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = "Startet ein Gefecht auf dieser Karte: du spielst Platz 1, jeden anderen "
+                        + "besetzten Platz die KI. Gespielt wird, was auf der Platte steht — "
+                        + "ungespeicherte Pinselstriche erst mit F5 sichern.",
+        };
+        _play.Pressed += OnPlayPressed;
+        after.AddChild(_play);
 
         _status = new Label
         {
@@ -424,10 +463,12 @@ public partial class MapEditorScreen : Control
         _create.Disabled = !any;
         _status.Text = any
             ? $"{_tilesets.Count} Kachelsaetze gefunden: {string.Join(", ", _tilesets)}"
+            // bug-739 (11.11.2026): der Einspieler legt NN.CWP/NN.PAL seit
+            // ContentBuilder.CopyTilesets sehr wohl ab — der alte Text sagte das Gegenteil.
             : "Kein Kachelsatz gefunden — weder im Entwicklungsbaum (Assets/Legacy/DATA) noch "
             + "unter user://data/DATA noch auf einer eingelegten Spiel-CD. Der Einspieler legt "
-            + "die NN.CWP/NN.PAL nicht ab, weil das Spiel sie nicht braucht; leg die CD ein "
-            + "oder waehle oben den DATA-Ordner deiner Spielkopie.";
+            + "die NN.CWP/NN.PAL unter user://data/DATA ab — fehlen sie, die Daten neu "
+            + "einlesen, die CD einlegen oder oben den DATA-Ordner deiner Spielkopie waehlen.";
     }
 
     // ---- erzeugen -----------------------------------------------------------
@@ -471,7 +512,7 @@ public partial class MapEditorScreen : Control
                    + $",boden={(int)_pick.Value}"
                    + (from.Length > 0 ? $",from={from}" : "");
 
-        _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = true;
+        _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
         _status.Text = $"arbeitet … ({(int)_w.Value}x{(int)_h.Value}, Kachelsatz {ts:00})";
         _log.Text = string.Join("\n", lines);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -483,11 +524,12 @@ public partial class MapEditorScreen : Control
         if (rc == 0)
         {
             _made = outName;
-            _check.Disabled = _view.Disabled = _edit.Disabled = false;
+            _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
             _status.Text = $"{outName} geschrieben. Jetzt pruefen oder ansehen.";
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
+            else if (_autoRun == "spielen") OnPlayPressed();   // bug-743
         }
         else
         {
@@ -527,10 +569,15 @@ public partial class MapEditorScreen : Control
     /// gibt also auch hier keinen zweiten Weg, den man getrennt pruefen
     /// muesste.
     ///
-    /// <para>⚠ Geoeffnet und gespeichert wird UNTER DEMSELBEN NAMEN: der Spieler
+    /// <para><s>⚠ Geoeffnet und gespeichert wird UNTER DEMSELBEN NAMEN: der Spieler
     /// will seine Karte weiterbearbeiten, nicht eine Kopie anlegen. Dass dabei
     /// nichts verlorengeht, ist gemessen — <c>--map-check=&lt;name&gt;,rundlauf</c>
-    /// haelt die neu geschriebenen Dateien Feld fuer Feld gegen die alten.</para>
+    /// haelt die neu geschriebenen Dateien Feld fuer Feld gegen die alten.</s></para>
+    /// <para>⭐ 11.11.2026 (bug-739): das »nichts geht verloren« galt nur bis zum
+    /// 13.09. — seitdem traegt die Ausgabe Bruecken, Rampen, Zeichenlage und
+    /// sec38, die der Rueckweg nicht liest. Eine GELIEFERTE Karte wird darum nur
+    /// noch als Kopie geoeffnet, und das Oeffnen schreibt gar nichts mehr; eine
+    /// eigene Karte speichert erst F5. Gegenschalter --editor-oeffnen-alt.</para>
     /// </summary>
     private async void OnOpen()
     {
@@ -540,7 +587,7 @@ public partial class MapEditorScreen : Control
         string stem = outName["map_".Length..];
 
         var lines = new List<string>();
-        _create.Disabled = _open.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = true;
+        _create.Disabled = _open.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
         _status.Text = $"oeffnet {outName} …";
         _log.Text = "";
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -551,13 +598,21 @@ public partial class MapEditorScreen : Control
 
         if (rc == 0)
         {
-            _made = outName;
-            _check.Disabled = _view.Disabled = _edit.Disabled = false;
-            _name.Text = stem;
-            _status.Text = $"{outName} geoeffnet. Speichern schreibt AN ORT UND STELLE zurueck.";
+            // bug-739 (11.11.2026): eine gelieferte Karte kommt als KOPIE zurueck
+            // (map_<x>_kopie) — der wirklich gehaltene Name steht in der Sitzung.
+            string held = MapEditSession.Name.Length > 0 ? MapEditSession.Name : outName;
+            _made = held;
+            _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
+            _name.Text = held["map_".Length..];
+            _status.Text = held != outName
+                ? $"{outName} ist eine gelieferte Karte — geoeffnet als Kopie {held} (Bruecken, "
+                  + "Rampen, Waldtafel und Vorkommen fehlen der Kopie noch). F5 speichert die Kopie."
+                : $"{outName} geoeffnet, nichts geschrieben. F5 im Pinsel speichert an Ort und Stelle.";
+            if (held != outName) FillExisting();
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
+            else if (_autoRun == "spielen") OnPlayPressed();   // bug-743
         }
         else
         {
@@ -594,6 +649,12 @@ public partial class MapEditorScreen : Control
     {
         if (_made.Length == 0 || OnView == null) return;
         OnView(_made);
+    }
+
+    private void OnPlayPressed()
+    {
+        if (_made.Length == 0 || OnPlay == null) return;
+        OnPlay(_made);
     }
 
     private void OnEditPressed()

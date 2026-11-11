@@ -38,9 +38,17 @@ using AkteEuropaReborn.Import;
 ///     Karte bekommt darum 0 — dieselbe <b>UNSERE SETZUNG</b>, die
 ///     <c>CwmFile.Create</c> fuer eine neu erzeugte Karte trifft.</item>
 ///   <item><b>Der Dateikommentar</b> (<c>CwmFile.Comment</c>, 21 Byte im Kopf).</item>
-///   <item><b>Die fuenf belegten, aber ungelesenen Abschnitte</b> sec18, sec20,
+///   <item><s><b>Die fuenf belegten, aber ungelesenen Abschnitte</b> sec18, sec20,
 ///     sec21, sec25 und sec32. Sie werden von keinem Leser angefasst, stehen in
-///     keiner Ausgabe und kommen als Null zurueck.</item>
+///     keiner Ausgabe und kommen als Null zurueck.</s>
+///     ⚠ 11.11.2026 (bug-739) berichtigt: sec18 (Waldtafel), sec20 (Zeichenlage)
+///     und sec21 (Rampen) werden inzwischen GELESEN und AUSGEGEBEN (MapForest,
+///     CwmExtra.Bridges/Ramps/TerraPlaces → EntitiesJson bridges/ramps_table/
+///     terra_places, Meta flat_buildings/objects), ebenso sec17 (Bruecken) und
+///     sec38 (aufgeschlossene Vorkommen). Nur DIESER Rueckweg liest sie noch
+///     nicht — darum oeffnet der Editor gelieferte Karten seit bug-739 nur als
+///     KOPIE (<see cref="IsDelivered"/>). Rueckweg vervollstaendigen = Paket E4.
+///     sec25 und sec32 bleiben ungelesen.</item>
 ///   <item><b>Jedes Byte eines Satzes, das kein Leser liest</b> — zum Beispiel
 ///     die Gebaeudebytes +0x08..+0x15 und +0x42..+0x4b, oder das dritte Byte
 ///     jeder Tuer (Torzustand). Fuer den Rundlauf DER AUSGABE macht das nichts
@@ -67,6 +75,51 @@ public static class MapOpen
 
     /// <summary>Der volle Dateiname, mit <c>map_</c> davor.</summary>
     public static string FullName(string name) => name.StartsWith("map_") ? name : "map_" + name;
+
+    // ⭐ 11.11.2026 — bug-739 (Paket E1, M1): GELIEFERTE KARTEN NUR ALS KOPIE.
+    //
+    // Der Rueckweg dieser Datei liest sec17 (Bruecken), sec18 (Waldtafel),
+    // sec20 (Zeichenlage), sec21 (Rampen) und sec38 (aufgeschlossene Vorkommen)
+    // NICHT zurueck (EntitiesJson.cs: bridges/ramps_table/terra_places, Meta
+    // flat_buildings/objects). Bis heute schrieb »VORHANDENE OEFFNEN« die Karte
+    // aber sofort unter demselben Namen zurueck (MainMenuMapEditor.MapNew) — eine
+    // gelieferte Karte (auch jede Kampagnenkarte) verlor damit schon beim
+    // OEFFNEN Bruecken, Rampen, Waldtafel und Minenbauplaetze; geheilt nur durch
+    // ein Neueinlesen von CD. Bericht berichte/karteneditor-abgleich-opus.md M1.
+    //
+    // Was »geliefert« heisst, ist GELESEN, nicht gesetzt: ContentBuilder nennt
+    // die Ausgaben »map_« + Stamm der LEVELS/*.CWM (01..33, NET01..08), »map_DM_n«
+    // aus DmStems (1..13) und »map_game007«. Gegenschalter --editor-oeffnen-alt.
+
+    /// <summary>bug-739: der Gegenschalter — Oeffnen wie bis 0.6.13 (schreibt
+    /// sofort an Ort und Stelle zurueck, auch gelieferte Karten).</summary>
+    public static bool OeffnenAlt
+        => Array.IndexOf(Core.CommandLine.Args, "--editor-oeffnen-alt") >= 0;
+
+    private static readonly System.Text.RegularExpressions.Regex Delivered =
+        new(@"^map_(\d+|NET\d+|DM_\d+|game\d+)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>bug-739: eine vom Einspieler aus der CD erzeugte Karte?</summary>
+    public static bool IsDelivered(string name) => Delivered.IsMatch(FullName(name));
+
+    /// <summary>bug-739: der Name der Arbeitskopie einer gelieferten Karte —
+    /// <c>map_01</c> → <c>map_01_kopie</c>, und gibt es die schon,
+    /// <c>map_01_kopie2</c> usw. Eine vorhandene Kopie wird NIE ueberschrieben:
+    /// sie koennte schon die Arbeit des Spielers tragen. UNSERE SETZUNG
+    /// (Namensform).</summary>
+    public static string CopyName(string name)
+    {
+        string full = FullName(name);
+        string dir = MapsDir;
+        for (int n = 1; n < 1000; n++)
+        {
+            string cand = full + "_kopie" + (n == 1 ? "" : n.ToString(CultureInfo.InvariantCulture));
+            if (!File.Exists($"{dir}/{cand}.json") && !File.Exists($"{dir}/{cand}.entities.json"))
+                return cand;
+        }
+        return full + "_kopie" + DateTime.Now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+    }
 
     /// <summary>
     /// Eine geschriebene Karte wieder in den Arbeitsspeicher holen.

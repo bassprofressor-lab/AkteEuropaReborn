@@ -862,7 +862,7 @@ public partial class MapEditOverlay : Node2D
         int hp = MapNeutrals.HpOf(_typ);
         var doors = MapNeutrals.DoorsOf(_typ);
         if (!MapFactory.PutBuilding(_map, _nextSlot, _typ, _owner, 0, cell.X, cell.Y,
-                                    fw, fh, hp, "", doors))
+                                    fw, fh, hp, "", doors, cwp: cwp))   // bug-742: Musterstempel
         { _say = "kein Gebaeudeplatz mehr frei (255)"; return; }
 
         _layer.EditorAddBuilding(_nextSlot, _typ, _owner, cell.X, cell.Y, fw, fh, hp);
@@ -912,6 +912,8 @@ public partial class MapEditOverlay : Node2D
 
         int slot = NextUnitSlot(_owner);
         if (slot < 0) { _say = $"Spieler {_owner + 1} hat keinen freien Einheitenplatz mehr (1000)"; return; }
+        // bug-740 (11.11.2026): Waffe 0 hier ist nur noch der Rueckfall — PutEntity
+        // schreibt den gemessenen Kampfsatz der Bauart (MapEditUnits.SatzOf).
         if (!MapFactory.PutEntity(_map, slot, cell.X, cell.Y, u.Type, u.Attack, 0,
                                   u.Fuel, 0, u.Kind_, u.Art, u.Energy))
         { _say = "der Satz liess sich nicht schreiben"; return; }
