@@ -108,6 +108,25 @@ public static class MapGenerator
         var m = MapFactory.Empty(width, height, tileset, stem);
         m.Mission = $"Editor {stem} {width}x{height}";
 
+        // ⭐ 11.11.2026 — bug-768/769/770: DER ECK-GENERATOR ist der Regelweg.
+        // Spielermeldung 0.7.0 (»leuchtende dreiecke«, »wasser wild in
+        // festlandschaft«, »multiplayer spielbar«). Er braucht das gelernte
+        // Eckmodell des Kachelsatzes (TileCorners) und eine Stoffkette; fehlt
+        // beides, oder steht --generator-alt / ,flach / ,ohnetabelle, laeuft
+        // der alte Weg unten unveraendert.
+        if (!GeneratorAlt && !flat && model != null)
+        {
+            var tc = TileCorners.Learn(tileset, say, cwp);
+            if (tc != null && tc.IsChain)
+                return BuildCorners(m, width, height, tc, say, players, troop, waterShare,
+                                    seed, seams, cwp, neutrals);
+            say(tc == null
+                ? "Eckmodell: keine gelieferte Karte dieses Kachelsatzes — alter Generator"
+                : $"Eckmodell: keine Stoffkette ({tc.ChainWhy}) — alter Generator");
+        }
+        else if (GeneratorAlt)
+            say("--generator-alt: der Generator bis 0.7.0 (Faecherwurf je Zelle)");
+
         // ---- 1. das Gelaende ---------------------------------------------------
         var t = MapTerrain.Build(width, height, seed, waterShare, flat, say);
         if (!flat) t.SetClasses(seed, say);
@@ -223,7 +242,7 @@ public static class MapGenerator
 
         // ---- 4. Basen, Truppen, Marken -----------------------------------------
         int usedSlots = 0;
-        if (starts.Count > 0) usedSlots = Populate(m, t, starts, troop, say, cwp);
+        if (starts.Count > 0) usedSlots = Populate(m, t.Class, t.W, starts, troop, say, cwp);
 
         // ---- 4b. die neutralen Gebaeude ----------------------------------------
         // ⚠ NACH den Startplaetzen (ihre Plaetze sind belegt und werden
@@ -247,6 +266,82 @@ public static class MapGenerator
         // Kontostand blieb 0. Die Messlatte steht bei MapDeposits.
         MapDeposits.Place(m, seed, cwp, say);
 
+        return m;
+    }
+
+    /// <summary>bug-768: <c>--generator-alt</c> — der Generator bis 0.7.0
+    /// (MapTerrain + Faecherwurf je Zelle + rechteckige Startplateaus) als
+    /// Nullmodell fuer <c>--map-check</c>.</summary>
+    public static bool GeneratorAlt
+        => Array.IndexOf(Core.CommandLine.Args, "--generator-alt") >= 0;
+
+    /// <summary>bug-772: <c>--generator-sec2-alt</c> — sec2 zellweise aus der
+    /// Gelaendeklasse (MapFactory.Paint) statt als Eckraster.</summary>
+    public static bool Sec2Alt
+        => Array.IndexOf(Core.CommandLine.Args, "--generator-sec2-alt") >= 0;
+
+    /// <summary>
+    /// ⭐ 11.11.2026 — bug-768/769/770: der Eck-Generator. Gelaende aus
+    /// <see cref="MapLandscape"/>, dann dieselben Startbasen und Truppen wie der
+    /// alte Weg, und Vorkommen/Neutrale GLEICHMAESSIG auf die Startgebiete
+    /// verteilt (<c>fair</c>, UNSERE SETZUNG).
+    /// </summary>
+    private static CwmFile BuildCorners(CwmFile m, int width, int height, TileCorners tc,
+                                        Action<string> say, int players, int troop,
+                                        double waterShare, uint seed, TileSeams? seams,
+                                        CwpFile? cwp, int neutrals)
+    {
+        int want = players <= 0 ? 0 : Math.Min(players, StartmarkeAlt ? 5 : PlayersMax);
+        var L = MapLandscape.Build(width, height, seed, waterShare, want, PlotW, PlotH, tc, seams, say);
+        for (int r = 0; r < height; r++)
+            for (int c = 0; c < width; c++)
+            {
+                int i = r * width + c;
+                MapFactory.Paint(m, c, r, L.Code[i], L.Elev[i], (MapFactory.Ground)L.Class[i]);
+                m.SetCell(c, r, L.Code[i], L.Elev[i], L.Flag[i]);
+            }
+        // ⭐ 11.11.2026 — bug-772: sec2 ist ein ECKraster (257x257 Knoten), aus
+        // dem das Original selbst die Kachel rechnet (0x41FA10, im Nebel
+        // gezeigt) und an dem corners_carry (@0x4211A0) den Bauplatz misst.
+        // MapFactory.Paint schreibt es ZELLweise aus der Gelaendeklasse — im
+        // Fensterbild war das unter dem Nebel ein Mosaik aus Wasser- und
+        // Grasbloecken, auf alter wie neuer Karte gleich. Jetzt die gemessene
+        // sec2-Klasse je Ecke. Gegenschalter --generator-sec2-alt.
+        var zone = m.Sec(2);
+        if (zone != null && !Sec2Alt)
+        {
+            for (int y = 0; y <= height; y++)
+                for (int x = 0; x <= width; x++)
+                {
+                    int zi = x * MapFactory.ZoneStride + y;
+                    if (zi < zone.Length) zone[zi] = (byte)L.CornerSec[y * L.CornerW + x];
+                }
+            say("sec2 als Eckraster geschrieben (gemessene Klasse je Stoff, bug-772)");
+        }
+        if (seams != null) say(seams.Describe());
+
+        var starts = new List<Start>();
+        foreach (var (p, col, row) in L.Plots) starts.Add(new Start(p, col, row, PlotW, PlotH));
+        if (want > 0 && starts.Count < want)
+            say($"⚠ nur {starts.Count} von {want} Startplaetzen passen auf {width}x{height}");
+        int usedSlots = starts.Count > 0 ? Populate(m, L.Class, width, starts, troop, say, cwp) : 0;
+
+        var clear = new List<(int Col, int Row)>();
+        var fair = new List<(int Col, int Row)>();
+        foreach (var s in starts)
+        {
+            // ⚠ die PLATTENMITTE, nicht die linke obere Ecke: von der Ecke aus
+            // gemessen lag auf 09/4 Spieler neben jedem eigenen Werk gleich ein
+            // neutrales (die ebene, waldfreie Startzone war der beste Bauplatz)
+            clear.Add((s.Col + PlotW / 2, s.Row + PlotH / 2));
+            // das GEBIET eines Platzes von dort aus, wo das Spiel ihn hat: die
+            // Truppe unter der Basis (Heimpunkt aus den Einheiten,
+            // GefechtStartbasis). Mit der Plattenmitte kippten bei 8 Spielern
+            // die Gebietsgrenzen: Vorkommen [1 1 1 1 1 2 0 1] im Pruefstand.
+            fair.Add((s.Col + 3, s.Row + BaseFootH + 1));
+        }
+        MapNeutrals.Place(m, seed, cwp, usedSlots, clear, say, neutrals, fair);
+        MapDeposits.Place(m, seed, cwp, say, fair);
         return m;
     }
 
@@ -334,7 +429,7 @@ public static class MapGenerator
     /// naechste freie ist der, ab dem <see cref="MapNeutrals"/> weiterzaehlt.
     /// Ohne diese Zahl haetten die neutralen Gebaeude die Startbasen
     /// ueberschrieben, und zwar still.</summary>
-    private static int Populate(CwmFile m, MapTerrain t, List<Start> starts, int troop,
+    private static int Populate(CwmFile m, byte[] cls, int tw, List<Start> starts, int troop,
                                  Action<string> say, CwpFile? cwp = null)
     {
         int bldSlot = 0, units = 0, blds = 0;
@@ -367,7 +462,7 @@ public static class MapGenerator
             {
                 int uc = s.Col + (k % s.W), ur = s.Row + BaseFootH + 1 + k / s.W;
                 if (uc < 0 || uc >= m.Width || ur < 0 || ur >= m.Height) continue;
-                if (t.Class[ur * t.W + uc] > 1) continue;             // Wasser oder gesperrt
+                if (cls[ur * tw + uc] > 1) continue;                  // Wasser oder gesperrt
                 if (m.Sec(6) is { } imap)
                 {
                     int at = (uc * MapFactory.ImapStride + ur) * 2;
