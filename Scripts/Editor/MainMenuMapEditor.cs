@@ -23,7 +23,12 @@ using AkteEuropaReborn.Import;
 ///                [,quelle=&lt;x.CWM&gt;]   statt erzeugen: diese Originaldatei einlesen
 ///                [,oeffne=&lt;karte&gt;]   statt erzeugen: eine VORHANDENE Karte
 ///                                     aus map_*.json/map_*.entities.json
-///   --map-check=&lt;name&gt;
+///   ⭐ 11.11.2026 (bug-768..772): der ECK-GENERATOR ist der Regelweg
+///   (TileCorners + MapLandscape). Gegenschalter, je als eigener Parameter:
+///     --generator-alt            der Generator bis 0.7.0 (Nullmodell)
+///     --generator-korridor-aus   keine freien Linien zwischen Nachbarstarts
+///     --generator-sec2-alt       sec2 zellweise statt als Eckraster
+///   --map-check=&lt;name&gt;           mit »Generatorpruefung« (bug-771)
 ///   --map-check=&lt;name&gt;,rundlauf     oeffnen → speichern → Feld fuer Feld vergleichen
 ///   --map-check=alle,rundlauf       derselbe Rundlauf ueber jede Karte
 /// </code>

@@ -136,7 +136,66 @@ public static class MapDeposits
     /// <b>0 Bauplätze</b>. Mit dem Muster wird die ganze Grundfläche gefragt,
     /// also dasselbe, was der Bautechniker fragt.</para>
     /// </summary>
-    public static int Place(CwmFile m, uint seed, CwpFile? cwp, Action<string> say)
+    /// <summary>bug-770: die Bewerber nach Startgebiet (naechste Plattenmitte,
+    /// Gleichstand → kleinerer Platz) in je eine Schlange, Reihenfolge wie
+    /// uebergeben.</summary>
+    public static List<Queue<T>> FairQueues<T>(List<T> cand, IReadOnlyList<(int Col, int Row)> fair,
+                                               Func<T, (int Col, int Row)> pos)
+    {
+        var lists = new List<Queue<T>>();
+        for (int p = 0; p < fair.Count; p++) lists.Add(new Queue<T>());
+        foreach (var k in cand)
+        {
+            // nur Bewerber, die KLAR in einem Gebiet liegen (eigener Abstand
+            // hoechstens 85 % des zweitnaechsten) — sonst kippt die Zuordnung
+            // an der Grenze schon mit einer Zelle Versatz des Bezugspunkts
+            // (8 Spieler auf 128x128: Vorkommen [1 1 1 1 1 2 0 1])
+            var (c, r) = pos(k);
+            long d1 = long.MaxValue, d2 = long.MaxValue;
+            foreach (var f in fair)
+            {
+                long dx = c - f.Col, dy = r - f.Row, d = dx * dx + dy * dy;
+                if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+            }
+            if (fair.Count >= 2 && d1 > 0.85 * 0.85 * d2) continue;
+            lists[RegionOf((c, r), fair)].Enqueue(k);
+        }
+        return lists;
+    }
+
+    public static int RegionOf((int Col, int Row) at, IReadOnlyList<(int Col, int Row)> fair)
+    {
+        int best = 0; long bd = long.MaxValue;
+        for (int p = 0; p < fair.Count; p++)
+        {
+            long dx = at.Col - fair[p].Col, dy = at.Row - fair[p].Row;
+            long d = dx * dx + dy * dy;
+            if (d < bd) { bd = d; best = p; }
+        }
+        return best;
+    }
+
+    /// <summary>bug-770: in STRIKTEN RUNDEN austeilen — jede Runde bekommt jedes
+    /// Gebiet eins; findet ein Gebiet keinen Platz mehr, endet das Austeilen
+    /// nach dieser Runde. So unterscheiden sich die Gebiete um hoechstens eins
+    /// (zuerst stand hier »das aermste Gebiet zuerst, bis alle leer sind« —
+    /// gemessen auf 09/4 Spieler: neutrale Gebaeude [3 2 2 0]).</summary>
+    public static void DealFair<T>(List<Queue<T>> lists, int want, Func<int> count, Func<T, bool> tryPlace)
+    {
+        bool stop = false;
+        while (!stop && count() < want)
+        {
+            for (int p = 0; p < lists.Count && count() < want; p++)
+            {
+                bool placed = false;
+                while (lists[p].Count > 0 && !placed) placed = tryPlace(lists[p].Dequeue());
+                if (!placed) stop = true;
+            }
+        }
+    }
+
+    public static int Place(CwmFile m, uint seed, CwpFile? cwp, Action<string> say,
+                            IReadOnlyList<(int Col, int Row)>? fair = null)
     {
         m.Terra.Clear();
         var imap = m.Sec(6);
@@ -201,20 +260,37 @@ public static class MapDeposits
 
         long sq = (long)spacing * spacing;
         int anchorSum = 0, anchorMin = 9;
-        foreach (var k in cand)
+        bool TryPlace((uint Key, int Col, int Row, int Anchors) k)
         {
-            if (m.Terra.Count >= want) break;
-            bool tooClose = false;
             foreach (var (dc, dr, _) in m.Terra)
             {
                 long dx = k.Col - dc, dy = k.Row - dr;
-                if (dx * dx + dy * dy < sq) { tooClose = true; break; }
+                if (dx * dx + dy * dy < sq) return false;
             }
-            if (tooClose) continue;
             m.Terra.Add((k.Col, k.Row, Amount));
             anchorSum += k.Anchors;
             anchorMin = Math.Min(anchorMin, k.Anchors);
+            return true;
         }
+        // ⭐ 11.11.2026 — bug-770: GLEICH VIELE JE STARTGEBIET. Mit
+        // <paramref name="fair"/> (Plattenmitten der Startplaetze) bekommt jedes
+        // Gebiet (naechster Startplatz) reihum eins, und es sind mindestens so
+        // viele wie Spieler, aufgerundet auf ein Vielfaches — UNSERE SETZUNG
+        // (die Messlatte 0,23 je 1000 bleibt die Untergrenze). Ohne fair, also
+        // unter --generator-alt, der Weg bis 0.7.0.
+        if (fair is { Count: >= 2 })
+        {
+            want = Math.Max(want, fair.Count);
+            want = Math.Min(Most, (want + fair.Count - 1) / fair.Count * fair.Count);
+            var lists = FairQueues(cand, fair, x => (x.Col, x.Row));
+            DealFair(lists, want, () => m.Terra.Count, TryPlace);
+        }
+        else
+            foreach (var k in cand)
+            {
+                if (m.Terra.Count >= want) break;
+                TryPlace(k);
+            }
 
         int n = m.Terra.Count;
         say($"Vorkommen (UNSERE ZUTAT — im Original legt sie das Missionsskript, " +

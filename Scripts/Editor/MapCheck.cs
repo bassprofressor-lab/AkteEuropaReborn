@@ -314,6 +314,13 @@ public static class MapCheck
                     "bug-744); fuer die Erreichbarkeit nicht mehr gefragt");
         }
 
+        // ⭐ 11.11.2026 — bug-771: DIE GENERATORPRUEFUNG (Eckpassquote, isolierte
+        // Zellen, Erreichbarkeit, Abstandsstreuung, Bauplatz, Verteilung). Auf
+        // einer gelieferten Karte nur Auskunft (= Messlatte), auf einer erzeugten
+        // (Mission »Editor …«) mit Urteil.
+        bad += GeneratorCriteria(root, ent.RootElement, w, h, tileset, code, ground, elev,
+                                 buildable, say);
+
         // ---- Startmarken und Erreichbarkeit (bis 0.6.13, nur --mapcheck-alt) -
         var starts = new List<(int Slot, int Col, int Row, int Type)>();
         if (CheckAlt)
@@ -1041,6 +1048,272 @@ public static class MapCheck
             for (int x = 0; x < img.GetWidth(); x++)
                 if (img.GetPixel(x, y).A > 0.5f) n++;
         return n;
+    }
+
+    // ========================================================================
+    //  bug-771 (11.11.2026): die Generatorpruefung
+    // ========================================================================
+
+    /// <summary>Schwellen des Urteils auf einer ERZEUGTEN Karte. UNSERE SETZUNG,
+    /// jeweils gegen die Messlatte der gelieferten Karten gelegt: Passquote der
+    /// Eckstoesse dort 99,959..100,000 % (37 Kachelsaetze).</summary>
+    public const double PassMin = 99.0, SpreadMax = 0.20;
+
+    private static int GeneratorCriteria(JsonElement meta, JsonElement ent, int w, int h, int tileset,
+                                         int[] code, byte[] ground, int[] elev, bool[] buildable,
+                                         Action<string> say)
+    {
+        int n = w * h, bad = 0;
+        bool erzeugt = meta.TryGetProperty("mission", out var mi) &&
+                       (mi.GetString() ?? "").StartsWith("Editor ", StringComparison.Ordinal);
+        var fails = new List<string>();
+        say(erzeugt ? "  -- Generatorpruefung (bug-771), Karte ERZEUGT: mit Urteil"
+                    : "  -- Generatorpruefung (bug-771), Karte GELIEFERT: Messlatte, kein Urteil");
+
+        // (1) Eckpassquote gegen das gelernte Eckmodell
+        var tc = TileCorners.Learn(tileset, _ => { });
+        if (tc == null) say("    Eckpassquote: kein Eckmodell fuer diesen Kachelsatz");
+        else
+        {
+            var (ok, nok, unk) = tc.Measure(w, h, code);
+            double pc = 100.0 * ok / Math.Max(1, ok + nok);
+            double orig = 100.0 * tc.PassOk / Math.Max(1, tc.PassOk + tc.PassBad);
+            say($"    Eckpassquote: {pc:0.000} % von {ok + nok} Eckstoessen ({nok} passen nicht, " +
+                $"{unk} Paare mit unbekannter Kachel)  [Originale dieses Satzes {orig:0.000} %, " +
+                "37 Saetze 99,959..100,000 %]");
+            if (erzeugt && pc < PassMin) fails.Add($"Eckpassquote {pc:0.00} % < {PassMin}");
+
+            // (1b) WASSERFLECKEN IM ECKRASTER — die »blauen Punkte im Festland«
+            // der Spielermeldung. Jede Ecke (x,y) bekommt den Stoff, den die
+            // Mehrheit der bis zu vier anliegenden Bodenkacheln dort zeigt; dann
+            // werden die Vierergebiete der Wasserecken gezaehlt, die KLEINER als
+            // 4 Ecken sind. ⚠ Nicht »Wasserecke ohne Wasserzelle daneben«: das
+            // zaehlt auch die Baeche aus reinen Uebergangskacheln, die die
+            // Originale tragen (NET07 298, NET02 194) — kein Unterschied zum
+            // alten Generator (111), also kein Zaehler.
+            int cw = w + 1, ch = h + 1;
+            var wc = new bool[cw * ch];
+            for (int y = 0; y < ch; y++)
+                for (int x = 0; x < cw; x++)
+                {
+                    int yes = 0, no = 0;
+                    void V(int c, int r, int k)
+                    {
+                        if (c < 0 || c >= w || r < 0 || r >= h) return;
+                        int code0 = code[r * w + c];
+                        if (code0 >= TileCorners.GroundMax || !tc.Knows(code0)) return;
+                        if (tc.Corner(code0, k) == tc.WaterLabel) yes++; else no++;
+                    }
+                    V(x - 1, y - 1, 3); V(x, y - 1, 2); V(x - 1, y, 1); V(x, y, 0);
+                    wc[y * cw + x] = yes > 0 && yes >= no;
+                }
+            var (_, spots) = Tiny(cw, ch, wc, 4);
+            say($"    Wasserflecken im Eckraster unter 4 Ecken (blaue Punkte im Land): {spots}");
+            if (erzeugt && spots > 0) fails.Add($"{spots} Wasserflecken < 4 Ecken");
+        }
+
+        // (2) isolierte und winzige Wasser-/Landgebiete
+        var waterM = new bool[n]; var landM = new bool[n];
+        for (int i = 0; i < n; i++) { waterM[i] = ground[i] == 2; landM[i] = ground[i] != 2; }
+        var (wIso, wTiny) = Tiny(w, h, waterM, 4);
+        var (lIso, lTiny) = Tiny(w, h, landM, 4);
+        say($"    isolierte Zellen (kein Vierer-Nachbar gleicher Art): Wasser {wIso}, Land {lIso}; " +
+            $"Gebiete unter 4 Zellen: Wasser {wTiny}, Land {lTiny}");
+        if (erzeugt && (wIso > 0 || lIso > 0 || wTiny > 0))
+            fails.Add($"isolierte/winzige Gebiete (Wasser {wIso}/{wTiny}, Land {lIso})");
+
+        // (3) Startplaetze: Schwerpunkt der Einheiten je Platz 0..7
+        var cells = new SortedDictionary<int, List<(int Col, int Row)>>();
+        foreach (var e in ent.GetProperty("entities").EnumerateArray())
+        {
+            int owner = e.TryGetProperty("owner", out var ow) ? ow.GetInt32() : -1;
+            if (owner is < 0 or > 7) continue;
+            if (!cells.TryGetValue(owner, out var l)) cells[owner] = l = new();
+            l.Add((e.GetProperty("col").GetInt32(), e.GetProperty("row").GetInt32()));
+        }
+        var players = new List<int>(cells.Keys);
+        var cen = new List<(int Col, int Row)>();
+        foreach (int p in players)
+        {
+            double sc = 0, sr = 0;
+            foreach (var (c, r) in cells[p]) { sc += c; sr += r; }
+            cen.Add(((int)Math.Round(sc / cells[p].Count), (int)Math.Round(sr / cells[p].Count)));
+        }
+        if (players.Count < 2) say($"    Startplaetze: {players.Count} — keine Paarpruefung");
+        else
+        {
+            // Erreichbarkeit fuer FAHRZEUGE (nur frei), Fahrweglaenge je Paar
+            int unreach = 0;
+            var road = new double[players.Count, players.Count];
+            for (int a = 0; a < players.Count; a++)
+            {
+                var dist = Steps(w, h, ground, cells[players[a]]);
+                for (int b = 0; b < players.Count; b++)
+                {
+                    if (a == b) continue;
+                    int best = int.MaxValue;
+                    // die Einheitenzelle selbst steht in der imap als belegt —
+                    // gefragt wird darum auch ihre Achterumgebung
+                    foreach (var (c, r) in cells[players[b]])
+                        for (int dr = -1; dr <= 1; dr++)
+                            for (int dc = -1; dc <= 1; dc++)
+                            {
+                                int nc = c + dc, nr = r + dr;
+                                if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                                if (dist[nr * w + nc] != int.MaxValue)
+                                    best = Math.Min(best, dist[nr * w + nc] + (dc != 0 || dr != 0 ? 1 : 0));
+                            }
+                    road[a, b] = best;
+                    if (best == int.MaxValue) unreach++;
+                }
+            }
+            var nnAir = new List<double>(); var nnRoad = new List<double>(); var edge = new List<double>();
+            var buildNear = new List<int>();
+            for (int a = 0; a < players.Count; a++)
+            {
+                double air = double.MaxValue, rd = double.MaxValue;
+                for (int b = 0; b < players.Count; b++)
+                {
+                    if (a == b) continue;
+                    double dx = cen[a].Col - cen[b].Col, dy = cen[a].Row - cen[b].Row;
+                    air = Math.Min(air, Math.Sqrt(dx * dx + dy * dy));
+                    rd = Math.Min(rd, road[a, b]);
+                }
+                nnAir.Add(air); nnRoad.Add(rd);
+                var (c0, r0) = cen[a];
+                edge.Add(Math.Min(Math.Min(c0, w - 1 - c0), Math.Min(r0, h - 1 - r0)));
+                int bn = 0;
+                for (int r = Math.Max(0, r0 - 12); r <= Math.Min(h - 1, r0 + 12); r++)
+                    for (int c = Math.Max(0, c0 - 12); c <= Math.Min(w - 1, c0 + 12); c++)
+                        if (buildable[r * w + c]) bn++;
+                buildNear.Add(bn);
+            }
+            double cvAir = Cv(nnAir), cvRoad = Cv(nnRoad), cvEdge = Cv(edge);
+            say($"    Startplaetze {players.Count}: Fahrzeug-Erreichbarkeit {players.Count * (players.Count - 1) - unreach} " +
+                $"von {players.Count * (players.Count - 1)} Paaren");
+            say($"    naechster Gegner Luftlinie [{Join(nnAir)}] Streuung {cvAir:0.000}; Fahrweg [{Join(nnRoad)}] " +
+                $"Streuung {cvRoad:0.000}; Randabstand [{Join(edge)}] Streuung {cvEdge:0.000}  " +
+                $"(Streuung = Standardabweichung/Mittel; Urteil ≤ {SpreadMax})");
+            say($"    Bauplatzzellen im Umkreis 12 je Start: [{string.Join(" ", buildNear)}]");
+            if (erzeugt)
+            {
+                if (unreach > 0) fails.Add($"{unreach} Paare nicht per Fahrzeug erreichbar");
+                if (cvAir > SpreadMax || cvRoad > SpreadMax) fails.Add($"Abstandsstreuung {Math.Max(cvAir, cvRoad):0.000}");
+                if (cvEdge > SpreadMax * 2) fails.Add($"Randabstand-Streuung {cvEdge:0.000}");
+                foreach (int bn in buildNear) if (bn < 150) { fails.Add($"Bauplatz am Start nur {bn}"); break; }
+            }
+
+            // Verteilung: Vorkommen und neutrale Gebaeude je Startgebiet
+            var dep = new int[players.Count];
+            if (meta.TryGetProperty("terra", out var terra) && terra.ValueKind == JsonValueKind.Array)
+                foreach (var t in terra.EnumerateArray())
+                {
+                    var it = t.EnumerateArray();
+                    it.MoveNext(); int c = it.Current.GetInt32();
+                    it.MoveNext(); int r = it.Current.GetInt32();
+                    dep[MapDeposits.RegionOf((c, r), cen)]++;
+                }
+            var neu = new int[players.Count];
+            foreach (var b in ent.GetProperty("buildings").EnumerateArray())
+            {
+                int type = b.GetProperty("type").GetInt32(), owner = b.GetProperty("owner").GetInt32();
+                if (type < 1 || type > 16 || owner is >= 0 and <= 7) continue;
+                if (!b.TryGetProperty("col", out var bc) || !b.TryGetProperty("row", out var br)) continue;
+                neu[MapDeposits.RegionOf((bc.GetInt32(), br.GetInt32()), cen)]++;
+            }
+            say($"    je Startgebiet: Vorkommen [{string.Join(" ", dep)}], neutrale Gebaeude [{string.Join(" ", neu)}]");
+            if (erzeugt)
+            {
+                if (Spread(dep) > 1) fails.Add($"Vorkommen ungleich [{string.Join(" ", dep)}]");
+                if (Spread(neu) > 1) fails.Add($"neutrale Gebaeude ungleich [{string.Join(" ", neu)}]");
+            }
+        }
+
+        if (erzeugt)
+        {
+            say(fails.Count == 0 ? "    Generatorpruefung: BESTANDEN"
+                                 : $"    Generatorpruefung: DURCHGEFALLEN — {string.Join("; ", fails)}");
+            bad += fails.Count;
+        }
+        return bad;
+
+        static string Join(List<double> v) => string.Join(" ", v.ConvertAll(x => x == int.MaxValue ? "∞" : $"{x:0}"));
+        static int Spread(int[] v) { int lo = int.MaxValue, hi = 0; foreach (int x in v) { lo = Math.Min(lo, x); hi = Math.Max(hi, x); } return hi - lo; }
+    }
+
+    private static double Cv(List<double> v)
+    {
+        if (v.Count == 0) return 0;
+        double m = 0; foreach (double x in v) m += Math.Min(x, 1e6);
+        m /= v.Count;
+        if (m <= 0) return 0;
+        double s = 0; foreach (double x in v) s += (Math.Min(x, 1e6) - m) * (Math.Min(x, 1e6) - m);
+        return Math.Sqrt(s / v.Count) / m;
+    }
+
+    /// <summary>Zellen ohne Vierer-Nachbarn derselben Maske, und Gebiete unter
+    /// <paramref name="min"/> Zellen.</summary>
+    private static (int Iso, int Tiny) Tiny(int w, int h, bool[] mask, int min)
+    {
+        int iso = 0, tiny = 0;
+        var seen = new bool[w * h];
+        var q = new Queue<int>();
+        int[] dc = { 1, -1, 0, 0 }, dr = { 0, 0, 1, -1 };
+        for (int s = 0; s < w * h; s++)
+        {
+            if (!mask[s] || seen[s]) continue;
+            int size = 0;
+            q.Enqueue(s); seen[s] = true;
+            while (q.Count > 0)
+            {
+                int i = q.Dequeue(); size++;
+                int c = i % w, r = i / w;
+                for (int k = 0; k < 4; k++)
+                {
+                    int nc = c + dc[k], nr = r + dr[k];
+                    if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                    int j = nr * w + nc;
+                    if (!mask[j] || seen[j]) continue;
+                    seen[j] = true; q.Enqueue(j);
+                }
+            }
+            if (size == 1) iso++;
+            if (size < min) tiny++;
+        }
+        return (iso, tiny);
+    }
+
+    /// <summary>Fahrweglaenge in Schritten fuer gewoehnliches Fahrwerk (nur frei),
+    /// acht Nachbarn mit der Eckenregel wie <see cref="Flood8"/>.</summary>
+    private static int[] Steps(int w, int h, byte[] ground, List<(int Col, int Row)> from)
+    {
+        var d = new int[w * h];
+        Array.Fill(d, int.MaxValue);
+        var q = new Queue<int>();
+        foreach (var (c, r) in from)
+        {
+            if (c < 0 || c >= w || r < 0 || r >= h) continue;
+            int i = r * w + c;
+            if (d[i] == 0) continue;
+            d[i] = 0; q.Enqueue(i);
+        }
+        int[] dc = { 1, 1, 0, -1, -1, -1, 0, 1 }, dr = { 0, 1, 1, 1, 0, -1, -1, -1 };
+        bool Weich(int c, int r) => c >= 0 && c < w && r >= 0 && r < h && ground[r * w + c] <= 1;
+        while (q.Count > 0)
+        {
+            int i = q.Dequeue();
+            int c = i % w, r = i / w;
+            for (int k = 0; k < 8; k++)
+            {
+                int nc = c + dc[k], nr = r + dr[k];
+                if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                int j = nr * w + nc;
+                if (d[j] != int.MaxValue || ground[j] != 0) continue;
+                if ((k & 1) != 0 && (!Weich(nc, r) || !Weich(c, nr))) continue;
+                d[j] = d[i] + 1; q.Enqueue(j);
+            }
+        }
+        return d;
     }
 
     /// <summary>bug-744: <c>--mapcheck-alt</c> — Startplatz aus den Marken 0x70..0x74

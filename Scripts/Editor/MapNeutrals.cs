@@ -156,7 +156,8 @@ public static class MapNeutrals
     /// <param name="want">−1 = aus der gemessenen Dichte rechnen.</param>
     public static int Place(CwmFile m, uint seed, CwpFile? cwp, int firstSlot,
                             IReadOnlyList<(int Col, int Row)> keepClear,
-                            Action<string> say, int want = -1)
+                            Action<string> say, int want = -1,
+                            IReadOnlyList<(int Col, int Row)>? fair = null)
     {
         var imap = m.Sec(6);
         var zone = m.Sec(2);
@@ -263,9 +264,26 @@ public static class MapNeutrals
         }
         var target = (int[])need.Clone();
 
-        foreach (var cd in cand)
+        // ⭐ 11.11.2026 — bug-770: mit <paramref name="fair"/> reihum je
+        // Startgebiet und auf ein Vielfaches der Spielerzahl aufgerundet —
+        // UNSERE SETZUNG; ohne (--generator-alt) der Weg bis 0.7.0.
+        if (fair is { Count: >= 2 })
         {
-            if (placed.Count >= want || slot >= SlotsMax) break;
+            int round = (want + fair.Count - 1) / fair.Count * fair.Count;
+            want = Math.Min(round, Math.Max(0, SlotsMax - firstSlot));
+            var lists = MapDeposits.FairQueues(cand, fair, x => (x.Col, x.Row));
+            MapDeposits.DealFair(lists, want, () => placed.Count, TryPlace);
+        }
+        else
+            foreach (var cd in cand)
+            {
+                if (placed.Count >= want || slot >= SlotsMax) break;
+                TryPlace(cd);
+            }
+
+        bool TryPlace((uint Key, int Col, int Row) cd)
+        {
+            if (slot >= SlotsMax) return false;
             tried++;
 
             bool tooClose = false;
@@ -280,7 +298,7 @@ public static class MapNeutrals
                     long dx = cd.Col - sc, dy = cd.Row - sr;
                     if (dx * dx + dy * dy < sqStart) { tooClose = true; break; }
                 }
-            if (tooClose) { blockedNear++; continue; }
+            if (tooClose) { blockedNear++; return false; }
 
             // Die noch offenen Arten, in einer aus der Zelle gewuerfelten
             // Reihenfolge — probiert wird, bis eine passt. ⚠ UNSERE Setzung
@@ -288,7 +306,7 @@ public static class MapNeutrals
             // von jeder.
             var order = new List<int>();
             for (int i = 0; i < kinds.Count; i++) if (need[i] > 0) order.Add(i);
-            if (order.Count == 0) break;
+            if (order.Count == 0) return false;
             order.Sort((a, b) =>
             {
                 uint ha = MapTerrain.Hash(cd.Col * 61 + a, cd.Row, seed ^ 0xB17DAu);
@@ -313,17 +331,18 @@ public static class MapNeutrals
                     }
                 if (ok) { chosen = i; break; }
             }
-            if (chosen < 0) { blockedSite++; continue; }
+            if (chosen < 0) { blockedSite++; return false; }
 
             var pick = kinds[chosen];
             if (!MapFactory.PutBuilding(m, slot, pick.K.Typ, NeutralOwner, 0,
                                         cd.Col, cd.Row, pick.FootW, pick.FootH,
                                         pick.K.Hp, "", pick.K.Doors,
                                         cwp: cwp))          // bug-742: Musterstempel
-                continue;
+                return false;
             placed.Add((cd.Col, cd.Row, pick.K.Typ));
             need[chosen]--;
             slot++;
+            return true;
         }
 
         // Soll GEGEN Ist je Art. Nur »Ist« zu drucken hiesse, einen Ausfall
