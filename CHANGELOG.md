@@ -52,6 +52,16 @@ your own copy of the 1997 game.
   everything produced within 40 ms goes out as one packet (bug-762). Without
   this the server rejected the match after a few seconds ("more than 60 frames
   per second"). The 6-tick lead absorbs the extra 40 ms.
+- **Your own maps in multiplayer.** Maps from the map editor now appear in the
+  skirmish and multiplayer list ("Eigene Karte: …"). When the host picks one,
+  the game sends it packed to every player before the start (a 96×96 map is
+  about 100 KB). The other player stores it under a name of its own, so it never
+  overwrites a map of the same name, and bakes the map picture from their own
+  game data. Every machine computes from the same bytes. Measured online and on
+  LAN: same starting checksum, 1200 ticks without divergence.
+- **The lobby connects by itself.** With a saved name the window signs in right
+  away; it asks for a name only the first time. "Name ändern" is in the room
+  list.
 - **Back to the lobby after the match.** Leaving an online match no longer
   drops you in the main menu but back in the lobby, still signed in, with a line
   saying how the match ended.
@@ -96,11 +106,37 @@ your own copy of the 1997 game.
   skirmish or multiplayer with map, or map editor, and for how long. The game
   only talks to the Discord app on your own machine and changes nothing in the
   game. You can turn it off under *Settings* → "Discord".
-- **"Discord beitreten" in the start menu** opens the invite to our Discord
-  server in your browser.
+- **Discord button bottom left in the start menu** — the familiar blue button
+  with the logo. It opens the invite to our Discord server in your browser.
 
 ### Map editor
 
+- **A new map generator: maps look like the original's** (bug-768). Generated
+  maps showed bright triangles, single water specks inland and rectangular
+  slope blocks. The reason: the original's maps are a corner tile system. Each
+  tile carries a material at its four corners (water, beach, main ground, extra
+  material), and neighbouring tiles must match at the corners. In all 37 tile
+  sets 99.96 to 100 % of corners match. The old generator rolled every cell on
+  its own (78 to 90 % matching). The new one learns each tile's corners from the
+  original maps, lays water and grounds as connected areas on a corner grid and
+  then picks only tiles whose corners fit. Measured: 100 % matching corners and
+  no more water specks, in all nine test maps across four tile sets.
+- **No more mosaic under the fog** (bug-772). From the same four materials the
+  original also computes the picture under the fog and the building ground. The
+  editor wrote them wrongly cell by cell, so a mosaic of water and grass blocks
+  lay under the fog — very likely the "wild water".
+- **Hills with corners and diagonals** (bug-769): slope tiles 9 to 14 are the
+  diagonals. The editor only knew the four straight ones, hence the boxy
+  rectangles.
+- **Multiplayer-ready maps for 2 to 8 players** (bug-770). Start positions are
+  placed first, symmetrically, each on flat buildable land. Every start can reach
+  every other by land, with free paths between neighbouring starts. Deposits and
+  neutral buildings are dealt out per start area in turn (difference at most
+  one); before, two of four start areas had no deposit at all.
+- **Test bench for generated maps** (bug-771): `--map-check` now measures
+  matching corners, water specks, reachability of all starts, fairness of the
+  paths and building ground around each start, with the original maps as the
+  yardstick. Counter-switch `--generator-alt` brings back the old generator.
 - **Opening no longer damages a shipped map** (bug-739). Until now *Open
   existing* immediately wrote the map back under the same name, losing bridges,
   ramps, the forest table and the Terranium sites — in missions 14, 17, 20 and
@@ -152,6 +188,8 @@ your own copy of the 1997 game.
 - **On LAN players carry no names**; they are "Spieler 1, 2, …".
 - **Copies of shipped maps** do not carry bridges, ramps, forest table and
   Terranium sites yet.
+- **The editor's terrain brush** still writes the materials under the fog cell
+  by cell; spots painted with the brush can look patchy under the fog.
 - The Discord status has barely been tried on real machines. If it does not
   show up for you, tell us on Discord.
 

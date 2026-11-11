@@ -57,6 +57,17 @@ bisher nur dort beschrieben.*
   (bug-762). Ohne das lehnte der Server die Partie nach wenigen Sekunden ab
   (»mehr als 60 Rahmen je Sekunde«). Der Vorlauf von 6 Takten fängt die
   zusätzlichen 40 ms auf.
+- **Eigene Karten im Mehrspieler.** Karten aus dem Karteneditor stehen jetzt
+  in der Kartenliste von Gefecht und Multiplayer (»Eigene Karte: …«). Spielt
+  der Gastgeber eine davon, schickt das Spiel sie vor dem Start gepackt an alle
+  Mitspieler (eine 96×96-Karte sind etwa 100 KB). Der Mitspieler legt sie unter
+  einem eigenen Namen ab, damit sie nie eine gleichnamige eigene Karte
+  überschreibt, und backt das Kartenbild aus seinen eigenen Spieldaten.
+  Gerechnet wird auf allen Rechnern aus denselben Bytes. Gemessen online und im
+  LAN: gleiche Anfangsprüfsumme, 1200 Takte ohne Abweichung.
+- **Die Lobby verbindet von selbst.** Ist ein Name gespeichert, meldet sich das
+  Fenster sofort an; nach dem Namen fragt es nur beim ersten Mal. »Name ändern«
+  steht in der Raumliste.
 - **Nach dem Spiel zurück in die Lobby.** Wer eine Online-Partie verlässt,
   landet nicht mehr im Hauptmenü, sondern gleich wieder angemeldet in der
   Lobby. Dort steht, wie die Partie endete.
@@ -104,11 +115,39 @@ bisher nur dort beschrieben.*
   Das Spiel spricht dafür nur mit der Discord-App auf deinem Rechner und
   verändert am Spiel nichts. Abschalten kannst du es in den *Einstellungen*
   unter »Discord«.
-- **»Discord beitreten« im Startmenü** öffnet die Einladung zu unserem
-  Discord-Server im Browser.
+- **Discord-Knopf unten links im Startmenü** — der bekannte blaue Knopf mit
+  Logo. Er öffnet die Einladung zu unserem Discord-Server im Browser.
 
 ### Karteneditor
 
+- **Ein neuer Kartengenerator: Karten sehen aus wie die des Originals**
+  (bug-768). Erzeugte Karten zeigten helle Dreiecke, einzelne Wasserflecken
+  im Festland und rechteckige Hangblöcke. Der Grund: Die Karten des Originals
+  sind ein Eck-Kachelsystem. Jede Kachel trägt an ihren vier Ecken einen Stoff
+  (Wasser, Strand, Hauptboden, Zusatzstoff), und Nachbarkacheln müssen an den
+  Ecken zusammenpassen. In allen 37 Kachelsätzen passen 99,96 bis 100 % der
+  Ecken. Der alte Generator würfelte jede Zelle einzeln (78 bis 90 % passend).
+  Der neue lernt die Ecken jeder Kachel aus den Originalkarten, legt Wasser und
+  Böden als zusammenhängende Flächen auf ein Eckraster und wählt dann nur
+  Kacheln, deren Ecken passen. Gemessen: 100 % passende Ecken und keine
+  Wasserflecken mehr, in allen neun Probekarten über vier Kachelsätze.
+- **Kein Mosaik mehr unter dem Nebel** (bug-772). Aus denselben vier Stoffen
+  rechnet das Original auch das Bild unter dem Nebel und den Bauplatz. Der
+  Editor schrieb sie zellweise falsch, darum lag unter dem Nebel ein Mosaik aus
+  Wasser- und Grasblöcken. Das war sehr wahrscheinlich das »wilde Wasser«.
+- **Hügel mit Ecken und Diagonalen** (bug-769): Die Hangkacheln 9 bis 14 sind
+  die Diagonalen. Der Editor kannte nur die vier Geraden, daher die kantigen
+  Rechtecke.
+- **Mehrspielertaugliche Karten für 2 bis 8 Spieler** (bug-770). Die
+  Startplätze werden zuerst gesetzt, symmetrisch verteilt, jeder auf ebenem,
+  baubarem Land. Jeder Startplatz ist von jedem anderen über Land erreichbar,
+  zwischen benachbarten Plätzen gibt es freie Wege. Vorkommen und neutrale
+  Gebäude werden reihum je Startgebiet verteilt (Unterschied höchstens eins).
+  Vorher standen bei vier Spielern zwei Startgebiete ohne Vorkommen da.
+- **Prüfstand für erzeugte Karten** (bug-771): `--map-check` misst jetzt
+  passende Ecken, Wasserflecken, Erreichbarkeit aller Startplätze, Fairness der
+  Wege und den Bauplatz um jeden Start, mit den Originalkarten als Messlatte.
+  Gegenschalter `--generator-alt` holt den alten Generator zurück.
 - **Öffnen beschädigt keine gelieferte Karte mehr** (bug-739). Bisher schrieb
   *Vorhandene öffnen* die Karte sofort unter demselben Namen zurück. Dabei
   gingen Brücken, Rampen, die Waldtafel und die Terranium-Plätze verloren, in
@@ -161,6 +200,9 @@ bisher nur dort beschrieben.*
 - **Im LAN tragen die Spieler keine Namen**, sie heißen »Spieler 1, 2, …«.
 - **Kopien gelieferter Karten** tragen Brücken, Rampen, Waldtafel und
   Terranium-Plätze noch nicht mit.
+- **Der Geländepinsel des Editors** schreibt die Stoffe unter dem Nebel noch
+  zellweise; mit dem Pinsel bemalte Stellen können unter dem Nebel fleckig
+  aussehen.
 - Die Discord-Anzeige ist an echten Rechnern noch kaum erprobt. Wenn sie bei dir
   nicht erscheint, sag es uns auf Discord.
 
