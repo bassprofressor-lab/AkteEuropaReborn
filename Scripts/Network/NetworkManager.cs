@@ -751,7 +751,7 @@ public partial class NetworkManager : Node
         s.Slot = slots;
 
         // ⭐ 11.11.2026: eine eigene Karte reist mit — ihre Pakete VOR dem Sitzungspaket.
-        if (!NetzKarte.IstMitgeliefert(s.Map) && NetzKarte.Vorhanden(s.Map))
+        if (!HatSchalter("--netzkarte-aus") && !NetzKarte.IstMitgeliefert(s.Map) && NetzKarte.Vorhanden(s.Map))
         {
             s.EigeneKarte = true;
             s.KartenSumme = NetzKarte.Pruefsumme(s.Map);
