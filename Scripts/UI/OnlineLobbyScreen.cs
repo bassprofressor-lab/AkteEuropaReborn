@@ -105,6 +105,15 @@ public partial class OnlineLobbyScreen : Control
         var create = new Button { Text = "RAUM ERÖFFNEN" };
         create.Pressed += CreateRoom;
         _rooms.AddChild(create);
+        var rename = new Button { Text = "NAME ÄNDERN", Flat = true };
+        rename.Pressed += () =>
+        {
+            NetworkManager.Cancel("Name ändern");
+            _rooms.Visible = _room.Visible = false;
+            _login.Visible = true;
+            _name.GrabFocus();
+        };
+        _rooms.AddChild(rename);
         _rooms.AddChild(new Label
         {
             Text = "Karte, Techstandard, Konto und Rohstoffe stellst du VORHER im Gefechtsschirm ein; " +
@@ -160,7 +169,13 @@ public partial class OnlineLobbyScreen : Control
             else if (a.StartsWith("--lobby-shot=")) _shotPrefix = a["--lobby-shot=".Length..];
         }
         if (Meldung.Length > 0) _chat.AddText($"— {Meldung}\n");
-        if (AutoConnect && NetworkManager.Lobby == null) CallDeferred(nameof(Connect));
+        // ⭐ 11.11.2026 (Spielerwunsch): mit gespeichertem Namen gleich verbinden — die
+        // Namensabfrage kommt nur beim ersten Mal oder wenn die Verbindung scheitert.
+        if (NetworkManager.Lobby == null && Settings.OnlineName.Length > 0)
+        {
+            _login.Visible = false;
+            CallDeferred(nameof(Connect));
+        }
         if (AutoConnect) _probeRoom = "";        // nach der Partie: nicht noch einmal eröffnen
         if (_probeRoom.Length > 0)
         {
