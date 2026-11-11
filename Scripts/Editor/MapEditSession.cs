@@ -30,6 +30,13 @@ using AkteEuropaReborn.Import;
 /// Knopf »VORHANDENE OEFFNEN« im <see cref="MapEditorScreen"/> und ueber
 /// <c>--map-new=&lt;name&gt;,0,0,0,oeffne=&lt;karte&gt;</c>.</para>
 ///
+/// <para>⚠ <b>11.11.2026 (bug-739):</b> gelieferte Karten werden nur noch als
+/// KOPIE geoeffnet (<see cref="MapOpen.IsDelivered"/>), und das Oeffnen einer
+/// eigenen Karte schreibt nichts mehr — die Zahlen unten (»67 Karten,
+/// 0 Abweichungen«) stammen vom 15.08. und sind VERALTET: seit Bruecken, Rampen,
+/// Zeichenlage und sec38 ausgegeben werden, liest der Rueckweg sie nicht zurueck
+/// (Bericht karteneditor-abgleich-opus.md M1/M10, Paket E4).</para>
+///
 /// <para><b>Und der Preis dafuer ist gemessen.</b> <see cref="MapRound"/> oeffnet
 /// eine Karte, speichert sie ohne jede Aenderung und haelt das Ergebnis Feld
 /// fuer Feld gegen das Original — <c>--map-check=&lt;name&gt;,rundlauf</c>. Ueber
@@ -175,6 +182,15 @@ public static class MapEditSession
     public static string? Save(Action<string> say)
     {
         if (Map == null || Cwp == null || Pal == null) { say("Editor: nichts zu speichern"); return null; }
+        // ⭐ 11.11.2026 — bug-739 (E1): zweite Sperre hinter MapNew. Eine
+        // GELIEFERTE Karte wird nie unter ihrem eigenen Namen zurueckgeschrieben
+        // (der Rueckweg verliert sec17/18/20/21/38). Gegenschalter --editor-oeffnen-alt.
+        if (MapOpen.IsDelivered(Name) && !MapOpen.OeffnenAlt)
+        {
+            say($"Editor: {Name} ist eine gelieferte Karte und wird NICHT ueberschrieben — " +
+                "ueber »VORHANDENE OEFFNEN« entsteht eine Kopie");
+            return null;
+        }
         // ⚠ MapGenerator.Write gibt das VERZEICHNIS zurueck, nicht den
         // Kartennamen — gemerkt, weil der Prueflauf »gespeichert als
         // C:/…/data/Maps« meldete. Wer den Rueckgabewert als Namen

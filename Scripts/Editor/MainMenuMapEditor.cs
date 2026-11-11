@@ -260,6 +260,33 @@ public partial class MainMenu
                 $"{cwp.ObjectCount} Objekte)");
 
             string outName = name.StartsWith("map_") ? name : "map_" + name;
+            // ⭐ 11.11.2026 — bug-739 (Paket E1, M1): OEFFNEN SCHREIBT NICHT MEHR
+            // AN ORT UND STELLE. Bis 0.6.13 rief dieser Weg nach »oeffne=« immer
+            // MapGenerator.Write unter demselben Namen — schon das Oeffnen
+            // ueberschrieb die Karte, und der Rueckweg (MapOpen) verliert
+            // sec17/18/20/21/38. Jetzt:
+            //   * gelieferte Karte (map_NN, map_NETnn, map_DM_n, map_game007):
+            //     es wird eine KOPIE map_<x>_kopie[n] angelegt und bearbeitet;
+            //   * eigene Karte unter eigenem Namen: es wird beim Oeffnen GAR
+            //     NICHTS geschrieben — erst F5 im Pinsel speichert.
+            // Gegenschalter --editor-oeffnen-alt (alter Weg).
+            bool skipWrite = false;
+            if (open != null && !MapOpen.OeffnenAlt)
+            {
+                string openFull = MapOpen.FullName(open);
+                if (outName == openFull && MapOpen.IsDelivered(openFull))
+                {
+                    outName = MapOpen.CopyName(openFull);
+                    say($"{openFull} ist eine GELIEFERTE Karte — sie wird nicht angefasst. " +
+                        $"Bearbeitet wird die Kopie {outName}. ⚠ Die Kopie traegt Bruecken, " +
+                        "Rampen, Waldtafel und aufgeschlossene Vorkommen (sec17/18/20/21/38) " +
+                        "noch NICHT — der Rueckweg liest sie nicht (Paket E4).");
+                }
+                else if (outName == openFull)
+                {
+                    skipWrite = true;
+                }
+            }
             CwmFile m;
             // ⚠ Bodenblock und Kacheltabelle ueberleben die Weiche, weil der
             // GELAENDEPINSEL sie braucht: er muss beim Malen dieselbe Kachel
@@ -282,8 +309,12 @@ public partial class MainMenu
                 say($"Quelle {source ?? open}: {m.Width}x{m.Height}, Kachelsatz {m.Tileset:00}, " +
                     $"{m.Sections.Count} Abschnitte, Mission \"{m.Mission}\"");
                 if (open != null && MapOpen.FullName(open) == outName)
-                    say($"⚠ AN ORT UND STELLE: {outName} wird beim Speichern UEBERSCHRIEBEN. " +
-                        "Dass dabei nichts verlorengeht, prueft --map-check=" + outName + ",rundlauf");
+                    say(skipWrite
+                        ? $"{outName} geoeffnet, NICHTS geschrieben (bug-739). F5 im Pinsel " +
+                          "speichert an Ort und Stelle."
+                        : $"⚠ AN ORT UND STELLE: {outName} wird beim Speichern UEBERSCHRIEBEN " +
+                          "(--editor-oeffnen-alt). Was verlorengeht, zeigt --map-check=" +
+                          outName + ",rundlauf");
                 // ⚠ STUMM gelernt. Der Pinsel braucht die Tabelle auch auf
                 // diesem Weg, aber dieser Weg ist die GEGENPROBE des
                 // Schreibwegs: kaeme hier eine Zeile mehr heraus, waere nicht
@@ -331,7 +362,7 @@ public partial class MainMenu
                                        neutrals);
                 brushPal = palette; brushModel = model; brushSeams = seams;
             }
-            MapGenerator.Write(m, cwp, pal, outName, say);
+            if (!skipWrite) MapGenerator.Write(m, cwp, pal, outName, say);
             // ⚠ Die Karte im Speicher BLEIBT — nur sie laesst sich bearbeiten
             // und zurueckschreiben. Der Kartenbetrachter zeigt gleich die
             // geschriebenen Dateien; ohne diese Zeile waere danach nichts mehr
