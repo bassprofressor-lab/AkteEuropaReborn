@@ -120,6 +120,24 @@ bisher nur dort beschrieben.*
 
 ### Karteneditor
 
+- **Feste Kartengrößen statt Hochzählen** (bug-800). Sieben Größen zum
+  Anklicken, jede nach einer Karte des Originals gewählt: Klein 100×100,
+  Mittel 150×150 (wie NET03), Groß 168×168 (NET01), Sehr groß 230×230 (NET02),
+  Riesig 254×254 (NET05/06), Breit 254×125 (NET07), Hochformat 150×200 (NET04).
+  Die Spielerzahl 2 bis 8 wählt man per Knopf, und sie schlägt eine passende
+  Größe vor. Vorgabe ist 150×150 für 2 Spieler; 64×64 war zu klein für den
+  Mehrspieler. Eine eigene Größe gibt es weiter, ausklappbar.
+- **Kachelsätze sind beschrieben** (bug-801). Zu jedem Satz stehen ein Name,
+  eine kurze Beschreibung, ein Vorschaubild aus einer Originalkarte, die
+  Bodenstoffe als Farbfelder und die Originalkarten, die ihn benutzen (etwa
+  »Wüste mit Küste – NET02, NET07«). Die Namen sind unsere Zusammenfassung,
+  das Original kennt nur die Nummern.
+- **Ein Bedienfeld zum Bearbeiten** (bug-802). Bisher gab es nur zwei
+  Textzeilen und Tasten. Jetzt steht rechts ein Feld mit den Werkzeugen
+  (Bodenart, Höhe, Gebäude, Einheiten, Wald/Fels, Gleise, neu: Wegnehmen),
+  einer Bildliste der Auswahl mit Namen, den Besitzern in Parteifarben, einer
+  Zeile, die sagt, was Links- und Rechtsklick gerade tun, und den Knöpfen
+  Speichern, Spielen und Zurück. Alle alten Tasten gelten weiter.
 - **Ein neuer Kartengenerator: Karten sehen aus wie die des Originals**
   (bug-768). Erzeugte Karten zeigten helle Dreiecke, einzelne Wasserflecken
   im Festland und rechteckige Hangblöcke. Der Grund: Die Karten des Originals

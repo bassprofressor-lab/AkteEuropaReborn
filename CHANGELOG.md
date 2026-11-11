@@ -111,6 +111,22 @@ your own copy of the 1997 game.
 
 ### Map editor
 
+- **Fixed map sizes instead of counting up** (bug-800). Seven sizes to click,
+  each modelled on an original map: Small 100×100, Medium 150×150 (like NET03),
+  Large 168×168 (NET01), Very large 230×230 (NET02), Huge 254×254 (NET05/06),
+  Wide 254×125 (NET07), Portrait 150×200 (NET04). The player count 2 to 8 is a
+  button and suggests a matching size. The default is 150×150 for 2 players;
+  64×64 was too small for multiplayer. A custom size is still there, folded
+  away.
+- **Tile sets are described** (bug-801). Each set shows a name, a short
+  description, a preview cut from an original map, its ground materials as
+  colour swatches and the original maps that use it (e.g. "Wüste mit Küste –
+  NET02, NET07"). The names are our summary; the original only has numbers.
+- **A panel for editing** (bug-802). Until now there were two lines of text and
+  keys. Now a panel on the right holds the tools (ground, height, buildings,
+  units, forest/rock, rails, new: remove), a picture list of the selection with
+  names, the owners in party colours, a line saying what left and right click do
+  right now, and the buttons Save, Play and Back. All old keys still work.
 - **A new map generator: maps look like the original's** (bug-768). Generated
   maps showed bright triangles, single water specks inland and rectangular
   slope blocks. The reason: the original's maps are a corner tile system. Each
