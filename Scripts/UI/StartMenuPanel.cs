@@ -622,7 +622,7 @@ public partial class StartMenuPanel : Control
         // Version. Gewuenscht: »unten links platzieren anstatt innerhalb des menus«
         // — die Liste bleibt damit bei den Zeilen des Originals und unseren zwei
         // Spielmodi.
-        if (DiscordKlick != null) AddChild(DiscordKnopf(DiscordKlick));
+        if (DiscordKlick != null) { _discordKnopf = DiscordKnopf(DiscordKlick); AddChild(_discordKnopf); }
     }
 
     /// <summary>
@@ -689,6 +689,15 @@ public partial class StartMenuPanel : Control
 
     /// <summary>Was der Knopf »Discord beitreten« unten links tut; null = kein Knopf.</summary>
     public System.Action? DiscordKlick { get; init; }
+
+    private Button? _discordKnopf;
+
+    /// <summary>bug-803: der Knopf schimmerte durch Unterschirme (Editor, Gefecht …) — das
+    /// Menue blendet ihn aus, solange etwas ueber dem Startmenue liegt.</summary>
+    public bool DiscordSichtbar
+    {
+        set { if (_discordKnopf != null && _discordKnopf.Visible != value) _discordKnopf.Visible = value; }
+    }
 
     /// <summary>The build's version, from project.godot. Empty settings fall
     /// back to a dash rather than to an invented number.</summary>

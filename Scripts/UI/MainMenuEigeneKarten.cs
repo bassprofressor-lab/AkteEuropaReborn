@@ -46,4 +46,21 @@ public partial class MainMenu
         Maps.Add((map, EigenerTitel(map)));
         return Maps.Count - 1;
     }
+
+    /// <summary>bug-803: liegt ein sichtbarer Schirm ueber dem Startmenue (Unterschirm,
+    /// Gefechtsaufbau, Karteneditor …)? Jeder sichtbare Control-Knoten, der im Baum NACH dem
+    /// Startmenue haengt, wird darueber gezeichnet.</summary>
+    private bool UeberDemStartmenue()
+    {
+        if (_start == null) return false;
+        if (_setup is { Visible: true }) return true;
+        bool danach = false;
+        foreach (var k in GetChildren())
+        {
+            if (k == _start) { danach = true; continue; }
+            if (danach && k is Control { Visible: true } c && !c.IsQueuedForDeletion()
+                && c.Size.X > 200 && c.Size.Y > 200) return true;
+        }
+        return false;
+    }
 }

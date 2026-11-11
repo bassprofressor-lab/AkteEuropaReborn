@@ -593,6 +593,8 @@ public partial class MainMenu : Control
 
     public override void _Process(double delta)
     {
+        // bug-803: Discord-Knopf nur, wenn nichts ueber dem Startmenue liegt
+        if (_start != null) _start.DiscordSichtbar = !UeberDemStartmenue();
         if (_clickRow != null && _start != null && _clickIn-- <= 0)
         {
             string want = _clickRow;
