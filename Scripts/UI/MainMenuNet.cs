@@ -258,7 +258,7 @@ public partial class MainMenu
         // ZEIGEN und nicht das Gegenteil behaupten (Regel 11).
         if (NetworkManager.Active)
         {
-            _netMode.Selected = NetworkManager.Link!.IsHost ? 1 : 2;
+            _netMode.Selected = (NetworkManager.Link?.IsHost ?? NetworkManager.WantHost) ? 1 : 2;   // bug-760: online gibt es vor match_start noch keine Leitung
             _netDetails.Visible = true;
             _netMode.Disabled = true;
             _netAddr.Editable = false;

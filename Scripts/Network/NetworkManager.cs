@@ -50,8 +50,13 @@ public partial class NetworkManager : Node
     /// der Keim gehört gesetzt, BEVOR <c>NavGrid.Build</c> ihn braucht.</summary>
     public static bool SessionReady => Link is { SessionReady: true };
 
-    /// <summary>Läuft überhaupt ein Netzspiel?</summary>
-    public static bool Active => Link != null;
+    /// <summary>Läuft überhaupt ein Netzspiel? ⭐ 11.11.2026: auch schon, wenn der
+    /// Lobby-Draht steht und die Partie noch nicht begonnen hat — sonst startete das
+    /// Menü sofort einen Einzelspieler (MainMenuNet: »!Active -> OnStart«).</summary>
+    public static bool Active => Link != null || Lobby != null;
+
+    /// <summary>⭐ 11.11.2026 — der Draht zum Lobby-Server (Online-Mehrspieler), sonst null.</summary>
+    public static LobbyClient? Lobby { get; private set; }
 
     public static string Fault { get; private set; } = "";
 
@@ -83,6 +88,14 @@ public partial class NetworkManager : Node
     private ulong _t0;
     private bool _offered, _timedOut;
 
+    // ---- ⭐ 11.11.2026: online -------------------------------------------------
+    /// <summary><c>--net-online[=url]</c> zusammen mit <c>--net-host</c>/<c>--net-join</c>:
+    /// über den Lobby-Server statt ENet. <c>--net-raum=&lt;name&gt;</c> = Raumname (Gastgeber
+    /// eröffnet ihn, Mitspieler sucht ihn), <c>--net-name=</c> = Spielername.</summary>
+    private bool _wantOnline;
+    private string _onlineUrl = LobbyClient.StandardUrl, _roomName = "Pruefstand", _playerName = "Spieler";
+    private bool _roomAsked, _listAsked, _joinAsked, _startAsked, _relayed;
+
     public override void _Ready()
     {
         Instance = this;
@@ -99,6 +112,13 @@ public partial class NetworkManager : Node
 
         if (!_wantHost && !_wantJoin) { if (_searchMs <= 0) SetProcess(false); return; }
 
+        if (_wantOnline)
+        {
+            if (!OpenLobby(_onlineUrl, _playerName)) { if (_searchMs <= 0) SetProcess(false); return; }
+            _t0 = Time.GetTicksMsec();
+            return;
+        }
+
         Link = new NetLink();
         bool ok = _wantHost ? Link.HostOn(_port, 7) : Link.JoinTo(_address, _port);
         if (!ok)
@@ -111,6 +131,92 @@ public partial class NetworkManager : Node
         }
         if (_wantHost) BeginListening();
         _t0 = Time.GetTicksMsec();
+    }
+
+    /// <summary>Die Spielgruppe auf dem Server: nur gleiche Fassung UND gleiches
+    /// Netzprotokoll sehen einander (der Server vergleicht den Text genau).</summary>
+    public static string GameVersion()
+        => ProjectSettings.GetSetting("application/config/version", "0").AsString() + "/n" + NetSession.Protokoll;
+
+    /// <summary>Den Lobby-Draht öffnen (Befehlszeile oder später der Lobbyschirm).</summary>
+    public static bool OpenLobby(string url, string name)
+    {
+        if (Lobby != null) return true;
+        var l = new LobbyClient();
+        // content_hash: UNSERE SETZUNG, Platzhalter — der Server vergleicht ihn nicht,
+        // das Spiel noch nicht (Kartenprüfsumme kommt mit der Lobby, Stufe 2).
+        if (!l.Connect(url, name, GameVersion(), "00000000"))
+        {
+            Fault = l.Fault;
+            GD.PrintErr("netz: " + Fault);
+            return false;
+        }
+        Lobby = l;
+        Instance?.SetProcess(true);
+        return true;
+    }
+
+    /// <summary>
+    /// Der Online-Ablauf je Bild, bis die Partie verteilt ist. Von der Befehlszeile
+    /// läuft er von selbst durch (Raum auf/suchen, beitreten, starten); aus der
+    /// Lobby-Oberfläche (Stufe 2) klickt der Spieler — die Schritte ab
+    /// <c>match_start</c> sind für beide dieselben.
+    /// </summary>
+    private void OnlineStep()
+    {
+        var l = Lobby!;
+        l.Poll();
+        if (l.State == LobbyClient.Phase.Getrennt && Link == null)
+        {
+            if (!_timedOut)
+            {
+                _timedOut = true;
+                Fault = l.Fault.Length > 0 ? l.Fault : "Server nicht erreichbar";
+                GD.PrintErr("netz: " + Fault);
+            }
+            return;
+        }
+        if (!l.Open) return;
+
+        if (!FromMenu && l.MatchStart == null)
+        {
+            if (_wantHost)
+            {
+                if (!l.InRoom && !_roomAsked)
+                {
+                    _roomAsked = true;
+                    l.CreateRoom(_roomName, System.Math.Clamp(_players, 2, 8), "",
+                        new System.Text.Json.Nodes.JsonObject { ["map"] = UI.SkirmishSetup.Map });
+                }
+                if (l.InRoom && _announced && !_startAsked && l.HumanRoomSlots().Count >= _players)
+                {
+                    _startAsked = true;
+                    l.Start();
+                }
+            }
+            else
+            {
+                if (!_listAsked) { _listAsked = true; l.ListRooms(); }
+                if (!_joinAsked)
+                    foreach (var r in l.Rooms.Values)
+                        if ((string?)r["name"] == _roomName && (string?)r["state"] == "lobby")
+                        { _joinAsked = true; l.JoinRoom((string?)r["id"] ?? ""); break; }
+            }
+        }
+
+        // ⚠ Ab match_start für beide Wege gleich: Spielernummern aus dem Raum, Leitung im Relay.
+        if (l.MatchStart != null && !_relayed)
+        {
+            _relayed = true;
+            var humans = l.HumanRoomSlots();
+            int me = humans.IndexOf(l.YouSlot);
+            Link = new NetLink();
+            Link.RelayOn(l, l.IAmHost, me < 0 ? 0 : me, humans.Count);
+            _wantHost = l.IAmHost;
+            _wantJoin = !l.IAmHost;
+            _players = humans.Count;
+            l.Loaded();
+        }
     }
 
     /// <summary>Als Gastgeber im LAN auffindbar werden. ⚠ Scheitert das Binden
@@ -167,6 +273,11 @@ public partial class NetworkManager : Node
     /// nicht zu unterscheiden.</summary>
     public static string StatusLine()
     {
+        if (Link == null && Lobby != null)
+            return Lobby.Open
+                ? (Lobby.InRoom ? $"Online im Raum »{(string?)Lobby.Room?["name"]}«, {Lobby.HumanRoomSlots().Count} Menschen"
+                                : $"Online angemeldet als »{Lobby.MyName}«")
+                : $"Verbinde mit {Lobby.Url} …";
         if (Link == null) return "Netzwerk aus";
         if (Link.Session is { } s)
             return $"Partie steht: {s.Map}, Keim {s.Seed}, mein Platz {s.MySlot} " +
@@ -218,6 +329,7 @@ public partial class NetworkManager : Node
                 _wantHost = true;
                 if (int.TryParse(a["--net-host=".Length..], out int p) && p > 0) _port = p;
             }
+            else if (a == "--net-join") _wantJoin = true;   // online: Raum per --net-raum
             else if (a.StartsWith("--net-join="))
             {
                 _wantJoin = true;
@@ -233,6 +345,10 @@ public partial class NetworkManager : Node
             else if (a.StartsWith("--net-keim=")) uint.TryParse(a["--net-keim=".Length..], out _forcedSeed);
             else if (a.StartsWith("--net-ki=")) int.TryParse(a["--net-ki=".Length..], out _netAi);
             else if (a.StartsWith("--net-suche=")) int.TryParse(a["--net-suche=".Length..], out _searchMs);
+            else if (a == "--net-online") _wantOnline = true;
+            else if (a.StartsWith("--net-online=")) { _wantOnline = true; _onlineUrl = a["--net-online=".Length..]; }
+            else if (a.StartsWith("--net-raum=")) _roomName = a["--net-raum=".Length..];
+            else if (a.StartsWith("--net-name=")) _playerName = a["--net-name=".Length..];
         }
         if (_players < 1) _players = 1;
         if (_lead < 1) _lead = 1;
@@ -345,7 +461,9 @@ public partial class NetworkManager : Node
         if (Discovery != null && Link != null && Link.IsHost) Discovery.Serve(MyOffer());
         if (_searchMs > 0) SearchHarnessTick();
 
-        if (Link == null) return;
+        if (Lobby != null && !(Link?.SessionReady ?? false)) OnlineStep();
+
+        if (Link == null) { OnlineFrist(); return; }
         Link.Pump();
 
         if (Link.SessionReady)
@@ -358,7 +476,8 @@ public partial class NetworkManager : Node
         // (Announce). Vorher wüsste der Vermittler nicht, welche Karte er
         // verteilt — er verteilte die Vorgabe, und der Mitspieler spielte
         // gehorsam die falsche.
-        if (_wantHost && _announced && !_offered && Link.ClientCount + 1 >= _players)
+        if (_wantHost && _announced && !_offered && Link.ClientCount + 1 >= _players
+            && (!Link.IsRelay || Lobby is { Go: true }))     // online: erst nach »go« dürfen Rahmen fliessen
             OfferSession();
 
         int frist = Frist;
@@ -403,6 +522,25 @@ public partial class NetworkManager : Node
 
     public static bool TimedOut => Instance is { _timedOut: true };
 
+    /// <summary>Will dieser Prozess Gastgeber sein (Schalter oder Menü)? Online steht das fest,
+    /// bevor es eine Leitung gibt (bug-760).</summary>
+    public static bool WantHost => Instance is { _wantHost: true };
+
+    /// <summary>Die Frist auch in der Online-Lobbyphase (noch keine Leitung).</summary>
+    private void OnlineFrist()
+    {
+        if (Lobby == null) return;
+        int frist = Frist;
+        if (frist > 0 && !_timedOut && Time.GetTicksMsec() - _t0 > (ulong)frist)
+        {
+            _timedOut = true;
+            Fault = $"nach {frist} ms keine Partie über den Server ({Lobby.Url}): " +
+                    (Lobby.Open ? (Lobby.InRoom ? $"im Raum, {Lobby.HumanRoomSlots().Count} von {_players} Menschen"
+                                                : "in keinem Raum") : Lobby.State.ToString());
+            GD.PrintErr("netz: " + Fault);
+        }
+    }
+
     /// <summary>
     /// Hat das MENÜ die Leitung geöffnet (und nicht die Befehlszeile)?
     ///
@@ -432,6 +570,8 @@ public partial class NetworkManager : Node
         if (Instance == null) return;
         Link?.Close();
         Link = null;
+        Lobby?.Close();
+        Lobby = null;
         // ⚠ Auch den Suchport freigeben. Bliebe er belegt, wäre der nächste
         // Versuch »Gastgeber« im LAN nicht auffindbar — und der Grund stünde
         // in einer Meldung, die niemand mit dem Abbruch von vorhin verbindet.
@@ -440,6 +580,7 @@ public partial class NetworkManager : Node
         FromMenu = false;
         var i = Instance;
         i._offered = i._announced = i._applied = i._timedOut = false;
+        i._roomAsked = i._listAsked = i._joinAsked = i._startAsked = i._relayed = false;
         i._wantHost = i._wantJoin = false;
         Determinism.Forced = null;
         GD.Print($"netz: abgebrochen — {reason}");
@@ -458,10 +599,16 @@ public partial class NetworkManager : Node
     /// </summary>
     public static void Announce()
     {
-        if (Instance == null || Link == null) return;
+        if (Instance == null || (Link == null && Lobby == null)) return;   // bug-761: online gibt es vor match_start keine Leitung
         Instance._announced = true;
         Instance._t0 = Time.GetTicksMsec();
         Instance._timedOut = false;
+        if (Link == null)
+        {
+            GD.Print($"netz: angemeldet (online) — {(Instance._wantHost ? "Gastgeber" : "Mitspieler")}, " +
+                     $"Karte {UI.SkirmishSetup.Map}, warte auf den Start über den Server");
+            return;
+        }
         GD.Print($"netz: angemeldet — {(Link.IsHost ? "Vermittler" : "Mitspieler")}, " +
                  $"Karte {UI.SkirmishSetup.Map}, " +
                  $"{(Link.IsHost ? $"warte auf {Instance._players - 1 - Link.ClientCount} " +
@@ -505,8 +652,10 @@ public partial class NetworkManager : Node
         };
 
         Determinism.EnsureConfigured();
+        // ⭐ online: der Keim kommt vom Server (kryptographisch, match_start), wenn nichts erzwungen ist.
         uint seed = _forcedSeed != 0 ? _forcedSeed
-                  : Determinism.Forced ?? Determinism.Fnv32(s.Map);
+                  : Determinism.Forced ?? (Link!.IsRelay && Lobby is { Seed: not 0 } ? Lobby.Seed
+                  : Determinism.Fnv32(s.Map));
         if (seed == 0) seed = 0x9E3779B9;
         s.Seed = seed;
 

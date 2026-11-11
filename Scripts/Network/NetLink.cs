@@ -63,10 +63,107 @@ public sealed class NetLink
 
     public long PacketsIn, PacketsOut, BytesIn, BytesOut, Relayed, Dropped;
 
-    public int ClientCount => _clients.Count;
+    public int ClientCount => _relay != null ? _relayHumans - 1 : _clients.Count;
 
     public MultiplayerPeer.ConnectionStatus Status
-        => _peer?.GetConnectionStatus() ?? MultiplayerPeer.ConnectionStatus.Disconnected;
+        => _relay != null
+            ? (_relay.Open ? MultiplayerPeer.ConnectionStatus.Connected : MultiplayerPeer.ConnectionStatus.Disconnected)
+            : _peer?.GetConnectionStatus() ?? MultiplayerPeer.ConnectionStatus.Disconnected;
+
+    // ---- ⭐ 11.11.2026: Online über den Lobby-Server (Relay) -----------------
+
+    /// <summary>Der Draht zum Lobby-Server, wenn diese Partie online läuft; sonst null (ENet/LAN).
+    /// <para>⚠ UNSERE ZUTAT. Der Server reicht jedes Paket an ALLE im Raum weiter, auch an
+    /// den Absender, und nummeriert sie. Der Gastgeber muss darum nichts weiterleiten,
+    /// und das eigene Echo wird verworfen — das eigene Paket ist wie bei ENet schon
+    /// über <see cref="Take"/> eingetragen (dieselben Bytes, ein Weg).</para></summary>
+    private LobbyClient? _relay;
+    private int _relayHumans;
+    private int _relaySlot = -1;
+
+    /// <summary>Die eigene Spielernummer, die ein Sitzungspaket tragen muss, damit es
+    /// angenommen wird. Online gehen ALLE Sitzungspakete an alle — jeder nimmt nur
+    /// das für sich (Feld »forPlayer« der ENet-Fassung). −1 = keine Prüfung (ENet).</summary>
+    public int ExpectMe = -1;
+
+    public bool IsRelay => _relay != null;
+
+    // ---- bug-762: BÜNDELN -----------------------------------------------------
+    // Der Server lässt höchstens 60 Rahmen je Sekunde und Verbindung durch (Auftrag §1);
+    // der Lockstep schickt je Takt ein Paket (50 Hz) plus Prüfsummen, ein kopfloser Lauf
+    // noch mehr. Darum sammelt die Online-Leitung alles, was in 40 ms anfällt, zu EINEM
+    // Rahmen: [0xFE][n:u16]{[len:u16][Paket]}*n. Höchstens 25 Rahmen/s, ≤ 40 ms mehr
+    // Verzögerung — der Vorlauf (6 Takte = 120 ms) fängt das auf. UNSERE SETZUNG.
+    public const byte Buendel = 0xFE;
+    private const int BuendelMs = 40, BuendelMax = 4000;
+    private readonly List<byte[]> _out = new();
+    private int _outBytes;
+    private ulong _lastFlush;
+    public long Bundles;
+
+    private void Queue(byte[] bytes)
+    {
+        if (_outBytes + bytes.Length + 2 + 3 > BuendelMax) Flush();
+        _out.Add(bytes);
+        _outBytes += bytes.Length + 2;
+        PacketsOut++;
+        BytesOut += bytes.Length;
+    }
+
+    /// <summary>Gesammelte Pakete als einen Rahmen abschicken.</summary>
+    public void Flush()
+    {
+        _lastFlush = Time.GetTicksMsec();
+        if (_relay == null || _out.Count == 0) return;
+        var frame = new byte[3 + _outBytes];
+        frame[0] = Buendel;
+        BitConverter.TryWriteBytes(frame.AsSpan(1, 2), (ushort)_out.Count);
+        int o = 3;
+        foreach (var b in _out)
+        {
+            BitConverter.TryWriteBytes(frame.AsSpan(o, 2), (ushort)b.Length);
+            b.CopyTo(frame, o + 2);
+            o += 2 + b.Length;
+        }
+        if (_relay.SendBinary(frame)) Bundles++; else Dropped += _out.Count;
+        _out.Clear();
+        _outBytes = 0;
+    }
+
+    private void TakeFrame(byte[] data)
+    {
+        if (data.Length >= 3 && data[0] == Buendel)
+        {
+            int n = BitConverter.ToUInt16(data, 1), o = 3;
+            for (int i = 0; i < n && o + 2 <= data.Length; i++)
+            {
+                int len = BitConverter.ToUInt16(data, o);
+                if (o + 2 + len > data.Length) { Dropped++; break; }
+                var b = new byte[len];
+                Buffer.BlockCopy(data, o + 2, b, 0, len);
+                o += 2 + len;
+                PacketsIn++;
+                BytesIn += len;
+                Take(b);
+            }
+            return;
+        }
+        PacketsIn++;
+        BytesIn += data.Length;
+        Take(data);
+    }
+
+    /// <summary>Online-Partie einrichten, sobald der Server <c>match_start</c> geschickt hat.</summary>
+    public void RelayOn(LobbyClient lobby, bool isHost, int me, int humans)
+    {
+        _relay = lobby;
+        _relaySlot = lobby.YouSlot;
+        _relayHumans = humans;
+        ExpectMe = me;
+        IsHost = isHost;
+        GD.Print($"netz: online über {lobby.Url} — {(isHost ? "Gastgeber" : "Mitspieler")}, " +
+                 $"Spieler {me} von {humans}, Raumplatz {_relaySlot}");
+    }
 
     // ---- Eingang ------------------------------------------------------------
 
@@ -121,6 +218,7 @@ public sealed class NetLink
 
     public void Close()
     {
+        _relay = null;              // ⚠ der Lobby-Draht gehört dem NetworkManager, nicht der Partie
         _peer?.Close();
         _peer = null;
         _clients.Clear();
@@ -151,6 +249,12 @@ public sealed class NetLink
 
     private void SendTo(int target, byte[] bytes)
     {
+        if (_relay != null)
+        {
+            // Online gibt es kein »an einen«: der Server reicht an alle (Ziel wird übergangen).
+            Queue(bytes);
+            return;
+        }
         if (_peer == null) return;
         // ⚠ Auf eine erloschene Steckdose NICHT schreiben. Godot meldet dort
         // »The multiplayer instance isn't currently active« mit vollem
@@ -183,10 +287,17 @@ public sealed class NetLink
     public void OfferSession(NetSession s)
     {
         s.Me = 0;
-        s.Players = 1 + _clients.Count;
+        s.Players = 1 + ClientCount;
         Session = s;
         SessionReady = true;
 
+        if (_relay != null)
+        {
+            // Online: je Mitspieler ein Paket, alle an alle; jeder nimmt nur seins (ExpectMe).
+            for (int i = 1; i < s.Players; i++) SendAll(SessionPacket(s, i));
+            Flush();
+        }
+        else
         for (int i = 0; i < _clients.Count; i++)
         {
             var w = SessionPacket(s, i + 1);
@@ -279,6 +390,18 @@ public sealed class NetLink
     /// </summary>
     public void Pump()
     {
+        if (_relay != null)
+        {
+            if (Time.GetTicksMsec() - _lastFlush >= BuendelMs) Flush();
+            _relay.Poll();
+            while (_relay.Frames.Count > 0)
+            {
+                var f = _relay.Frames.Dequeue();
+                if (f.Slot == _relaySlot) continue;      // eigenes Echo, schon über Take eingetragen
+                TakeFrame(f.Data);
+            }
+            return;
+        }
         if (_peer == null) return;
         _peer.Poll();
         while (_peer.GetAvailablePacketCount() > 0)
@@ -380,6 +503,7 @@ public sealed class NetLink
         for (int i = 0; i < n; i++) slots[i] = r.U8();
         s.Slot = slots;
         if (r.Bad) { Dropped++; return; }
+        if (ExpectMe >= 0 && s.Me != ExpectMe) return;   // online: das Sitzungspaket eines anderen
         if (proto != NetSession.Protokoll)
         {
             Fault = $"Protokoll {proto} des Gastgebers passt nicht zu unserem " +
@@ -488,7 +612,8 @@ public sealed class NetLink
 
     public string Numbers()
         => $"Pakete ein {PacketsIn} ({BytesIn} B), aus {PacketsOut} ({BytesOut} B), " +
-           $"weitergeleitet {Relayed}, verworfen {Dropped}";
+           $"weitergeleitet {Relayed}, verworfen {Dropped}" +
+           (_relay != null ? $", online in {Bundles} Rahmen, Server-Nr. bis {_relay.LastSeq}" : "");
 }
 
 /// <summary>Ein Handgriff, damit <see cref="NetWriter"/> in einer Kette eine
