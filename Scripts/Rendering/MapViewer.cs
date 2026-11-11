@@ -622,6 +622,13 @@ public partial class MapViewer : Node2D
         if (UI.SkirmishSetup.Active)
         {
             int mi = System.Array.IndexOf(MapNames, UI.SkirmishSetup.Map);
+            // ⭐ 11.11.2026 — bug-743 (E2, M3): der Knopf »Im Gefecht spielen« des
+            // Editors schickt eine Karte her, die nach dem ersten Einlesen der
+            // statischen Kartenliste entstanden sein kann — dann gaebe IndexOf -1
+            // und gespielt wuerde still die vorige Karte (dieselbe Falle wie bei
+            // ViewMap unten). Einmal neu einlesen; fuer jede schon gelistete Karte
+            // aendert sich nichts.
+            if (mi < 0) { _mapNames = null; mi = System.Array.IndexOf(MapNames, UI.SkirmishSetup.Map); }
             if (mi >= 0) _mapIndex = mi;
         }
         // Der Karteneditor schickt eine Karte NUR ZUM ANSEHEN her: kein
@@ -1389,6 +1396,12 @@ public partial class MapViewer : Node2D
         if (_startbasisCheck)                   // bug-733
         {
             GD.Print(_entities.StartbasisCheck(UI.SkirmishSetup.Map, _entities.StartbasisMitspieler));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_mapEditGefechtCheck)               // bug-740..742 (11.11.2026): Editorkarte im Gefecht
+        {
+            GD.Print(_entities.MapEditGefechtCheck(UI.SkirmishSetup.Map, _entities.StartbasisMitspieler));
             GetTree().Quit(0);
             return;
         }
@@ -4827,6 +4840,7 @@ _mausProbePunkt = karte;
             else if (a.StartsWith("--gefecht-startbasis-fabrik="))                             // bug-733
                 MapEntityLayer.StartbasisFabrikTyp = a["--gefecht-startbasis-fabrik=".Length..].ToInt();
             else if (a == "--startbasis-check") _startbasisCheck = true;                       // bug-733
+            else if (a == "--map-edit-gefecht-check") _mapEditGefechtCheck = true;             // bug-740..742 (11.11.2026)
             else if (a == "--startbasis-heim-alt") MapEntityLayer.StartbasisHeimAlt = true;    // bug-735
             else if (a == "--startbasis-fabrik-nur-neu") MapEntityLayer.StartbasisFabrikNurNeu = true;    // 31.10.: NET02..06 ohne Fabrik
             else if (a == "--netz-sitzung-alt") Network.NetworkManager.SitzungAlt = true;     // bug-734
@@ -6031,6 +6045,7 @@ _mausProbePunkt = karte;
     private bool _dmMinenCheck, _minenhaltCheck;   // bug-709, bug-707
     private bool _imapAbgleichCheck;               // bug-706
     private bool _startbasisCheck;                 // bug-733, --startbasis-check
+    private bool _mapEditGefechtCheck;             // bug-740..742, --map-edit-gefecht-check (11.11.2026)
     /// <summary><c>--flammenwerfer-wald-check</c> — siehe Simulation/FlammenwerferWald.cs.</summary>
     private bool _flammenwaldCheck;
 

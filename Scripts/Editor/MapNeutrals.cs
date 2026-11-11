@@ -318,7 +318,8 @@ public static class MapNeutrals
             var pick = kinds[chosen];
             if (!MapFactory.PutBuilding(m, slot, pick.K.Typ, NeutralOwner, 0,
                                         cd.Col, cd.Row, pick.FootW, pick.FootH,
-                                        pick.K.Hp, "", pick.K.Doors))
+                                        pick.K.Hp, "", pick.K.Doors,
+                                        cwp: cwp))          // bug-742: Musterstempel
                 continue;
             placed.Add((cd.Col, cd.Row, pick.K.Typ));
             need[chosen]--;

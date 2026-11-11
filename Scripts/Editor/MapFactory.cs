@@ -176,7 +176,6 @@ public static class MapFactory
         var zone = m.Sec(2);
         if (imap != null)
         {
-            int handle = BuildingHandle(slot);
             for (int dr = 0; dr < CwpFile.PatternHeight; dr++)
                 for (int dc = 0; dc < CwpFile.PatternWidth; dc++)
                 {
@@ -184,7 +183,8 @@ public static class MapFactory
                     if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) continue;
                     int i = (c * ImapStride + r) * 2;
                     if (i + 1 >= imap.Length) continue;
-                    if ((imap[i] | (imap[i + 1] << 8)) != handle) continue;
+                    // bug-741: beide Griffformen (alte Karten tragen 51000 + Platz)
+                    if (!IsHandleOf(imap[i] | (imap[i + 1] << 8), slot)) continue;
                     int z = zone != null && c * ZoneStride + r < zone.Length
                           ? zone[c * ZoneStride + r] : ZoneLand;
                     int v = z switch
@@ -361,7 +361,47 @@ public static class MapFactory
     /// aufgeloest (die <c>ref</c>-Angabe der <c>.entities.json</c> ist reine
     /// Auskunft). 51000 + Platz haelt Abstand zu den Griffen der
     /// Gelaendegegenstaende, die die gelieferten Karten ab 50000 vergeben.</summary>
-    public static int BuildingHandle(int slot) => StaticHandleBase + 1000 + slot;
+    public static int BuildingHandle(int slot)
+        => GriffAlt ? StaticHandleBase + 1000 + slot : GriffBase + slot;
+
+    // ⭐ 11.11.2026 — bug-741 (Paket E2, M4): DER GRIFF IST 60000 + PLATZ.
+    //
+    // Der Kommentar darueber (»der Zahlenwert selbst wird nirgends aufgeloest«)
+    // stimmt seit dem 26.08.2026 nicht mehr: MapEntityLayer liest die
+    // Griffzellen 60000..60299 als Rumpf des Gebaeudes mit Platz v − 60000
+    // (_griffZelle, Gebaeudeangriff, Absturz, Fussvolk-Uhr, UTOK_NA). ORIGINAL:
+    // Gebaeude 60000..60299 (Zasah @0x40D269, MapForest.cs:26), Wald
+    // 50000..55999 (@0x40D61D). 51000 + Platz lag also mitten im WALDBAND, und
+    // jedes Editorgebaeude lief ohne Griffzellen auf dem Rechteck-Rueckfall.
+    // Gegenschalter --editor-griff-alt (51000 + Platz).
+
+    /// <summary>bug-741: der Gebaeudegriff des Originals, 60000 + Platz (0..299).</summary>
+    public const int GriffBase = 60000;
+
+    /// <summary>bug-741: <c>--editor-griff-alt</c> — der Griff von bis 0.6.13 (51000 + Platz).</summary>
+    public static bool GriffAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-griff-alt") >= 0;
+
+    /// <summary>bug-741: gehoert dieser imap-Wert dem Gebaeude auf Platz
+    /// <paramref name="slot"/>? Beide Griffformen — eine Karte, die vor dem
+    /// 11.11.2026 gespeichert wurde, traegt noch 51000 + Platz, und Wegnehmen
+    /// soll auch dort die Zellen freigeben.</summary>
+    public static bool IsHandleOf(int v, int slot)
+        => v == GriffBase + slot || v == StaticHandleBase + 1000 + slot;
+
+    // ⭐ 11.11.2026 — bug-742 (Paket E2, M5): NUR DIE SPERRENDEN MUSTERZELLEN.
+    //
+    // ORIGINAL (add_building, C 0x4C8E3C; bei uns Construction.PlaceBuilding):
+    // die imap bekommt den Griff nur dort, wo das MUSTER sperrt
+    // (PatternBlocks); gezeichnete, aber begehbare Musterzellen und alles
+    // ausserhalb des Musters bleiben, was sie waren (0xFFFE). In den
+    // gelieferten Karten liegt der Anker vieler Gebaeude darum auf 0xFFFE
+    // (ImapAbgleich.cs, bug-706; MapEntityLayer »Plattform 65534«). Der Editor
+    // stempelte das ganze Rechteck footW×footH (ohne Tueren) — ueber Wasser,
+    // Einheiten und Nachbargriffe hinweg, die der Pinsel gar nicht geprueft hat.
+    // Gegenschalter --editor-stempel-alt (Rechteck).
+
+    /// <summary>bug-742: <c>--editor-stempel-alt</c> — Rechteckstempel wie bis 0.6.13.</summary>
+    public static bool StempelAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-stempel-alt") >= 0;
 
     /// <summary>
     /// Ein Gebaeude nach sec3 schreiben und seine Grundflaeche in die imap
@@ -380,7 +420,7 @@ public static class MapFactory
                                    int col, int row, int footW, int footH,
                                    int hp, string name, (int Col, int Row)[] doors,
                                    int stockW = 0, int stockF = 0, int stockS = 0,
-                                   int terranium = 0)
+                                   int terranium = 0, CwpFile? cwp = null)
     {
         var s = m.Sec(3);
         if (s == null) return false;
@@ -410,9 +450,31 @@ public static class MapFactory
         }
         s[o + 0x41] = 0;
 
-        // die Grundflaeche in die imap, die Tuerzellen ausgenommen
+        // bug-742 (11.11.2026): mit Kachelsatz NUR die sperrenden Musterzellen
+        // (wie add_building / Construction.PlaceBuilding), Tueren ausgenommen.
         var imap = m.Sec(6);
-        if (imap != null)
+        var bt = cwp?.GetBuildingType(type);
+        if (imap != null && !StempelAlt && cwp != null && bt is { IsEmpty: false } b)
+        {
+            int handle = BuildingHandle(slot);
+            for (int dx = 0; dx < CwpFile.PatternWidth; dx++)
+                for (int dy = 0; dy < CwpFile.PatternHeight; dy++)
+                {
+                    if (!cwp.PatternBlocks(b.FirstPattern, dx, dy)) continue;
+                    bool door = false;
+                    foreach (var d in doors) if (d.Col == dx && d.Row == dy) door = true;
+                    if (door) continue;
+                    int c = col + dx, r = row + dy;
+                    if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) continue;
+                    int i = (c * ImapStride + r) * 2;
+                    if (i + 1 >= imap.Length) continue;
+                    imap[i] = (byte)(handle & 0xFF);
+                    imap[i + 1] = (byte)(handle >> 8);
+                }
+        }
+        // die Grundflaeche in die imap, die Tuerzellen ausgenommen — der Weg bis
+        // 0.6.13, jetzt nur noch unter --editor-stempel-alt oder ohne Kachelsatz
+        else if (imap != null)
         {
             int handle = BuildingHandle(slot);
             for (int dr = 0; dr < footH; dr++)
@@ -493,6 +555,27 @@ public static class MapFactory
         s[o + 0x29] = (byte)energy;            // EnergieMax
         s[o + 0x2e] = (byte)(fuel & 0xFF); s[o + 0x2f] = (byte)(fuel >> 8);
         s[o + 0x30] = (byte)(fuel & 0xFF); s[o + 0x31] = (byte)(fuel >> 8);
+
+        // ⭐ 11.11.2026 — bug-740 (E2, M2): der gemessene KAMPFSATZ der Bauart
+        // (MapEditUnits.SatzOf). Ohne ihn blieben Waffe/Fahne/Munition, Tempo,
+        // Reichweite und Sicht auf 0 — die Einheit war unbewaffnet und stand.
+        // Der Aufrufer reicht `weapon` = 0 weiter; der Satz gewinnt. Mit
+        // --editor-einheit-alt liefert SatzOf null → Stand bis 0.6.13.
+        if (MapEditUnits.SatzOf(unitType) is { } k)
+        {
+            s[o + 0x0b] = (byte)k.Chassis;
+            s[o + 0x0c] = (byte)k.Weapon;
+            s[o + 0x0d] = (byte)k.Flag0D;
+            s[o + 0x10] = (byte)k.Equip;
+            s[o + 0x20] = (byte)(k.Speed & 0xFF); s[o + 0x21] = (byte)(k.Speed >> 8);
+            s[o + 0x27] = (byte)k.Defense;
+            s[o + 0x2a] = (byte)k.RangeMin;
+            s[o + 0x2b] = (byte)k.Range;
+            s[o + 0x2c] = (byte)k.Sight;
+            s[o + 0x39] = (byte)k.Ammo;            // UNSERE SETZUNG: voll
+            s[o + 0x3a] = (byte)k.Ammo;
+            s[o + 0x3d] = (byte)k.Reload;
+        }
 
         var imap = m.Sec(6);
         if (imap != null && col >= 0 && col < m.Width && row >= 0 && row < m.Height)

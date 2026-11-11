@@ -68,6 +68,11 @@ public partial class MapEditorScreen : Control
     /// demselben Grund wie <see cref="OnView"/>.</summary>
     public Action<string>? OnEdit { get; init; }
 
+    /// <summary>bug-743 (11.11.2026): wohin »Im Gefecht spielen« fuehrt — setzt
+    /// das Hauptmenue (MainMenu.PlayMade), aus demselben Grund wie
+    /// <see cref="OnView"/>.</summary>
+    public Action<string>? OnPlay { get; init; }
+
     // ---- UNSERE Setzungen fuer die Eingabefelder ----------------------------
     //
     // Die Obergrenze ist GELESEN: CwmFile.Create wirft ueber 254 ("die groesste
@@ -86,7 +91,7 @@ public partial class MapEditorScreen : Control
     private OptionButton _tileset = null!;
     private CheckBox _flat = null!;
     private LineEdit _from = null!;
-    private Button _create = null!, _check = null!, _view = null!, _edit = null!;
+    private Button _create = null!, _check = null!, _view = null!, _edit = null!, _play = null!;
 
     /// <summary>Die Auswahl der VORHANDENEN Karten und der Knopf dazu. Siehe
     /// <see cref="OnOpen"/>.</summary>
@@ -314,6 +319,21 @@ public partial class MapEditorScreen : Control
         _edit.Pressed += OnEditPressed;
         after.AddChild(_edit);
 
+        // ⭐ 11.11.2026 — bug-743 (E2, M3): der Weg ins Gefecht. Bis heute gab es
+        // nur »Ansehen«; die Gefechts- und die Netzliste sind fest (NET-Karten).
+        _play = new Button
+        {
+            Text = "Im Gefecht spielen",
+            Disabled = true,
+            CustomMinimumSize = new Vector2(0, 36),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = "Startet ein Gefecht auf dieser Karte: du spielst Platz 1, jeden anderen "
+                        + "besetzten Platz die KI. Gespielt wird, was auf der Platte steht — "
+                        + "ungespeicherte Pinselstriche erst mit F5 sichern.",
+        };
+        _play.Pressed += OnPlayPressed;
+        after.AddChild(_play);
+
         _status = new Label
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -492,7 +512,7 @@ public partial class MapEditorScreen : Control
                    + $",boden={(int)_pick.Value}"
                    + (from.Length > 0 ? $",from={from}" : "");
 
-        _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = true;
+        _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
         _status.Text = $"arbeitet … ({(int)_w.Value}x{(int)_h.Value}, Kachelsatz {ts:00})";
         _log.Text = string.Join("\n", lines);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -504,11 +524,12 @@ public partial class MapEditorScreen : Control
         if (rc == 0)
         {
             _made = outName;
-            _check.Disabled = _view.Disabled = _edit.Disabled = false;
+            _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
             _status.Text = $"{outName} geschrieben. Jetzt pruefen oder ansehen.";
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
+            else if (_autoRun == "spielen") OnPlayPressed();   // bug-743
         }
         else
         {
@@ -566,7 +587,7 @@ public partial class MapEditorScreen : Control
         string stem = outName["map_".Length..];
 
         var lines = new List<string>();
-        _create.Disabled = _open.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = true;
+        _create.Disabled = _open.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
         _status.Text = $"oeffnet {outName} …";
         _log.Text = "";
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -581,7 +602,7 @@ public partial class MapEditorScreen : Control
             // (map_<x>_kopie) — der wirklich gehaltene Name steht in der Sitzung.
             string held = MapEditSession.Name.Length > 0 ? MapEditSession.Name : outName;
             _made = held;
-            _check.Disabled = _view.Disabled = _edit.Disabled = false;
+            _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
             _name.Text = held["map_".Length..];
             _status.Text = held != outName
                 ? $"{outName} ist eine gelieferte Karte — geoeffnet als Kopie {held} (Bruecken, "
@@ -591,6 +612,7 @@ public partial class MapEditorScreen : Control
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
+            else if (_autoRun == "spielen") OnPlayPressed();   // bug-743
         }
         else
         {
@@ -627,6 +649,12 @@ public partial class MapEditorScreen : Control
     {
         if (_made.Length == 0 || OnView == null) return;
         OnView(_made);
+    }
+
+    private void OnPlayPressed()
+    {
+        if (_made.Length == 0 || OnPlay == null) return;
+        OnPlay(_made);
     }
 
     private void OnEditPressed()

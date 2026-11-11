@@ -94,7 +94,36 @@ public partial class MainMenu
     /// wird gerade gearbeitet, und <c>MainMenu</c> ist eine
     /// <c>partial class</c>.</summary>
     private void ShowMapEditor()
-        => AddChild(new MapEditorScreen { OnView = ViewMade, OnEdit = EditMade });
+        => AddChild(new MapEditorScreen { OnView = ViewMade, OnEdit = EditMade, OnPlay = PlayMade });
+
+    /// <summary>
+    /// ⭐ 11.11.2026 — bug-743 (Paket E2, M3): »IM GEFECHT SPIELEN«.
+    ///
+    /// <para>Derselbe Weg wie <c>--skirmish=map_&lt;name&gt;</c> (MapViewer setzt dort
+    /// Active, CampaignMission 0 und die Karte) und wie »STARTEN« im
+    /// Gefechtsaufbau (<c>OnStart</c>): SkirmishSetup fuellen, Kulisse weg,
+    /// Spielszene. Der Pinsel geht vorher aus (<see cref="MapEditSession.Leave"/>),
+    /// sonst haengte der Waechter den Ueberzug an das Gefecht (B9).</para>
+    ///
+    /// <para><b>UNSERE SETZUNG:</b> der Mensch ist Platz 0, alle anderen besetzten
+    /// Plaetze der Karte spielt die KI (<c>AiCount = 7</c>; StartSkirmish
+    /// nimmt davon nur so viele, wie die Karte lebende Plaetze hat). KI-Stufe,
+    /// Konto, Techstandard und Rohstoffe bleiben, was im Gefechtsaufbau zuletzt
+    /// stand. Kein Netzspiel — Editorkarten stehen nicht in der Netzliste (M3 Teil 2 = E5).</para>
+    /// </summary>
+    private void PlayMade(string mapName)
+    {
+        MapEditSession.Leave();
+        SkirmishSetup.ViewMap = "";
+        SkirmishSetup.Map = mapName;
+        SkirmishSetup.Human = 0;
+        SkirmishSetup.AiCount = 7;
+        SkirmishSetup.CampaignMission = 0;
+        SkirmishSetup.Active = true;
+        Say($"spielen: {mapName} im Gefecht (Platz 1 Mensch, Rest KI)");
+        StopBackdrop();
+        GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
+    }
 
     /// <summary>Eine eben erzeugte Karte ANSEHEN — kein Gefecht. Warum nicht,
     /// steht bei <see cref="SkirmishSetup.ViewMap"/>: eine erzeugte Karte hat 0
