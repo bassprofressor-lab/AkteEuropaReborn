@@ -7,12 +7,162 @@ dem eigenen Rechner aus der eigenen Fassung des Spiels von 1997.
 *In English: [CHANGELOG.md](CHANGELOG.md). Ältere Fassungen als 0.5.0 sind
 bisher nur dort beschrieben.*
 
-## 0.7.0 — in Arbeit
+## 0.7.0 — 11.11.2026 · Online-Mehrspieler, Discord und ein Karteneditor, der nichts mehr kaputt macht
 
-> ⚠ **Noch nicht veröffentlicht.** 0.7.0 kommt heraus, wenn jede der 33
-> Kampagnenmissionen einzeln durchgespielt und für sauber befunden ist — siehe
-> **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
-> mit jeder gespielten Mission weiter.
+> **Mit 0.7.0 geht Akte Europa Reborn online.** Alle 33 Kampagnenmissionen
+> sind durchgespielt, und wie angekündigt kommt jetzt der Mehrspieler über das
+> Internet. Es gibt einen eigenen Lobby-Server. Du meldest dich mit einem Namen
+> an, siehst die offenen Spiele, eröffnest einen Raum oder trittst bei. Der
+> Gastgeber startet, und die Partie läuft im Gleichschritt wie im LAN. Eine
+> Portfreigabe im Router braucht niemand mehr.
+>
+> Dazu kommen die Netzfenster des Originals: »Warten auf …« mit Ctrl-K, der Chat
+> per Enter. Neu sind die Discord-Anzeige und ein Karteneditor, der gelieferte
+> Karten nicht mehr beschädigt und spielbare Karten erzeugt.
+>
+> Wie immer hat jede Änderung einen Schalter, der das alte Verhalten
+> zurückholt, und einen Prüfstand. Wo das Original nichts vorgibt, steht im
+> Quelltext »UNSERE SETZUNG«.
+>
+> ✅ **Kein Neueinlesen nötig.** Spielstände von 0.6.13 laden weiter.
+>
+> ⚠ **Netzspiel:** Das Protokoll steht jetzt auf Stufe 4. 0.6.13 und 0.7.0
+> spielen nicht miteinander, auch nicht im LAN. Online sehen sich nur Spieler
+> mit derselben Fassung.
+
+### Online-Mehrspieler
+
+- **Spielen über das Internet.** Im Menü unter *Multiplayer* gibt es den
+  neuen Modus **»Online (Internet)«**. *Partie starten* öffnet die
+  Online-Lobby. Alle Rechner verbinden sich nur nach außen zu unserem Server
+  (`wss://ae.krynexlabs.de/ae/v1`), deshalb braucht niemand eine Portfreigabe
+  oder die IP-Adresse des anderen. Das Original kannte nur DirectPlay im
+  lokalen Netz; Server und Lobby sind unsere Zutat.
+- **Die Lobby.** Du gibst einmal deinen Namen ein, er wird gespeichert. Du
+  siehst die offenen Spiele mit Gastgeber, Karte und Belegung. Laufende und
+  volle Räume stehen grau in der Liste. Einen eigenen Raum eröffnest du mit
+  einem Klick, der Name ist wie im Original »Akte Europa *Name*s Spiel«, ein
+  Passwort ist möglich. Im Raum siehst du die Mitspieler mit ihrem Ping, und
+  es gibt einen Chat für Lobby und Raum.
+- **Kein Bereit-Knopf, wie im Original.** Der Gastgeber drückt *Start*, sobald
+  mindestens zwei Menschen im Raum sind. Karte, Techstandard, Konto und
+  Rohstoffe stellt er vorher im Gefechtsschirm ein; das Feld *Menschen* im
+  Netzkasten bestimmt die Größe des Raums.
+- **Der Zufall kommt vom Server.** Bei jedem Start würfelt der Server den
+  Startwert der Partie, und alle Rechner bekommen denselben. Er verteilt auch
+  die Befehle in einer festen, nummerierten Reihenfolge an alle, der Gastgeber
+  muss nichts weiterreichen.
+- **Gebündelt statt einzeln.** Der Gleichschritt schickt je Takt ein Paket.
+  Online wird alles, was in 40 ms anfällt, zu einem Paket zusammengefasst
+  (bug-762). Ohne das lehnte der Server die Partie nach wenigen Sekunden ab
+  (»mehr als 60 Rahmen je Sekunde«). Der Vorlauf von 6 Takten fängt die
+  zusätzlichen 40 ms auf.
+- **Nach dem Spiel zurück in die Lobby.** Wer eine Online-Partie verlässt,
+  landet nicht mehr im Hauptmenü, sondern gleich wieder angemeldet in der
+  Lobby. Dort steht, wie die Partie endete.
+
+### Im Netzspiel: Warten, Ausschalten, Chat (online und im LAN)
+
+- **»Warten auf …« (Fenster Art 42 des Originals).** Hängt ein Mitspieler,
+  erscheint nach 2 Sekunden das Fenster des Originals mit seinem Namen und dem
+  Hinweis »Drücken Sie Ctrl-K, um ihn/sie auszuschalten.« Mitspieler sehen wie
+  im Original »Drücken Sie CTRL-E, um das Spiel zu beenden.«
+- **Ctrl-K schaltet einen hängenden Spieler aus** (Befehl 973 des Originals).
+  Seine Einheiten verschwinden, seine Gebäude werden neutral (Besitzer 11), und
+  die anderen spielen weiter. Damit das auf allen Rechnern im **selben Takt**
+  geschieht, rechnet jeder Rechner den Takt beim Empfang selbst aus: den
+  letzten Takt, für den von dem Spieler schon ein Paket da war, plus eins. Weil
+  alle die Pakete in derselben Reihenfolge bekommen, kommt überall dasselbe
+  heraus. Gemessen mit drei Rechnern, online und im LAN: Beide Verbleibenden
+  schalten im selben Takt aus, entfernen dieselben Einheiten und haben danach
+  dieselbe Prüfsumme. Im LAN darf nur der Gastgeber Ctrl-K drücken, wie im
+  Original; online jeder, weil der Server die Reihenfolge festlegt.
+- **Wer geht, hält die anderen nicht mehr auf.** Verlässt jemand die Partie,
+  schaltet er sich selbst aus (Befehl 995 des Originals). Reißt online die
+  Verbindung ab und kommt der Spieler nicht binnen 60 Sekunden zurück, schaltet
+  ihn das Spiel von selbst aus.
+- **Chat im Spiel (Fenster Art 36 des Originals).** **Enter** öffnet die
+  Chatzeile, Enter schickt, Esc verwirft. Die anderen sehen »Name: Text« im
+  Meldungsfenster, wie bei Befehl 994 des Originals.
+- **Spielerliste mit Ping: F4 gedrückt halten.** Name, Ping und ob der Spieler
+  noch im Spiel ist. Unsere Zutat; im Original gibt es sie nicht. *Tab* ist dort
+  schon die Umschaltung der Lebensbalken, darum F4.
+- **Das Spiel beendet sich nicht mehr ohne Meldung** (bug-765). Bisher schloss
+  sich das ganze Programm, wenn ein Mitspieler 15 Sekunden hing oder die Rechner
+  auseinanderliefen. Der Netztaktgeber ist zugleich unser Prüfstand, und dort
+  ist Beenden gewollt. Im echten Spiel kommt jetzt das Wartefenster, und ein
+  Abbruch führt mit einer Meldung zurück ins Menü.
+- **Ins Menü gehen hinterlässt keinen laufenden Taktgeber mehr** (bug-766).
+  Nach dem Verlassen der Karte lief er gegen die schon freigegebene Karte
+  weiter.
+
+### Discord
+
+- **Discord zeigt, was du spielst.** Wenn Discord läuft, steht in deinem
+  Profil »Akte Europa Reborn«, dazu Hauptmenü, Kampagne mit Mission und Titel,
+  Gefecht oder Mehrspieler mit Karte oder Karteneditor, und wie lange schon.
+  Das Spiel spricht dafür nur mit der Discord-App auf deinem Rechner und
+  verändert am Spiel nichts. Abschalten kannst du es in den *Einstellungen*
+  unter »Discord«.
+- **»Discord beitreten« im Startmenü** öffnet die Einladung zu unserem
+  Discord-Server im Browser.
+
+### Karteneditor
+
+- **Öffnen beschädigt keine gelieferte Karte mehr** (bug-739). Bisher schrieb
+  *Vorhandene öffnen* die Karte sofort unter demselben Namen zurück. Dabei
+  gingen Brücken, Rampen, die Waldtafel und die Terranium-Plätze verloren, in
+  den Missionen 14, 17, 20 und 22 also auch der einzige Bauplatz für eine Mine.
+  Gelieferte Karten öffnet der Editor jetzt nur als Kopie (`…_kopie`), eigene
+  Karten werden erst beim Speichern (F5) geschrieben. Eine zweite Sperre
+  verhindert das Speichern einer gelieferten Karte unter ihrem eigenen Namen.
+  Hattest du eine Karte schon beschädigt, hilft ein Neueinlesen.
+- **Einheiten aus dem Editor sind bewaffnet** (bug-740). Editor und Generator
+  setzten Waffe, Munition, Tempo, Reichweite und Sicht auf 0, die Truppe konnte
+  also weder kämpfen noch richtig fahren. Jetzt kommt je Bauart der häufigste
+  Satz aus den 54 gelieferten Karten.
+- **Gebäude bekommen die richtigen Griffzellen** (bug-741): 60000 + Platz wie
+  im Original statt 51000 + Platz, was im Waldband lag.
+- **Nur die sperrenden Zellen eines Gebäudes werden belegt** (bug-742). Bisher
+  wurde das ganze Rechteck gestempelt, auch über Wasser und Einheiten, während
+  einzelne sperrende Zellen fehlten und man durch sie hindurchfahren konnte.
+- **»Im Gefecht spielen«** (bug-743): ein Knopf im Editor startet die Karte
+  direkt als Gefecht. Du spielst Platz 1, alle anderen besetzten Plätze spielt
+  der Computer (unsere Setzung).
+- **Ehrliche Kartenprüfung** (bug-744). Die Startplätze kommen aus den
+  Einheiten und nicht mehr aus veralteten Startmarken. Fahrzeuge dürfen nur über
+  freien Boden, Fußvolk auch über rauen. Bis zu 8 Spieler.
+
+### Für Neugierige
+
+- Online-Prüflauf mit zwei oder drei Rechnern auf einer Maschine:
+  `--net-online --net-host --net-raum=<name>` und
+  `--net-online --net-join --net-raum=<name>`; NET07 über 6000 Takte mit
+  Direktbefehlen und voller Prüfsumme läuft durch.
+- Prüfschalter für das Ausschalten: `--net-geht-bei=<takt>`,
+  `--net-haengt-bei=<takt>`, `--net-kick-nach=<ms>`, `--net-chat-bei=<takt>:<text>`;
+  Gegenschalter `--netz-ausschalten-aus`.
+- Bilder aus dem echten Fenster: `--net-probe=online:<raum> --lobby-shot=<pfad>`
+  und `--netz-probe=<pfad>`.
+- Editor: `--map-edit-gefecht-check` mit den Gegenschaltern
+  `--editor-einheit-alt`, `--editor-griff-alt`, `--editor-stempel-alt`,
+  `--editor-oeffnen-alt`, `--mapcheck-alt`, `--editor-startmarke-alt`.
+- Discord aus: `--discord-aus`.
+
+### Bekannte Einschränkungen
+
+- **Kein Wiederverbinden.** Reißt die Verbindung ab, ist die Partie für dich
+  vorbei. Die anderen spielen weiter. Der Server hält die Partie schon vor; der
+  Weg zurück hinein kommt in einer der nächsten Fassungen.
+- **Online jeder gegen jeden.** Bündnisse und Teams werden noch nicht
+  übertragen.
+- **Kein Kartenabgleich.** Haben zwei Spieler verschieden eingelesene Daten,
+  merkt das Spiel es erst an auseinanderlaufenden Prüfsummen.
+- **Im LAN tragen die Spieler keine Namen**, sie heißen »Spieler 1, 2, …«.
+- **Kopien gelieferter Karten** tragen Brücken, Rampen, Waldtafel und
+  Terranium-Plätze noch nicht mit.
+- Die Discord-Anzeige ist an echten Rechnern noch kaum erprobt. Wenn sie bei dir
+  nicht erscheint, sag es uns auf Discord.
 
 ## 0.6.13 — 31.10.2026 · fehlende Spielfunktionen, flache Fluglage und ein Gefecht mit Startbasis
 

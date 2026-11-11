@@ -6,11 +6,154 @@ your own copy of the 1997 game.
 
 *Auf Deutsch: [CHANGELOG.de.md](CHANGELOG.de.md).*
 
-## 0.7.0 — in progress
+## 0.7.0 — 2026-11-11 · online multiplayer, Discord, and a map editor that no longer breaks things
 
-> ⚠ **Not released yet.** 0.7.0 ships once every one of the 33 campaign missions
-> has been played through individually and found clean — see **Road to 0.7.0**
-> in the [README](README.md). The section below grows with every mission played.
+> **With 0.7.0, Akte Europa Reborn goes online.** All 33 campaign missions
+> have been played through, and as announced, multiplayer over the internet is
+> here. There is a dedicated lobby server. You sign in with a name, see the
+> open games, open a room or join one. The host starts, and the match runs in
+> lockstep just like on a LAN. Nobody needs to forward ports any more.
+>
+> On top of that come the original's network windows: "Warten auf …" with
+> Ctrl-K, and chat on Enter. New are the Discord status and a map editor that no
+> longer damages shipped maps and produces playable ones.
+>
+> As always, every change has a switch that brings back the old behaviour, and
+> a test bench. Where the original prescribes nothing, the source says "UNSERE
+> SETZUNG" (our choice).
+>
+> ✅ **No re-import needed.** Savegames from 0.6.13 still load.
+>
+> ⚠ **Network play:** the protocol is now at level 4. 0.6.13 and 0.7.0 do not
+> play together, not even on a LAN. Online, players only see others on the same
+> version.
+
+### Online multiplayer
+
+- **Play over the internet.** Under *Multiplayer* there is a new mode,
+  **"Online (Internet)"**. *Start game* opens the online lobby. Every machine
+  only connects outward to our server (`wss://ae.krynexlabs.de/ae/v1`), so
+  nobody needs port forwarding or the other player's IP address. The original
+  only knew DirectPlay on a local network; server and lobby are our addition.
+- **The lobby.** You enter your name once; it is remembered. You see the open
+  games with host, map and slots. Running and full rooms are greyed out. You
+  open your own room with one click, named like the original's
+  "Akte Europa *Name*s Spiel", optionally with a password. Inside the room you
+  see the other players with their ping, and there is chat for lobby and room.
+- **No ready button, as in the original.** The host presses *Start* as soon as
+  at least two people are in the room. Map, tech level, account and resources
+  are set beforehand on the skirmish screen; the *Menschen* field in the network
+  box sets the room size.
+- **The dice come from the server.** On every start the server rolls the
+  match's seed, and every machine gets the same one. It also hands the commands
+  to everyone in a fixed, numbered order, so the host no longer relays
+  anything.
+- **Bundled, not one by one.** Lockstep sends one packet per tick. Online,
+  everything produced within 40 ms goes out as one packet (bug-762). Without
+  this the server rejected the match after a few seconds ("more than 60 frames
+  per second"). The 6-tick lead absorbs the extra 40 ms.
+- **Back to the lobby after the match.** Leaving an online match no longer
+  drops you in the main menu but back in the lobby, still signed in, with a line
+  saying how the match ended.
+
+### In network play: waiting, dropping, chat (online and LAN)
+
+- **"Warten auf …" (the original's window type 42).** If a player stalls, the
+  original's window appears after 2 seconds with their name and the hint
+  "Drücken Sie Ctrl-K, um ihn/sie auszuschalten." Other players see, as in the
+  original, "Drücken Sie CTRL-E, um das Spiel zu beenden."
+- **Ctrl-K drops a stalled player** (the original's command 973). Their units
+  disappear, their buildings turn neutral (owner 11), and everyone else plays
+  on. For this to happen on **the same tick** on every machine, each machine
+  computes the tick itself on receipt: the last tick it already had a packet
+  for from that player, plus one. Since everyone receives the packets in the
+  same order, the result is the same everywhere. Measured with three machines,
+  online and on LAN: both remaining machines drop the player on the same tick,
+  remove the same units and have the same checksum afterwards. On LAN only the
+  host may press Ctrl-K, as in the original; online anyone may, because the
+  server fixes the order.
+- **Whoever leaves no longer holds the others up.** A player who leaves drops
+  themselves (the original's command 995). If an online connection breaks and
+  the player is not back within 60 seconds, the game drops them by itself.
+- **In-game chat (the original's window type 36).** **Enter** opens the chat
+  line, Enter sends, Esc discards. The others see "Name: Text" in the message
+  window, as with the original's command 994.
+- **Player list with ping: hold F4.** Name, ping and whether the player is still
+  in the game. Our addition; the original has none. *Tab* already toggles the
+  health bars there, hence F4.
+- **The game no longer quits without a word** (bug-765). Until now the whole
+  program closed when a player stalled for 15 seconds or the machines went out
+  of sync. The network ticker is also our test bench, where quitting is
+  intended. In a real game you now get the waiting window, and an abort takes
+  you back to the menu with a message.
+- **Going to the menu no longer leaves a ticker running** (bug-766). After
+  leaving the map it kept running against the already freed map.
+
+### Discord
+
+- **Discord shows what you are playing.** While Discord runs, your profile
+  shows "Akte Europa Reborn" with main menu, campaign mission and title,
+  skirmish or multiplayer with map, or map editor, and for how long. The game
+  only talks to the Discord app on your own machine and changes nothing in the
+  game. You can turn it off under *Settings* → "Discord".
+- **"Discord beitreten" in the start menu** opens the invite to our Discord
+  server in your browser.
+
+### Map editor
+
+- **Opening no longer damages a shipped map** (bug-739). Until now *Open
+  existing* immediately wrote the map back under the same name, losing bridges,
+  ramps, the forest table and the Terranium sites — in missions 14, 17, 20 and
+  22 that included the only place a mine can be built. Shipped maps now open
+  only as a copy (`…_kopie`); your own maps are written only when you save (F5).
+  A second guard refuses to save a shipped map under its own name. If you had
+  already damaged a map, a re-import repairs it.
+- **Units from the editor are armed** (bug-740). Editor and generator set
+  weapon, ammunition, speed, range and sight to 0, so the troops could neither
+  fight nor move properly. Each unit type now gets the most common record from
+  the 54 shipped maps.
+- **Buildings get the right grip cells** (bug-741): 60000 + slot as in the
+  original instead of 51000 + slot, which lay in the forest band.
+- **Only a building's blocking cells are occupied** (bug-742). Until now the
+  whole rectangle was stamped, even over water and units, while some blocking
+  cells were missing and could be driven through.
+- **"Im Gefecht spielen"** (bug-743): a button in the editor starts the map
+  directly as a skirmish. You play slot 1, the computer plays every other
+  occupied slot (our choice).
+- **Honest map check** (bug-744). Start positions now come from the units, not
+  from outdated start markers. Vehicles may only cross free ground, infantry
+  rough ground as well. Up to 8 players.
+
+### For the curious
+
+- Online test with two or three players on one machine:
+  `--net-online --net-host --net-raum=<name>` and
+  `--net-online --net-join --net-raum=<name>`; NET07 over 6000 ticks with direct
+  commands and full checksum passes.
+- Test switches for dropping: `--net-geht-bei=<tick>`, `--net-haengt-bei=<tick>`,
+  `--net-kick-nach=<ms>`, `--net-chat-bei=<tick>:<text>`; counter-switch
+  `--netz-ausschalten-aus`.
+- Pictures from the real window: `--net-probe=online:<room> --lobby-shot=<path>`
+  and `--netz-probe=<path>`.
+- Editor: `--map-edit-gefecht-check` with the counter-switches
+  `--editor-einheit-alt`, `--editor-griff-alt`, `--editor-stempel-alt`,
+  `--editor-oeffnen-alt`, `--mapcheck-alt`, `--editor-startmarke-alt`.
+- Discord off: `--discord-aus`.
+
+### Known limitations
+
+- **No reconnect.** If your connection breaks, the match is over for you; the
+  others play on. The server already keeps the match; the way back in comes in
+  one of the next versions.
+- **Online it is everyone against everyone.** Alliances and teams are not
+  transmitted yet.
+- **No data check.** If two players imported different data, the game only
+  notices through diverging checksums.
+- **On LAN players carry no names**; they are "Spieler 1, 2, …".
+- **Copies of shipped maps** do not carry bridges, ramps, forest table and
+  Terranium sites yet.
+- The Discord status has barely been tried on real machines. If it does not
+  show up for you, tell us on Discord.
 
 ## 0.6.13 — 2026-10-31 · missing game functions, flat flight attitude, and skirmish with a starting base
 

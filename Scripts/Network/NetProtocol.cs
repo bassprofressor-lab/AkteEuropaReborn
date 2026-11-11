@@ -144,8 +144,9 @@ public sealed class NetSession
     /// mit verschiedener Nummer spielen NICHT zusammen — sie würden
     /// auseinanderlaufen, und ein Auseinanderlaufen aus diesem Grund ist der
     /// teuerste, weil er wie ein Rechenfehler aussieht.</summary>
-    public const int Protokoll = 3;   // 2: Paket W4, Vorlauf traegt die Tafel-Pruefzahl
+    public const int Protokoll = 4;   // 2: Paket W4, Vorlauf traegt die Tafel-Pruefzahl
                                       // 3: bug-733/734, Sitzung traegt Konto, B8 und Startbasis
+                                      // 4: 0.7.0 Online 2b, Pakete 10 Ausschalten (Ctrl-K) und 11 Chat
 
     public string Map = "";
     public uint Seed;
