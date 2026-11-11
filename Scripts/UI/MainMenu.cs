@@ -578,6 +578,10 @@ public partial class MainMenu : Control
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
             else if (a.StartsWith("--shot-delay=")) _shotDelay = a[13..].ToInt();
             else if (a.StartsWith("--menu-click=")) _clickRow = a[13..];
+            // 11.11.2026 bug-800: den Karteneditor ohne Menueklick oeffnen —
+            // --menu-click=Karteneditor traf im 1920x1080-Fenster die Zeile
+            // »Multiplayer« (Bild scratchpad/editorui/vorher_editor.png).
+            else if (a == "--editor-direkt") CallDeferred(nameof(ShowMapEditor));
         }
     }
 

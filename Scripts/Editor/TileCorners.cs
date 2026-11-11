@@ -510,6 +510,17 @@ public sealed class TileCorners
         ChainWhy = "Kette " + string.Join("–", order.ConvertAll(l => Name(l)));
     }
 
+    /// <summary>11.11.2026 bug-801: der kleinste Code einer Kachel, die an allen
+    /// vier Ecken diesen Stoff traegt, oder -1 — fuer die Farbprobe der
+    /// Kachelsatzbeschreibung (<see cref="KachelsatzInfo"/>).</summary>
+    public int UniformCode(int label)
+    {
+        int best = int.MaxValue;
+        foreach (var (code, q) in _corners)
+            if (q[0] == label && q[1] == label && q[2] == label && q[3] == label && code < best) best = code;
+        return best == int.MaxValue ? -1 : best;
+    }
+
     /// <summary>Ein Stoffname fuer die Meldung: der kleinste Code einer Kachel,
     /// die an allen vier Ecken diesen Stoff traegt.</summary>
     public string Name(int label)

@@ -535,6 +535,50 @@ public static class MapFactory
     /// die Ruempfe 150..153, Gattung 5 nur 157/158 — kein einziger Landtyp,
     /// obwohl der Katalog fuer 171 und 165 etwas anderes sagt.</param>
     /// <param name="energy">+0x08 und +0x29 — das LEBEN.</param>
+    /// <summary>
+    /// ⭐ 11.11.2026 — bug-802: EINE EINHEIT WIEDER WEGNEHMEN, die Gegenstelle zu
+    /// <see cref="PutEntity"/>. Gesucht wird der Satz, dessen Rumpf (1, 2x2 oder
+    /// 4x4 Zellen, <see cref="Simulation.NavGrid.HullSide"/>) die Zelle deckt; der
+    /// Satz wird geleert (+0x09 = 0xFF, der Leerwert aus <see cref="Empty"/>), und
+    /// die imap-Zelle, die PutEntity mit der Platznummer belegt hat, geht auf den
+    /// Wert zurueck, den das Zonenraster nennt — Zone 0 bei einem Schiff auf
+    /// Wasser, sonst wie bei <see cref="ClearBuilding"/> auf gesperrt.
+    /// UNSERE SETZUNG wie der ganze Editor.
+    /// </summary>
+    /// <returns>Die geleerte Platznummer oder −1.</returns>
+    public static int ClearEntityAt(CwmFile m, int col, int row)
+    {
+        var s = m.Sec(5);
+        if (s == null) return -1;
+        for (int slot = 0; (slot + 1) * CwmData.EntityStride <= s.Length; slot++)
+        {
+            int o = slot * CwmData.EntityStride;
+            if (s[o + 0x09] == 0xFF) continue;
+            int c = s[o], r = s[o + 1], art = s[o + 0x0a];
+            int side = Simulation.NavGrid.HullSide(art);
+            if (col < c || row < r || col >= c + side || row >= r + side) continue;
+
+            Array.Clear(s, o, CwmData.EntityStride);
+            s[o + 0x09] = 0xFF;
+            var imap = m.Sec(6);
+            var zone = m.Sec(2);
+            int i = (c * ImapStride + r) * 2;
+            if (imap != null && i + 1 < imap.Length && (imap[i] | (imap[i + 1] << 8)) == slot)
+            {
+                int z = zone != null && c * ZoneStride + r < zone.Length ? zone[c * ZoneStride + r] : ZoneLand;
+                int v = z switch
+                {
+                    ZoneLand => ImapFree,
+                    ZoneShore => ImapRough,
+                    _ => art is 4 or 5 ? ImapWater : ImapBlocked,
+                };
+                imap[i] = (byte)(v & 0xFF); imap[i + 1] = (byte)(v >> 8);
+            }
+            return slot;
+        }
+        return -1;
+    }
+
     public static bool PutEntity(CwmFile m, int slot, int col, int row, int unitType,
                                  int attack, int weapon, int fuel, int facing = 0,
                                  int kind = 0, int art = 0, int energy = 100)

@@ -87,6 +87,55 @@ public partial class MapEditorScreen : Control
     private const int PreferredTileset = 47;
 
     private LineEdit _name = null!;
+
+    // ---- 11.11.2026 bug-800/801: Groessen, Spieler, Kachelsatzbeschreibung ----
+    /// <summary>Eine feste Kartengroesse zum Anklicken.</summary>
+    private readonly record struct Groesse(string Name, int W, int H, string Spieler,
+                                           int MinP, int MaxP, string Herkunft);
+
+    /// <summary>
+    /// DIE FESTEN GROESSEN — GEMESSEN an den gelieferten Karten
+    /// (scratchpad/editorui/maps.py, 11.11.2026: Width/Height aus
+    /// user://data/Maps/map_*.json, besetzte Plaetze = Eigner 0..7 der
+    /// Einheiten in map_*.entities.json). Jede Groesse ist die einer
+    /// Originalkarte; NAME und SPIELEREMPFEHLUNG sind UNSERE SETZUNG.
+    /// <list type="bullet">
+    ///   <item>NET-Karten: NET01 168x168 (4 Plaetze), NET02 230x230 (6),
+    ///     NET03 150x150 (4), NET04 150x200 (8), NET05 254x254 (8), NET06
+    ///     254x254 (8), NET07 254x125 (8), NET08 254x200 (4).</item>
+    ///   <item>Kampagne: kleinste 30x80 (K4), K8 100x100, K18 120x120, K24
+    ///     150x150, K19 168x168, K21 200x200, K29 230x230, K23/K32/K33 254x254.</item>
+    /// </list>
+    /// ⚠ Eine Zelle ist 40x20 Bildpunkte: 254x125 Zellen sind im Bild etwa
+    /// quadratisch (10160x2500), 150x150 Zellen doppelt so breit wie hoch.
+    /// </summary>
+    private static readonly Groesse[] Groessen =
+    {
+        new("Klein",       100, 100, "2 Spieler",       2, 2, "K8 »The gate« 100×100 (Kampagne); keine NET-Karte ist kleiner als 150×150"),
+        new("Mittel",      150, 150, "2–4 Spieler",     2, 4, "NET03 »Deep forest« 150×150, 4 Plaetze; K24 »Forest Flames«"),
+        new("Gross",       168, 168, "4 Spieler",       3, 4, "NET01 »Swamp fight« 168×168, 4 Plaetze; K19 »Danube Delta«"),
+        new("Sehr gross",  230, 230, "4–6 Spieler",     4, 6, "NET02 »Sands of doom« 230×230, 6 Plaetze; K29 »Icefield«"),
+        new("Riesig",      254, 254, "6–8 Spieler",     6, 8, "NET05 »River combat« und NET06 »Spring streams« 254×254, je 8 Plaetze — die groesste Karte"),
+        new("Breit",       254, 125, "8 Spieler",       6, 8, "NET07 »Desert death« 254×125, 8 Plaetze (im Bild fast quadratisch)"),
+        new("Hochformat",  150, 200, "8 Spieler",       6, 8, "NET04 »Islands« 150×200, 8 Plaetze"),
+    };
+
+    /// <summary>Welche Groesse zur Spielerzahl vorgeschlagen wird (Index in
+    /// <see cref="Groessen"/>). UNSERE SETZUNG: 2 → Mittel, 3–4 → Gross,
+    /// 5–6 → Sehr gross, 7–8 → Riesig.</summary>
+    private static int VorschlagFuer(int players) => players switch
+    {
+        <= 2 => 1, <= 4 => 2, <= 6 => 3, _ => 4,
+    };
+
+    private int _players = 2;
+    private int _sizeAt = 1;
+    private readonly List<Button> _playerButtons = new(), _sizeButtons = new();
+    private CheckButton _ownSize = null!;
+    private Label _sizeHint = null!;
+    private TextureRect _preview = null!;
+    private Label _tsName = null!, _tsText = null!, _tsUsed = null!, _tsMore = null!;
+    private HBoxContainer _tsStoffe = null!;
     private SpinBox _w = null!, _h = null!, _pick = null!;
     private OptionButton _tileset = null!;
     private CheckBox _flat = null!;
@@ -140,7 +189,7 @@ public partial class MapEditorScreen : Control
         };
         scroll.AddChild(middle);
 
-        var box = new VBoxContainer { CustomMinimumSize = new Vector2(1000, 0) };
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(1320, 0) };
         box.AddThemeConstantOverride("separation", 10);
         middle.AddChild(box);
 
@@ -174,7 +223,18 @@ public partial class MapEditorScreen : Control
         form.AddThemeConstantOverride("separation", 6);
         var formGroup = Group("Neue Karte", form);
         formGroup.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        lower.AddChild(formGroup);
+        // bug-800 (11.11.2026): links Formular UND Knoepfe untereinander, damit
+        // »KARTE ERZEUGEN« auch bei 1080 Zeilen ohne Rollen sichtbar bleibt.
+        var leftCol = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        leftCol.AddThemeConstantOverride("separation", 8);
+        lower.AddChild(leftCol);
+        formGroup.SizeFlagsVertical = SizeFlags.ShrinkBegin;
+        leftCol.AddChild(formGroup);
+        // bug-801 (11.11.2026): rechts die Landschaft (Vorschau + Beschreibung)
+        // und darunter der Bericht.
+        var right = new VBoxContainer { CustomMinimumSize = new Vector2(420, 0) };
+        right.AddThemeConstantOverride("separation", 10);
+        lower.AddChild(right);
 
         _name = new LineEdit
         {
@@ -185,23 +245,132 @@ public partial class MapEditorScreen : Control
         };
         form.AddChild(Row("Name", _name));
 
+        // ⭐ 11.11.2026 — bug-800: SPIELERZAHL UND FESTE GROESSEN zum Anklicken.
+        // Spielermeldung: »bei den größen sollte man feste werte wählen können
+        // die halt so klassisch sind und nicht einzeln hochklicken können/müssen,
+        // gerade 64x64 ist viel zu klein für multiplayer!« Die Groessen sind die
+        // der gelieferten Karten (Tafel Groessen, gemessen); die Zuordnung zur
+        // Spielerzahl ist UNSERE SETZUNG. Die Zaehler bleiben unter »Eigene
+        // Groesse« erreichbar — der Lauf liest weiter _w/_h.
+        var players = new HBoxContainer();
+        players.AddThemeConstantOverride("separation", 4);
+        var playerGroup = new ButtonGroup();
+        for (int n = 2; n <= 8; n++)
+        {
+            int nn = n;
+            var b = new Button
+            {
+                Text = n.ToString(), ToggleMode = true, ButtonGroup = playerGroup,
+                CustomMinimumSize = new Vector2(54, 38),
+                TooltipText = $"{n} Startplaetze — je Platz Basis, Fabrik und Truppe.",
+            };
+            Kachelknopf(b);
+            b.Pressed += () => SetPlayers(nn, true);
+            _playerButtons.Add(b);
+            players.AddChild(b);
+        }
+        form.AddChild(Row("Spieler", players));
+
         string sizeHint = $"{MinSize} bis {MaxSize} Zellen. Die {MaxSize} sind gelesen — so gross "
                         + "ist die groesste gelieferte Karte, darueber weist CwmFile.Create ab. Die "
                         + $"{MinSize} sind UNSERE Setzung: darunter bleibt nach Wasserrand (3), "
                         + "Strandring und den 6 Zellen bis zur Startmarke kaum Landesinneres uebrig.";
-        _w = new SpinBox { MinValue = MinSize, MaxValue = MaxSize, Value = 64, TooltipText = sizeHint };
-        _h = new SpinBox { MinValue = MinSize, MaxValue = MaxSize, Value = 64, TooltipText = sizeHint };
-        var size = new HBoxContainer();
+        _w = new SpinBox { MinValue = MinSize, MaxValue = MaxSize, Value = 150, TooltipText = sizeHint };
+        _h = new SpinBox { MinValue = MinSize, MaxValue = MaxSize, Value = 150, TooltipText = sizeHint };
+
+        var sizeGrid = new GridContainer { Columns = 4 };
+        sizeGrid.AddThemeConstantOverride("h_separation", 6);
+        sizeGrid.AddThemeConstantOverride("v_separation", 6);
+        var sizeGroup = new ButtonGroup();
+        for (int i = 0; i < Groessen.Length; i++)
+        {
+            int ii = i;
+            var g = Groessen[i];
+            var b = new Button
+            {
+                Text = $"{g.Name}  {g.W}×{g.H}\n{g.Spieler}",
+                ToggleMode = true, ButtonGroup = sizeGroup,
+                CustomMinimumSize = new Vector2(180, 56),
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                TooltipText = $"{g.W}×{g.H} Zellen. Vorbild: {g.Herkunft}",
+            };
+            Kachelknopf(b);
+            b.Pressed += () => SetSize(ii);
+            _sizeButtons.Add(b);
+            sizeGrid.AddChild(b);
+        }
+        form.AddChild(new Label { Text = "Kartengroesse (wie die Originalkarten)" });
+        form.AddChild(sizeGrid);
+        _sizeHint = Hint("");
+        form.AddChild(_sizeHint);
+
+        // »Eigene Groesse« — ausgeklappt nur auf Wunsch.
+        _ownSize = new CheckButton { Text = "Eigene Groesse eingeben", TooltipText = sizeHint };
+        form.AddChild(_ownSize);
+        var size = new HBoxContainer { Visible = false };
         size.AddThemeConstantOverride("separation", 8);
         _w.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _h.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         size.AddChild(_w);
         size.AddChild(new Label { Text = "x" });
         size.AddChild(_h);
-        form.AddChild(Row($"Groesse ({MinSize}..{MaxSize})", size));
+        var sizeRow = Row($"Breite x Hoehe ({MinSize}..{MaxSize})", size);
+        sizeRow.Visible = false;
+        form.AddChild(sizeRow);
+        _ownSize.Toggled += on =>
+        {
+            sizeRow.Visible = size.Visible = on;
+            foreach (var b in _sizeButtons) b.Disabled = on;
+            UpdateSizeHint();
+        };
+        _w.ValueChanged += _ => UpdateSizeHint();
+        _h.ValueChanged += _ => UpdateSizeHint();
 
+        // ⭐ 11.11.2026 — bug-801: der Kachelsatz mit Namen, Beschreibung und
+        // Vorschau (KachelsatzInfo). Die Nummer steht weiter dabei.
         _tileset = new OptionButton();
-        form.AddChild(Row("Kachelsatz", _tileset));
+        form.AddChild(Row("Landschaft (Kachelsatz)", _tileset));
+        _tileset.ItemSelected += _ => ShowTilesetInfo();
+
+        var info = new VBoxContainer();
+        info.AddThemeConstantOverride("separation", 6);
+        _preview = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(400, 225),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        var previewFrame = new PanelContainer();
+        var pfStyle = new StyleBoxFlat { BgColor = new Color(0.02f, 0.02f, 0.03f), BorderColor = new Color(0.3f, 0.34f, 0.4f) };
+        pfStyle.SetBorderWidthAll(1);
+        previewFrame.AddThemeStyleboxOverride("panel", pfStyle);
+        previewFrame.AddChild(_preview);
+        info.AddChild(previewFrame);
+        var infoText = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        infoText.AddThemeConstantOverride("separation", 4);
+        _tsName = new Label { Modulate = new Color(0.95f, 0.85f, 0.55f) };
+        _tsName.AddThemeFontSizeOverride("font_size", 20);
+        _tsText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(380, 0) };
+        _tsUsed = Hint("");
+        _tsStoffe = new HBoxContainer();
+        _tsStoffe.AddThemeConstantOverride("separation", 3);
+        _tsMore = Hint("");
+        infoText.AddChild(_tsName);
+        infoText.AddChild(_tsText);
+        infoText.AddChild(_tsUsed);
+        infoText.AddChild(_tsStoffe);
+        infoText.AddChild(_tsMore);
+        info.AddChild(infoText);
+        right.AddChild(Group("Landschaft", info));
+
+        // ---- Fortgeschritten: was nur der Kenner braucht ---------------------
+        var adv = new CheckButton { Text = "Fortgeschritten (Bodenblock, Kachelsatz-Ordner, Gegenprobe)" };
+        form.AddChild(adv);
+        var advBox = new VBoxContainer { Visible = false };
+        advBox.AddThemeConstantOverride("separation", 6);
+        form.AddChild(advBox);
+        adv.Toggled += on => advBox.Visible = on;
+        form = advBox;   // die drei folgenden Zeilen landen im Klappteil
 
         _pick = new SpinBox
         {
@@ -239,25 +408,23 @@ public partial class MapEditorScreen : Control
         // ein Lauf gescheitert ist.
         _log = new RichTextLabel
         {
-            CustomMinimumSize = new Vector2(420, 300),
+            CustomMinimumSize = new Vector2(380, 130),
             BbcodeEnabled = false,
             ScrollFollowing = true,
             SelectionEnabled = true,
             Text = "Noch nichts erzeugt.",
         };
-        lower.AddChild(Group("Bericht", _log));
+        right.AddChild(Group("Bericht", _log));
 
         // ---- die Knoepfe -----------------------------------------------------
-        box.AddChild(new HSeparator());
-
         _create = new Button { Text = "KARTE ERZEUGEN", CustomMinimumSize = new Vector2(0, 44) };
         _create.Pressed += OnCreate;
-        box.AddChild(_create);
+        leftCol.AddChild(_create);
 
         // ---- die vorhandene Karte -------------------------------------------
         var openRow = new HBoxContainer();
         openRow.AddThemeConstantOverride("separation", 8);
-        box.AddChild(openRow);
+        leftCol.AddChild(openRow);
         _existing = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         openRow.AddChild(_existing);
         _open = new Button
@@ -277,7 +444,7 @@ public partial class MapEditorScreen : Control
 
         var after = new HBoxContainer();
         after.AddThemeConstantOverride("separation", 8);
-        box.AddChild(after);
+        leftCol.AddChild(after);
 
         _check = new Button
         {
@@ -312,9 +479,10 @@ public partial class MapEditorScreen : Control
             Disabled = true,
             CustomMinimumSize = new Vector2(0, 36),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            TooltipText = "Oeffnet die Karte mit dem Pinsel: 1/2/3 waehlt Gebaeude, Gegenstand "
-                        + "oder Gleis, +/- die Art, LINKS setzt, RECHTS nimmt weg, F5 speichert. "
-                        + "ESC fuehrt zurueck.",
+            // bug-802 (11.11.2026): Text auf das neue Bedienfeld umgestellt.
+            TooltipText = "Oeffnet die Karte mit dem Bedienfeld rechts: Werkzeug waehlen (Gelaende, "
+                        + "Gebaeude, Einheiten, Wald/Fels, Gleise, Wegnehmen), Auswahl und Besitzer "
+                        + "anklicken, LINKS setzt, RECHTS nimmt weg, F5 speichert, Esc fuehrt zurueck.",
         };
         _edit.Pressed += OnEditPressed;
         after.AddChild(_edit);
@@ -340,7 +508,7 @@ public partial class MapEditorScreen : Control
             Modulate = new Color(0.75f, 0.8f, 0.86f),
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        box.AddChild(_status);
+        leftCol.AddChild(_status);
 
         box.AddChild(new HSeparator());
         var back = new Button { Text = "ZURUECK", CustomMinimumSize = new Vector2(0, 40) };
@@ -364,6 +532,7 @@ public partial class MapEditorScreen : Control
         _from.FocusExited += FillTilesets;
 
         FillTilesets();
+        SetPlayers(2, true);
 
         // ---- der Harnisch ----------------------------------------------------
         //
@@ -399,6 +568,24 @@ public partial class MapEditorScreen : Control
         foreach (string a in OS.GetCmdlineUserArgs())
         {
             if (a.StartsWith("--map-editor-name=")) _name.Text = a["--map-editor-name=".Length..];
+            // bug-800 (11.11.2026): Spielerzahl, Groesse (Index der Tafel oder BxH)
+            // und Kachelsatz fuer Bild- und Prueflaeufe.
+            else if (a.StartsWith("--map-editor-spieler=") &&
+                     int.TryParse(a["--map-editor-spieler=".Length..], out int sp)) SetPlayers(sp, true);
+            else if (a.StartsWith("--map-editor-groesse="))
+            {
+                string v = a["--map-editor-groesse=".Length..];
+                var wh = v.Split('x');
+                if (wh.Length == 2 && int.TryParse(wh[0], out int ww) && int.TryParse(wh[1], out int hh))
+                { _ownSize.ButtonPressed = true; _w.Value = ww; _h.Value = hh; }
+                else if (int.TryParse(v, out int gi)) SetSize(gi);
+            }
+            else if (a.StartsWith("--map-editor-kachelsatz=") &&
+                     int.TryParse(a["--map-editor-kachelsatz=".Length..], out int kt))
+            {
+                int ki = _tilesets.IndexOf(kt);
+                if (ki >= 0) { _tileset.Selected = ki; ShowTilesetInfo(); }
+            }
             else if (a.StartsWith("--map-editor-open=")) _autoOpen = a["--map-editor-open=".Length..];
             else if (a == "--map-editor-run" || a.StartsWith("--map-editor-run="))
             {
@@ -454,21 +641,115 @@ public partial class MapEditorScreen : Control
         for (int t = 0; t <= 63; t++)
             if (MapGenerator.FindTileset(t, hint) != null) _tilesets.Add(t);
 
-        foreach (int t in _tilesets) _tileset.AddItem($"{t:00}");
+        // bug-801 (11.11.2026): mit Namen, Mehrspielersaetze zuerst.
+        _tilesets.Sort((a, b) => KachelsatzInfo.Rang(a).CompareTo(KachelsatzInfo.Rang(b)));
+        foreach (int t in _tilesets) _tileset.AddItem(KachelsatzInfo.Zeile(t));
         int at = _tilesets.IndexOf(PreferredTileset);
         _tileset.Selected = at >= 0 ? at : 0;
+        ShowTilesetInfo();
 
         bool any = _tilesets.Count > 0;
         _tileset.Disabled = !any;
         _create.Disabled = !any;
         _status.Text = any
-            ? $"{_tilesets.Count} Kachelsaetze gefunden: {string.Join(", ", _tilesets)}"
+            ? $"{_tilesets.Count} Landschaften (Kachelsaetze) gefunden."
             // bug-739 (11.11.2026): der Einspieler legt NN.CWP/NN.PAL seit
             // ContentBuilder.CopyTilesets sehr wohl ab — der alte Text sagte das Gegenteil.
             : "Kein Kachelsatz gefunden — weder im Entwicklungsbaum (Assets/Legacy/DATA) noch "
             + "unter user://data/DATA noch auf einer eingelegten Spiel-CD. Der Einspieler legt "
             + "die NN.CWP/NN.PAL unter user://data/DATA ab — fehlen sie, die Daten neu "
             + "einlesen, die CD einlegen oder oben den DATA-Ordner deiner Spielkopie waehlen.";
+    }
+
+    // ---- 11.11.2026 bug-800: Spieler und Groesse --------------------------
+
+    /// <summary>Spielerzahl setzen; <paramref name="suggest"/> schlaegt die
+    /// passende Groesse vor (UNSERE SETZUNG, siehe <see cref="VorschlagFuer"/>).</summary>
+    private void SetPlayers(int n, bool suggest)
+    {
+        _players = Math.Clamp(n, 2, MapGenerator.PlayersMax);
+        for (int i = 0; i < _playerButtons.Count; i++) _playerButtons[i].SetPressedNoSignal(i + 2 == _players);
+        if (suggest && !_ownSize.ButtonPressed) SetSize(VorschlagFuer(_players));
+        else UpdateSizeHint();
+    }
+
+    private void SetSize(int i)
+    {
+        if (i < 0 || i >= Groessen.Length) return;
+        _sizeAt = i;
+        _w.Value = Groessen[i].W;
+        _h.Value = Groessen[i].H;
+        for (int k = 0; k < _sizeButtons.Count; k++) _sizeButtons[k].SetPressedNoSignal(k == i);
+        UpdateSizeHint();
+    }
+
+    private void UpdateSizeHint()
+    {
+        if (_sizeHint == null) return;
+        int w = (int)_w.Value, h = (int)_h.Value;
+        if (_ownSize.ButtonPressed)
+        {
+            _sizeHint.Text = $"Eigene Groesse {w}×{h} Zellen" +
+                             (w * h < 150 * 150
+                                 ? " — ⚠ kleiner als jede Mehrspielerkarte des Originals (kleinste: 150×150)."
+                                 : ".");
+            return;
+        }
+        var g = Groessen[_sizeAt];
+        string warn = _players > g.MaxP
+            ? $"  ⚠ Fuer {_players} Spieler eng — empfohlen: {Groessen[VorschlagFuer(_players)].Name}."
+            : "";
+        _sizeHint.Text = $"{g.W}×{g.H} Zellen, {g.Spieler}. Vorbild: {g.Herkunft}.{warn}";
+    }
+
+    // ---- 11.11.2026 bug-801: der Kachelsatz beschrieben --------------------
+
+    private void ShowTilesetInfo()
+    {
+        if (_tsName == null) return;
+        foreach (var c in _tsStoffe.GetChildren()) c.QueueFree();
+        if (_tileset.Selected < 0 || _tileset.Selected >= _tilesets.Count)
+        {
+            _tsName.Text = "keine Landschaft gefunden";
+            _tsText.Text = _tsUsed.Text = _tsMore.Text = "";
+            _preview.Texture = null;
+            return;
+        }
+        int ts = _tilesets[_tileset.Selected];
+        var s = KachelsatzInfo.Of(ts);
+        _tsName.Text = $"{s.Name}  (Kachelsatz {ts:00})";
+        _tsText.Text = s.Text;
+        _tsUsed.Text = $"Im Original benutzt von: {s.Belege}. (Name und Beschreibung sind UNSERE "
+                     + "Zusammenfassung — das Original kennt nur die Nummer.)";
+        var m = KachelsatzInfo.Hole(ts, done =>
+        {
+            if (!IsInstanceValid(this)) return;
+            if (_tileset.Selected >= 0 && _tileset.Selected < _tilesets.Count && _tilesets[_tileset.Selected] == done)
+                ShowTilesetInfo();
+        });
+        if (m == null)
+        {
+            _preview.Texture = null;
+            _tsMore.Text = "Vorschau wird aus der Originalkarte geschnitten …";
+            return;
+        }
+        _preview.Texture = m.Bild != null ? ImageTexture.CreateFromImage(m.Bild) : null;
+        if (m.Stoffe.Count > 0)
+        {
+            _tsStoffe.AddChild(new Label { Text = "Bodenstoffe:", Modulate = new Color(0.6f, 0.65f, 0.72f) });
+            foreach (var (farbe, anteil, wasser) in m.Stoffe)
+                _tsStoffe.AddChild(new ColorRect
+                {
+                    Color = farbe,
+                    CustomMinimumSize = new Vector2(Math.Max(18f, (float)(anteil * 200)), 20),
+                    TooltipText = (wasser ? "Wasser — " : "") +
+                                  $"{100 * anteil:0} % der Kachelecken in den Originalkarten (gemessen, TileCorners)",
+                });
+        }
+        string geb = m.FehlendeGebaeude.Count == 0 ? "alle 16 Gebaeudearten"
+            : $"{m.Gebaeudearten} von 16 Gebaeudearten (es fehlen: {string.Join(", ", m.FehlendeGebaeude)})";
+        _tsMore.Text = m.Fehler.Length > 0 ? $"Messung unvollstaendig: {m.Fehler}"
+            : $"Bietet {geb} und {m.Gegenstaende} Objektbilder (Gebaeudeteile, Baeume, Felsen …).";
     }
 
     // ---- erzeugen -----------------------------------------------------------
@@ -508,12 +789,14 @@ public partial class MapEditorScreen : Control
         }
 
         string arg = $"{name},{(int)_w.Value},{(int)_h.Value},{ts}"
+                   + $",spieler={_players}"                       // bug-800
                    + (_flat.ButtonPressed ? ",flach" : "")
                    + $",boden={(int)_pick.Value}"
                    + (from.Length > 0 ? $",from={from}" : "");
 
         _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
-        _status.Text = $"arbeitet … ({(int)_w.Value}x{(int)_h.Value}, Kachelsatz {ts:00})";
+        _status.Text = $"arbeitet … ({(int)_w.Value}x{(int)_h.Value}, {_players} Spieler, " +
+                       $"{KachelsatzInfo.Of(ts).Name} {ts:00}) — grosse Karten brauchen einige Sekunden";
         _log.Text = string.Join("\n", lines);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
@@ -664,6 +947,29 @@ public partial class MapEditorScreen : Control
     }
 
     // ---- Kleinteile, gebaut wie im Gefechtsschirm ---------------------------
+
+    /// <summary>bug-800 (11.11.2026): ein Auswahlknopf mit sichtbarem Rahmen —
+    /// im Spielthema sahen nicht gewaehlte Knoepfe wie blosser Text aus.
+    /// UNSERE SETZUNG: Farben.</summary>
+    private static void Kachelknopf(Button b)
+    {
+        StyleBoxFlat Box(Color bg, Color border, int w)
+        {
+            var s = new StyleBoxFlat { BgColor = bg, BorderColor = border,
+                                       ContentMarginLeft = 6, ContentMarginRight = 6,
+                                       ContentMarginTop = 4, ContentMarginBottom = 4 };
+            s.SetBorderWidthAll(w);
+            s.SetCornerRadiusAll(3);
+            return s;
+        }
+        b.AddThemeStyleboxOverride("normal", Box(new Color(0.12f, 0.14f, 0.17f), new Color(0.30f, 0.34f, 0.40f), 1));
+        b.AddThemeStyleboxOverride("hover", Box(new Color(0.17f, 0.20f, 0.25f), new Color(0.55f, 0.62f, 0.72f), 1));
+        b.AddThemeStyleboxOverride("pressed", Box(new Color(0.16f, 0.30f, 0.46f), new Color(0.95f, 0.80f, 0.40f), 2));
+        b.AddThemeStyleboxOverride("hover_pressed", Box(new Color(0.18f, 0.33f, 0.50f), new Color(1f, 0.85f, 0.45f), 2));
+        b.AddThemeStyleboxOverride("disabled", Box(new Color(0.08f, 0.09f, 0.10f), new Color(0.18f, 0.2f, 0.22f), 1));
+        b.AddThemeColorOverride("font_pressed_color", new Color(1f, 0.95f, 0.8f));
+        b.AddThemeColorOverride("font_hover_pressed_color", new Color(1f, 0.95f, 0.8f));
+    }
 
     private static Label Hint(string text) => new()
     {

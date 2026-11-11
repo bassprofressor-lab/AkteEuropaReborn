@@ -9296,7 +9296,10 @@ _mausProbePunkt = karte;
         // Kartenbetrachter, wo man wirklich Karten durchblaettert — bleiben sie
         // ebenfalls stehen, samt der Blaetterzahl [n/N].
         bool imSpiel = UI.SkirmishSetup.Active || UI.SkirmishSetup.CampaignMission > 0;
-        bool technik = HudDebug || !imSpiel;
+        // 11.11.2026 bug-802: im Bearbeitungsmodus weg — die Tastenlegende des
+        // Spiels (X=stop, B=bauen …) bedeutet dort nichts; der Editor hat sein
+        // eigenes Bedienfeld (MapEditPanel.cs). --hud-debug holt sie zurueck.
+        bool technik = HudDebug || (!imSpiel && !Editor.MapEditSession.Active);
         _hud.Text =
             (technik
                 ? $"{MapLabel(name)}   \"{mission}\"\n" +

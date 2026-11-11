@@ -53,7 +53,9 @@ using AkteEuropaReborn.Rendering;
 public partial class MapEditOverlay : Node2D
 {
     /// <summary>Was der Pinsel gerade setzt.</summary>
-    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit, Gelaende, Hoehe }
+    /// <remarks>11.11.2026 bug-802: <c>Wegnehmen</c> (Taste 7) neu — nimmt weg,
+    /// was unter der Maus steht, egal welche Art.</remarks>
+    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit, Gelaende, Hoehe, Wegnehmen }
 
     private MapEntityLayer _layer = null!;
     private CwmFile _map = null!;
@@ -74,7 +76,6 @@ public partial class MapEditOverlay : Node2D
     private int _nextSlot;
 
     private CanvasLayer _ui = null!;
-    private Label _head = null!, _foot = null!;
 
     /// <summary>Die Eigner zur Auswahl. 0..7 sind die Spielerplaetze, 11 ist
     /// herrenlos (der Preis einer Eroberungskarte, siehe
@@ -97,6 +98,7 @@ public partial class MapEditOverlay : Node2D
         if (_types.Count > 0) _typ = _types[0];
         CollectProps();
         _nextSlot = _layer.EditorBuildingCount;
+        Wiederherstellen();      // bug-802: Werkzeug ueber F5 hinweg behalten
         BuildUi();
         Refresh();
         Harness();
@@ -120,7 +122,30 @@ public partial class MapEditOverlay : Node2D
     private void Harness()
     {
         bool want = false;
-        foreach (string a in Core.CommandLine.Args) if (a == "--map-edit-check") want = true;
+        int wahl = -1;
+        foreach (string a in Core.CommandLine.Args)
+        {
+            if (a == "--map-edit-check") want = true;
+            // 11.11.2026 bug-800: Bildlauf des Bearbeitungsmodus.
+            //   --editor-ui-shot=<png>[,<bilder>]  Bild nach n Bildern, dann Ende
+            //   --editor-ui-pinsel=<1..7>           diesen Pinsel vorwaehlen
+            else if (a.StartsWith("--editor-ui-shot="))
+            {
+                var q = a["--editor-ui-shot=".Length..].Split(',');
+                _uiShot = q[0];
+                if (q.Length > 1 && int.TryParse(q[1], out int n)) _uiShotIn = n;
+            }
+            else if (a.StartsWith("--editor-ui-pinsel=") &&
+                     int.TryParse(a["--editor-ui-pinsel=".Length..], out int b) && b >= 1 && b <= 7)
+                PinselVorwahl(b);
+            //   --editor-ui-wahl=<n>   den n-ten Eintrag der Auswahlliste waehlen
+            else if (a.StartsWith("--editor-ui-wahl=") &&
+                     int.TryParse(a["--editor-ui-wahl=".Length..], out int w)) wahl = w;
+            //   --editor-ui-besitzer=<0..7|11|255>
+            else if (a.StartsWith("--editor-ui-besitzer=") &&
+                     int.TryParse(a["--editor-ui-besitzer=".Length..], out int ow)) { _owner = ow; Refresh(); }
+        }
+        if (wahl >= 0) { OnListPick(wahl); }
         if (!want) return;
 
         int before = CountBuildings();
@@ -267,6 +292,32 @@ public partial class MapEditOverlay : Node2D
                  $"{shipPut} durchgelassen (durchgelassen muss 0 sein, wenn kein Wasser da ist)");
         _owner = 0;
 
+        // 3a2. bug-802 (11.11.2026): EINHEIT WEGNEHMEN und das Werkzeug
+        // »Wegnehmen« — die eben gesetzte erste Einheit wieder weg, dann
+        // dieselbe Zelle noch einmal (muss »nichts« melden).
+        {
+            var u0 = _mine.Find(x => x.What == Brush.Einheit);
+            int vorE = CountUnits();
+            if (unitsPut > 0)
+            {
+                _brush = Brush.Wegnehmen;
+                Take(new Vector2I(u0.Col, u0.Row));
+                int nachE = CountUnits();
+                // der zweite Klick mit dem EINHEITENpinsel (rechte Taste): dort
+                // steht keine mehr — er muss abweisen. (Mit Werkzeug 7 naehme er
+                // das Gebaeude, in dessen Ueberhang die Einheit stand.)
+                _brush = Brush.Einheit;
+                _say = "";
+                Take(new Vector2I(u0.Col, u0.Row));
+                GD.Print($"map-edit-check: Einheit wegnehmen (Werkzeug 7) -> {vorE} -> {nachE} Einheiten " +
+                         $"(muss eins weniger sein); zweiter Klick: {(_say.Contains("keine Einheit") ? "abgewiesen" : "⚠ " + _say)}");
+                // und wieder hinstellen, damit die Zaehler unten unveraendert bleiben
+                _brush = Brush.Einheit; _unitAt = 0; _owner = 0;
+                PutUnit(new Vector2I(u0.Col, u0.Row));
+                _gone.Clear();
+            }
+        }
+
         // 3b. eine RAMPE: eine Zelle mit Gelaendebyte 1..4 suchen und sehen, ob
         // das abgeleitete Bild das gemessene Rampenbild ist. ⚠ Gesucht statt
         // gesetzt — welche Zelle eine Stufe traegt, entscheidet das Gelaende.
@@ -355,6 +406,31 @@ public partial class MapEditOverlay : Node2D
                      $"\n               {mark} nachher: {b ?? "(fehlt)"}");
         }
         GD.Print("map-edit-check: fertig");
+    }
+
+    // ---- 11.11.2026 bug-800: der Bildlauf -----------------------------------
+    private string _uiShot = "";
+    private int _uiShotIn = 90;
+
+    private void PinselVorwahl(int n)
+    {
+        _brush = n switch
+        {
+            1 => Brush.Gebaeude, 2 => Brush.Gegenstand, 3 => Brush.Gleis,
+            4 => Brush.Einheit, 5 => Brush.Gelaende, 6 => Brush.Hoehe, _ => Brush.Wegnehmen,
+        };
+        Refresh();
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_uiShot.Length == 0) return;
+        if (_uiShotIn-- > 0) return;
+        var img = GetViewport().GetTexture().GetImage();
+        var err = img.SavePng(_uiShot);
+        GD.Print($"editor-ui-shot: {_uiShot} {err} ({img.GetWidth()}x{img.GetHeight()})");
+        _uiShot = "";
+        GetTree().Quit(err == Error.Ok ? 0 : 1);
     }
 
     /// <summary>Die Zeilen von <see cref="MapCheck"/>, auf die es beim
@@ -567,6 +643,17 @@ public partial class MapEditOverlay : Node2D
         return n;
     }
 
+    /// <summary>bug-802: belegte Saetze in sec5.</summary>
+    private int CountUnits()
+    {
+        var s = _map.Sec(5);
+        if (s == null) return 0;
+        int n = 0;
+        for (int o = 0; o + CwmData.EntityStride <= s.Length; o += CwmData.EntityStride)
+            if (s[o + 0x09] != 0xFF) n++;
+        return n;
+    }
+
     private int CountRail()
     {
         var s = _map.Sec(22);
@@ -621,49 +708,9 @@ public partial class MapEditOverlay : Node2D
     }
 
     // ---- die Bedienleiste ---------------------------------------------------
-
-    private void BuildUi()
-    {
-        _ui = new CanvasLayer { Layer = 90 };
-        AddChild(_ui);
-        var panel = new PanelContainer
-        {
-            AnchorLeft = 1, AnchorRight = 1, AnchorTop = 0, AnchorBottom = 0,
-            OffsetLeft = -330, OffsetTop = 110, OffsetRight = -12, OffsetBottom = 250,
-            GrowHorizontal = Control.GrowDirection.Begin,
-        };
-        _ui.AddChild(panel);
-        var box = new VBoxContainer();
-        panel.AddChild(box);
-        _head = new Label { Text = "EDITOR" };
-        _foot = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        box.AddChild(_head);
-        box.AddChild(_foot);
-    }
-
-    private void Refresh()
-    {
-        string what = _brush switch
-        {
-            Brush.Gebaeude => $"Gebaeude Typ {_typ} ({OwnerName(_owner)})",
-            Brush.Gegenstand => _props.Count > 0
-                ? $"Gegenstand {_props[_propAt]} ({_propAt + 1}/{_props.Count})"
-                : "Gegenstand — diese Karte hat keine",
-            Brush.Gleis => $"Gleis, Linie {_line}",
-            Brush.Gelaende => $"Gelaende: {GroundName(_ground)}" +
-                              (MapEditSession.Tiles == null ? "  ⚠ ohne Kacheltabelle" : ""),
-            Brush.Hoehe => "Hoehe: LINKS anheben, RECHTS absenken",
-            _ => $"Einheit {MapEditUnits.All[_unitAt].Name} " +
-                 $"(Typ {MapEditUnits.All[_unitAt].Type}, {OwnerName(_owner)})",
-        };
-        _head.Text = $"EDITOR {MapEditSession.Name}  —  {what}" +
-                     (MapEditSession.Dirty ? "  *" : "");
-        _foot.Text =
-            "1..6 = Gebaeude/Gegenstand/Gleis/Einheit/Gelaende/Hoehe · +/- = Art\n" +
-            ",/. = Eigner (N herrenlos, K Kulisse) · LINKS setzen, RECHTS weg\n" +
-            "F5 = speichern und neu laden   ·   " + _mine.Count + " gesetzt\n" +
-            _say;
-    }
+    //
+    // ⭐ 11.11.2026 — bug-802: die alte Leiste (zwei Textzeilen, nur Tasten)
+    // ist ersetzt durch das Bedienfeld in MapEditPanel.cs (BuildUi/Refresh).
 
     private static string GroundName(MapFactory.Ground g) => g switch
     {
@@ -673,7 +720,7 @@ public partial class MapEditOverlay : Node2D
         _ => "gesperrt",
     };
 
-    private static string OwnerName(int o) => o switch
+    internal static string OwnerName(int o) => o switch
     {
         11 => "herrenlos",
         255 => "Kulisse",
@@ -712,6 +759,7 @@ public partial class MapEditOverlay : Node2D
             case Key.Key4: _brush = Brush.Einheit; break;
             case Key.Key5: _brush = Brush.Gelaende; break;
             case Key.Key6: _brush = Brush.Hoehe; break;
+            case Key.Key7: _brush = Brush.Wegnehmen; break;          // bug-802
             case Key.Equal or Key.Plus or Key.KpAdd: Step(+1); break;
             case Key.Minus or Key.KpSubtract: Step(-1); break;
             // ⚠ DER EIGNER HAT JETZT EIGENE TASTEN, und das ist eine
@@ -736,6 +784,7 @@ public partial class MapEditOverlay : Node2D
             case Key.N: _owner = 11; break;
             case Key.K: _owner = 255; break;
             case Key.F5: SaveAndReload(); return;
+            case Key.Escape: ZurueckZumMenue(); GetViewport().SetInputAsHandled(); return;   // bug-802
             default:
                 used = false;
                 break;
@@ -784,6 +833,7 @@ public partial class MapEditOverlay : Node2D
             case Brush.Einheit: PutUnit(cell); break;
             case Brush.Gelaende: PutGround(cell, _ground); break;
             case Brush.Hoehe: PutHeight(cell, +1); break;
+            case Brush.Wegnehmen: TakeAny(cell); return;              // bug-802
         }
         Refresh();
         QueueRedraw();
@@ -1055,12 +1105,75 @@ public partial class MapEditOverlay : Node2D
                        "unangetastet; sichtbar nach F5";
                 break;
             }
+            case Brush.Wegnehmen:
+                TakeAny(cell);
+                return;
+            // bug-802 (11.11.2026): Einheiten wegnehmen — der Satz geht aus
+            // sec5, das Bild verschwindet erst nach F5 (bis dahin rotes Kreuz).
+            case Brush.Einheit:
+            {
+                int uslot = MapFactory.ClearEntityAt(_map, cell.X, cell.Y);
+                if (uslot < 0) { _say = "dort steht keine Einheit"; break; }
+                _gone.Add((cell.X, cell.Y));
+                _mine.RemoveAll(x => x.What == Brush.Einheit && x.Col == cell.X && x.Row == cell.Y);
+                MapEditSession.Dirty = true;
+                _say = $"Einheit auf Platz {uslot} (Spieler {uslot / CwmData.EntitiesPerPlayer + 1}) weg — " +
+                       "verschwindet aus dem Bild nach F5";
+                break;
+            }
             default:
                 _say = "dieser Pinsel kennt kein Wegnehmen";
                 break;
         }
         Refresh();
         QueueRedraw();
+    }
+
+    /// <summary>Steht in sec5 eine Einheit, deren Rumpf diese Zelle deckt?</summary>
+    private bool UnitAt(Vector2I cell)
+    {
+        var s = _map.Sec(5);
+        if (s == null) return false;
+        for (int o = 0; o + CwmData.EntityStride <= s.Length; o += CwmData.EntityStride)
+        {
+            if (s[o + 0x09] == 0xFF) continue;
+            int side = Simulation.NavGrid.HullSide(s[o + 0x0a]);
+            if (cell.X >= s[o] && cell.Y >= s[o + 1] && cell.X < s[o] + side && cell.Y < s[o + 1] + side)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Weggenommene Einheiten bis zum naechsten F5 — ihr Bild steht
+    /// noch in der lebenden Liste (sie umzunummern verschoebe die Belegung der
+    /// Wegekarte), darum ein rotes Kreuz darueber.</summary>
+    private readonly List<(int Col, int Row)> _gone = new();
+
+    /// <summary>bug-802 (11.11.2026): WEGNEHMEN, WAS DORT STEHT — erst eine
+    /// Einheit, sonst ein Gebaeude, sonst ein Gleis, sonst ein Gegenstand. Dieselben Wege wie die
+    /// rechte Taste der einzelnen Pinsel (<see cref="Take"/>); die Reihenfolge
+    /// ist UNSERE SETZUNG.</summary>
+    private void TakeAny(Vector2I cell)
+    {
+        var keep = _brush;
+        // Die Einheit ZUERST: sie steht oft im Ueberhang eines Gebaeudemusters
+        // (Dach/Fassade decken begehbare Zellen) — der erste Prueflauf nahm sonst
+        // das Gebaeude statt der Einheit weg.
+        if (UnitAt(cell)) _brush = Brush.Einheit;
+        else if (_layer.EditorBuildingAt(cell) >= 0) _brush = Brush.Gebaeude;
+        else if (MapFactory.HasRail(_map, cell.X, cell.Y)) _brush = Brush.Gleis;
+        else if (_map.CodeAt(cell.X, cell.Y) >= CwpFile.ObjectCodeBase) _brush = Brush.Gegenstand;
+        else
+        {
+            _say = $"({cell.X},{cell.Y}): hier steht nichts, was sich wegnehmen laesst " +
+                   "(Gebaeude, Einheit, Gleis oder Gegenstand)";
+            Refresh();
+            QueueRedraw();
+            return;
+        }
+        Take(cell);
+        _brush = keep;
+        Refresh();
     }
 
     // ---- speichern ----------------------------------------------------------
@@ -1077,6 +1190,7 @@ public partial class MapEditOverlay : Node2D
         if (made == null) { _say = "Speichern ging nicht"; Refresh(); return; }
         UI.SkirmishSetup.ViewMap = made;
         MapEditSession.Active = true;
+        Merken();                // bug-802: Werkzeug ueber das Neuladen retten
         GetTree().ReloadCurrentScene();
     }
 
@@ -1089,6 +1203,7 @@ public partial class MapEditOverlay : Node2D
             var (fw, fh) = _brush == Brush.Gebaeude ? _layer.EditorFootprint(_typ) : (1, 1);
             var col = _brush switch
             {
+                Brush.Wegnehmen => new Color(1f, 0.25f, 0.2f, 0.95f),   // bug-802
                 Brush.Gebaeude => new Color(0.3f, 1f, 0.4f, 0.9f),
                 Brush.Gegenstand => new Color(1f, 0.85f, 0.2f, 0.9f),
                 Brush.Gelaende => GroundColor(_ground),
@@ -1116,6 +1231,15 @@ public partial class MapEditOverlay : Node2D
                     if (dy == fh - 1) DrawLine(p + new Vector2(0, MapBaker.TileH),
                                                p + new Vector2(MapBaker.TileW, MapBaker.TileH), col, 2f);
                 }
+        }
+
+        // bug-802: weggenommene Einheiten, bis F5 neu laedt
+        foreach (var (c, r) in _gone)
+        {
+            var p = _layer.EditorCellTopLeft(c, r);
+            var x = new Color(1f, 0.2f, 0.2f, 0.95f);
+            DrawLine(p, p + new Vector2(MapBaker.TileW, MapBaker.TileH), x, 3f);
+            DrawLine(p + new Vector2(MapBaker.TileW, 0), p + new Vector2(0, MapBaker.TileH), x, 3f);
         }
 
         // Was dieser Lauf gesetzt hat, aber noch nicht im Bild steht.
