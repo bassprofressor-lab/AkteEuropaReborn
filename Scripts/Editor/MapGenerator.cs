@@ -42,8 +42,17 @@ using AkteEuropaReborn.Import;
 public static class MapGenerator
 {
     /// <summary>Wie viele Spieler eine erzeugte Karte bekommt, wenn keine Zahl
-    /// genannt ist. Startmarken gibt es fuer 0x70..0x74, also fuenf.</summary>
-    public const int PlayersDefault = 2, PlayersMax = 5;
+    /// genannt ist. <s>Startmarken gibt es fuer 0x70..0x74, also fuenf.</s>
+    /// ⚠ 11.11.2026 (bug-744, M6): die »Startmarken« waren eine ueberholte Lesung
+    /// (sec4 = Objekttafel). Das Spiel kennt 8 Plaetze — sec5 in acht Bloecken
+    /// zu 1000 (CwmData.EntitiesPerPlayer), Besitzer = Block. PlayersMax darum 8;
+    /// ob so viele Plaetze aufs Gelaende passen, sagt Reserve() je Platz.</summary>
+    public const int PlayersDefault = 2, PlayersMax = 8;
+
+    /// <summary>bug-744: <c>--editor-startmarke-alt</c> — wieder eine sec4-Zeile der
+    /// Art 0x70+Platz je Startplatz schreiben (und hoechstens 5 Spieler).</summary>
+    public static bool StartmarkeAlt
+        => Array.IndexOf(Core.CommandLine.Args, "--editor-startmarke-alt") >= 0;
 
     /// <summary>Wie viele Einheiten je Spieler. UNSERE Setzung.</summary>
     public const int TroopDefault = 6;
@@ -112,7 +121,7 @@ public static class MapGenerator
         if (players > 0 && !flat)
         {
             var locked = new bool[width * height];
-            starts = Reserve(t, Math.Min(players, PlayersMax), locked, say);
+            starts = Reserve(t, Math.Min(players, StartmarkeAlt ? 5 : PlayersMax), locked, say);
             t.Refresh(locked, say);
         }
         else if (players > 0)
@@ -378,11 +387,17 @@ public static class MapGenerator
             // laesst die imap frei, ist aber von der eigenen Grundflaeche
             // eingeschlossen, also flutete er 1 Zelle weit. Der Zaehler
             // »erreichbare Zellen« hat beide Male genau das gesagt.
-            MapFactory.PutMarker(m, s.Player, bcol + 2, brow + BaseFootH,
-                                 MapFactory.MarkerStartBase + s.Player);
+            // ⭐ 11.11.2026 — bug-744 (E3, M6): KEINE »Startmarke« mehr. sec4 ist
+            // die Objekttafel; die Zeile der Art 0x70+p war ein Objekt ohne
+            // imap-Verweis (61000+i) und im Spiel wirkungslos — nur MapCheck
+            // flutete von ihr aus, und der nimmt jetzt die Einheiten.
+            // Gegenschalter --editor-startmarke-alt.
+            if (StartmarkeAlt)
+                MapFactory.PutMarker(m, s.Player, bcol + 2, brow + BaseFootH,
+                                     MapFactory.MarkerStartBase + s.Player);
             say($"Spieler {s.Player}: Basis ({bcol},{brow}) {BaseFootW}x{BaseFootH}, " +
-                $"Fabrik ({fcol},{frow}), {put} von {troop} Fahrzeugen, " +
-                $"Startmarke 0x{MapFactory.MarkerStartBase + s.Player:X2}");
+                $"Fabrik ({fcol},{frow}), {put} von {troop} Fahrzeugen" +
+                (StartmarkeAlt ? $", Startmarke 0x{MapFactory.MarkerStartBase + s.Player:X2}" : ""));
         }
         say($"Startplaetze: {starts.Count} Spieler, {blds} Gebaeude, {units} Einheiten " +
             "(ohne die gaebe SkirmishAi.StartSkirmish −1 und die Karte waere im ersten " +

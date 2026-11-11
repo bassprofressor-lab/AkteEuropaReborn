@@ -360,7 +360,13 @@ public static class CwmData
     /// <summary>sec4 — 2000 slots of 6 (dest 0xc03a30). The loader counts the
     /// non-empty ones (+2 != 0xFF) into 0x539d88 (@0x41f2d2) and stamps the
     /// cell into the sec6 grid as col*256+row (@0x40d583), exactly like an
-    /// entity. Types 0x70..0x74 are the per-player start markers.</summary>
+    /// entity. <s>Types 0x70..0x74 are the per-player start markers.</s>
+    /// ⚠ 11.11.2026 (bug-744, Bericht karteneditor-abgleich-opus.md M6): eine
+    /// ueberholte Lesung. sec4 ist die OBJEKTTAFEL (0xC03A30, 2000x6, +2 = ART
+    /// des zerstoerbaren Objekts; MapBaker/MapForest, seit 24.08.2026) — die
+    /// »Marken« sind Baeume, Bueschen, Felsen (map_DM_1: 142). Der Klassenname
+    /// bleibt, damit Export und Leser unveraendert bleiben (Schluessel
+    /// <c>markers</c>); Startplaetze kommen aus den Einheiten.</summary>
     public sealed class Marker
     {
         public int Slot, Col, Row, Type;

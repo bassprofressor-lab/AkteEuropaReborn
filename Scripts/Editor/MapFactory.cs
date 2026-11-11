@@ -320,8 +320,10 @@ public static class MapFactory
         return flag == 3 ? 6 : flag == 1 ? 7 : 0;
     }
 
-    /// <summary>Eine Marke in sec4 setzen. Typ 0x70..0x74 sind die
-    /// Startmarken je Spieler (<see cref="CwmData.Markers"/>).</summary>
+    /// <summary>Eine Marke in sec4 setzen. <s>Typ 0x70..0x74 sind die
+    /// Startmarken je Spieler (<see cref="CwmData.Markers"/>).</s>
+    /// ⚠ 11.11.2026 (bug-744): sec4 ist die Objekttafel, 0x70.. sind Objektarten;
+    /// der Generator schreibt sie nur noch unter --editor-startmarke-alt.</summary>
     public const int MarkerStartBase = 0x70;
 
     public static void PutMarker(CwmFile m, int slot, int col, int row, int type)

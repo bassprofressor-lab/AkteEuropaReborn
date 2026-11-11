@@ -14,7 +14,7 @@ using AkteEuropaReborn.Import;
 ///                [,ohnetabelle]      Gegenprobe: ohne die gemessene Kacheltabelle
 ///                [,ohnenaht]         Gegenprobe: ohne die Nahtwahl (TileSeams)
 ///                [,naht=&lt;n&gt;]         wie viele Wuerfe je Zelle verglichen werden
-///                [,spieler=&lt;n&gt;]      wie viele Startplaetze (1..5)
+///                [,spieler=&lt;n&gt;]      wie viele Startplaetze (1..8; bis 11.11.2026 1..5, bug-744)
 ///                [,truppe=&lt;n&gt;]       Fahrzeuge je Spieler
 ///                [,wasser=&lt;prozent&gt;] Wasseranteil, sonst der Median 18,55 %
 ///                [,samen=&lt;n&gt;]        der Wuerfelsamen
