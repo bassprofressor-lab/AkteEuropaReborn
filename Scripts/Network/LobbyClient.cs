@@ -73,6 +73,12 @@ public sealed class LobbyClient
     /// <summary>Die eingegangenen Spielrahmen in Serverreihenfolge.</summary>
     public readonly Queue<(uint Seq, int Slot, uint Ms, byte[] Data)> Frames = new();
     public uint LastSeq { get; private set; }
+
+    /// <summary>Raumplätze, die der Server als weg gemeldet hat (player_left), für den Taktgeber.</summary>
+    public readonly Queue<(int Slot, string Reason)> Left = new();
+    /// <summary>Eigene Laufzeit zum Server (Anwendungs-Ping), ms; −1 = noch keine.</summary>
+    public int MyPingMs { get; private set; } = -1;
+    private ulong _pingSent, _pingAt;
     public long FramesIn, FramesOut, BytesIn, BytesOut;
 
     // ================= Aufbauen =============================================
@@ -176,6 +182,14 @@ public sealed class LobbyClient
             _helloSent = true;
             Send(_hello);
         }
+        // Anwendungs-Ping alle 5 s: daraus misst der Server ping_ms je Spieler (Auftrag §3.7).
+        ulong now = Time.GetTicksMsec();
+        if (State == Phase.Angemeldet && now - _pingSent >= 5000)
+        {
+            _pingSent = now;
+            _pingAt = now;
+            Send(new JsonObject { ["t"] = "ping", ["rid"] = Rid() });
+        }
         while (_ws.GetAvailablePacketCount() > 0)
         {
             byte[] b = _ws.GetPacket();
@@ -272,6 +286,7 @@ public sealed class LobbyClient
                 break;
             case "player_left":
                 Events.Add($"{NameOf((string?)m["player"])} ist weg ({(string?)m["reason"] ?? "?"})");
+                Left.Enqueue(((int?)m["slot"] ?? -1, (string?)m["reason"] ?? ""));
                 Revision++;
                 break;
             case "match_over":
@@ -281,6 +296,7 @@ public sealed class LobbyClient
                 GD.Print("lobby: Partie vorbei — " + m.ToJsonString());
                 break;
             case "pong":
+                if (_pingAt != 0) MyPingMs = (int)(Time.GetTicksMsec() - _pingAt);
                 break;
             case "error":
                 LastError = (string?)m["code"] ?? "";
@@ -297,6 +313,16 @@ public sealed class LobbyClient
     // ================= Auskünfte ============================================
 
     public bool InRoom => Room != null;
+
+    /// <summary>Name und Ping eines Raumplatzes aus dem letzten room_state.</summary>
+    public (string Name, int Ping) SlotInfo(int roomSlot)
+    {
+        if (Room?["slots"] is JsonArray a)
+            foreach (var s in a)
+                if (s is JsonObject o && (int?)o["slot"] == roomSlot)
+                    return ((string?)o["name"] ?? "?", (int?)o["ping_ms"] ?? -1);
+        return ("?", -1);
+    }
     public string RoomId => (string?)Room?["id"] ?? "";
     public bool IAmHost => Room != null && (string?)Room["host"] == MyId;
 

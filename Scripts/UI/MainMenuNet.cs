@@ -274,6 +274,7 @@ public partial class MainMenu
         // Der Prüfschalter für den Spielerweg (--net-probe=), verzögert, damit er
         // hinter ApplyNetEntry liegt.
         CallDeferred(nameof(NetProbeArm));
+        CallDeferred(nameof(NachDerPartie));
 
         // ⚠ Der Kasten selbst bleibt sichtbar — ein- und ausgeblendet wird sein
         // RAHMEN (_netFrame, gesetzt beim Aufbau des Schirms), damit im Gefecht
@@ -461,8 +462,29 @@ public partial class MainMenu
         StartWhenNetIsReady();
     }
 
+    /// <summary>⭐ 11.11.2026 (Online 2b): nach einer Netzpartie zurück an die Stelle, von der
+    /// sie ausging — online gleich wieder in die Lobby (angemeldet mit dem gespeicherten
+    /// Namen), im LAN in den Netzkasten. Die Meldung des Endes steht in der Statuszeile.</summary>
+    private async void NachDerPartie()
+    {
+        if (NetworkManager.Active) return;
+        string msg = NetworkManager.Fault;
+        bool online = NetworkManager.ZurueckZurLobby;
+        if (!online && msg.Length == 0) return;
+        NetworkManager.ZurueckZurLobby = false;
+        if (!online) { if (_netStatus != null) _netStatus.Text = msg; return; }
+        for (int i = 0; i < 10; i++) { if (!IsInsideTree()) return; await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+        ShowSetup(net: true);
+        if (_netMode == null) return;
+        _netMode.Selected = 3;
+        if (_netDetails != null) _netDetails.Visible = true;
+        if (_netStatus != null) _netStatus.Text = msg;
+        ApplyNetSearchVisible();
+        OpenOnlineLobby(autoConnect: true, meldung: msg);
+    }
+
     /// <summary>Das Online-Lobbyfenster über den Gefechtsschirm legen.</summary>
-    private void OpenOnlineLobby()
+    private void OpenOnlineLobby(bool autoConnect = false, string meldung = "")
     {
         foreach (var k in GetChildren()) if (k is OnlineLobbyScreen) return;
         var lobby = new OnlineLobbyScreen
@@ -470,6 +492,8 @@ public partial class MainMenu
             OnMatchStart = StartWhenNetIsReady,
             CurrentMap = () => { ApplySetupFields(); return SkirmishSetup.Map; },
             MaxHumans = (int)(_netPlayers?.Value ?? 2),
+            AutoConnect = autoConnect && Settings.OnlineName.Length > 0,
+            Meldung = meldung,
         };
         // bug-764: der Gefechtsschirm schien durch das Fenster — solange es offen ist, aus.
         if (_setup != null) _setup.Visible = false;

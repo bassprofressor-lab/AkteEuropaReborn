@@ -58,6 +58,62 @@ public partial class NetworkManager : Node
     /// <summary>⭐ 11.11.2026 — der Draht zum Lobby-Server (Online-Mehrspieler), sonst null.</summary>
     public static LobbyClient? Lobby { get; private set; }
 
+    /// <summary>Online: die Raumplätze der Menschen in Spielerreihenfolge, festgehalten bei match_start.</summary>
+    public static System.Collections.Generic.List<int> RoomSlotsAtStart { get; private set; } = new();
+
+    /// <summary>Der Name von Spieler p — online aus dem Raum, im LAN »Spieler N« (dort
+    /// reisen keine Namen; im Original tippt man ihn in die Lobby, 987).</summary>
+    public static string PlayerName(int p)
+    {
+        if (Lobby != null && p >= 0 && p < RoomSlotsAtStart.Count) return Lobby.SlotInfo(RoomSlotsAtStart[p]).Name;
+        return p == 0 ? "Spieler 1 (Gastgeber)" : $"Spieler {p + 1}";
+    }
+
+    /// <summary>Laufzeit zu Spieler p in ms; −1 = unbekannt.</summary>
+    public static int PlayerPing(int p)
+    {
+        if (Lobby != null && p >= 0 && p < RoomSlotsAtStart.Count)
+            return Link?.Session?.Me == p && Lobby.MyPingMs >= 0 ? Lobby.MyPingMs : Lobby.SlotInfo(RoomSlotsAtStart[p]).Ping;
+        return Link?.RttOf(p) ?? -1;
+    }
+
+    /// <summary>Spieler p zu einem Raumplatz (online), −1 wenn keiner.</summary>
+    public static int PlayerOfRoomSlot(int roomSlot) => RoomSlotsAtStart.IndexOf(roomSlot);
+
+    /// <summary>Eine Chatzeile im Spiel abschicken: online über den Server (Raumchat), im
+    /// LAN als Paket (Befehl 994 des Originals).</summary>
+    public static void SendChat(string text)
+    {
+        text = text.Trim();
+        if (text.Length == 0) return;
+        if (text.Length > 200) text = text[..200];
+        if (Lobby is { Open: true }) Lobby.SendChat(text);
+        else if (Link?.Session is { } s) Link.SendPlausch(s.Me, text);
+    }
+
+    /// <summary>Gesetzt, wenn eine ONLINE-Partie zu Ende ist: das Menü öffnet dann gleich
+    /// wieder die Lobby. Die Meldung steht in <see cref="Fault"/>.</summary>
+    public static bool ZurueckZurLobby;
+
+    /// <summary>Die Netzpartie ist vorbei (Karte verlassen, ausgeschaltet, Abweichung):
+    /// dem Server das Ende melden und alles schliessen. Ein Online-Spieler landet danach
+    /// wieder in der Lobby (Menü), ein LAN-Spieler im Netzkasten.</summary>
+    public static void EndeDerPartie(string meldung, int dauerS)
+    {
+        bool online = Lobby != null;
+        if (Lobby is { Open: true })
+        {
+            // ⚠ UNSERE SETZUNG: ein Ergebnis, das auf allen Maschinen gleich ist — Sieger
+            // ermittelt der Server nicht (Auftrag §5), und die Dauer ist je Maschine anders.
+            Lobby.MatchEnd(0, 0);
+            Lobby.LeaveRoom();
+        }
+        Cancel(meldung);
+        Fault = meldung;
+        ZurueckZurLobby = online;
+        RoomSlotsAtStart = new();
+    }
+
     public static string Fault { get; private set; } = "";
 
     /// <summary>
@@ -232,6 +288,7 @@ public partial class NetworkManager : Node
             int me = humans.IndexOf(l.YouSlot);
             Link = new NetLink();
             Link.RelayOn(l, l.IAmHost, me < 0 ? 0 : me, humans.Count);
+            RoomSlotsAtStart = humans;
             _wantHost = l.IAmHost;
             _wantJoin = !l.IAmHost;
             _players = humans.Count;

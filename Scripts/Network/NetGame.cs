@@ -188,6 +188,17 @@ public sealed partial class NetGameRunner : Node
             else if (a == "--net-neustart-check") r._nsCheck = 600;
             else if (a.StartsWith("--net-neustart-check=")) int.TryParse(a["--net-neustart-check=".Length..], out r._nsCheck);
             else if (a == "--pausenfenster-check") r._pfCheck = true;
+            // ⭐ 11.11.2026 Online 2b — Prüfschalter des Ausschaltens:
+            else if (a.StartsWith("--net-geht-bei=")) int.TryParse(a["--net-geht-bei=".Length..], out r._gehtBei);
+            else if (a.StartsWith("--net-haengt-bei=")) int.TryParse(a["--net-haengt-bei=".Length..], out r._haengtBei);
+            else if (a.StartsWith("--net-kick-nach=")) int.TryParse(a["--net-kick-nach=".Length..], out r._kickNach);
+            else if (a == "--netz-ausschalten-aus") MapEntityLayer.NetzAusschaltenAus = true;
+            else if (a.StartsWith("--net-chat-bei="))
+            {
+                string v = a["--net-chat-bei=".Length..];
+                int c = v.IndexOf(':');
+                if (c > 0 && int.TryParse(v[..c], out int t)) { r._chatBei = t; r._chatText = v[(c + 1)..]; }
+            }
             // Paket N2 (bug-625): Pause bei Hilfe im Netz — Mitspieler oeffnet in Takt 300 ein
             // Hilfefenster (993 ueber den Ring), Vermittler klickt in Takt 400 »Weiter«.
             else if (a == "--net-pause-bei-hilfe-check") { r._pfCheck = true; r._pbhCheck = true; }
@@ -228,6 +239,19 @@ public sealed partial class NetGameRunner : Node
             return;
         }
         _s = _link.Session;
+
+        // ⭐ 11.11.2026 (Online 2b): im gespielten Spiel die Netzfenster (Warten, Chat, F4).
+        if (_limit == 0)
+        {
+            _ui = new NetzOberflaeche
+            {
+                OnCtrlK = CtrlK,
+                OnCtrlE = () => Abschied("Du hast die Partie verlassen."),
+                Takt = () => _tick,
+            };
+            AddChild(_ui);
+            _chatSeen = NetworkManager.Lobby?.Chat.Count ?? 0;
+        }
 
         // ⭐ 22.10.2026, bug-620 (Paket N, Gegenprobe): die zwei Prozesse EINES Prüflaufs
         // teilten sich user://saves/pruefstand_kopflos/GAME.005 — schrieb der eine noch,
@@ -299,7 +323,12 @@ public sealed partial class NetGameRunner : Node
     public override void _Process(double delta)
     {
         if (_phase == Phase.Ende || _sim == null) return;
+        // ⭐ 11.11.2026 (Online 2b): die Karte ist weg (Spieler ins Menü) — vorher lief der
+        // Taktgeber hier gegen ein freigegebenes Objekt weiter.
+        if (!IsInstanceValid(_sim)) { Abschied("Partie verlassen.", menue: false); return; }
         _link.Pump();
+        NetzEreignisse();
+        if (_phase == Phase.Ende) return;
 
         foreach (string v in _link.Verdicts) Say("NETZ-URTEIL des Gegenübers: " + v);
         _link.Verdicts.Clear();
@@ -417,8 +446,31 @@ public sealed partial class NetGameRunner : Node
             if (budget == 0) return;
         }
 
+        if (_haengt) return;
         for (int k = 0; k < budget; k++)
         {
+            if (_haengtBei > 0 && _tick - _start >= _haengtBei)
+            {
+                _haengt = true;
+                Say($"NETZ-PROBE: verstumme bei Takt {_tick} (--net-haengt-bei) — keine Pakete mehr");
+                GetTree().CreateTimer(25).Timeout += () => { Say("NETZ-PROBE: verstummt beendet"); GetTree().Quit(0); };
+                return;
+            }
+            if (_chatBei > 0 && _tick - _start == _chatBei)
+            {
+                Say($"NETZ-PROBE: Chat bei Takt {_tick}: {_chatText}");
+                NetworkManager.SendChat(_chatText);
+            }
+            if (_gehtBei > 0 && _tick - _start >= _gehtBei)
+            {
+                Say($"NETZ-PROBE: gehe bei Takt {_tick} (--net-geht-bei), schalte mich selbst aus");
+                _link.SendAusschalten(_s.Me, _s.Me);
+                _link.Flush();
+                _phase = Phase.Ende;
+                Say($"NETZ-PROBE-ABDRUCK t={_tick} {_sim.DeterminismChecksum():X16}");
+                GetTree().CreateTimer(3).Timeout += () => GetTree().Quit(0);
+                return;
+            }
             if (!_link.TurnReady(_tick, _s.Players))
             {
                 Stall($"Takt {_tick} ist nicht frei — es fehlt Spieler " +
@@ -427,10 +479,21 @@ public sealed partial class NetGameRunner : Node
             }
             _stallSince = 0;
             _stallSaid = 0;
+            _ui?.Warten(null, false, 0);
 
             // 1) Das eigene Taktpaket für t + Vorlauf — VOR dem Takt, damit die
             //    Leitung die ganze Vorlaufzeit hat.
             SendTurn(_tick + _s.Lead);
+
+            // 1b) ⭐ 11.11.2026: wer ab diesem Takt draussen ist, verliert jetzt seine
+            //     Einheiten und Gebäude — auf jeder Maschine im selben Takt (NetLink.Cut).
+            foreach (var kv in _link.Cut)
+                if (kv.Value == _tick && kv.Key < _s.Slot.Length && kv.Key != _s.Me)
+                {
+                    int n = _sim.NetzSpielerAusschalten(_s.Slot[kv.Key]);
+                    Say($"NETZ-AUSSCHALTEN Spieler {kv.Key} (Platz {_s.Slot[kv.Key]}) bei Takt {_tick}: {n} entfernt/abgegeben, " +
+                        $"Prüfsumme danach {_sim.DeterminismChecksum():X16}");
+                }
 
             // 2) Die Sätze DIESES Takts in den Ring, in der festgelegten
             //    Reihenfolge (Spielernummer, dann Paketreihenfolge).
@@ -786,6 +849,23 @@ public sealed partial class NetGameRunner : Node
         if (_stallSince == 0) { _stallSince = now; return; }
         ulong waited = now - _stallSince;
 
+        // ⭐ 11.11.2026 (Online 2b): im gespielten Spiel KEIN Abbruch nach der Frist — das
+        // Programm beendete sich hier nach 15 s still (Quit). Stattdessen Fenster Art 42:
+        // »Warten auf …«, Ctrl-K schaltet aus, Ctrl-E verlässt.
+        if (_kickNach > 0 && waited >= (ulong)_kickNach && KannAusschalten && !_gekickt)
+        {
+            _gekickt = true;
+            Say($"NETZ-PROBE: Ctrl-K nach {waited} ms — {what}");
+            CtrlK();
+        }
+        if (_ui != null && _limit == 0)
+        {
+            var namen = _link.TurnMissingList(_tick, _s.Players).ConvertAll(NetworkManager.PlayerName).ToArray();
+            _ui.Warten(namen, KannAusschalten, waited);
+            if (waited >= 2000 && _stallSaid < 2000) { _stallSaid = 2000; Say($"netz: warte {waited} ms — {what}"); }
+            return;
+        }
+
         // 2000 ms: die Frist, die der Absender des Originals je Spielerplatz
         // setzt (GetTickCount()+0x7D0 @0x4C5B78).
         if (waited >= 2000 && _stallSaid < 2000)
@@ -867,8 +947,108 @@ public sealed partial class NetGameRunner : Node
         Quit(ok ? 0 : 1);
     }
 
+    // ================= ⭐ 11.11.2026 Online 2b: Spielerbetrieb ======================
+
+    private NetzOberflaeche? _ui;
+    private int _chatSeen;
+
+    /// <summary>Prüfschalter: bei Takt N sauber gehen (Ausschalten über sich selbst, 995) /
+    /// bei Takt N verstummen ohne zu gehen / als Gastgeber nach M ms Warten Ctrl-K drücken.</summary>
+    private int _gehtBei, _haengtBei, _kickNach;
+    private bool _haengt, _gekickt;
+    private int _chatBei;
+    private string _chatText = "";
+
+    /// <summary>Ctrl-K darf im LAN nur der Vermittler (nur dort ist die Reihenfolge seine),
+    /// online jeder — der Server ordnet alles. Original: nur der Gastgeber (Sperre 0x4C5F50).</summary>
+    private bool KannAusschalten => _link.IsHost || _link.IsRelay;
+
+    /// <summary>Ctrl-K: den ERSTEN fehlenden Spieler ausschalten (wie 973 @0x4C62C5).</summary>
+    private void CtrlK()
+    {
+        if (!KannAusschalten) return;
+        var miss = _link.TurnMissingList(_tick, _s.Players);
+        if (miss.Count == 0) return;
+        Say($"netz: Ctrl-K — schalte {NetworkManager.PlayerName(miss[0])} aus");
+        _link.SendAusschalten(miss[0], _s.Me);
+    }
+
+    /// <summary>Was zwischen den Takten aus dem Netz kommt: Ausschaltungen, Chat, Abgänge.</summary>
+    private void NetzEreignisse()
+    {
+        foreach (var (p, c) in _link.NewCuts)
+        {
+            string wer = NetworkManager.PlayerName(p);
+            Say($"netz: {wer} ist ab Takt {c} draussen");
+            if (p == _s.Me && _limit == 0) { Abschied("Du wurdest aus der Partie genommen."); _link.NewCuts.Clear(); return; }
+            Meldung($"{wer} hat das Spiel verlassen");
+        }
+        _link.NewCuts.Clear();
+
+        foreach (var (p, text) in _link.ChatIn)
+            if (p != _s.Me) Meldung($"{NetworkManager.PlayerName(p)}: {text}");   // 994: bei allen ANDEREN
+        _link.ChatIn.Clear();
+
+        var l = NetworkManager.Lobby;
+        if (l == null) return;
+        for (; _chatSeen < l.Chat.Count; _chatSeen++)
+        {
+            var c = l.Chat[_chatSeen];
+            if (c.InRoom && c.Name != l.MyName) Meldung($"{c.Name}: {c.Text}");
+        }
+        // Der Server meldet einen Spieler als weg (Verbindung verloren und 60 s nicht
+        // zurück, oder Raum verlassen): automatisch ausschalten — Zusatz, im Original nur
+        // per Ctrl-K. Mehrfach geschickt schadet nicht (der erste zählt überall).
+        while (l.Left.Count > 0)
+        {
+            var (slot, reason) = l.Left.Dequeue();
+            int p = NetworkManager.PlayerOfRoomSlot(slot);
+            if (p >= 0 && p != _s.Me && !_link.Cut.ContainsKey(p))
+            {
+                Say($"netz: Server meldet {NetworkManager.PlayerName(p)} als weg ({reason}) — ausschalten");
+                _link.SendAusschalten(p, _s.Me);
+            }
+        }
+    }
+
+    private void Meldung(string zeile)
+    {
+        if (_limit != 0) return;
+        _sim.OnMeldung?.Invoke(zeile, "", 3, false);
+    }
+
+    /// <summary>Die Netzpartie verlassen — Spieler geht, wird ausgeschaltet oder die Partie
+    /// ist auseinandergelaufen. Die anderen spielen weiter: wir schalten uns selbst aus
+    /// (995 des Originals), melden dem Server das Ende und gehen ins Menü.</summary>
+    private void Abschied(string meldung, bool menue = true)
+    {
+        if (_phase == Phase.Ende) return;
+        _phase = Phase.Ende;
+        Say("netz: Abschied — " + meldung);
+        if (!_link.Cut.ContainsKey(_s.Me)) _link.SendAusschalten(_s.Me, _s.Me);
+        _link.Flush();
+        NetworkManager.EndeDerPartie(meldung, 0);
+        Active = false;
+        _log?.Flush();
+        _log?.Close();
+        _log = null;
+        if (menue && _sim != null && IsInstanceValid(_sim))
+        {
+            Core.LeaveToMenu.Tidy(_sim);
+            GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
+        }
+        QueueFree();
+    }
+
     private void Quit(int code)
     {
+        // ⭐ 11.11.2026: im gespielten Spiel nie das Programm beenden — zurück ins Menü.
+        if (_limit == 0 && _ui != null)
+        {
+            Abschied(code == 0 ? "Partie beendet."
+                     : "Die Partie wurde abgebrochen: die Rechner sind auseinandergelaufen oder die Verbindung riss ab.");
+            return;
+        }
         _phase = Phase.Ende;
         _log?.Flush();
         _log?.Close();

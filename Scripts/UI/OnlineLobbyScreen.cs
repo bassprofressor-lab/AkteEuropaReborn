@@ -33,6 +33,10 @@ public partial class OnlineLobbyScreen : Control
     public Func<string>? CurrentMap { get; init; }
     /// <summary>Höchstzahl Menschen für einen neuen Raum (Feld »Menschen« im Netzkasten).</summary>
     public int MaxHumans { get; init; } = 4;
+    /// <summary>Nach einer Partie: gleich mit dem gespeicherten Namen anmelden.</summary>
+    public bool AutoConnect { get; init; }
+    /// <summary>Eine Zeile, die zuerst im Chatfeld steht (wie die Partie endete).</summary>
+    public string Meldung { get; init; } = "";
 
     private Label _status = null!;
     private VBoxContainer _login = null!, _rooms = null!, _room = null!;
@@ -155,6 +159,9 @@ public partial class OnlineLobbyScreen : Control
             if (a.StartsWith("--net-probe=online:")) _probeRoom = a["--net-probe=online:".Length..];
             else if (a.StartsWith("--lobby-shot=")) _shotPrefix = a["--lobby-shot=".Length..];
         }
+        if (Meldung.Length > 0) _chat.AddText($"— {Meldung}\n");
+        if (AutoConnect && NetworkManager.Lobby == null) CallDeferred(nameof(Connect));
+        if (AutoConnect) _probeRoom = "";        // nach der Partie: nicht noch einmal eröffnen
         if (_probeRoom.Length > 0)
         {
             _name.Text = "ProbeHost";
@@ -166,6 +173,8 @@ public partial class OnlineLobbyScreen : Control
     // Fährt das Fenster wie ein Spieler: anmelden, Raum eröffnen, warten bis ein zweiter
     // Mensch da ist, Bild, START. Der Mitspieler kommt kopflos über --net-online --net-join.
     private string _probeRoom = "";
+    private bool _zurueckBild;
+    private ulong _zurueckT;
     private string? _shotPrefix;
     private int _probeStep;
     private ulong _probeT;
@@ -285,6 +294,16 @@ public partial class OnlineLobbyScreen : Control
         if (l.Revision != _seenRev) { _seenRev = l.Revision; Refresh(); }
         Status();
         ProbeTick(l);
+        if (AutoConnect && _shotPrefix != null && l.Open && !_zurueckBild)
+        {
+            if (_zurueckT == 0) _zurueckT = Time.GetTicksMsec();
+            else if (Time.GetTicksMsec() - _zurueckT > 2000)
+            {
+                _zurueckBild = true;
+                Shot("zurueck");
+                GetTree().CreateTimer(1).Timeout += () => GetTree().Quit(0);
+            }
+        }
     }
 
     private void Status()

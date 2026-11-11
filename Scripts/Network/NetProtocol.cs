@@ -82,6 +82,16 @@ public enum NetPacket : byte
     /// <summary>Mitspieler → Vermittler: »ich bin da«, mit Protokollnummer.</summary>
     Hallo = 1,
 
+    /// <summary>⭐ 11.11.2026 (Online 2b) — Gastgeber → alle bzw. ein Spieler über sich
+    /// selbst: »Spieler p ist ab jetzt draussen« — Befehl 973 (Ctrl-K, @0x4C62C5) bzw.
+    /// 995 (Gast verlässt Spiel) des Originals. Der Schnitt-Takt wird beim EMPFANG
+    /// gerechnet (letzter Takt von p + 1), siehe <c>NetLink.Take</c>.</summary>
+    Ausschalten = 10,
+
+    /// <summary>⭐ 11.11.2026 — Chat im LAN-Spiel (Befehl 994 des Originals). Online
+    /// geht der Chat über den Lobby-Server.</summary>
+    Plausch = 11,
+
     /// <summary>Vermittler → alle: die Partie. Karte, <b>KEIM</b>, Spielerzahl,
     /// eigene Spielernummer, Vorlauf und die Einstellungen des Gastgebers.
     /// Das Gegenstück im Original ist Kommando 979 (trägt Techstandard, Konto,

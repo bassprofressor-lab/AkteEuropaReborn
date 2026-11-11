@@ -88,6 +88,58 @@ public sealed class NetLink
 
     public bool IsRelay => _relay != null;
 
+    // ---- ⭐ 11.11.2026 Online 2b: AUSSCHALTEN (Ctrl-K, Befehl 973 des Originals) ----------
+    //
+    // ⚠ Der Schnitt muss auf ALLEN Maschinen derselbe Takt sein. Er wird darum nicht vom
+    // Absender bestimmt, sondern beim EMPFANG gerechnet: C = letzter Takt, für den von p
+    // schon ein Taktpaket da war, + 1. Das ist überall gleich, weil alle die Pakete in
+    // DERSELBEN Reihenfolge bekommen — online nummeriert sie der Server, im LAN reicht der
+    // Vermittler sie über geordnete Kanäle weiter (und Ctrl-K drückt nur er). Keine Maschine
+    // kann Takt C schon gerechnet haben, denn dafür hätte sie das Paket von p für C gebraucht.
+    // Spätere Pakete von p werden überall verworfen. UNSERE SETZUNG in der Form; das Original
+    // verlässt sich auf seine Gastgeber-Sperre (0x4C5F50), die wir nicht haben.
+
+    private readonly int[] _maxTick = { -1, -1, -1, -1, -1, -1, -1, -1 };
+    /// <summary>Ausgeschaltete Spieler → erster Takt ohne sie.</summary>
+    public readonly Dictionary<int, int> Cut = new();
+    /// <summary>Neue Ausschaltungen für den Taktgeber (Spieler, Schnitt-Takt).</summary>
+    public readonly List<(int Player, int Tick)> NewCuts = new();
+    /// <summary>Eingegangene LAN-Chatzeilen (Spieler, Text).</summary>
+    public readonly List<(int Player, string Text)> ChatIn = new();
+
+    public bool IsOut(int p, int tick) => Cut.TryGetValue(p, out int c) && tick >= c;
+
+    /// <summary>LAN: Laufzeit zu Spieler p in ms, soweit ENet sie kennt (Vermittler zu allen,
+    /// Mitspieler nur zum Vermittler); −1 = unbekannt.</summary>
+    public int RttOf(int p)
+    {
+        if (_peer == null || _relay != null) return -1;
+        int id = IsHost ? (p >= 1 && p - 1 < _clients.Count ? _clients[p - 1] : -1) : (p == 0 ? 1 : -1);
+        if (id < 0) return -1;
+        var pp = _peer.GetPeer(id);
+        return pp == null ? -1 : (int)pp.GetStatistic(ENetPacketPeer.PeerStatistic.RoundTripTime);
+    }
+
+    public static byte[] AusschaltenPacket(int player, int by)
+        => new NetWriter(NetPacket.Ausschalten).U8((byte)player).U8((byte)by).Done();
+
+    /// <summary>Spieler p ausschalten. ENet: sofort selbst aufnehmen (der Vermittler hat dann
+    /// schon alles von p weitergereicht, was er hatte). Online: erst das Echo des Servers
+    /// zählt — dort steht es an seinem Platz in der gemeinsamen Reihenfolge.</summary>
+    public void SendAusschalten(int player, int by)
+    {
+        var b = AusschaltenPacket(player, by);
+        SendAll(b);
+        if (_relay == null) Take(b); else Flush();
+    }
+
+    public void SendPlausch(int player, string text)
+    {
+        var b = new NetWriter(NetPacket.Plausch).U8((byte)player).Text(text).Done();
+        SendAll(b);
+        Take(b);
+    }
+
     // ---- bug-762: BÜNDELN -----------------------------------------------------
     // Der Server lässt höchstens 60 Rahmen je Sekunde und Verbindung durch (Auftrag §1);
     // der Lockstep schickt je Takt ein Paket (50 Hz) plus Prüfsummen, ein kopfloser Lauf
@@ -111,6 +163,24 @@ public sealed class NetLink
     }
 
     /// <summary>Gesammelte Pakete als einen Rahmen abschicken.</summary>
+    private static IEnumerable<byte[]> Unbundle(byte[] data)
+    {
+        if (data.Length >= 3 && data[0] == Buendel)
+        {
+            int n = BitConverter.ToUInt16(data, 1), o = 3;
+            for (int i = 0; i < n && o + 2 <= data.Length; i++)
+            {
+                int len = BitConverter.ToUInt16(data, o);
+                if (o + 2 + len > data.Length) yield break;
+                var b = new byte[len];
+                Buffer.BlockCopy(data, o + 2, b, 0, len);
+                o += 2 + len;
+                yield return b;
+            }
+        }
+        else yield return data;
+    }
+
     public void Flush()
     {
         _lastFlush = Time.GetTicksMsec();
@@ -130,8 +200,15 @@ public sealed class NetLink
         _outBytes = 0;
     }
 
-    private void TakeFrame(byte[] data)
+    private void TakeFrame(byte[] data, bool ownEcho = false)
     {
+        // Vom eigenen Echo zählt nur das Ausschalten (siehe SendAusschalten).
+        if (ownEcho)
+        {
+            foreach (var b in Unbundle(data))
+                if (b.Length > 0 && b[0] == (byte)NetPacket.Ausschalten) Take(b);
+            return;
+        }
         if (data.Length >= 3 && data[0] == Buendel)
         {
             int n = BitConverter.ToUInt16(data, 1), o = 3;
@@ -397,8 +474,8 @@ public sealed class NetLink
             while (_relay.Frames.Count > 0)
             {
                 var f = _relay.Frames.Dequeue();
-                if (f.Slot == _relaySlot) continue;      // eigenes Echo, schon über Take eingetragen
-                TakeFrame(f.Data);
+                // eigenes Echo: schon über Take eingetragen — bis auf das Ausschalten
+                TakeFrame(f.Data, ownEcho: f.Slot == _relaySlot);
             }
             return;
         }
@@ -449,7 +526,9 @@ public sealed class NetLink
                 var list = new List<CommandRecord>(n);
                 for (int i = 0; i < n; i++) list.Add(r.Record());
                 if (r.Bad) { Dropped++; break; }
+                if (IsOut(Clamp(p), t)) break;             // nach dem Schnitt: überall verworfen
                 Slots(t)[Clamp(p)] = list;
+                if (t > _maxTick[Clamp(p)]) _maxTick[Clamp(p)] = t;
                 break;
             }
             case NetPacket.Abdruck:
@@ -471,6 +550,23 @@ public sealed class NetLink
                 int p = r.U8(), t = r.I32();
                 string s = r.Text();
                 if (!r.Bad) Verdicts.Add($"Spieler {p} meldet bei Takt {t}: {s}");
+                break;
+            }
+            case NetPacket.Ausschalten:
+            {
+                int p = r.U8(), by = r.U8();
+                if (r.Bad || p > 7 || Cut.ContainsKey(p)) break;
+                int c = _maxTick[p] + 1;
+                Cut[p] = c;
+                NewCuts.Add((p, c));
+                GD.Print($"netz: Spieler {p} ausgeschaltet (von Spieler {by}) ab Takt {c}");
+                break;
+            }
+            case NetPacket.Plausch:
+            {
+                int p = r.U8();
+                string text = r.Text();
+                if (!r.Bad) ChatIn.Add((p, text));
                 break;
             }
             default: Dropped++; break;
@@ -537,8 +633,8 @@ public sealed class NetLink
     /// </summary>
     public bool TurnReady(int tick, int players)
     {
-        if (!_turns.TryGetValue(tick, out var a)) return false;
-        for (int p = 0; p < players; p++) if (a[p] == null) return false;
+        if (!_turns.TryGetValue(tick, out var a)) a = Slots(tick);
+        for (int p = 0; p < players; p++) if (a[p] == null && !IsOut(p, tick)) return false;
         return true;
     }
 
@@ -549,7 +645,7 @@ public sealed class NetLink
     {
         if (!_turns.TryGetValue(tick, out var a)) return $"alle {players}";
         var miss = new List<int>();
-        for (int p = 0; p < players; p++) if (a[p] == null) miss.Add(p);
+        for (int p = 0; p < players; p++) if (a[p] == null && !IsOut(p, tick)) miss.Add(p);
         return miss.Count == 0 ? "—" : string.Join(",", miss);
     }
 
@@ -563,13 +659,23 @@ public sealed class NetLink
     /// vertauschte Reihenfolge ist ein Auseinanderlaufen (zwei Befehle auf
     /// dieselbe Zelle: wer zuerst kommt, bekommt sie).</para>
     /// </summary>
+    /// <summary>Wer für diesen Takt noch fehlt, als Liste (für das Wartefenster).</summary>
+    public List<int> TurnMissingList(int tick, int players)
+    {
+        var miss = new List<int>();
+        _turns.TryGetValue(tick, out var a);
+        for (int p = 0; p < players; p++)
+            if ((a == null || a[p] == null) && !IsOut(p, tick)) miss.Add(p);
+        return miss;
+    }
+
     public IEnumerable<CommandRecord> TurnRecords(int tick, int players)
     {
         if (!_turns.TryGetValue(tick, out var a)) yield break;
         for (int p = 0; p < players; p++)
         {
             var l = a[p];
-            if (l == null) continue;
+            if (l == null || IsOut(p, tick)) continue;
             foreach (var c in l) yield return c;
         }
     }
