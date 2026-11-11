@@ -225,6 +225,7 @@ public sealed class LobbyClient
                 ServerVersion = (string?)m["server_version"] ?? "";
                 Online = (int?)m["online"] ?? 0;
                 State = Phase.Angemeldet;
+                Revision++;                    // bug-763: sonst zeichnet das Lobbyfenster nach der Anmeldung nicht neu
                 GD.Print($"lobby: angemeldet als »{MyName}« ({MyId}), Server {ServerVersion}, {Online} online");
                 break;
             case "room_list":

@@ -30,6 +30,7 @@ using AkteEuropaReborn.Network;
 public partial class MainMenu
 {
     private OptionButton? _netMode;
+    private Control? _netAddrRow;
     private LineEdit? _netAddr;
     private SpinBox? _netPlayers;
     private Label? _netStatus;
@@ -98,6 +99,8 @@ public partial class MainMenu
     {
         1 => "Gastgeber: die Mitspieler rufen dich an. Karte, Keim und " +
              "Plätze verteilst DU.",
+        3 => "Online über den Lobby-Server: »PARTIE STARTEN« öffnet die Lobby. " +
+             "Karte und Einstellungen von hier gelten, wenn DU den Raum eröffnest.",
         2 => "Beitreten: Karte, Keim und Startplatz kommen vom Gastgeber — " +
              "was hier steht, wird überschrieben.",
         _ => "Netzwerk aus",
@@ -145,6 +148,8 @@ public partial class MainMenu
     /// dem <see cref="NetStatusText"/> herausgezogen ist.</summary>
     private void ApplyNetSearchVisible()
     {
+        // Online gibt es keine Adresse — der Server steht fest (Settings.OnlineServer).
+        if (_netAddrRow != null) _netAddrRow.Visible = _netMode is not { Selected: 3 };
         bool join = _netMode is { Selected: 2 };
         if (_netSearch != null) _netSearch.Visible = join;
         if (_netList != null && !join) _netList.Visible = false;
@@ -196,6 +201,7 @@ public partial class MainMenu
         _netMode.AddItem("Aus (gegen den Rechner)");
         _netMode.AddItem("Gastgeber");
         _netMode.AddItem("Beitreten");
+        _netMode.AddItem("Online (Internet)");     // ⭐ 11.11.2026, Online Stufe 2
         _netMode.Selected = 0;
         box.AddChild(Row("Modus", _netMode));
 
@@ -208,7 +214,8 @@ public partial class MainMenu
                         + "gilt 27015.\nBeim Gastgeber zählt nur der Port — er hört "
                         + "zu, er ruft nicht an.",
         };
-        _netDetails.AddChild(Row("Adresse:Port", _netAddr));
+        _netAddrRow = Row("Adresse:Port", _netAddr);
+        _netDetails.AddChild(_netAddrRow);
         _netPlayers = new SpinBox { MinValue = 2, MaxValue = 8, Value = 2 };
         _netDetails.AddChild(Row("Menschen", _netPlayers));
         _netStatus = new Label
@@ -414,6 +421,19 @@ public partial class MainMenu
         }
         if (!IsInsideTree() || _netMode == null) return;
 
+        // ⭐ 11.11.2026: `online:<raum>` — Modus »Online« und PARTIE STARTEN; den Rest
+        // (anmelden, Raum eröffnen, START) fährt das Lobbyfenster selbst (OnlineLobbyScreen).
+        if (want.StartsWith("online"))
+        {
+            _netMode.Selected = 3;
+            if (_netDetails != null) _netDetails.Visible = true;
+            if (_netStatus != null) _netStatus.Text = NetStatusText(3);
+            ApplyNetSearchVisible();
+            GD.Print("netz-probe: Modus 3 (Online), druecke den Startknopf");
+            StartWhenNetIsReady();
+            return;
+        }
+
         if (want.StartsWith("join") || want.StartsWith("suche"))
         {
             _netMode.Selected = 2;
@@ -439,6 +459,22 @@ public partial class MainMenu
                  $"({(_netMode.Selected == 1 ? "Gastgeber" : "Beitreten")}), " +
                  $"Adresse {_netAddr?.Text}, druecke den Startknopf");
         StartWhenNetIsReady();
+    }
+
+    /// <summary>Das Online-Lobbyfenster über den Gefechtsschirm legen.</summary>
+    private void OpenOnlineLobby()
+    {
+        foreach (var k in GetChildren()) if (k is OnlineLobbyScreen) return;
+        var lobby = new OnlineLobbyScreen
+        {
+            OnMatchStart = StartWhenNetIsReady,
+            CurrentMap = () => { ApplySetupFields(); return SkirmishSetup.Map; },
+            MaxHumans = (int)(_netPlayers?.Value ?? 2),
+        };
+        // bug-764: der Gefechtsschirm schien durch das Fenster — solange es offen ist, aus.
+        if (_setup != null) _setup.Visible = false;
+        lobby.TreeExiting += () => { if (_setup != null && IsInsideTree()) _setup.Visible = true; };
+        AddChild(lobby);
     }
 
     /// <summary>Adresse und Port aus einem Feld — <c>127.0.0.1:27015</c> oder nur
@@ -479,7 +515,15 @@ public partial class MainMenu
         // ist. Im Gefecht steht der Modus schon auf »Aus« (ApplyNetEntry) — aber
         // ein Netzspiel, von dem der Spieler nichts weiß, ist der eine Fehler,
         // den ich hier nicht einmal über einen zweiten Weg zulassen will.
-        if (!NetworkManager.Active && _netEntry && _netMode is { Selected: > 0 })
+        // ⭐ 11.11.2026 Online Stufe 2: »Online« startet nicht, es öffnet die Lobby. Das Fenster
+        // ruft diese Methode wieder, sobald der Server die Partie beginnt (match_start).
+        if (_netEntry && _netMode is { Selected: 3 } && NetworkManager.Lobby?.MatchStart == null)
+        {
+            OpenOnlineLobby();
+            return;
+        }
+
+        if (!NetworkManager.Active && _netEntry && _netMode is { Selected: > 0 and < 3 })
         {
             var (addr, port) = NetTarget();
             bool asHost = _netMode.Selected == 1;

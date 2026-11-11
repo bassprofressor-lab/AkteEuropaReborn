@@ -138,7 +138,27 @@ public partial class NetworkManager : Node
     public static string GameVersion()
         => ProjectSettings.GetSetting("application/config/version", "0").AsString() + "/n" + NetSession.Protokoll;
 
-    /// <summary>Den Lobby-Draht öffnen (Befehlszeile oder später der Lobbyschirm).</summary>
+    /// <summary>Den Lobby-Draht aus dem MENÜ öffnen (Online-Lobby-Fenster): kein
+    /// Selbstlauf wie von der Befehlszeile, der Spieler klickt; ohne Frist, solange er
+    /// in der Raumliste stöbert.</summary>
+    public static bool OpenLobbyFromMenu(string url, string name)
+    {
+        if (Instance == null) return false;
+        if (Lobby != null) return true;
+        Fault = "";
+        var i = Instance;
+        i._wantOnline = true;
+        i._wantHost = i._wantJoin = false;
+        i._onlineUrl = url;
+        i._playerName = name;
+        i._timedOut = false;
+        FromMenu = true;
+        if (!OpenLobby(url, name)) return false;
+        i._t0 = Time.GetTicksMsec();
+        return true;
+    }
+
+    /// <summary>Den Lobby-Draht öffnen (Befehlszeile oder Lobbyfenster).</summary>
     public static bool OpenLobby(string url, string name)
     {
         if (Lobby != null) return true;
@@ -530,6 +550,7 @@ public partial class NetworkManager : Node
     private void OnlineFrist()
     {
         if (Lobby == null) return;
+        if (FromMenu && Lobby.MatchStart == null) return;    // im Lobbyfenster: stöbern ohne Uhr
         int frist = Frist;
         if (frist > 0 && !_timedOut && Time.GetTicksMsec() - _t0 > (ulong)frist)
         {

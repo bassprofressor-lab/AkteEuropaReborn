@@ -288,7 +288,7 @@ public partial class MainMenu : Control
     {
         if (_setup is { Visible: true }) return true;
         foreach (var k in GetChildren())
-            if (k is LoadGameScreen or SpeicherfensterChrome or SettingsScreen or EncyclopediaScreen or CreditsScreen or CampaignScreen
+            if (k is LoadGameScreen or SpeicherfensterChrome or SettingsScreen or EncyclopediaScreen or CreditsScreen or CampaignScreen or OnlineLobbyScreen
                 && !((Node)k).IsQueuedForDeletion() && k is CanvasItem { Visible: true })
                 return true;
         return false;
