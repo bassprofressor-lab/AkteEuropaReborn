@@ -118,6 +118,9 @@ public partial class MainMenu : Control
     /// rows that have nowhere to go say so when clicked instead of being greyed
     /// out and silent; the one row that is ours is marked in the caption.
     /// </summary>
+    /// <summary>Einladung zum Discord-Server des Projekts (vom Spieler, 11.11.2026).</summary>
+    public const string DiscordEinladung = "https://discord.gg/MVMfRWrMKv";
+
     private void BuildStartMenu()
     {
         var missions = Campaign.CampaignManager.Missions;
@@ -221,6 +224,15 @@ public partial class MainMenu : Control
             new StartMenuPanel.Row(0, "Karteneditor", -1,
                 "Eine neue Karte erzeugen und pruefen — im Original gibt es das nicht",
                 ShowMapEditor));
+
+        // ⭐ 11.11.2026 — OURS: der Discord-Server des Projekts, gewuenscht als »Join
+        // Discord Button im Startmenu«. Oeffnet die Einladung im Browser; das Spiel
+        // selbst sendet nichts. Bei den beiden anderen Zutaten, damit die Zeilen des
+        // Originals beieinander bleiben.
+        rows = StartMenuPanel.InsertAfter(rows, "Karteneditor",
+            new StartMenuPanel.Row(0, "Discord beitreten", -1,
+                "Zum Discord-Server von Akte Europa Reborn — oeffnet den Browser",
+                () => OS.ShellOpen(DiscordEinladung)));
 
         _start = new StartMenuPanel
         {
