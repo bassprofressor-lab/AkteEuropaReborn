@@ -124,6 +124,61 @@ public partial class MapEntityLayer
                       $"{fremd} sperrende Musterzellen ohne eigenen Griff (Nachbar/Rand; Auskunft)");
         ok &= gebaeude > 0 && mitGriff == gebaeude && nichtSperrend == 0;
 
+        // ⭐ 11.11.2026 — bug-771: ERREICHBARKEIT IM GELADENEN SPIEL. Je
+        // Mitspieler eine Flutung ueber NavGrid.CanEnter(Fahrzeug) — dieselbe
+        // Abfrage, die der Wegsucher stellt — von seinen Einheiten aus (acht
+        // Nachbarn, schraeg nur mit beiden Geraden frei); erreicht ist ein
+        // anderer Platz, wenn eine Nachbarzelle einer seiner Einheiten erreicht ist.
+        if (_nav != null)
+        {
+            var plaetze = new List<int>(mitspieler);
+            int paare = 0, erreicht = 0;
+            foreach (int a in plaetze)
+            {
+                var start = new List<(int, int)>();
+                foreach (var e in _entities)
+                    if (!e.Dead && !e.IsProp && !e.IsBuilding && e.Owner == a) start.Add((e.Col, e.Row));
+                var seen = NavFlut(start);
+                foreach (int b in plaetze)
+                {
+                    if (b == a) continue;
+                    paare++;
+                    bool hit = false;
+                    foreach (var e in _entities)
+                    {
+                        if (hit || e.Dead || e.IsProp || e.IsBuilding || e.Owner != b) continue;
+                        for (int dr = -1; dr <= 1 && !hit; dr++)
+                            for (int dc = -1; dc <= 1 && !hit; dc++)
+                                if (seen.Contains((e.Col + dc, e.Row + dr))) hit = true;
+                    }
+                    if (hit) erreicht++;
+                }
+            }
+            sb.AppendLine($"  Fahrzeug-Erreichbarkeit im NavGrid: {erreicht} von {paare} Paaren (muss alle sein)");
+            ok &= erreicht == paare;
+        }
+
         return sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN").ToString();
+    }
+
+    private HashSet<(int, int)> NavFlut(List<(int, int)> start)
+    {
+        var seen = new HashSet<(int, int)>();
+        var q = new Queue<(int, int)>();
+        foreach (var s in start) if (seen.Add(s)) q.Enqueue(s);
+        int[] dc = { 1, 1, 0, -1, -1, -1, 0, 1 }, dr = { 0, 1, 1, 1, 0, -1, -1, -1 };
+        bool Frei(int c, int r) => _nav!.InBounds(c, r) && _nav.CanEnter(c, r, Simulation.NavGrid.MoveClass.Vehicle);
+        while (q.Count > 0)
+        {
+            var (c, r) = q.Dequeue();
+            for (int k = 0; k < 8; k++)
+            {
+                int nc = c + dc[k], nr = r + dr[k];
+                if (seen.Contains((nc, nr)) || !Frei(nc, nr)) continue;
+                if ((k & 1) != 0 && (!Frei(nc, r) || !Frei(c, nr))) continue;
+                seen.Add((nc, nr)); q.Enqueue((nc, nr));
+            }
+        }
+        return seen;
     }
 }
