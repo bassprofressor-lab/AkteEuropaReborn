@@ -88,6 +88,16 @@ public sealed class NetLink
 
     public bool IsRelay => _relay != null;
 
+    /// <summary>Eine Partie, die auf ihre eigene Karte wartet (NetzKarte).</summary>
+    public NetSession? WartendeSitzung { get; private set; }
+
+    /// <summary>Die Pakete einer eigenen Karte an alle — vor dem Sitzungspaket.</summary>
+    public void SendKarte(List<byte[]> pakete)
+    {
+        foreach (var p in pakete) SendAll(p);
+        if (_relay != null) Flush();
+    }
+
     // ---- ⭐ 11.11.2026 Online 2b: AUSSCHALTEN (Ctrl-K, Befehl 973 des Originals) ----------
     //
     // ⚠ Der Schnitt muss auf ALLEN Maschinen derselbe Takt sein. Er wird darum nicht vom
@@ -149,13 +159,17 @@ public sealed class NetLink
     public const byte Buendel = 0xFE;
     private const int BuendelMs = 40, BuendelMax = 4000;
     private readonly List<byte[]> _out = new();
+    /// <summary>Fertige Rahmen, die noch hinaus müssen — höchstens einer je 40 ms
+    /// (Servergrenze 60/s; eine eigene Karte sind ~100 Rahmen am Stück).</summary>
+    private readonly Queue<byte[]> _rahmen = new();
+    private ulong _lastSend;
     private int _outBytes;
     private ulong _lastFlush;
     public long Bundles;
 
     private void Queue(byte[] bytes)
     {
-        if (_outBytes + bytes.Length + 2 + 3 > BuendelMax) Flush();
+        if (_outBytes + bytes.Length + 2 + 3 > BuendelMax) Bundle();
         _out.Add(bytes);
         _outBytes += bytes.Length + 2;
         PacketsOut++;
@@ -181,9 +195,36 @@ public sealed class NetLink
         else yield return data;
     }
 
+    /// <summary>Gesammelte Pakete als Rahmen in die Sendeschlange und die Schlange so weit
+    /// leeren, wie die Rate es erlaubt (ein Rahmen je 40 ms).</summary>
     public void Flush()
     {
         _lastFlush = Time.GetTicksMsec();
+        Bundle();
+        SendePaced();
+    }
+
+    /// <summary>Beim Abschied: alles sofort hinaus, ohne Drossel (wenige Rahmen).</summary>
+    public void FlushNow()
+    {
+        Bundle();
+        while (_relay != null && _rahmen.Count > 0)
+            if (_relay.SendBinary(_rahmen.Dequeue())) Bundles++; else Dropped++;
+    }
+
+    private void SendePaced()
+    {
+        if (_relay == null) return;
+        ulong now = Time.GetTicksMsec();
+        if (_rahmen.Count > 0 && now - _lastSend >= BuendelMs)
+        {
+            _lastSend = now;
+            if (_relay.SendBinary(_rahmen.Dequeue())) Bundles++; else Dropped++;
+        }
+    }
+
+    private void Bundle()
+    {
         if (_relay == null || _out.Count == 0) return;
         var frame = new byte[3 + _outBytes];
         frame[0] = Buendel;
@@ -195,7 +236,7 @@ public sealed class NetLink
             b.CopyTo(frame, o + 2);
             o += 2 + b.Length;
         }
-        if (_relay.SendBinary(frame)) Bundles++; else Dropped += _out.Count;
+        _rahmen.Enqueue(frame);
         _out.Clear();
         _outBytes = 0;
     }
@@ -399,6 +440,8 @@ public sealed class NetLink
             .U16(s.StartMoney)                // bug-734, Protokoll 3
             .Bool(s.NoStartBase)
             .Bool(s.StartbasisAus)
+            .Bool(s.EigeneKarte)              // Protokoll 4: eigene Karte + Prüfsumme
+            .U64(s.KartenSumme)
             .U8((byte)s.Slot.Length)
             .Also(w => { foreach (int sl in s.Slot) w.U8((byte)sl); })
             .Done();
@@ -562,6 +605,16 @@ public sealed class NetLink
                 GD.Print($"netz: Spieler {p} ausgeschaltet (von Spieler {by}) ab Takt {c}");
                 break;
             }
+            case NetPacket.Karte:
+                NetzKarte.Nimm(r, bytes, 0);
+                if (WartendeSitzung is { } ws && NetzKarte.Fertig(ws.KartenSumme))
+                {
+                    WartendeSitzung = null;
+                    Session = ws;
+                    SessionReady = true;
+                    GD.Print($"netz: Karte da — Partie steht: {ws}");
+                }
+                break;
             case NetPacket.Plausch:
             {
                 int p = r.U8();
@@ -594,6 +647,11 @@ public sealed class NetLink
             s.NoStartBase = r.Bool();
             s.StartbasisAus = r.Bool();
         }
+        if (proto >= 4)
+        {
+            s.EigeneKarte = r.Bool();
+            s.KartenSumme = r.U64();
+        }
         int n = r.U8();
         var slots = new int[n];
         for (int i = 0; i < n; i++) slots[i] = r.U8();
@@ -606,6 +664,21 @@ public sealed class NetLink
                     $"{NetSession.Protokoll} — diese beiden Fassungen spielen nicht zusammen";
             GD.PrintErr("netz: " + Fault);
             return;
+        }
+        // ⭐ 11.11.2026: eine EIGENE Karte des Gastgebers — erst spielen, wenn sie hier liegt.
+        if (s.EigeneKarte)
+        {
+            if (!NetzKarte.ImmerEmpfangen && NetzKarte.Vorhanden(s.Map) && NetzKarte.Pruefsumme(s.Map) == s.KartenSumme) { /* dieselbe Karte unter demselben Namen */ }
+            else
+            {
+                s.Map = NetzKarte.LokalerName(s.KartenSumme);
+                if (!NetzKarte.Fertig(s.KartenSumme))
+                {
+                    WartendeSitzung = s;
+                    GD.Print($"netz: Partie empfangen, warte auf die Karte ({s.KartenSumme:X16})");
+                    return;
+                }
+            }
         }
         Session = s;
         SessionReady = true;

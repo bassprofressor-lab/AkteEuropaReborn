@@ -617,6 +617,10 @@ public partial class MapViewer : Node2D
             UI.SkirmishSetup.Active = true;
             UI.SkirmishSetup.CampaignMission = 0;
             UI.SkirmishSetup.Map = _skirmishMap.Length > 0 ? _skirmishMap : MapNames[_mapIndex];
+            // ⭐ 11.11.2026, bug-790: im Netz gewinnt die Karte der PARTIE auch gegen
+            // --skirmish= dieser Maschine (wie OverrideSetup oben fuer Konto & Co.) —
+            // sonst lud der Mitspieler eines Pruefstands still seine eigene Karte.
+            if (Network.NetworkManager.Link?.Session is { } netz) UI.SkirmishSetup.Map = netz.Map;
         }
         // a game started from the menu overrides the command line
         if (UI.SkirmishSetup.Active)

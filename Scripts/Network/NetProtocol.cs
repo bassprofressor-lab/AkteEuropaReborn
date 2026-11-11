@@ -92,6 +92,10 @@ public enum NetPacket : byte
     /// geht der Chat über den Lobby-Server.</summary>
     Plausch = 11,
 
+    /// <summary>⭐ 11.11.2026 — ein Stück einer EIGENEN Karte (Karteneditor), vor dem
+    /// Sitzungspaket. Siehe <c>NetzKarte</c>.</summary>
+    Karte = 12,
+
     /// <summary>Vermittler → alle: die Partie. Karte, <b>KEIM</b>, Spielerzahl,
     /// eigene Spielernummer, Vorlauf und die Einstellungen des Gastgebers.
     /// Das Gegenstück im Original ist Kommando 979 (trägt Techstandard, Konto,
@@ -149,6 +153,11 @@ public sealed class NetSession
                                       // 4: 0.7.0 Online 2b, Pakete 10 Ausschalten (Ctrl-K) und 11 Chat
 
     public string Map = "";
+
+    /// <summary>⭐ 11.11.2026: eine Karte, die nicht mit dem Spiel kommt — sie reist mit
+    /// (NetzKarte), erkannt an der Prüfsumme ihrer zwei Dateien.</summary>
+    public bool EigeneKarte;
+    public ulong KartenSumme;
     public uint Seed;
     /// <summary>Wie viele Menschen mitspielen (der Vermittler eingeschlossen).</summary>
     public int Players = 2;

@@ -2172,6 +2172,7 @@ public partial class MainMenu : Control
 
     private void FillMapList()
     {
+        EigeneKartenAufnehmen();      // ⭐ 11.11.2026: Editorkarten (MainMenuEigeneKarten.cs)
         _mapList.Clear();
         _listed.Clear();
         for (int i = 0; i < Maps.Count; i++)

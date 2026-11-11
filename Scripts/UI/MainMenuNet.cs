@@ -651,7 +651,7 @@ public partial class MainMenu
         // ⚠ Die Karte kommt jetzt aus der Partie, nicht aus dem Auswahlfeld.
         // Sonst spielte der Mitspieler die Karte, die BEI IHM im Menü stand.
         var s = NetworkManager.Link!.Session!;
-        int mi = Maps.FindIndex(m => m.File == s.Map);
+        int mi = KarteAufnehmen(s.Map);   // ⭐ 11.11.2026: auch eine empfangene eigene Karte
         if (mi >= 0) SelectMap(mi);
         else GD.PrintErr($"netz: die Karte »{s.Map}« des Gastgebers gibt es hier nicht — " +
                          "der Lauf wird auseinanderlaufen, und zwar sofort");

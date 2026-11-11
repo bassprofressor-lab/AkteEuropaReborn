@@ -1026,7 +1026,7 @@ public sealed partial class NetGameRunner : Node
         _phase = Phase.Ende;
         Say("netz: Abschied — " + meldung);
         if (!_link.Cut.ContainsKey(_s.Me)) _link.SendAusschalten(_s.Me, _s.Me);
-        _link.Flush();
+        _link.FlushNow();
         NetworkManager.EndeDerPartie(meldung, 0);
         Active = false;
         _log?.Flush();
