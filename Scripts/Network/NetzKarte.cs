@@ -94,7 +94,7 @@ public static class NetzKarte
     /// <summary>Wie weit der Empfang einer Karte ist (für die Statuszeile).</summary>
     public static (int Da, int Von) Fortschritt(ulong hash)
     {
-        if (_fertig.Contains(hash)) return (1, 1);
+        if (_fertig.Contains(hash) || _komplett.ContainsKey(hash)) return (1, 1);
         if (!_teile.TryGetValue(hash, out var a)) return (0, 0);
         int da = 0; foreach (var x in a) if (x != null) da++;
         return (da, a.Length);
@@ -115,10 +115,30 @@ public static class NetzKarte
         a[nr] = roh[start..];
         foreach (var x in a) if (x == null) return;
 
-        // komplett
+        // komplett — ⭐ 12.11.2026 bug-810: NOCH NICHT BACKEN. Der Gastgeber schickt die
+        // Karte immer; ob dieser Rechner sie braucht, sagt erst das Sitzungspaket (liegt
+        // dieselbe Karte unter demselben Namen hier, wird sie nicht gebraucht). Vorher
+        // wurde jede mitgereiste Karte sofort gebacken — Sekunden auf dem Hauptfaden,
+        // auch wenn niemand sie brauchte, und die Leitung riss ab.
         _teile.Remove(hash);
-        try { Ablegen(hash, a!); _fertig.Add(hash); }
-        catch (Exception e) { Fehler = "Karte konnte nicht abgelegt werden: " + e.Message; GD.PrintErr("netzkarte: " + Fehler); }
+        _komplett[hash] = a!;
+    }
+
+    private static readonly Dictionary<ulong, byte[]?[]> _komplett = new();
+
+    /// <summary>bug-810: liegt die Karte hier (gebacken)? Wenn sie nur empfangen ist,
+    /// JETZT backen — gerufen erst, wenn die Sitzung sie wirklich braucht.</summary>
+    public static bool Bereitstellen(ulong hash)
+    {
+        if (Fertig(hash)) return true;
+        if (!_komplett.Remove(hash, out var teile)) return false;
+        try { Ablegen(hash, teile); _fertig.Add(hash); return true; }
+        catch (Exception e)
+        {
+            Fehler = "Karte konnte nicht abgelegt werden: " + e.Message;
+            GD.PrintErr("netzkarte: " + Fehler);
+            return false;
+        }
     }
 
     private static void Ablegen(ulong hash, byte[]?[] teile)

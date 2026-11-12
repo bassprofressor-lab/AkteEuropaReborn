@@ -853,6 +853,7 @@ public partial class MapEditOverlay : Node2D
         if (MapEditSession.Tiles == null && MapEditSession.Palette == null)
         { _say = "keine Kacheltabelle und kein Bodenblock — Gelaendemalen ginge nur ins Blaue"; return; }
 
+        if (MapFactory.Belegt(_map, cell.X, cell.Y) is { } belegt) { _say = belegt; return; }   // B4
         string? why = MapEditTerrain.PaintClass(_map, MapEditSession.Tiles, MapEditSession.Palette,
                                                 cell.X, cell.Y, g, MapEditSession.Seed,
                                                 MapEditSession.Seams);
@@ -958,6 +959,7 @@ public partial class MapEditOverlay : Node2D
                 int c = cell.X + dx, r = cell.Y + dy;
                 if (c >= _map.Width || r >= _map.Height)
                 { _say = "die Einheit ragt ueber den Kartenrand"; return; }
+                if (MapFactory.Belegt(_map, c, r) is { } belegt) { _say = belegt; return; }   // B5: nicht stapeln
                 if (_layer.NavGridOf() is { } nav && !nav.CanEnter(c, r, mc))
                 {
                     _say = $"({c},{r}) traegt {(mc == Simulation.NavGrid.MoveClass.Ship ? "kein Wasser" : "kein Land")}" +
@@ -1015,6 +1017,7 @@ public partial class MapEditOverlay : Node2D
     {
         if (_props.Count == 0) { _say = "diese Karte fuehrt keine Gegenstaende"; return; }
         int code = _props[_propAt];
+        if (MapFactory.Belegt(_map, cell.X, cell.Y) is { } belegt) { _say = belegt; return; }   // B4
         int elev = _map.ElevAt(cell.X, cell.Y);
         // ⚠ Die Gelaendeklasse bleibt, was sie war. Ein Gegenstand ist Bewuchs;
         // ihn zum Hindernis zu erklaeren waere eine Entscheidung ueber das
@@ -1043,6 +1046,9 @@ public partial class MapEditOverlay : Node2D
     /// entstanden ist.</summary>
     private void PutRail(Vector2I cell)
     {
+        if (MapFactory.Belegt(_map, cell.X, cell.Y) is { } belegt) { _say = belegt; return; }   // B4
+        if (GroundAt(cell) == MapFactory.Ground.Water && !MapFactory.HasRail(_map, cell.X, cell.Y))
+        { _say = $"({cell.X},{cell.Y}): kein Gleis auf Wasser oder gesperrten Boden"; return; }
         if (MapFactory.PutRail(_map, cell.X, cell.Y, RailFrameAt(cell.X, cell.Y, true), _line) < 0)
         { _say = "kein Gleisplatz mehr frei (3000)"; return; }
         _mine.Add((cell.X, cell.Y, Brush.Gleis));

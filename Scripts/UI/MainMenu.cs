@@ -583,6 +583,8 @@ public partial class MainMenu : Control
             // »Multiplayer« (Bild scratchpad/editorui/vorher_editor.png).
             else if (a == "--editor-direkt") CallDeferred(nameof(ShowMapEditor));
         }
+        // P3/C2 (12.11.2026): aus dem Bearbeitungsmodus zurueck -> gleich in den Editorschirm.
+        if (MapEditorScreen.ZurueckMit.Length > 0) CallDeferred(nameof(ShowMapEditor));
     }
 
     /// <summary>`--menu-click=<caption>`: press a start-menu row through the

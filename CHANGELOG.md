@@ -128,6 +128,35 @@ your own copy of the 1997 game.
     palm trees in the bushes. The picture references came from the host, the
     object image from the local bake. Both now match; everything the simulation
     reads still comes unchanged from the host.
+- **Edit mode is an editor** (bug-812):
+  - No fog of war any more: the whole map with all buildings and objects is
+    visible and the minimap is full. Before, you only saw your own base.
+  - The game displays are gone (resource bar, money, mission box, clock, command
+    buttons). What remains is the map, the panel and the minimap.
+  - Esc and "Back" return to the editor screen with the same map opened again,
+    instead of the start menu.
+  - "Open existing" lists your own maps first and preselected, then received
+    maps, then the shipped ones.
+  - The selection list is taller. Greyed-out buttons say why. The editor screen
+    is opaque; the start menu no longer shows through.
+  - Brushes no longer overwrite buildings and units: terrain, objects and rails
+    refuse occupied cells, units can't be stacked, rails can't go on water.
+    Switching to "Units" while "ownerless" is selected picks player 1.
+- **No more crash when closing the map editor quickly** (bug-809). The tile set
+  preview ran in a background thread that called engine functions; closing the
+  editor within the first seconds could crash the game. The measurement now also
+  learns only from shipped maps, not copies.
+- **Network games on custom maps start reliably** (bug-810, bug-811):
+  - The joining player baked every transferred map right away, even when they
+    already had the same map. On large maps this took seconds, the connection
+    dropped silently and the game hung at "Waiting for …". Now only what the game
+    actually needs is baked.
+  - The connection waits longer before dropping a silent player (30–60 instead of
+    5 seconds), and the joining player no longer gives up while data from the host
+    is still arriving.
+  - A copy of an original network map under another name got the original AI
+    table on the host but a computed one on the joining player, and the game
+    aborted. The original table now only applies to the shipped maps themselves.
 - **Fixed map sizes instead of counting up** (bug-800). Seven sizes to click,
   each modelled on an original map: Small 100×100, Medium 150×150 (like NET03),
   Large 168×168 (NET01), Very large 230×230 (NET02), Huge 254×254 (NET05/06),

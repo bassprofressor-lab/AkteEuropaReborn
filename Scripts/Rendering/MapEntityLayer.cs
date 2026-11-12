@@ -2341,7 +2341,15 @@ public partial class MapEntityLayer : Node2D
     /// obeys it, and the setting on this machine has it off.</summary>
     public static bool ForceFog;
 
-    public bool FogActive => _fog != null && !NebelAus && (ForceFog || NebelImNetzFest || UI.Settings.FogOfWar);
+    // ⭐ 12.11.2026 — P3/B2 (Fable-Pruefung): im Bearbeitungsmodus KEIN Nebel — man
+    // setzte Gebaeude und Gelaende ins Blinde, die Minikarte war schwarz.
+    // Gegenschalter --editor-nebel-alt.
+    public bool FogActive => _fog != null && !NebelAus && !EditorOhneNebel
+                             && (ForceFog || NebelImNetzFest || UI.Settings.FogOfWar);
+
+    private static readonly bool EditorNebelAlt =
+        System.Array.IndexOf(Core.CommandLine.Args, "--editor-nebel-alt") >= 0;
+    private static bool EditorOhneNebel => Editor.MapEditSession.Active && !EditorNebelAlt;
 
     /// <summary><c>--nebel-aus</c> — Messschalter (15.09.2026): kein Nebel, gleich was die
     /// Einstellung sagt. Fuer Bildschirmfotos von Stellen, die keine Einheit sieht.</summary>

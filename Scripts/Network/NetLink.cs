@@ -328,6 +328,7 @@ public sealed class NetLink
         Error e = p.CreateClient(address, port);
         if (e != Error.Ok) { Fault = $"CreateClient({address}:{port}) -> {e}"; return false; }
         p.TransferMode = MultiplayerPeer.TransferModeEnum.Reliable;
+        Geduldig(p, 1);           // bug-810: die Leitung zum Vermittler
         _peer = p;
         IsHost = false;
         GD.Print($"netz: Mitspieler, verbinde nach {address}:{port}");
@@ -342,8 +343,21 @@ public sealed class NetLink
         _clients.Clear();
     }
 
+    // ⭐ 12.11.2026 — bug-810: GEDULDIGERE LEITUNG. Backt ein Mitspieler eine
+    // mitgereiste grosse Karte (254x125: mehrere Sekunden auf dem Hauptfaden), schweigt
+    // er so lange. ENet trennt nach Vorgabe schon nach 5 s Schweigen (timeoutMin) —
+    // die Partie stand dann still: »Vorlauf, es fehlt noch jemand«. Jetzt 30..60 s.
+    // Gegenschalter --netz-zeitgrenze-alt.
+    private static void Geduldig(ENetMultiplayerPeer p, int id)
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--netz-zeitgrenze-alt") >= 0) return;
+        try { p.GetPeer(id)?.SetTimeout(64, 30000, 60000); }
+        catch (Exception e) { GD.PrintErr($"netz: Zeitgrenze fuer {id} nicht gesetzt: {e.Message}"); }
+    }
+
     private void OnPeerConnected(long id)
     {
+        if (_peer is ENetMultiplayerPeer ep) Geduldig(ep, (int)id);
         if (!_clients.Contains((int)id)) _clients.Add((int)id);
         _clients.Sort();          // ⚠ die Spielernummern hängen an dieser Ordnung
         GD.Print($"netz: Mitspieler {id} da ({_clients.Count} insgesamt)");
@@ -607,7 +621,7 @@ public sealed class NetLink
             }
             case NetPacket.Karte:
                 NetzKarte.Nimm(r, bytes, 0);
-                if (WartendeSitzung is { } ws && NetzKarte.Fertig(ws.KartenSumme))
+                if (WartendeSitzung is { } ws && NetzKarte.Bereitstellen(ws.KartenSumme))
                 {
                     WartendeSitzung = null;
                     Session = ws;
@@ -672,7 +686,7 @@ public sealed class NetLink
             else
             {
                 s.Map = NetzKarte.LokalerName(s.KartenSumme);
-                if (!NetzKarte.Fertig(s.KartenSumme))
+                if (!NetzKarte.Bereitstellen(s.KartenSumme))
                 {
                     WartendeSitzung = s;
                     GD.Print($"netz: Partie empfangen, warte auf die Karte ({s.KartenSumme:X16})");

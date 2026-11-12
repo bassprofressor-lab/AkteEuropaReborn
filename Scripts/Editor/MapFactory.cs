@@ -392,6 +392,38 @@ public static class MapFactory
     /// <paramref name="slot"/>? Beide Griffformen — eine Karte, die vor dem
     /// 11.11.2026 gespeichert wurde, traegt noch 51000 + Platz, und Wegnehmen
     /// soll auch dort die Zellen freigeben.</summary>
+    /// <summary>⭐ 12.11.2026 — P3/B4/B5 (Fable-Pruefung): steht auf der Zelle ein
+    /// Gebaeude oder eine Einheit? Gelaende-, Objekt- und Gleispinsel ueberschrieben
+    /// die Belegung unbesehen (der Satz in sec3/sec5 blieb, der Griff war weg), und
+    /// Einheiten liessen sich stapeln. null = frei, sonst der Grund.
+    /// Gegenschalter --editor-belegung-alt.</summary>
+    public static string? Belegt(CwmFile m, int col, int row)
+    {
+        if (BelegungAlt) return null;
+        var imap = m.Sec(6);
+        if (imap == null || col < 0 || row < 0 || col >= m.Width || row >= m.Height) return null;
+        int i = (col * ImapStride + row) * 2;
+        if (i + 1 >= imap.Length) return null;
+        int v = imap[i] | (imap[i + 1] << 8);
+        if (v >= GriffBase && v < GriffBase + 300) return $"({col},{row}): dort steht ein Gebaeude — erst wegnehmen (7)";
+        if (v < 8 * CwmData.EntitiesPerPlayer) return $"({col},{row}): dort steht eine Einheit — erst wegnehmen (7)";
+        // die imap traegt nur die ANKERZELLE einer Einheit — grosse Rumpfe (2x2, 4x4)
+        // decken mehr: dafuer die Saetze selbst fragen
+        var s = m.Sec(5);
+        if (s != null)
+            for (int o = 0; o + CwmData.EntityStride <= s.Length; o += CwmData.EntityStride)
+            {
+                if (s[o + 0x09] == 0xFF) continue;
+                int c = s[o], r = s[o + 1], side = Simulation.NavGrid.HullSide(s[o + 0x0a]);
+                if (col >= c && row >= r && col < c + side && row < r + side)
+                    return $"({col},{row}): dort steht eine Einheit — erst wegnehmen (7)";
+            }
+        return null;
+    }
+
+    private static readonly bool BelegungAlt =
+        System.Array.IndexOf(Core.CommandLine.Args, "--editor-belegung-alt") >= 0;
+
     public static bool IsHandleOf(int v, int slot)
         => v == GriffBase + slot || v == StaticHandleBase + 1000 + slot;
 

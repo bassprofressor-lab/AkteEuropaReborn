@@ -131,7 +131,7 @@ public partial class MapEditOverlay
         v.AddChild(sel);
         _pList = new ItemList
         {
-            CustomMinimumSize = new Vector2(0, 90),
+            CustomMinimumSize = new Vector2(0, 132),   // P3/C5 (12.11.2026): vorher 90 = 2½ Zeilen; 132 = 3 volle, Minikarte bleibt frei
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             FixedIconSize = new Vector2I(48, 32),
@@ -250,7 +250,14 @@ public partial class MapEditOverlay
             btn.AddThemeStyleboxOverride("pressed", Chip(col, 0.40f, 2));
             btn.AddThemeStyleboxOverride("hover_pressed", Chip(col, 0.48f, 2));
             var bb = b;
-            btn.Pressed += () => { _brush = bb; _say = ""; Refresh(); QueueRedraw(); };
+            btn.Pressed += () =>
+            {
+                _brush = bb; _say = "";
+                // P3/C12 (12.11.2026): Einheiten brauchen einen Spieler — »herrenlos«
+                // oder »Kulisse« vom Gebaeudepinsel springt auf Spieler 1 zurueck.
+                if (bb == Brush.Einheit && _owner is < 0 or > 7) _owner = 0;
+                Refresh(); QueueRedraw();
+            };
             _toolButtons[b] = btn;
             h.AddChild(btn);
         }
@@ -487,6 +494,7 @@ public partial class MapEditOverlay
             Refresh();
             return;
         }
+        UI.MapEditorScreen.ZurueckMit = MapEditSession.Name;   // P3/C2: zurueck in den Editorschirm
         MapEditSession.Leave();
         UI.SkirmishSetup.Active = false;
         UI.SkirmishSetup.ViewMap = "";

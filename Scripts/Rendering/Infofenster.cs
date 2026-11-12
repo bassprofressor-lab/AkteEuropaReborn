@@ -233,6 +233,15 @@ public partial class MapEntityLayer
     /// <summary>Den Leerzweig zeigen: sechs Zeilen an festen Punkten, kein Bild, keine Balken.</summary>
     private void ZeigeLeerzweig()
     {
+        // ⭐ 12.11.2026 — P3/C6: im Bearbeitungsmodus kein Missionskasten (Kontostand,
+        // Sprit, Verluste bedeuten dort nichts). Gegenschalter --editor-hud-alt.
+        if (Editor.MapEditSession.Active && System.Array.IndexOf(Core.CommandLine.Args, "--editor-hud-alt") < 0)
+        {
+            _panel.Visible = false;
+            _blockZeilen?.Setze(null);
+            ShowPanelBars(null);
+            return;
+        }
         _panel.Visible = _panelTextOn;
         if (LeerzweigAlt || !BlockZeilenMoeglich)
         {

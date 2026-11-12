@@ -141,6 +141,12 @@ public partial class MapEditorScreen : Control
     private CheckBox _flat = null!;
     private LineEdit _from = null!;
     private Button _create = null!, _check = null!, _view = null!, _edit = null!, _play = null!;
+    private Label? _grauHinweis;
+
+    public override void _Process(double delta)
+    {
+        if (_grauHinweis != null) _grauHinweis.Visible = _check.Disabled;
+    }
 
     /// <summary>Die Auswahl der VORHANDENEN Karten und der Knopf dazu. Siehe
     /// <see cref="OnOpen"/>.</summary>
@@ -174,7 +180,7 @@ public partial class MapEditorScreen : Control
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
 
-        var backdrop = new ColorRect { Color = new Color(0.04f, 0.05f, 0.07f, 0.96f) };
+        var backdrop = new ColorRect { Color = new Color(0.04f, 0.05f, 0.07f, 1f) };   // P3/C8 (12.11.2026): deckend, das Startmenue schien durch
         backdrop.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(backdrop);
 
@@ -502,6 +508,17 @@ public partial class MapEditorScreen : Control
         _play.Pressed += OnPlayPressed;
         after.AddChild(_play);
 
+        // ⭐ 12.11.2026 — P3/C11 (Fable-Pruefung): die vier Knoepfe waren grau ohne
+        // Hinweis, warum. Der Hinweis steht da, solange sie grau sind.
+        _grauHinweis = new Label
+        {
+            Text = "Erst eine Karte erzeugen oder öffnen — dann gehen diese vier Knöpfe.",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Modulate = new Color(0.95f, 0.8f, 0.45f),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        leftCol.AddChild(_grauHinweis);
+
         _status = new Label
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -593,6 +610,15 @@ public partial class MapEditorScreen : Control
                 run = true;
             }
         }
+        // ⭐ 12.11.2026 — P3/C2 (Fable-Pruefung): Esc/Zurueck im Bearbeitungsmodus
+        // fuehrt hierher zurueck, mit derselben Karte geoeffnet (vorher: Startmenue,
+        // und alle Knoepfe waren wieder grau).
+        if (!run && ZurueckMit.Length > 0)
+        {
+            _autoOpen = ZurueckMit;
+            run = true;
+        }
+        ZurueckMit = "";
         if (run && _autoOpen.Length > 0)
         {
             for (int i = 0; i < _existingNames.Count; i++)
@@ -893,9 +919,29 @@ public partial class MapEditorScreen : Control
             found.Add(f);
         }
         found.Sort(StringComparer.Ordinal);
-        foreach (string f in found) { _existing.AddItem(f["map_".Length..]); _existingNames.Add(f); }
-        if (found.Count == 0) { _existing.AddItem("keine Karten gefunden"); _open.Disabled = true; }
+        if (found.Count == 0) { _existing.AddItem("keine Karten gefunden"); _open.Disabled = true; return; }
+        // ⭐ 12.11.2026 — P3/C3: eigene Karten ZUERST und vorgewaehlt, dann empfangene,
+        // dann die mitgelieferten (vorher alphabetisch, Vorgabe Kampagnenkarte 01).
+        var eigene = found.FindAll(f => !MapOpen.IsDelivered(f) && !f.StartsWith("map_netz_"));
+        var netz = found.FindAll(f => f.StartsWith("map_netz_"));
+        var geliefert = found.FindAll(f => MapOpen.IsDelivered(f));
+        void Gruppe(string titel, List<string> liste)
+        {
+            if (liste.Count == 0) return;
+            _existing.AddSeparator(titel);
+            _existingNames.Add("");
+            foreach (string f in liste) { _existing.AddItem(f["map_".Length..]); _existingNames.Add(f); }
+        }
+        Gruppe("Eigene Karten", eigene);
+        Gruppe("Empfangene Karten (Netzspiel)", netz);
+        Gruppe("Mitgelieferte Karten (werden als Kopie geoeffnet)", geliefert);
+        for (int i = 0; i < _existingNames.Count; i++)
+            if (_existingNames[i].Length > 0) { _existing.Selected = i; break; }
     }
+
+    /// <summary>P3/C2: die Karte, mit der der Bearbeitungsmodus per Esc/Zurueck
+    /// verlassen wurde — der Editorschirm oeffnet sie gleich wieder.</summary>
+    public static string ZurueckMit = "";
 
     /// <summary>
     /// Der Knopf »VORHANDENE OEFFNEN«. Er geht denselben Weg wie
@@ -919,6 +965,7 @@ public partial class MapEditorScreen : Control
         int at = _existing.Selected;
         if (at < 0 || at >= _existingNames.Count) { _status.Text = "Keine Karte gewaehlt."; return; }
         string outName = _existingNames[at];
+        if (outName.Length == 0) { _status.Text = "Keine Karte gewaehlt."; return; }
         string stem = outName["map_".Length..];
 
         var lines = new List<string>();

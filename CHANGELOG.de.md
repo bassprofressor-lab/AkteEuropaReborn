@@ -139,6 +139,37 @@ bisher nur dort beschrieben.*
     Gebüsch. Die Bildverweise kamen vom Gastgeber, das Objektbild aber aus dem
     eigenen Backlauf. Jetzt passt beides zusammen; was die Simulation liest,
     kommt weiter unverändert vom Gastgeber.
+- **Der Bearbeitungsmodus ist ein Editor** (bug-812):
+  - Kein Nebel des Krieges mehr: Man sieht die ganze Karte mit allen Gebäuden
+    und Objekten, die Minikarte ist voll. Vorher sah man nur die eigene Basis.
+  - Die Spielanzeigen sind weg (Rohstoffleiste, Kontostand, Missionskasten,
+    Uhr, Befehlsknöpfe). Es bleiben Karte, Bedienfeld und Minikarte.
+  - Esc und »Zurück« führen in den Editorschirm, mit derselben Karte gleich
+    wieder geöffnet, statt ins Startmenü.
+  - »Vorhandene öffnen« zeigt eigene Karten zuerst und vorgewählt, dann
+    empfangene, dann die mitgelieferten.
+  - Die Auswahlliste ist höher. Graue Knöpfe sagen, warum sie grau sind. Der
+    Editorschirm ist deckend, das Startmenü scheint nicht mehr durch.
+  - Pinsel überschreiben keine Gebäude und Einheiten mehr: Gelände, Objekte und
+    Gleise weisen belegte Zellen ab, Einheiten lassen sich nicht stapeln, Gleise
+    nicht aufs Wasser legen. Wer zu »Einheiten« wechselt, während »herrenlos«
+    gewählt ist, bekommt Spieler 1.
+- **Kein Absturz mehr beim schnellen Schließen des Karteneditors** (bug-809).
+  Die Vorschau der Kachelsätze lief in einem Hintergrundprozess, der Funktionen
+  der Spiel-Engine aufrief; schloss man den Editor in den ersten Sekunden, konnte
+  das Spiel abstürzen. Die Messung lernt außerdem nur noch aus mitgelieferten
+  Karten, nicht aus Kopien.
+- **Netzspiel mit eigener Karte startet zuverlässig** (bug-810, bug-811):
+  - Der Mitspieler backte jede mitgereiste Karte sofort, auch wenn er dieselbe
+    Karte schon hatte. Bei großen Karten dauerte das Sekunden, die Verbindung riss
+    still ab, und die Partie hing bei »Warten auf …«. Jetzt wird nur gebacken, was
+    die Partie wirklich braucht.
+  - Die Leitung wartet länger, bevor sie einen schweigenden Mitspieler trennt
+    (30–60 statt 5 Sekunden), und der Mitspieler gibt nicht mehr auf, solange
+    Daten vom Gastgeber kommen.
+  - Eine Kopie einer Original-Netzkarte unter anderem Namen bekam beim Gastgeber
+    die Original-KI-Tafel, beim Mitspieler eine gerechnete — die Partie brach ab.
+    Die Originaltafel gilt jetzt nur für die mitgelieferten Karten selbst.
 - **Feste Kartengrößen statt Hochzählen** (bug-800). Sieben Größen zum
   Anklicken, jede nach einer Karte des Originals gewählt: Klein 100×100,
   Mittel 150×150 (wie NET03), Groß 168×168 (NET01), Sehr groß 230×230 (NET02),

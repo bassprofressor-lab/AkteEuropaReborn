@@ -127,10 +127,19 @@ public partial class MapEntityLayer
     /// <summary>NN der Sektortafeln im Gefecht: <c>map_NETxx</c> → 50 + xx
     /// (W2.4: AI51..58 gehören zu NET01..08), sonst −1 (rechnen). ⚠ UNSERE SETZUNG,
     /// die Zuordnung ist nicht an der EXE nachgelesen.</summary>
+    private static readonly bool KiTafelNameAlt =
+        Array.IndexOf(Core.CommandLine.Args, "--ki-tafel-name-alt") >= 0;
+
     private int GefechtKiTafelNummer()
     {
         if (!GefechtKiMarschAn) return -1;
         string m = UI.SkirmishSetup.Map ?? "";
+        // ⭐ 12.11.2026 — bug-811: NUR die gelieferten Netzkarten (map_NETnn). Eine Kopie
+        // unter anderem Namen (map_zNET07) bekam AI57.CWI, beim Mitspieler aber unter
+        // ihrem Netznamen map_netz_<summe> die gerechnete Tafel — Abbruch »KI-Sektortafeln
+        // verschieden«. Eine Kopie kann ausserdem veraendert sein; dann passt die
+        // Originaltafel nicht. Gegenschalter --ki-tafel-name-alt.
+        if (!KiTafelNameAlt && !Editor.MapOpen.IsDelivered(m)) return -1;
         int k = m.LastIndexOf("NET", StringComparison.OrdinalIgnoreCase);
         if (k < 0) return -1;
         return int.TryParse(m[(k + 3)..], out int n) && n is >= 1 and <= 49 ? 50 + n : -1;

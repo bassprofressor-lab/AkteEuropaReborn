@@ -558,6 +558,16 @@ public partial class NetworkManager : Node
             OfferSession();
 
         int frist = Frist;
+        // ⭐ 12.11.2026 — bug-810: die Frist zaehlt ab dem LETZTEN Lebenszeichen, nicht
+        // ab dem Anmelden. Der Gastgeber laedt nach »Partie verteilt« seine Karte
+        // (NET07: ~12 s ohne zu senden), danach kommen Karte (bis 0,5 MB) und Partie
+        // ueber eine gedrosselte Leitung — der Mitspieler gab nach 20 s auf, obwohl die
+        // Daten liefen. Gegenschalter --netz-frist-alt.
+        if (!_wantHost && Link.PacketsIn != _letzteEin && !FristAlt)
+        {
+            _letzteEin = Link.PacketsIn;
+            _t0 = Time.GetTicksMsec();
+        }
         if (frist > 0 && !_timedOut && Time.GetTicksMsec() - _t0 > (ulong)frist)
         {
             _timedOut = true;
@@ -595,6 +605,9 @@ public partial class NetworkManager : Node
     ///   danach Rückgabewert 5. Unverändert, denn das ist der Prüflauf.</item>
     /// </list>
     /// </summary>
+    private long _letzteEin = -1;
+    private static readonly bool FristAlt = System.Array.IndexOf(Core.CommandLine.Args, "--netz-frist-alt") >= 0;
+
     private int Frist => FromMenu ? (_wantHost ? 0 : 30000) : _waitMs;
 
     public static bool TimedOut => Instance is { _timedOut: true };

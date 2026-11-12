@@ -7798,6 +7798,24 @@ _mausProbePunkt = karte;
     /// auch, was an ihr belegt und was unsere Zutat ist.</summary>
     private UI.GameHud? _resourceBar;
 
+    /// <summary>⭐ 12.11.2026 — P3/C6 (Fable-Pruefung): im Bearbeitungsmodus bedeuten
+    /// Rohstoffleiste, Bedienblock (Missionskasten, Uhr, Befehlsknoepfe) und
+    /// Kontostand nichts — sie verdeckten nur die Karte. Die Minikarte bleibt.
+    /// Gegenschalter --editor-hud-alt.</summary>
+    private void EditorSpielanzeigenWeg()
+    {
+        if (!Editor.MapEditSession.Active || HudDebug) return;
+        if (_editorHudAlt ??= System.Array.IndexOf(Core.CommandLine.Args, "--editor-hud-alt") >= 0) return;
+        _hideResourceBar = true;                  // UpdateResourceBar setzt sie sonst jedes Bild zurueck
+        if (_resourceBar is { Visible: true }) _resourceBar.Visible = false;
+        if (_hud is { Visible: true }) _hud.Visible = false;          // Kontostand-Zeile oben links
+        if (_hudBg is { Visible: true }) _hudBg.Visible = false;
+        if (_panelLayer != null)
+            foreach (var k in _panelLayer.GetChildren())
+                if (k != _minimap && k is CanvasItem { Visible: true } ci) ci.Visible = false;
+    }
+    private bool? _editorHudAlt;
+
     /// <summary>`Q` legt die Leiste weg — sie liegt über der Karte, und wer ein
     /// freies Bild will, muss sie loswerden können (dieselbe Überlegung wie bei
     /// `I` fürs Baufenster).</summary>
@@ -9427,6 +9445,7 @@ _mausProbePunkt = karte;
 
     public override void _Process(double delta)
     {
+        EditorSpielanzeigenWeg();                 // P3/C6 (12.11.2026)
         P4BildTakt();                             // --bodenstrahl-bild= (bug-658), Rendering/PaketP4Lauf.cs
         // ⭐ 03.10.2026 (bug-411) — ein verlorenes Loslassen darf den Zeiger
         // nicht gefangen lassen. MausTabLauf.cs.
