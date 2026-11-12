@@ -251,3 +251,17 @@ public partial class MapEditOverlay
         GetTree().Quit(ok ? 0 : 1);
     }
 }
+
+/// <summary><c>--map-edit-spielen-check</c> — C9: »Spielen« im Bedienfeld druecken (Bildlauf:
+/// danach muss der Editorschirm mit dem Fenster »Im Gefecht spielen« stehen).</summary>
+public partial class MapEditOverlay
+{
+    private static bool _spielenGedrueckt;
+    private async void SpielenCheck()
+    {
+        if (_spielenGedrueckt || Array.IndexOf(Core.CommandLine.Args, "--map-edit-spielen-check") < 0) return;
+        for (int i = 0; i < 6; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        _spielenGedrueckt = true;
+        PlayNow();
+    }
+}

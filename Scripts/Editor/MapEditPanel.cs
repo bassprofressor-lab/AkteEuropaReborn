@@ -317,7 +317,7 @@ public partial class MapEditOverlay
         {
             Text = "Spielen", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 34),
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            TooltipText = "Im Gefecht spielen: speichert (falls nötig), du Platz 1, die anderen Plätze die KI.",
+            TooltipText = "Im Gefecht spielen: speichert (falls nötig) und fragt dann Platz, Computergegner und KI-Stufe.",
         };
         play.Pressed += PlayNow;
         row.AddChild(play);
@@ -588,6 +588,20 @@ public partial class MapEditOverlay
         {
             made = MapEditSession.Save(s => GD.Print("map-editor: " + s));
             if (made == null) { _say = "Speichern ging nicht — kein Gefecht"; Refresh(); return; }
+        }
+        // ⭐ 12.11.2026 C9: derselbe Weg wie der Knopf im Editorschirm — zurueck dorthin und
+        // gleich das Fenster »Im Gefecht spielen« (Platz, Gegner, Stufe). Vorher startete
+        // dieser Knopf fest als Platz 1 gegen sieben KI. Gegenschalter --editor-spielen-alt.
+        if (Array.IndexOf(Core.CommandLine.Args, "--editor-spielen-alt") < 0)
+        {
+            UI.MapEditorScreen.ZurueckMit = made;
+            UI.MapEditorScreen.ZurueckAktion = "spielenfrage";
+            MapEditSession.Leave();
+            UI.SkirmishSetup.Active = false;
+            UI.SkirmishSetup.ViewMap = "";
+            GD.Print($"map-editor: spielen: {made} — zurück in den Editorschirm, Fenster »Im Gefecht spielen«");
+            GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
+            return;
         }
         MapEditSession.Leave();
         UI.SkirmishSetup.ViewMap = "";

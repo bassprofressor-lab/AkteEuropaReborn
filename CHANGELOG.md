@@ -144,6 +144,10 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **"Spielen" in the edit panel asks too**: the edit-mode "Spielen" button still
+  started you as player 1 against seven computer opponents. It now saves (if needed),
+  returns to the editor screen and opens the same window as "Play in skirmish" (slot,
+  opponent count, AI level). Opt-out `--editor-spielen-alt`.
 - **Small things in the map editor**:
   - **Type 0** is no longer offered as a building. Measured: 75 of 144 type-0 records
     in the shipped maps are empty slots, the rest carry values of other types — type 0

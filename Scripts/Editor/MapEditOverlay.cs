@@ -112,6 +112,7 @@ public partial class MapEditOverlay : Node2D
         MinikarteCheck();         // D10 (12.11.2026)
         SpiegelCheck();           // D6 (12.11.2026)
         FahrwerkCheck();          // B6 (12.11.2026)
+        SpielenCheck();           // C9 (12.11.2026)
     }
 
     /// <summary>

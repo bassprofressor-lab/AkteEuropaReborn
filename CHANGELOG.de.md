@@ -156,6 +156,11 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **»Spielen« im Bedienfeld fragt auch**: Der Knopf »Spielen« im Bearbeitungsmodus
+  startete noch fest als Spieler 1 gegen sieben Computergegner. Jetzt speichert er
+  (falls nötig), kehrt in den Editorschirm zurück und öffnet dasselbe Fenster wie
+  »Im Gefecht spielen« (Platz, Gegnerzahl, KI-Stufe). Gegenschalter
+  `--editor-spielen-alt`.
 - **Kleinigkeiten im Karteneditor**:
   - **Typ 0** steht nicht mehr in der Gebäudeauswahl. Gemessen: 75 von 144 Sätzen mit
     Typ 0 in den gelieferten Karten sind leere Plätze, der Rest trägt Werte anderer

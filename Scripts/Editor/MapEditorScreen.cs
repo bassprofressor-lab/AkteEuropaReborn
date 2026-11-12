@@ -725,12 +725,16 @@ public partial class MapEditorScreen : Control
         // ⭐ 12.11.2026 — P3/C2 (Fable-Pruefung): Esc/Zurueck im Bearbeitungsmodus
         // fuehrt hierher zurueck, mit derselben Karte geoeffnet (vorher: Startmenue,
         // und alle Knoepfe waren wieder grau).
-        if (!run && ZurueckMit.Length > 0)
+        // C9 (12.11.2026): eine RUECKKEHR geht den Befehlszeilenschaltern vor — sonst
+        // erzeugte ein Prueflauf mit --map-editor-run bei jeder Rueckkehr neu.
+        if (ZurueckMit.Length > 0)
         {
             _autoOpen = ZurueckMit;
             run = true;
+            _autoRun = ZurueckAktion;     // »spielenfrage« = Fenster »Im Gefecht spielen«, sonst nichts
         }
         ZurueckMit = "";
+        ZurueckAktion = "";
         if (run && _autoOpen.Length > 0)
         {
             for (int i = 0; i < _existingNames.Count; i++)
@@ -1223,6 +1227,10 @@ public partial class MapEditorScreen : Control
     /// verlassen wurde — der Editorschirm oeffnet sie gleich wieder.</summary>
     public static string ZurueckMit = "";
 
+    /// <summary>C9: was nach der Rueckkehr gleich geschehen soll (»spielenfrage« = das
+    /// Fenster »Im Gefecht spielen«).</summary>
+    public static string ZurueckAktion = "";
+
     /// <summary>
     /// Der Knopf »VORHANDENE OEFFNEN«. Er geht denselben Weg wie
     /// »KARTE ERZEUGEN« — dieselbe Zeichenkette an dieselbe
@@ -1415,6 +1423,7 @@ public partial class MapEditorScreen : Control
         d.Canceled += () => d.QueueFree();
         AddChild(d);
         d.PopupCentered();
+        GD.Print($"map-editor: Fenster »Im Gefecht spielen« offen — {_made}, {plaetze.Count} Plätze");
     }
 
     /// <summary>C9: die besetzten Plaetze einer Karte (Eigner 0..7 mit Gebaeude oder
