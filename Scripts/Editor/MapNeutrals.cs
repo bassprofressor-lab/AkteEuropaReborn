@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -148,6 +148,13 @@ public static class MapNeutrals
     public static (int Col, int Row)[] DoorsOf(int typ)
     {
         foreach (var k in Kinds) if (k.Typ == typ) return k.Doors;
+        // ⭐ 12.11.2026 B9: die Arten, die nie HERRENLOS vorkommen, an ALLEN Gebaeuden der
+        // gelieferten Karten nachgemessen (door_cells relativ zum Anker):
+        //   Typ 5  — 1 Satz,   Tuer (3,3)    ⚠ schwach belegt (1 von 1)
+        //   Typ 7  — 15 Saetze, 0 mit Tuer   } diese Arten HABEN keine Tuer —
+        //   Typ 13 — 262 Saetze, 0 mit Tuer  } »keine Tuer« ist hier richtig,
+        //   Typ 14 — 124 Saetze, 0 mit Tuer  } kein Fehler
+        if (typ == 5) return new[] { (3, 3) };
         return Array.Empty<(int, int)>();
     }
 

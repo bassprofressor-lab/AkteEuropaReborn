@@ -301,7 +301,7 @@ public partial class MapEditorScreen : Control
         string sizeHint = $"{MinSize} bis {MaxSize} Zellen. Die {MaxSize} sind gelesen — so groß "
                         + "ist die groesste gelieferte Karte, darueber weist CwmFile.Create ab. Die "
                         + $"{MinSize} sind UNSERE Setzung: darunter bleibt nach Wasserrand (3), "
-                        + "Strandring und den 6 Zellen bis zur Startmarke kaum Landesinneres uebrig.";
+                        + "Strandring und den 6 Zellen bis zum Startplatz kaum Landesinneres übrig.";
         _w = new SpinBox { MinValue = MinSize, MaxValue = MaxSize, Value = 150, TooltipText = sizeHint };
         _h = new SpinBox { MinValue = MinSize, MaxValue = MaxSize, Value = 150, TooltipText = sizeHint };
 
@@ -567,7 +567,7 @@ public partial class MapEditorScreen : Control
             CustomMinimumSize = new Vector2(0, 36),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             TooltipText = "Liest die geschriebenen Dateien zurück: Raster, Gelände, Bauplätze, "
-                        + "Erreichbarkeit von den Startmarken und das Bild.",
+                        + "Erreichbarkeit von den Startplätzen und das Bild.",
         };
         _check.Pressed += OnCheck;
         after.AddChild(_check);
@@ -834,9 +834,13 @@ public partial class MapEditorScreen : Control
             return;
         }
         var g = Groessen[_sizeAt];
+        // B10 (12.11.2026): auch zu WENIGE Spieler fuer eine grosse Karte melden
+        // (Groesse.MinP wurde nie gelesen).
         string warn = _players > g.MaxP
-            ? $"  ⚠ Fuer {_players} Spieler eng — empfohlen: {Groessen[VorschlagFuer(_players)].Name}."
-            : "";
+            ? $"  ⚠ Für {_players} Spieler eng — empfohlen: {Groessen[VorschlagFuer(_players)].Name}."
+            : _players < g.MinP
+                ? $"  ⚠ Für {_players} Spieler sehr weitläufig — empfohlen: {Groessen[VorschlagFuer(_players)].Name}."
+                : "";
         _sizeHint.Text = $"{g.W}×{g.H} Zellen, {g.Spieler}. Vorbild: {g.Herkunft}.{warn}";
     }
 

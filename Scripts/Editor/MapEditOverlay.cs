@@ -1043,6 +1043,7 @@ public partial class MapEditOverlay : Node2D
 
         _layer.EditorAddUnit(slot, u.Type, _owner, cell.X, cell.Y, u.Art, u.Energy, u.Fuel);
         _mine.Add((cell.X, cell.Y, Brush.Einheit));
+        _gone.Remove((cell.X, cell.Y));            // B10: das rote Kreuz der dort weggenommenen Einheit weg
         MapEditSession.Dirty = true;
         _say = $"{u.Name} (Typ {u.Type}) auf ({cell.X},{cell.Y}), Platz {slot}, Spieler {_owner + 1}";
     }

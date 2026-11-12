@@ -166,7 +166,12 @@ public partial class MapEntityLayer
         var list = new List<int>();
         var p = Patterns;
         if (p == null) return list;
-        for (int t = 0; t < CwpFile.BuildingTypeCount; t++)
+        // ⭐ 12.11.2026 B9 (Fable-Pruefung): Typ 0 nicht mehr anbieten. GEMESSEN an allen
+        // gelieferten Karten: 75 der 144 Saetze mit Typ 0 sind ungebaut (+0x18 = 0, leerer
+        // Platz), die uebrigen 69 tragen Trefferpunkte und Tueren anderer Arten (700/1000/
+        // 1200) — Typ 0 ist keine eigene Gebaeudeart. Gegenschalter --editor-typ0-alt.
+        bool typ0 = System.Array.IndexOf(Core.CommandLine.Args, "--editor-typ0-alt") >= 0;
+        for (int t = typ0 ? 0 : 1; t < CwpFile.BuildingTypeCount; t++)
             if (!p.GetBuildingType(t).IsEmpty) list.Add(t);
         return list;
     }

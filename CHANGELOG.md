@@ -144,6 +144,17 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Small things in the map editor**:
+  - **Type 0** is no longer offered as a building. Measured: 75 of 144 type-0 records
+    in the shipped maps are empty slots, the rest carry values of other types — type 0
+    is not a building type. Opt-out `--editor-typ0-alt`.
+  - **Doors**: building type 5 gets its door (measured on its only occurrence, weakly
+    backed). Types 7, 13 and 14 have no door in 401 of 401 records — "no door" is right
+    there and stays.
+  - The **size hint** now also warns when a map is very spacious for the player count,
+    not only when it is too cramped.
+  - The **red cross** of a removed unit disappears when you place one on the same spot.
+  - Two tooltips still said "Startmarken"; they are start positions now.
 - **Report in plain German**: after generating, opening and checking, the map
   editor's report field showed the full workshop output ("can_build_here",
   "Bodenblock", "Fächer unter 8 Beobachtungen", memory addresses). It now starts with

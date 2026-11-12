@@ -156,6 +156,18 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Kleinigkeiten im Karteneditor**:
+  - **Typ 0** steht nicht mehr in der Gebäudeauswahl. Gemessen: 75 von 144 Sätzen mit
+    Typ 0 in den gelieferten Karten sind leere Plätze, der Rest trägt Werte anderer
+    Arten — Typ 0 ist keine Gebäudeart. Gegenschalter `--editor-typ0-alt`.
+  - **Türen**: Gebäudeart 5 bekommt ihre Tür (gemessen an ihrem einzigen Vorkommen,
+    schwach belegt). Die Arten 7, 13 und 14 haben in 401 von 401 Sätzen keine Tür —
+    dort ist »keine Tür« richtig und bleibt so.
+  - Der **Größenhinweis** warnt jetzt auch, wenn eine Karte für die Spielerzahl sehr
+    weitläufig ist, nicht nur wenn sie zu eng ist.
+  - Das **rote Kreuz** einer weggenommenen Einheit verschwindet, wenn man an derselben
+    Stelle wieder eine setzt.
+  - Zwei Tooltips sprachen noch von »Startmarken«; sie heißen Startplätze.
 - **Bericht in normalem Deutsch**: Das Berichtsfeld des Karteneditors zeigte nach
   dem Erzeugen, Öffnen und Prüfen die volle Werkstattausgabe (»can_build_here«,
   »Bodenblock«, »Fächer unter 8 Beobachtungen«, Speicheradressen). Jetzt steht oben
