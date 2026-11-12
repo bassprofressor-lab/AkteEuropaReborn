@@ -156,6 +156,15 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Keine abgeschnürten Wasserstraßen mehr in erzeugten Karten** (bug-820): Lief eine
+  Wasserstraße schräg und nur eine Ecke breit, blieb an ihrer engsten Stelle eine
+  einzelne Wasserzelle ohne geraden Nachbarn stehen — die Prüfung meldete ein
+  »isoliertes Wassergebiet«, und die Straße war für die Wegsuche dort zu (gemessen
+  an 1 von 4 Probekarten). Der Generator verbreitert solche Engstellen jetzt um eine
+  Ecke, auch auf symmetrischen Karten spiegelgleich. Karten ohne solche Stelle
+  bleiben Byte für Byte, wie sie waren (5 weitere Probekarten geprüft). Die Prüfung
+  nennt bei winzigen Wassergebieten jetzt auch die Zelle. Gegenschalter
+  `--generator-sattel-alt`.
 - **Verständliche Namen im Karteneditor**: Einheiten hießen nur nach ihrem Fahrwerk
   (»Reifen«, »Ketten«), Objekte »Objekt 555« und Gleise »Linie 0..9«. Jetzt steht
   bei jeder Einheit die Waffe dabei (»Ketten · Leichte Bordkanone«, Namen aus der

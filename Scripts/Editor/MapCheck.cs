@@ -1117,10 +1117,12 @@ public static class MapCheck
         // (2) isolierte und winzige Wasser-/Landgebiete
         var waterM = new bool[n]; var landM = new bool[n];
         for (int i = 0; i < n; i++) { waterM[i] = ground[i] == 2; landM[i] = ground[i] != 2; }
-        var (wIso, wTiny) = Tiny(w, h, waterM, 4);
+        var wWo = new List<int>();
+        var (wIso, wTiny) = Tiny(w, h, waterM, 4, wWo);
         var (lIso, lTiny) = Tiny(w, h, landM, 4);
         say($"    isolierte Zellen (kein Vierer-Nachbar gleicher Art): Wasser {wIso}, Land {lIso}; " +
-            $"Gebiete unter 4 Zellen: Wasser {wTiny}, Land {lTiny}");
+            $"Gebiete unter 4 Zellen: Wasser {wTiny}, Land {lTiny}" +
+            (wWo.Count > 0 ? "  (Wasser bei Zelle " + string.Join(" ", wWo.Take(8).Select(i => $"({i % w},{i / w})")) + ")" : ""));
         if (erzeugt && (wIso > 0 || lIso > 0 || wTiny > 0))
             fails.Add($"isolierte/winzige Gebiete (Wasser {wIso}/{wTiny}, Land {lIso})");
 

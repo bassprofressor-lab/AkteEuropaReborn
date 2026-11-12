@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -178,7 +178,57 @@ public sealed class MapLandscape
         int removedIslands = RemoveSmall(water, CW, CH, false, MinIslandCorners, startCorner);
         int bridged = Bridge(water, CW, CH, startCorner, Math.Max(MinIslandCorners * 4, NV / 33));
         int removedWater2 = RemoveSmall(water, CW, CH, true, MinWaterCorners, null);
+        // ⭐ 12.11.2026 bug-820: WASSERSATTEL AUFLOESEN. Zwei Wasserecken, die sich in
+        // einer Zelle nur UEBER ECK beruehren (W L / L W), ergaben an der engsten Stelle
+        // einer Wasserstrasse eine Wasserzelle ohne Vierer-Nachbarn — map-check zaehlte
+        // sie als »isoliertes Wassergebiet« (Samen 33 auf 150x150: Zelle (13,94)), und
+        // die Strasse war fuer die Wegsuche dort zu. Jetzt wird an jedem solchen Sattel
+        // eine der beiden Landecken Wasser (die erste ausserhalb der Startzonen), bis
+        // keiner mehr da ist. UNSERE SETZUNG; Gegenschalter --generator-sattel-alt.
+        int saettel = 0;
+        if (Array.IndexOf(Core.CommandLine.Args, "--generator-sattel-alt") < 0)
+            for (int pass = 0; pass < 8; pass++)
+            {
+                int vor = saettel;
+                for (int y = 0; y + 1 < CH; y++)
+                    for (int x = 0; x + 1 < CW; x++)
+                    {
+                        int a = y * CW + x, b = a + 1, c = a + CW, d = c + 1;
+                        int l1, l2;
+                        if (water[a] && water[d] && !water[b] && !water[c]) { l1 = b; l2 = c; }
+                        else if (water[b] && water[c] && !water[a] && !water[d]) { l1 = a; l2 = d; }
+                        else continue;
+                        int pick = !InZone(l1 % CW, l1 / CW, 1.7) ? l1 : !InZone(l2 % CW, l2 / CW, 1.7) ? l2 : -1;
+                        if (pick < 0) continue;
+                        water[pick] = true; saettel++;
+                        if (sym) water[MV(pick)] = true;                 // P6: Spiegelbild mitnehmen
+                    }
+                // und die SCHRAEGE ENGSTELLE: eine Zelle mit vier Wasserecken, deren vier
+                // Nachbarzellen je eine Landecke haben (Treppe, eine Ecke breit) — gemessen
+                // an Samen 33, Zelle (13,94). Die erste Nachbarzelle mit DREI Wasserecken
+                // bekommt die vierte dazu, damit die Strasse eine volle Zelle breit wird.
+                bool W4(int cx, int cy) => cx >= 0 && cy >= 0 && cx + 1 < CW && cy + 1 < CH
+                    && water[cy * CW + cx] && water[cy * CW + cx + 1] && water[(cy + 1) * CW + cx] && water[(cy + 1) * CW + cx + 1];
+                for (int y = 0; y + 1 < CH; y++)
+                    for (int x = 0; x + 1 < CW; x++)
+                    {
+                        if (!W4(x, y) || W4(x - 1, y) || W4(x + 1, y) || W4(x, y - 1) || W4(x, y + 1)) continue;
+                        foreach (var (nx, ny) in new[] { (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1) })
+                        {
+                            if (nx < 0 || ny < 0 || nx + 1 >= CW || ny + 1 >= CH) continue;
+                            int land = -1, nl = 0;
+                            foreach (int v in new[] { ny * CW + nx, ny * CW + nx + 1, (ny + 1) * CW + nx, (ny + 1) * CW + nx + 1 })
+                                if (!water[v]) { land = v; nl++; }
+                            if (nl != 1 || InZone(land % CW, land / CW, 1.7)) continue;
+                            water[land] = true; saettel++;
+                            if (sym) water[MV(land)] = true;
+                            break;
+                        }
+                    }
+                if (saettel == vor) break;
+            }
         int nW = 0; foreach (bool b in water) if (b) nW++;
+        if (saettel > 0) say($"Wassersattel aufgeloest: {saettel} Ecken (bug-820)");
         say($"Eckgelaende {w}x{h}: Wasser {nW} von {NV} Ecken ({100.0 * nW / NV:0.0} %, Soll " +
             $"{100 * waterShare:0.0} %), Wellenlaenge {waveL:0} Halbzellen; weg: {removedWater + removedWater2} " +
             $"Wasserflecken < {MinWaterCorners} Ecken, {removedIslands} Inseln < {MinIslandCorners} Ecken; " +

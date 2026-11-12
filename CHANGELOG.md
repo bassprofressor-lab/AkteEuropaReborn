@@ -144,6 +144,14 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **No more pinched waterways in generated maps** (bug-820): where a waterway ran
+  diagonally and only one corner wide, its narrowest point left a single water cell
+  without a straight neighbour — the check reported an "isolated water area" and the
+  waterway was closed there for path finding (measured on 1 of 4 sample maps). The
+  generator now widens such pinches by one corner, mirrored on symmetric maps too.
+  Maps without such a spot stay byte for byte the same (5 more sample maps checked).
+  The check now also names the cell of any tiny water area. Opt-out
+  `--generator-sattel-alt`.
 - **Clear names in the map editor**: units were only named after their chassis
   ("Reifen", "Ketten"), objects "Objekt 555" and rails "Linie 0..9". Every unit now
   shows its weapon too ("Ketten · Leichte Bordkanone", names from the game's
