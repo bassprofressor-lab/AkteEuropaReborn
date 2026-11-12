@@ -249,7 +249,27 @@ public partial class MapEditorScreen : Control
             TooltipText = "Die Dateien heissen danach map_<name>.png, .json und .entities.json in "
                         + Core.Content.UserDir + "Maps.",
         };
-        form.AddChild(Row("Name", _name));
+        // ⭐ 12.11.2026 — P4/D1 (Fable-Pruefung): ZUFALL BEIM ERZEUGEN. Gleiche
+        // Einstellungen ergaben immer dieselbe Karte (Samen fest 1). Jetzt eine
+        // Zufallszahl, die man sieht (eine gute Karte laesst sich wiederfinden),
+        // und »Neu wuerfeln«.
+        _samen = new LineEdit
+        {
+            Text = NeuerSamen().ToString(), CustomMinimumSize = new Vector2(130, 0),
+            TooltipText = "Dieselbe Zahl mit denselben Einstellungen ergibt dieselbe Karte — "
+                        + "so findet man eine gelungene wieder.",
+        };
+        var wuerfeln = new Button { Text = "Neu würfeln", CustomMinimumSize = new Vector2(0, 34) };
+        Kachelknopf(wuerfeln);
+        wuerfeln.Pressed += () => _samen.Text = NeuerSamen().ToString();
+        var nameZeile = new HBoxContainer();
+        nameZeile.AddThemeConstantOverride("separation", 8);
+        _name.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        nameZeile.AddChild(_name);
+        nameZeile.AddChild(new Label { Text = "Zufallszahl" });
+        nameZeile.AddChild(_samen);
+        nameZeile.AddChild(wuerfeln);
+        form.AddChild(Row("Name", nameZeile));
 
         // ⭐ 11.11.2026 — bug-800: SPIELERZAHL UND FESTE GROESSEN zum Anklicken.
         // Spielermeldung: »bei den größen sollte man feste werte wählen können
@@ -336,6 +356,44 @@ public partial class MapEditorScreen : Control
         // Vorschau (KachelsatzInfo). Die Nummer steht weiter dabei.
         _tileset = new OptionButton();
         form.AddChild(Row("Landschaft (Kachelsatz)", _tileset));
+
+        // ⭐ 12.11.2026 — P4/D1: Wasser und neutrale Gebaeude als feste Auswahlen.
+        // »mittel« und »normal« sind die gemessenen Werte des Generators; die
+        // anderen Stufen sind UNSERE SETZUNG.
+        var mengen = new HBoxContainer();
+        mengen.AddThemeConstantOverride("separation", 4);
+        void Stufen(string titel, (string Text, double Wert, string Tipp)[] stufen, int vorgabe, Action<double> setze)
+        {
+            if (mengen.GetChildCount() > 0) mengen.AddChild(new Control { CustomMinimumSize = new Vector2(18, 0) });
+            mengen.AddChild(new Label { Text = titel });
+            var g = new ButtonGroup();
+            for (int i = 0; i < stufen.Length; i++)
+            {
+                var st = stufen[i];
+                var b = new Button
+                {
+                    Text = st.Text, ToggleMode = true, ButtonGroup = g, ButtonPressed = i == vorgabe,
+                    CustomMinimumSize = new Vector2(0, 34), TooltipText = st.Tipp,
+                };
+                Kachelknopf(b);
+                b.Pressed += () => setze(st.Wert);
+                mengen.AddChild(b);
+            }
+        }
+        Stufen("Wasser", new[]
+        {
+            ("wenig", 0.08, "etwa 8 % der Karte Wasser — fast alles Land"),
+            ("mittel", MapTerrain.WaterShareDefault, "etwa 19 % — gemessen an den Originalkarten"),
+            ("viel", 0.32, "etwa 32 % — Seen und Küsten, Schiffe lohnen sich"),
+        }, 1, v => _wasser = v);
+        Stufen("Neutrale Gebäude", new[]
+        {
+            ("keine", 0.0, "keine herrenlosen Gebäude zum Einnehmen"),
+            ("wenige", 0.5, "halb so viele wie in den Originalkarten"),
+            ("normal", 1.0, "so dicht wie in den Originalkarten"),
+            ("viele", 1.7, "deutlich mehr Gebäude zum Einnehmen"),
+        }, 2, v => _neutral = v);
+        form.AddChild(Row("Mengen", mengen));
         _tileset.ItemSelected += _ => ShowTilesetInfo();
 
         var info = new VBoxContainer();
@@ -789,6 +847,13 @@ public partial class MapEditorScreen : Control
     /// Lauf haelt den Faden fest (er backt das ganze Kartenbild), und ohne das
     /// eine gewartete Einzelbild wuerde die Zeile erst NACH dem Lauf
     /// erscheinen.</para></summary>
+    private LineEdit _samen = null!;
+    private double _wasser = MapTerrain.WaterShareDefault, _neutral = 1.0;
+    /// <summary>P4: die Karte, die in diesem Schirm eben erzeugt (und nicht bearbeitet) wurde.</summary>
+    private string _frischErzeugt = "";
+
+    private static uint NeuerSamen() => (uint)GD.RandRange(1, 999999);
+
     /// <summary>A1: der Name, dessen Ueberschreiben der Spieler bestaetigt hat.</summary>
     private string _ueberschreibenOk = "";
 
@@ -846,7 +911,10 @@ public partial class MapEditorScreen : Control
             _status.Text = $"»{name}« ist der Name einer mitgelieferten Karte — bitte einen anderen waehlen.";
             return;
         }
-        if (File.Exists($"{maps}/{outName}.json") && _ueberschreibenOk != outName && _autoRun.Length == 0)
+        // P4: eine eben erst ERZEUGTE (nicht bearbeitete) Karte darf »Neu wuerfeln«
+        // ohne Rueckfrage ersetzen — sonst fragte jeder zweite Wurf.
+        if (File.Exists($"{maps}/{outName}.json") && _ueberschreibenOk != outName && _autoRun.Length == 0
+            && _frischErzeugt != outName)
         {
             FrageUeberschreiben(outName);
             return;
@@ -870,7 +938,12 @@ public partial class MapEditorScreen : Control
                    + $",spieler={_players}"                       // bug-800
                    + (_flat.ButtonPressed ? ",flach" : "")
                    + $",boden={(int)_pick.Value}"
-                   + (from.Length > 0 ? $",from={from}" : "");
+                   + (from.Length > 0 ? $",from={from}" : "")
+                   // P4/D1 (12.11.2026): Zufallszahl, Wasser, Neutrale
+                   + (uint.TryParse(_samen.Text.Trim(), out uint sm) && sm > 0 ? $",samen={sm}" : "")
+                   + $",wasser={_wasser.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                   + (_neutral <= 0 ? ",ohneneutral"
+                      : $",neutralfaktor={_neutral.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
 
         _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
         _status.Text = $"arbeitet … ({(int)_w.Value}x{(int)_h.Value}, {_players} Spieler, " +
@@ -885,8 +958,16 @@ public partial class MapEditorScreen : Control
         if (rc == 0)
         {
             _made = outName;
+            _frischErzeugt = outName;
             _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
-            _status.Text = $"{outName} geschrieben. Jetzt pruefen oder ansehen.";
+            // ⭐ 12.11.2026 — P4/B8: Warnungen gehoeren in die Statuszeile, nicht nur in
+            // den Bericht (»nur 0 von 8 Startplaetzen« stand frueher nur dort).
+            var warn = lines.FindAll(l => l.Contains('⚠') && (l.Contains("Startpl") || l.Contains("Vorkommen")));   // die zaehlen fuers Spiel
+            _status.Modulate = warn.Count > 0 ? new Color(1f, 0.82f, 0.35f) : new Color(0.75f, 0.8f, 0.86f);
+            _status.Text = warn.Count == 0
+                ? $"{outName["map_".Length..]} geschrieben. Jetzt prüfen, ansehen, bearbeiten oder spielen."
+                : $"{outName["map_".Length..]} geschrieben — aber {warn.Count} Warnung(en): " +
+                  warn[0].Trim().TrimStart('⚠', ' ') + (warn.Count > 1 ? " … (siehe Bericht)" : "");
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
@@ -962,6 +1043,8 @@ public partial class MapEditorScreen : Control
     /// </summary>
     private async void OnOpen()
     {
+        _frischErzeugt = "";   // P4: bearbeitet/geoeffnet = nicht mehr frisch
+        _status.Modulate = new Color(0.75f, 0.8f, 0.86f);
         int at = _existing.Selected;
         if (at < 0 || at >= _existingNames.Count) { _status.Text = "Keine Karte gewaehlt."; return; }
         string outName = _existingNames[at];
@@ -1041,6 +1124,8 @@ public partial class MapEditorScreen : Control
 
     private void OnEditPressed()
     {
+        _frischErzeugt = "";   // P4: bearbeitet/geoeffnet = nicht mehr frisch
+        _status.Modulate = new Color(0.75f, 0.8f, 0.86f);
         if (_made.Length == 0 || OnEdit == null) return;
         OnEdit(_made);
     }

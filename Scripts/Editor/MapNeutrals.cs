@@ -75,6 +75,11 @@ public static class MapNeutrals
     /// sieben NET-Karten (Spanne 1,20..3,77).</summary>
     public const double PerThousandWalkable = 1.75;
 
+    /// <summary>⭐ 12.11.2026 — P4/D1: »wenige/normal/viele« im Neu-Dialog, als Faktor auf
+    /// die gemessene Dichte (Befehlszeile <c>neutralfaktor=</c>). 1 = gemessen.
+    /// Gesetzt von MainMenu.MapNew fuer genau einen Lauf. UNSERE SETZUNG.</summary>
+    public static double Faktor = 1.0;
+
     /// <summary>Mindestabstand zweier neutraler Gebaeude. Gemessen ist das
     /// 5-%-Quantil des naechsten Nachbarn 7,3 Zellen (Median 13,0); die 7 ist
     /// daraus abgerundet. Ein Median als Untergrenze wuerde die Haelfte der
@@ -201,7 +206,7 @@ public static class MapNeutrals
             for (int r = 0; r < h; r++)
                 if (MapDeposits.ImapFree(m, imap, c, r)) walkable++;
 
-        if (want < 0) want = (int)Math.Round(PerThousandWalkable * walkable / 1000.0);
+        if (want < 0) want = (int)Math.Round(PerThousandWalkable * Faktor * walkable / 1000.0);
         want = Math.Min(want, Math.Max(0, SlotsMax - firstSlot));
         if (want <= 0)
         { say($"Neutrale Gebaeude: 0 gewuenscht ({walkable} begehbare Zellen)"); return 0; }

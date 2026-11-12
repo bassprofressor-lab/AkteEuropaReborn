@@ -128,6 +128,19 @@ your own copy of the 1997 game.
     palm trees in the bushes. The picture references came from the host, the
     object image from the local bake. Both now match; everything the simulation
     reads still comes unchanged from the host.
+- **Create with choices** (bug-813):
+  - Every map gets a random number, and "Neu würfeln" (re-roll) makes a new one.
+    Until now the same settings always produced the same map. The number is
+    shown: the same number with the same settings recreates the same map. A map
+    you just created can be re-rolled without a confirmation.
+  - Water "little / medium / much" and neutral buildings "none / few / normal /
+    many" as fixed choices. "Medium" and "normal" are the values measured on the
+    original maps.
+  - Missing start positions or deposits now show in yellow in the status line,
+    not only in the report.
+  - Every player gets their first deposit at a similar distance (12 to 20 cells
+    from the start). Measured before, it lay 1 to 38 cells away on the same map;
+    now e.g. 11 to 19 (portrait, 8 players) or 14 to 17 (medium, 8 players).
 - **Edit mode is an editor** (bug-812):
   - No fog of war any more: the whole map with all buildings and objects is
     visible and the minimap is full. Before, you only saw your own base.

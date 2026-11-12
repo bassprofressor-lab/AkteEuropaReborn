@@ -139,6 +139,20 @@ bisher nur dort beschrieben.*
     Gebüsch. Die Bildverweise kamen vom Gastgeber, das Objektbild aber aus dem
     eigenen Backlauf. Jetzt passt beides zusammen; was die Simulation liest,
     kommt weiter unverändert vom Gastgeber.
+- **Erzeugen mit Wahl** (bug-813):
+  - Jede Karte bekommt eine Zufallszahl, und »Neu würfeln« macht eine neue. Bisher
+    ergaben gleiche Einstellungen immer dieselbe Karte. Die Zahl steht sichtbar
+    da: Mit derselben Zahl und denselben Einstellungen entsteht dieselbe Karte
+    wieder. Eine eben erzeugte Karte darf ohne Rückfrage neu gewürfelt werden.
+  - Wasser »wenig / mittel / viel« und neutrale Gebäude »keine / wenige / normal /
+    viele« als feste Auswahlen. »Mittel« und »normal« sind die Werte, die an den
+    Originalkarten gemessen sind.
+  - Fehlen Startplätze oder Vorkommen, sagt es die Statuszeile gelb, statt nur
+    im Bericht.
+  - Jeder Spieler hat sein erstes Vorkommen in ähnlicher Entfernung (12 bis 20
+    Felder vom Start). Gemessen lag es vorher auf derselben Karte 1 bis 38 Felder
+    entfernt, jetzt zum Beispiel 11 bis 19 (Hochformat, 8 Spieler) oder 14 bis 17
+    (Mittel, 8 Spieler).
 - **Der Bearbeitungsmodus ist ein Editor** (bug-812):
   - Kein Nebel des Krieges mehr: Man sieht die ganze Karte mit allen Gebäuden
     und Objekten, die Minikarte ist voll. Vorher sah man nur die eigene Basis.

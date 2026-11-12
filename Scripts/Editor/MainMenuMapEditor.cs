@@ -214,6 +214,7 @@ public partial class MainMenu
         // -1 = aus der gemessenen Dichte rechnen; 0 ist die GEGENPROBE
         // (keine neutralen Gebaeude, also die Karte von vor dem 14.08.2026).
         int neutrals = -1;
+        double neutralFaktor = 1.0;
         for (int i = 4; i < p.Length; i++)
         {
             if (p[i] == "flach" || p[i] == "flat") flat = true;
@@ -233,6 +234,10 @@ public partial class MainMenu
             else if (p[i].StartsWith("truppe=")) int.TryParse(p[i]["truppe=".Length..], out troop);
             else if (p[i].StartsWith("neutral=")) int.TryParse(p[i]["neutral=".Length..], out neutrals);
             else if (p[i] == "ohneneutral") neutrals = 0;
+            else if (p[i].StartsWith("neutralfaktor=") &&
+                     double.TryParse(p[i]["neutralfaktor=".Length..], System.Globalization.NumberStyles.Float,
+                                     System.Globalization.CultureInfo.InvariantCulture, out double nf))
+                neutralFaktor = nf;   // P4/D1
             else if (p[i].StartsWith("samen=")) { uint.TryParse(p[i]["samen=".Length..], out uint s); seed = s == 0 ? 1 : s; }
             else if (p[i].StartsWith("wasser="))
             {
@@ -399,9 +404,15 @@ public partial class MainMenu
                 // der Feld-Rohstoffmine (Typ 15, 30 Zellen in 10x6), sonst legt es
                 // Vorkommen, auf denen keine Mine steht — gemessen 0 Bauplaetze
                 // trotz gelegter Vorkommen.
-                m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
-                                       players, troop, waterShare, seed, model, seams, cwp,
-                                       neutrals);
+                MapNeutrals.Faktor = neutralFaktor;
+                try
+                {
+                    m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
+                                           players, troop, waterShare, seed, model, seams, cwp,
+                                           neutrals);
+                }
+                finally { MapNeutrals.Faktor = 1.0; }
+                say($"Zufallszahl {seed}, Wasser {waterShare:0.###}, Neutrale x{neutralFaktor:0.##}");
                 brushPal = palette; brushModel = model; brushSeams = seams;
             }
             if (!skipWrite) MapGenerator.Write(m, cwp, pal, outName, say);

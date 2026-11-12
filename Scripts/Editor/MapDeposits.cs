@@ -139,6 +139,9 @@ public static class MapDeposits
     /// <summary>bug-770: die Bewerber nach Startgebiet (naechste Plattenmitte,
     /// Gleichstand → kleinerer Platz) in je eine Schlange, Reihenfolge wie
     /// uebergeben.</summary>
+    /// <summary>E1: der Ring um den Startplatz, in dem jedes Gebiet sein erstes Vorkommen bekommt.</summary>
+    public const int RingVon = 12, RingBis = 20;
+
     public static List<Queue<T>> FairQueues<T>(List<T> cand, IReadOnlyList<(int Col, int Row)> fair,
                                                Func<T, (int Col, int Row)> pos)
     {
@@ -283,6 +286,26 @@ public static class MapDeposits
             want = Math.Max(want, fair.Count);
             want = Math.Min(Most, (want + fair.Count - 1) / fair.Count * fair.Count);
             var lists = FairQueues(cand, fair, x => (x.Col, x.Row));
+            // ⭐ 12.11.2026 — E1 (Fable-Pruefung): GLEICH WEIT, nicht nur gleich viele.
+            // Gemessen lag das naechste Vorkommen auf derselben Karte 1 bis 38 Zellen
+            // vom Start. Jetzt kommen in jedem Gebiet zuerst die Bewerber im Ring
+            // 12..20 Zellen um den Startplatz dran (Reihenfolge sonst wie bisher).
+            // UNSERE SETZUNG. Gegenschalter --vorkommen-ring-aus.
+            if (Array.IndexOf(Core.CommandLine.Args, "--vorkommen-ring-aus") < 0)
+                for (int p = 0; p < lists.Count; p++)
+                {
+                    var f = fair[p];
+                    bool ImRing((uint Key, int Col, int Row, int Anchors) k)
+                    {
+                        long dx = k.Col - f.Col, dy = k.Row - f.Row, d = dx * dx + dy * dy;
+                        return d >= RingVon * RingVon && d <= RingBis * RingBis;
+                    }
+                    var alle = lists[p].ToArray();
+                    var neu = new Queue<(uint Key, int Col, int Row, int Anchors)>();
+                    foreach (var k in alle) if (ImRing(k)) neu.Enqueue(k);
+                    foreach (var k in alle) if (!ImRing(k)) neu.Enqueue(k);
+                    lists[p] = neu;
+                }
             DealFair(lists, want, () => m.Terra.Count, TryPlace);
         }
         else
