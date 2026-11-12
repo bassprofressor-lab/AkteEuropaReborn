@@ -144,6 +144,11 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **F5 keeps your view**: saving with F5 in the map editor reloads the map — until
+  now the view then jumped to the start of the map at the smallest zoom, and you had
+  to find the spot you were painting all over again. Position and zoom now stay
+  exactly as they were (check `--map-edit-kamera-check`: 0 px off; with the opt-out
+  `--editor-kamera-alt` it is 288 px off again).
 - **No more blue dots after painting** (bug-819): changing the height or painting
   rubble on a generated map in the map editor left tiles around the stroke whose
   corners didn't match — small blue water dots appeared in the middle of land, and

@@ -73,3 +73,34 @@ public partial class MapEditOverlay
         GetTree().Quit(ok ? 0 : 1);
     }
 }
+
+/// <summary><c>--map-edit-kamera-check</c> — C1 (12.11.2026): Blick verschieben, F5,
+/// nach dem Neuladen muss die Kamera wieder dort stehen (Gegenprobe --editor-kamera-alt).</summary>
+public partial class MapEditOverlay
+{
+    private static int _kamPhase;
+    private static Vector2 _kamZiel, _kamZielZoom;
+
+    private async void KameraCheck()
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--map-edit-kamera-check") < 0) return;
+        for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var cam = GetViewport().GetCamera2D();
+        if (cam == null) { GD.Print("map-edit-kamera-check: DURCHGEFALLEN — keine Kamera"); GetTree().Quit(1); return; }
+        if (_kamPhase == 0)
+        {
+            _kamPhase = 1;
+            _kamZielZoom = new Vector2(2.5f, 2.5f);
+            _kamZiel = cam.Position + new Vector2(240, 160);
+            cam.Zoom = _kamZielZoom; cam.Position = _kamZiel;
+            GD.Print($"map-edit-kamera-check: vorher Blick ({_kamZiel.X:0},{_kamZiel.Y:0}) Zoom 2.5 — F5");
+            SaveAndReload();
+            return;
+        }
+        float d = cam.Position.DistanceTo(_kamZiel);
+        bool ok = d < 1f && Mathf.Abs(cam.Zoom.X - _kamZielZoom.X) < 0.01f;
+        GD.Print($"map-edit-kamera-check: nach F5 Blick ({cam.Position.X:0},{cam.Position.Y:0}) Zoom {cam.Zoom.X:0.##}, " +
+                 $"Abstand {d:0} px — {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
+        GetTree().Quit(ok ? 0 : 1);
+    }
+}

@@ -156,6 +156,12 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **F5 behält den Blick**: Speichern mit F5 im Karteneditor lädt die Karte neu —
+  bisher sprang die Ansicht danach an den Kartenanfang und auf den kleinsten Zoom,
+  und man musste die Stelle, an der man gerade malte, erst wieder suchen. Jetzt
+  stehen Ausschnitt und Zoom nach dem Speichern genau wie vorher (Prüflauf
+  `--map-edit-kamera-check`: Abstand 0 px; mit dem Gegenschalter
+  `--editor-kamera-alt` wieder 288 px daneben).
 - **Keine blauen Punkte mehr nach dem Malen** (bug-819): Wer im Karteneditor auf
   einer erzeugten Karte die Höhe änderte oder Geröll malte, bekam rundherum
   Kacheln, deren Ecken nicht zusammenpassten — mitten im Land tauchten kleine

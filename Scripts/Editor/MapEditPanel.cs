@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -55,10 +55,36 @@ public partial class MapEditOverlay
     // ---- ueber F5 hinweg merken (ReloadCurrentScene baut den Ueberzug neu) ---
     private static (Brush B, int Typ, int Owner, int Line, MapFactory.Ground G, int Prop, int Unit)? _merk;
 
-    private void Merken() => _merk = (_brush, _typ, _owner, _line, _ground, _propAt, _unitAt);
+    private void Merken()
+    {
+        _merk = (_brush, _typ, _owner, _line, _ground, _propAt, _unitAt);
+        // ⭐ 12.11.2026 C1 (Fable-Pruefung): auch den BLICK merken. Vorher sprang die
+        // Ansicht nach jedem F5 an den Kartenanfang, und man suchte die Stelle, an der
+        // man gerade malte. Gegenschalter --editor-kamera-alt.
+        if (GetViewport()?.GetCamera2D() is { } cam && !KameraAlt) _kamera = (cam.Position, cam.Zoom);
+    }
+
+    private static (Vector2 Pos, Vector2 Zoom)? _kamera;
+    private static bool KameraAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-kamera-alt") >= 0;
+
+    /// <summary>Den gemerkten Blick zuruecksetzen — zwei Bilder spaeter, damit der
+    /// Kartenbetrachter seine eigene Startsicht schon gesetzt hat.</summary>
+    private async void KameraZurueck()
+    {
+        if (_kamera is not { } k) return;
+        _kamera = null;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (GetViewport()?.GetCamera2D() is { } cam)
+        {
+            cam.Zoom = k.Zoom; cam.Position = k.Pos;
+            GD.Print($"map-editor: Blick nach F5 zurueck auf ({k.Pos.X:0},{k.Pos.Y:0}), Zoom {k.Zoom.X:0.##}");
+        }
+    }
 
     private void Wiederherstellen()
     {
+        KameraZurueck();
         if (_merk is not { } m) return;
         _merk = null;
         _brush = m.B; _owner = m.Owner; _line = m.Line; _ground = m.G;
