@@ -271,7 +271,62 @@ public static class MapEditTerrain
         int now = m.CodeAt(col, row);
         if (now >= CwpFile.ObjectCodeBase)
             return $"({col},{row}) traegt immer noch den Code {now} — nicht weggenommen";
+        BelegungFreigeben(m, col, row);
         return null;
+    }
+
+    /// <summary>⭐ 12.11.2026 (Wald brennt): nach dem Wegnehmen eines Gegenstands die
+    /// BELEGUNG der Zelle zuruecksetzen. Bisher blieb sie stehen — ein weggenommener Baum
+    /// liess eine gesperrte Zelle zurueck (Belegung 0xFFFF) bzw. einen Waldeintrag, der
+    /// weiter brennen koennte. Waldeintrag auf Zustand 0 (»weg«, MapForest), Belegung
+    /// aus dem Zonenraster wie bei MapFactory.ClearBuilding. Nur fuer Wald, zerstoerbare
+    /// Objekte und 0xFFFF — eine Einheit oder ein Gebaeude auf der Zelle bleibt.
+    /// Gegenschalter --generator-wald-alt.</summary>
+    private static void BelegungFreigeben(CwmFile m, int col, int row)
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--generator-wald-alt") >= 0) return;
+        var imap = m.Sec(MapForest.ImapSektion);
+        if (imap == null) return;
+        int i = (col * MapFactory.ImapStride + row) * 2;
+        if (i + 1 >= imap.Length) return;
+        int v = imap[i] | (imap[i + 1] << 8);
+        bool wald = MapForest.IstWald(v);
+        bool objekt = v >= MapForest.ObjektVon && v < MapForest.ObjektBis;
+        if (!wald && !objekt && v != MapFactory.ImapBlocked) return;
+        if (wald && m.Sec(MapForest.WaldSektion) is { } w)
+        {
+            int k = (v - MapForest.WaldVon) * MapForest.WaldStride;
+            if (k + 2 < w.Length) w[k + 2] = 0;                  // Zustand 0 = weg
+        }
+        var zone = m.Sec(2);
+        int z = zone == null ? MapFactory.ZoneLand : MapDeposits.Zone(zone, m.Width, m.Height, col, row);
+        int neu = z >= MapFactory.ZoneLand ? MapFactory.ImapFree : z == MapFactory.ZoneShore ? MapFactory.ImapRough
+                : v == MapFactory.ImapBlocked ? MapFactory.ImapBlocked : MapFactory.ImapWater;
+        imap[i] = (byte)(neu & 0xFF); imap[i + 1] = (byte)(neu >> 8);
+    }
+
+    /// <summary>⭐ 12.11.2026: einen gesetzten BAUM in die Waldtafel eintragen (Belegung
+    /// 50000 + k, Zustand 1) — derselbe Eintrag wie beim Erzeugen. Rueckgabe: ob es ging
+    /// (die Tafel hat 6000 Plaetze; ein Platz mit Zustand 0 wird wiederverwendet).</summary>
+    public static bool WaldSetzen(CwmFile m, int col, int row)
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--generator-wald-alt") >= 0) return false;
+        var imap = m.Sec(MapForest.ImapSektion);
+        var w = m.Sec(MapForest.WaldSektion);
+        if (imap == null || w == null) return false;
+        int max = Math.Min(w.Length / MapForest.WaldStride, MapForest.WaldBis - MapForest.WaldVon);
+        for (int k = 0; k < max; k++)
+        {
+            if (w[k * MapForest.WaldStride + 2] != 0) continue;
+            int i = (col * MapFactory.ImapStride + row) * 2;
+            if (i + 1 >= imap.Length) return false;
+            int v = MapForest.WaldVon + k;
+            imap[i] = (byte)(v & 0xFF); imap[i + 1] = (byte)(v >> 8);
+            w[k * MapForest.WaldStride] = (byte)col; w[k * MapForest.WaldStride + 1] = (byte)row;
+            w[k * MapForest.WaldStride + 2] = 1;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>

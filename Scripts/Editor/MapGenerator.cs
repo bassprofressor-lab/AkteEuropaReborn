@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -300,6 +300,15 @@ public static class MapGenerator
                 MapFactory.Paint(m, c, r, L.Code[i], L.Elev[i], (MapFactory.Ground)L.Class[i]);
                 m.SetCell(c, r, L.Code[i], L.Elev[i], L.Flag[i]);
             }
+        // ⭐ 12.11.2026 (Opus M7 / Fable B10): DER WALD BRENNT. Bisher war Wald gesperrter
+        // Boden mit Baumbild — »0 davon sind Wald und koennen brennen«, Flammenwerfer und
+        // Brand wirkten auf Editorkarten nicht. Gelesen (Import/MapForest): eine Waldzelle
+        // traegt in der Belegung 50000 + k, und Eintrag k der Waldtafel (Sektion 18,
+        // 6000 x 3 Byte) ist Spalte, Zeile, Zustand 1 = steht. Genau das wird jetzt fuer
+        // jede Waldzelle des Generators (Klasse 3 mit Objektkachel) geschrieben.
+        // Gegenschalter --generator-wald-alt.
+        int waldN = WaldEintragen(m, width, height, i => L.Class[i] == 3 && L.Code[i] >= CwpFile.ObjectCodeBase);
+        if (waldN > 0) say($"Wald: {waldN} Baumzellen in die Waldtafel (Sektion 18) — sie können brennen");
         // ⭐ 11.11.2026 — bug-772: sec2 ist ein ECKraster (257x257 Knoten), aus
         // dem das Original selbst die Kachel rechnet (0x41FA10, im Nebel
         // gezeigt) und an dem corners_carry (@0x4211A0) den Bauplatz misst.
@@ -634,5 +643,31 @@ public static class MapGenerator
             if (File.Exists(cwp) && File.Exists(pal)) return (cwp, pal);
         }
         return null;
+    }
+
+    /// <summary>Waldzellen in Belegung (50000 + k) und Waldtafel (Sektion 18) eintragen.
+    /// Gibt die Zahl der Eintraege zurueck (hoechstens 6000, die Tafelgroesse).</summary>
+    public static int WaldEintragen(CwmFile m, int width, int height, Func<int, bool> istWald)
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--generator-wald-alt") >= 0) return 0;
+        var imap = m.Sec(MapForest.ImapSektion);
+        var wald = m.Sec(MapForest.WaldSektion);
+        if (imap == null || wald == null) return 0;
+        int max = Math.Min(wald.Length / MapForest.WaldStride, MapForest.WaldBis - MapForest.WaldVon);
+        int k = 0;
+        for (int r = 0; r < height && k < max; r++)
+            for (int c = 0; c < width && k < max; c++)
+            {
+                if (!istWald(r * width + c)) continue;
+                int ii = (c * MapFactory.ImapStride + r) * 2;
+                if (ii + 1 >= imap.Length) continue;
+                int v = MapForest.WaldVon + k;
+                imap[ii] = (byte)(v & 0xFF); imap[ii + 1] = (byte)(v >> 8);
+                wald[k * MapForest.WaldStride] = (byte)c;
+                wald[k * MapForest.WaldStride + 1] = (byte)r;
+                wald[k * MapForest.WaldStride + 2] = 1;          // steht
+                k++;
+            }
+        return k;
     }
 }

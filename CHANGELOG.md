@@ -144,6 +144,14 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Forest on generated maps burns**: on editor maps, forest was only blocked ground
+  with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
+  und können brennen"). The generator now records every tree the way the original
+  does: occupancy 50000 + k and an entry in the map's forest table (column, row,
+  "standing"). Sample map: 4740 of 4740 trees burnable (before 0), terrain and check
+  unchanged. In the editor a placed tree becomes real forest as well, and a removed
+  tree frees its cell again (it used to stay blocked) and leaves the forest table.
+  Check `--map-edit-wald-check`. Opt-out `--generator-wald-alt`.
 - **"Spielen" in the edit panel asks too**: the edit-mode "Spielen" button still
   started you as player 1 against seven computer opponents. It now saves (if needed),
   returns to the editor screen and opens the same window as "Play in skirmish" (slot,

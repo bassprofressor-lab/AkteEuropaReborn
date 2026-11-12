@@ -113,6 +113,7 @@ public partial class MapEditOverlay : Node2D
         SpiegelCheck();           // D6 (12.11.2026)
         FahrwerkCheck();          // B6 (12.11.2026)
         SpielenCheck();           // C9 (12.11.2026)
+        WaldCheck();              // Wald brennt (12.11.2026)
     }
 
     /// <summary>
@@ -1089,7 +1090,12 @@ public partial class MapEditOverlay : Node2D
         // ⚠ Die Gelaendeklasse bleibt, was sie war. Ein Gegenstand ist Bewuchs;
         // ihn zum Hindernis zu erklaeren waere eine Entscheidung ueber das
         // Spiel, keine ueber das Bild — und sie steht hier nicht an.
+        bool warFrei = BelegungAt(cell.X, cell.Y) == MapFactory.ImapFree;
         MapFactory.Paint(_map, cell.X, cell.Y, code, elev, GroundAt(cell));
+        // 12.11.2026: ein BAUM (Art »Wald« auf dieser Karte) auf freiem Boden wird echter
+        // Wald — er brennt und sperrt wie die Baeume des Generators und der Originale.
+        if (_propInfo.TryGetValue(code, out var pi) && pi.Art == "Wald" && warFrei)
+            MapEditTerrain.WaldSetzen(_map, cell.X, cell.Y);
         _mine.Add((cell.X, cell.Y, Brush.Gegenstand));
         MapEditSession.Dirty = true;
         _say = $"Gegenstand {code} auf ({cell.X},{cell.Y}) — sichtbar nach F5";

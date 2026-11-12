@@ -156,6 +156,15 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
+  mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
+  können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:
+  Belegung 50000 + k und ein Eintrag in der Waldtafel der Karte (Spalte, Zeile,
+  »steht«). Probekarte: 4740 von 4740 Bäumen brennbar (vorher 0), Gelände und Prüfung
+  unverändert. Im Editor wird ein gesetzter Baum ebenso echter Wald, und ein
+  weggenommener Baum gibt seine Zelle wieder frei (bisher blieb sie gesperrt) und
+  verschwindet aus der Waldtafel. Prüflauf `--map-edit-wald-check`. Gegenschalter
+  `--generator-wald-alt`.
 - **»Spielen« im Bedienfeld fragt auch**: Der Knopf »Spielen« im Bearbeitungsmodus
   startete noch fest als Spieler 1 gegen sieben Computergegner. Jetzt speichert er
   (falls nötig), kehrt in den Editorschirm zurück und öffnet dasselbe Fenster wie

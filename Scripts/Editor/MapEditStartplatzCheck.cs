@@ -265,3 +265,54 @@ public partial class MapEditOverlay
         PlayNow();
     }
 }
+
+/// <summary><c>--map-edit-wald-check</c> — 12.11.2026: ein Baum des Generators steht in der
+/// Waldtafel; wegnehmen gibt die Zelle frei und setzt den Eintrag auf »weg«; ein gesetzter
+/// Baum wird Wald; ein Rueckgaengig je Schritt bringt die Karte bytegleich zurueck.</summary>
+public partial class MapEditOverlay
+{
+    private async void WaldCheck()
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--map-edit-wald-check") < 0) return;
+        for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        ulong Abdruck()
+        {
+            ulong h = 14695981039346656037UL;
+            foreach (var a in _map.Sections) foreach (byte b in a) { h ^= b; h *= 1099511628211UL; }
+            return h;
+        }
+        Vector2I? baum = null, frei = null;
+        for (int r = 4; r < _map.Height - 4 && (baum == null || frei == null); r++)
+            for (int c = 4; c < _map.Width - 4; c++)
+            {
+                int v = BelegungAt(c, r);
+                if (baum == null && Import.MapForest.IstWald(v)) baum = new Vector2I(c, r);
+                if (frei == null && v == MapFactory.ImapFree && _map.CodeAt(c, r) < CwpFile.ObjectCodeBase) frei = new Vector2I(c, r);
+            }
+        int waldVorher = Import.MapForest.Waldliste(_map).Count;
+        ulong h0 = Abdruck();
+        bool wegOk = false, setzOk = false, zurueck1 = false, zurueck2 = false;
+        if (baum is { } b0)
+        {
+            _brush = Brush.Gegenstand; _pinsel = 1;
+            StrichBeginnen(false); Anwenden(b0, false); StrichEnden();
+            wegOk = BelegungAt(b0.X, b0.Y) == MapFactory.ImapFree && Import.MapForest.Waldliste(_map).Count == waldVorher - 1;
+            GD.Print($"map-edit-wald-check: Baum {b0} weg -> Belegung {BelegungAt(b0.X, b0.Y):X4}, Wald {waldVorher} -> {Import.MapForest.Waldliste(_map).Count} — {_say}");
+            Rueckgaengig(); zurueck1 = Abdruck() == h0;
+        }
+        int wi = -1;
+        for (int i = 0; i < _props.Count; i++) if (_propInfo.TryGetValue(_props[i], out var pi) && pi.Art == "Wald") { wi = i; break; }
+        if (frei is { } f0 && wi >= 0)
+        {
+            _brush = Brush.Gegenstand; _propAt = wi; _pinsel = 1;
+            StrichBeginnen(true); Anwenden(f0, true); StrichEnden();
+            setzOk = Import.MapForest.IstWald(BelegungAt(f0.X, f0.Y)) && Import.MapForest.Waldliste(_map).Count == waldVorher + 1;
+            GD.Print($"map-edit-wald-check: Baum auf {f0} gesetzt -> Belegung {BelegungAt(f0.X, f0.Y)}, Wald {waldVorher} -> {Import.MapForest.Waldliste(_map).Count}");
+            Rueckgaengig(); zurueck2 = Abdruck() == h0;
+        }
+        bool ok = wegOk && setzOk && zurueck1 && zurueck2;
+        GD.Print($"map-edit-wald-check: wegnehmen {(wegOk ? "ok" : "FALSCH")}, setzen {(setzOk ? "ok" : "FALSCH")}, " +
+                 $"Rueckgaengig {(zurueck1 && zurueck2 ? "bytegleich" : "ANDERS")} — {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
+        GetTree().Quit(ok ? 0 : 1);
+    }
+}
