@@ -69,7 +69,7 @@ public static class MapEditUnits
         new("Schneegleiter",   167, 0, 0,  9,  46,  800,   "11/33"),
         new("Kugelroller",     168, 0, 0, 23,  59,  300,    "5/43"),
         new("Stahlsucher",     173, 0, 0, 20,  13, 1000,   "22/32"),
-        new("Laeufer",         174, 0, 0, 20,  80,  300,  "29/221"),
+        new("Läufer",         174, 0, 0, 20,  80,  300,  "29/221"),
         new("Abwehrstellung",  171, 1, 0, 13, 178,   40, "390/982"),
         // ⚠ Die Schiffsruempfe. Ihre Gattung 4/5 ist das, worauf Can_go
         // @0x4055D0 den 2x2- bzw. 4x4-Rumpf prueft — wer eines davon auf Land
@@ -78,7 +78,7 @@ public static class MapEditUnits
         new("Schiff klein",    151, 0, 4, 18, 125,  500,  "96/117"),
         new("Schiff mittel",   150, 0, 4,  6,  90,  500,   "25/29"),
         new("Schiff ohne Waffe",153,0, 4,  0, 120,  500,   "14/17"),
-        new("Schiff gross",    157, 0, 5, 30, 175,  500,    "6/26"),
+        new("Schiff groß",    157, 0, 5, 30, 175,  500,    "6/26"),
     };
 
     // ========================================================================

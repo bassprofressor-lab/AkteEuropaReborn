@@ -277,19 +277,19 @@ public static class MapPreview
         // darunter gelten nur noch mit --gefecht-startbasis-aus.
         if (System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-startbasis-aus") < 0)
             return bases >= slots.Count
-                ? $"{bases} Basen fuer {slots.Count} Startplaetze"
-                : $"{bases} Basen fuer {slots.Count} Startplaetze — wer nach dem Verteilen " +
+                ? $"{bases} Basen für {slots.Count} Startplätze"
+                : $"{bases} Basen für {slots.Count} Startplätze — wer nach dem Verteilen " +
                   "keine hat, bekommt beim Start Basis und Fabrik";
         if (bases == 0)
-            return $"⚠ KEINE Basis auf dieser Karte ({slots.Count} Startplaetze) — " +
+            return $"⚠ KEINE Basis auf dieser Karte ({slots.Count} Startplätze) — " +
                    "hier baut niemand, es wird mit den Truppen der Karte gespielt";
         // ⚠ »jeder kann bauen« waere auf einer EROBERUNGSKARTE eine Zusage, die
         // erst nach der Einnahme gilt — dort gehoeren die Basen niemandem. Die
         // Zeile nennt deshalb nur die Zahlen und ueberlaesst den Schluss dem,
         // was die Zeile darueber schon sagt.
         if (bases >= slots.Count)
-            return $"{bases} Basen fuer {slots.Count} Startplaetze";
-        return $"⚠ nur {bases} Basen fuer {slots.Count} Startplaetze — wer keine " +
+            return $"{bases} Basen für {slots.Count} Startplätze";
+        return $"⚠ nur {bases} Basen für {slots.Count} Startplätze — wer keine " +
                "bekommt, kann NICHTS bauen und sieht zu";
     }
 
@@ -324,7 +324,7 @@ public static class MapPreview
                     t is 2 or 3 or 4) fab[o]++;
             }
         }
-        catch (System.Exception e) { GD.PrintErr("Startplaetze: " + e.Message); return ""; }
+        catch (System.Exception e) { GD.PrintErr("Startplätze: " + e.Message); return ""; }
 
         var makers = new List<int>();
         for (int i = 0; i < 8; i++) if (fab[i] > 0) makers.Add(i);
@@ -333,15 +333,15 @@ public static class MapPreview
 
         if (makers.Count == 0)
             return built.Count == 0
-                ? "Kein Startplatz hat ein Gebaeude — wird mit den Truppen der Karte gespielt"
-                : $"{built.Count} bebaute Startplaetze, aber KEINE Fabrik — " +
+                ? "Kein Startplatz hat ein Gebäude — wird mit den Truppen der Karte gespielt"
+                : $"{built.Count} bebaute Startplätze, aber KEINE Fabrik — " +
                   "hier wird nicht gebaut, die Karte wird mit ihren Truppen gespielt";
 
         int lo = int.MaxValue, hi = 0;
         foreach (int i in makers) { lo = Mathf.Min(lo, fab[i]); hi = Mathf.Max(hi, fab[i]); }
         string counts = string.Join("/", makers.ConvertAll(i => fab[i].ToString()));
         float spread = (float)hi / lo;
-        return $"{makers.Count} Startplaetze mit Fabrik ({counts}) — " +
+        return $"{makers.Count} Startplätze mit Fabrik ({counts}) — " +
                $"je Platz bleiben {Rendering.MapEntityLayer.StarterTroop} Einheiten stehen" +
                (makers.Count > 1 && spread >= 2f ? $"; unausgeglichen, {spread:0.0}:1" : "");
     }

@@ -25,7 +25,7 @@ public partial class MapEditOverlay
 
     private void PutStartplatz(Vector2I cell)
     {
-        if (_owner is < 0 or > 7) { _say = "ein Startplatz gehoert einem Spieler (Sp 1..8)"; return; }
+        if (_owner is < 0 or > 7) { _say = "ein Startplatz gehört einem Spieler (Sp 1..8)"; return; }
         int p = _owner;
         int ui = Array.FindIndex(MapEditUnits.All, u => u.Type == MapGenerator.TroopUnitType);
         if (ui < 0) ui = 0;
@@ -35,7 +35,7 @@ public partial class MapEditOverlay
 
         // 2. das neue Paket ueber dieselben Wege wie die Einzelwerkzeuge
         int typ0 = _typ, unit0 = _unitAt;
-        string Fehler(string was) => $"Startplatz passt hier nicht ({was}: {_say}) — nichts geaendert";
+        string Fehler(string was) => $"Startplatz passt hier nicht ({was}: {_say}) — nichts geändert";
         try
         {
             var (bw, bh) = _layer.EditorFootprint(MapGenerator.BaseType);
@@ -54,7 +54,7 @@ public partial class MapEditOverlay
                 PutUnit(z);
                 if (_say.Contains(" auf (")) gesetzt++;
             }
-            if (gesetzt == 0) { Zuruecknehmen("Startplatz: keine Zelle fuer die Truppe frei — nichts geaendert"); return; }
+            if (gesetzt == 0) { Zuruecknehmen("Startplatz: keine Zelle für die Truppe frei — nichts geändert"); return; }
             _say = $"Startplatz Spieler {p + 1} auf ({cell.X},{cell.Y}): Basis, Werk, {gesetzt} Fahrzeuge" +
                    (weg > 0 ? $" — der alte Startplatz ist weg ({weg} Teile)" : "");
         }
@@ -73,8 +73,8 @@ public partial class MapEditOverlay
         int frei = -1;
         for (int p = 0; p < 8 && frei < 0; p++) if (!mit.Contains(p)) frei = p;
         return $"Startplatz — die Karte hat {mit.Count} Spieler ({wer}). " +
-               (frei >= 0 ? $"Mehr Spieler: Sp {frei + 1} waehlen und klicken. " : "") +
-               "Weniger: Rechtsklick nimmt den Startplatz des gewaehlten Spielers weg.";
+               (frei >= 0 ? $"Mehr Spieler: Sp {frei + 1} wählen und klicken. " : "") +
+               "Weniger: Rechtsklick nimmt den Startplatz des gewählten Spielers weg.";
     }
 
     /// <summary>Den Schritt, den StrichBeginnen gemerkt hat, ganz zuruecknehmen.</summary>

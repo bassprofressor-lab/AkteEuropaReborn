@@ -144,6 +144,11 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Umlauts in the map editor**: the editor wrote "Groesse", "ZURUECK", "OEFFNEN",
+  "Gelaende" next to "Wüste mit Küste" and "Dünen". All visible texts of the editor
+  screen and the edit panel (buttons, headings, hints, messages) and the map
+  description in the skirmish setup now use real umlauts and ß. Check switch names
+  (`pruefen` etc.) stay as they are.
 - **Hovercraft on water, walkers on rubble** (bug-825): the editor's unit brush treated
   hovercraft and walkers like ordinary vehicles — a hovercraft couldn't be placed on
   water and a walker not on rough ground, although both go there in the game. The

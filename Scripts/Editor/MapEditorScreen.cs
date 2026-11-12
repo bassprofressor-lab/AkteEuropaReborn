@@ -113,12 +113,12 @@ public partial class MapEditorScreen : Control
     private static readonly Groesse[] Groessen =
     {
         new("Klein",       100, 100, "2 Spieler",       2, 2, "K8 »The gate« 100×100 (Kampagne); keine NET-Karte ist kleiner als 150×150"),
-        new("Mittel",      150, 150, "2–4 Spieler",     2, 4, "NET03 »Deep forest« 150×150, 4 Plaetze; K24 »Forest Flames«"),
-        new("Gross",       168, 168, "4 Spieler",       3, 4, "NET01 »Swamp fight« 168×168, 4 Plaetze; K19 »Danube Delta«"),
-        new("Sehr gross",  230, 230, "4–6 Spieler",     4, 6, "NET02 »Sands of doom« 230×230, 6 Plaetze; K29 »Icefield«"),
-        new("Riesig",      254, 254, "6–8 Spieler",     6, 8, "NET05 »River combat« und NET06 »Spring streams« 254×254, je 8 Plaetze — die groesste Karte"),
-        new("Breit",       254, 125, "8 Spieler",       6, 8, "NET07 »Desert death« 254×125, 8 Plaetze (im Bild fast quadratisch)"),
-        new("Hochformat",  150, 200, "8 Spieler",       6, 8, "NET04 »Islands« 150×200, 8 Plaetze"),
+        new("Mittel",      150, 150, "2–4 Spieler",     2, 4, "NET03 »Deep forest« 150×150, 4 Plätze; K24 »Forest Flames«"),
+        new("Groß",       168, 168, "4 Spieler",       3, 4, "NET01 »Swamp fight« 168×168, 4 Plätze; K19 »Danube Delta«"),
+        new("Sehr groß",  230, 230, "4–6 Spieler",     4, 6, "NET02 »Sands of doom« 230×230, 6 Plätze; K29 »Icefield«"),
+        new("Riesig",      254, 254, "6–8 Spieler",     6, 8, "NET05 »River combat« und NET06 »Spring streams« 254×254, je 8 Plätze — die groesste Karte"),
+        new("Breit",       254, 125, "8 Spieler",       6, 8, "NET07 »Desert death« 254×125, 8 Plätze (im Bild fast quadratisch)"),
+        new("Hochformat",  150, 200, "8 Spieler",       6, 8, "NET04 »Islands« 150×200, 8 Plätze"),
     };
 
     /// <summary>Welche Groesse zur Spielerzahl vorgeschlagen wird (Index in
@@ -209,8 +209,8 @@ public partial class MapEditorScreen : Control
             // aus MapGenerator abgelesen und nicht geschaetzt.
             // bug-739 (11.11.2026) berichtigt: der Generator setzt seit dem
             // 13./14.08. je Spieler Basis + Fabrik + Truppe und neutrale Gebaeude.
-            Text = "Erzeugt Gelaende mit Startplaetzen (je Spieler Basis, Fabrik, Truppe), "
-                 + "neutralen Gebaeuden und Vorkommen. Gleise und Gegenstaende setzt der Pinsel.",
+            Text = "Erzeugt Gelände mit Startplätzen (je Spieler Basis, Fabrik, Truppe), "
+                 + "neutralen Gebäuden und Vorkommen. Gleise und Gegenstände setzt der Pinsel.",
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.7f, 0.75f, 0.8f),
         });
@@ -289,7 +289,7 @@ public partial class MapEditorScreen : Control
             {
                 Text = n.ToString(), ToggleMode = true, ButtonGroup = playerGroup,
                 CustomMinimumSize = new Vector2(54, 38),
-                TooltipText = $"{n} Startplaetze — je Platz Basis, Fabrik und Truppe.",
+                TooltipText = $"{n} Startplätze — je Platz Basis, Fabrik und Truppe.",
             };
             Kachelknopf(b);
             b.Pressed += () => SetPlayers(nn, true);
@@ -298,7 +298,7 @@ public partial class MapEditorScreen : Control
         }
         form.AddChild(Row("Spieler", players));
 
-        string sizeHint = $"{MinSize} bis {MaxSize} Zellen. Die {MaxSize} sind gelesen — so gross "
+        string sizeHint = $"{MinSize} bis {MaxSize} Zellen. Die {MaxSize} sind gelesen — so groß "
                         + "ist die groesste gelieferte Karte, darueber weist CwmFile.Create ab. Die "
                         + $"{MinSize} sind UNSERE Setzung: darunter bleibt nach Wasserrand (3), "
                         + "Strandring und den 6 Zellen bis zur Startmarke kaum Landesinneres uebrig.";
@@ -326,13 +326,13 @@ public partial class MapEditorScreen : Control
             _sizeButtons.Add(b);
             sizeGrid.AddChild(b);
         }
-        form.AddChild(new Label { Text = "Kartengroesse (wie die Originalkarten)" });
+        form.AddChild(new Label { Text = "Kartengröße (wie die Originalkarten)" });
         form.AddChild(sizeGrid);
         _sizeHint = Hint("");
         form.AddChild(_sizeHint);
 
         // »Eigene Groesse« — ausgeklappt nur auf Wunsch.
-        _ownSize = new CheckButton { Text = "Eigene Groesse eingeben", TooltipText = sizeHint };
+        _ownSize = new CheckButton { Text = "Eigene Größe eingeben", TooltipText = sizeHint };
         form.AddChild(_ownSize);
         var size = new HBoxContainer { Visible = false };
         size.AddThemeConstantOverride("separation", 8);
@@ -341,7 +341,7 @@ public partial class MapEditorScreen : Control
         size.AddChild(_w);
         size.AddChild(new Label { Text = "x" });
         size.AddChild(_h);
-        var sizeRow = Row($"Breite x Hoehe ({MinSize}..{MaxSize})", size);
+        var sizeRow = Row($"Breite x Höhe ({MinSize}..{MaxSize})", size);
         sizeRow.Visible = false;
         form.AddChild(sizeRow);
         _ownSize.Toggled += on =>
@@ -398,8 +398,8 @@ public partial class MapEditorScreen : Control
         Stufen("Symmetrisch", new[]
         {
             ("nein", 0.0, "freie Landschaft"),
-            ("ja", 1.0, "jede Haelfte ist das um 180° gedrehte Spiegelbild der anderen — Gelaende, " +
-                        "Hoehen, Wald, Startplaetze und Vorkommen; nur bei gerader Spielerzahl"),
+            ("ja", 1.0, "jede Hälfte ist das um 180° gedrehte Spiegelbild der anderen — Gelände, " +
+                        "Höhen, Wald, Startplätze und Vorkommen; nur bei gerader Spielerzahl"),
         }, 0, v => _symmetrisch = v > 0);
         form.AddChild(Row("Mengen", mengen));
         _tileset.ItemSelected += _ => ShowTilesetInfo();
@@ -447,13 +447,13 @@ public partial class MapEditorScreen : Control
         _pick = new SpinBox
         {
             MinValue = 0, MaxValue = 7, Value = 0,
-            TooltipText = "Welcher der gefundenen Bodenlaeufe die Wiese wird. Welche es in diesem "
-                        + "Kachelsatz gibt, steht im Bericht (»volle Bodenlaeufe ab 8«) — die "
+            TooltipText = "Welcher der gefundenen Bodenläufe die Wiese wird. Welche es in diesem "
+                        + "Kachelsatz gibt, steht im Bericht (»volle Bodenläufe ab 8«) — die "
                         + "Kachel selbst sagt es nicht.",
         };
         form.AddChild(Row("Bodenblock", _pick));
 
-        _from = new LineEdit { PlaceholderText = @"nur noetig, wenn kein Kachelsatz gefunden wird" };
+        _from = new LineEdit { PlaceholderText = @"nur nötig, wenn kein Kachelsatz gefunden wird" };
         var fromRow = new HBoxContainer();
         fromRow.AddThemeConstantOverride("separation", 8);
         _from.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -465,12 +465,12 @@ public partial class MapEditorScreen : Control
 
         _flat = new CheckBox
         {
-            Text = "flach (alles auf Hoehe 0)",
+            Text = "flach (alles auf Höhe 0)",
             TooltipText = "Die Gegenprobe des Editors, nicht zum Spielen: eine flache Karte hat "
-                        + "NULL Bauplaetze, und die Pruefung muss danach genau das beanstanden.",
+                        + "NULL Bauplätze, und die Prüfung muss danach genau das beanstanden.",
         };
         form.AddChild(Row("Gegenprobe", _flat));
-        form.AddChild(Hint("⚠ Flach heisst NULL Bauplaetze (can_build_here: vier Eckhoehen ≥ 2)."));
+        form.AddChild(Hint("⚠ Flach heißt NULL Bauplätze (can_build_here: vier Eckhoehen ≥ 2)."));
 
         // ---- rechts der Bericht ----------------------------------------------
         //
@@ -507,7 +507,7 @@ public partial class MapEditorScreen : Control
         vRow.AddChild(_vorschauText);
         berichtBox.AddChild(vRow);
         berichtBox.AddChild(_log);
-        right.AddChild(Group("Gewaehlte Karte und Bericht", berichtBox));
+        right.AddChild(Group("Gewählte Karte und Bericht", berichtBox));
 
         // ---- die Knoepfe -----------------------------------------------------
         _create = new Button { Text = "KARTE ERZEUGEN", CustomMinimumSize = new Vector2(0, 44) };
@@ -522,11 +522,11 @@ public partial class MapEditorScreen : Control
         openRow.AddChild(_existing);
         _open = new Button
         {
-            Text = "VORHANDENE OEFFNEN",
+            Text = "VORHANDENE ÖFFNEN",
             CustomMinimumSize = new Vector2(0, 44),
             // bug-739 (11.11.2026): Text berichtigt — gelieferte Karten nur als Kopie.
             TooltipText = "Liest map_*.json und map_*.entities.json wieder zu einer Karte im "
-                        + "Arbeitsspeicher zusammen. Beim Oeffnen wird NICHTS geschrieben. Eine "
+                        + "Arbeitsspeicher zusammen. Beim Öffnen wird NICHTS geschrieben. Eine "
                         + "GELIEFERTE Karte (01..33, NET, DM) wird nie angefasst: bearbeitet "
                         + "wird eine Kopie <name>_kopie. Eine eigene Karte speichert F5 im Pinsel "
                         + "an Ort und Stelle.",
@@ -540,13 +540,13 @@ public partial class MapEditorScreen : Control
         var verwRow = new HBoxContainer();
         verwRow.AddThemeConstantOverride("separation", 8);
         leftCol.AddChild(verwRow);
-        _umbenennen = VerwKnopf("Umbenennen …", "Gibt der gewaehlten Karte einen neuen Namen.", verwRow);
+        _umbenennen = VerwKnopf("Umbenennen …", "Gibt der gewählten Karte einen neuen Namen.", verwRow);
         _umbenennen.Pressed += () => NamensFrage("Karte umbenennen", "Umbenennen", true);
-        _kopieren = VerwKnopf("Kopie anlegen …", "Legt eine Kopie der gewaehlten Karte unter neuem Namen an.", verwRow);
+        _kopieren = VerwKnopf("Kopie anlegen …", "Legt eine Kopie der gewählten Karte unter neuem Namen an.", verwRow);
         _kopieren.Pressed += () => NamensFrage("Kopie anlegen", "Kopieren", false);
         _titel = VerwKnopf("Titel …", "Der Anzeigename der Karte — er steht im Gefechtsaufbau unter dem Kartenbild.", verwRow);
         _titel.Pressed += TitelFrage;
-        _loeschen = VerwKnopf("Loeschen …", "Loescht die gewaehlte Karte (alle vier Dateien) — nach Rueckfrage.", verwRow);
+        _loeschen = VerwKnopf("Löschen …", "Löscht die gewählte Karte (alle vier Dateien) — nach Rückfrage.", verwRow);
         _loeschen.Pressed += LoeschFrage;
         _existing.ItemSelected += _ => VerwStand();
         FillExisting();
@@ -557,11 +557,11 @@ public partial class MapEditorScreen : Control
 
         _check = new Button
         {
-            Text = "Karte pruefen",
+            Text = "Karte prüfen",
             Disabled = true,
             CustomMinimumSize = new Vector2(0, 36),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            TooltipText = "Liest die geschriebenen Dateien zurueck: Raster, Gelaende, Bauplaetze, "
+            TooltipText = "Liest die geschriebenen Dateien zurück: Raster, Gelände, Bauplätze, "
                         + "Erreichbarkeit von den Startmarken und das Bild.",
         };
         _check.Pressed += OnCheck;
@@ -576,8 +576,8 @@ public partial class MapEditorScreen : Control
             // bug-739 (11.11.2026): der alte Text (»traegt keine Einheiten und
             // keine Gebaeude«) war seit dem 13.08. falsch — der Generator setzt
             // je Spieler Basis, Fabrik und Truppe.
-            TooltipText = "Oeffnet die Karte im Kartenbetrachter — nur ansehen, kein Gefecht, "
-                        + "keine KI. ESC fuehrt zurueck.",
+            TooltipText = "Öffnet die Karte im Kartenbetrachter — nur ansehen, kein Gefecht, "
+                        + "keine KI. ESC fuehrt zurück.",
         };
         _view.Pressed += OnViewPressed;
         after.AddChild(_view);
@@ -589,9 +589,9 @@ public partial class MapEditorScreen : Control
             CustomMinimumSize = new Vector2(0, 36),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             // bug-802 (11.11.2026): Text auf das neue Bedienfeld umgestellt.
-            TooltipText = "Oeffnet die Karte mit dem Bedienfeld rechts: Werkzeug waehlen (Gelaende, "
-                        + "Gebaeude, Einheiten, Wald/Fels, Gleise, Wegnehmen), Auswahl und Besitzer "
-                        + "anklicken, LINKS setzt, RECHTS nimmt weg, F5 speichert, Esc fuehrt zurueck.",
+            TooltipText = "Öffnet die Karte mit dem Bedienfeld rechts: Werkzeug wählen (Gelände, "
+                        + "Gebäude, Einheiten, Wald/Fels, Gleise, Wegnehmen), Auswahl und Besitzer "
+                        + "anklicken, LINKS setzt, RECHTS nimmt weg, F5 speichert, Esc fuehrt zurück.",
         };
         _edit.Pressed += OnEditPressed;
         after.AddChild(_edit);
@@ -631,7 +631,7 @@ public partial class MapEditorScreen : Control
         leftCol.AddChild(_status);
 
         box.AddChild(new HSeparator());
-        var back = new Button { Text = "ZURUECK", CustomMinimumSize = new Vector2(0, 40) };
+        var back = new Button { Text = "ZURÜCK", CustomMinimumSize = new Vector2(0, 40) };
         back.Pressed += Close;
         box.AddChild(back);
 
@@ -641,7 +641,7 @@ public partial class MapEditorScreen : Control
             FileMode = FileDialog.FileModeEnum.OpenDir,
             Access = FileDialog.AccessEnum.Filesystem,
             Size = new Vector2I(820, 560),
-            Title = "Ordner mit den Kachelsaetzen waehlen",
+            Title = "Ordner mit den Kachelsaetzen wählen",
         };
         AddChild(dlg);
         browse.Pressed += () => dlg.PopupCentered();
@@ -785,13 +785,13 @@ public partial class MapEditorScreen : Control
         _tileset.Disabled = !any;
         _create.Disabled = !any;
         _status.Text = any
-            ? $"{_tilesets.Count} Landschaften (Kachelsaetze) gefunden."
+            ? $"{_tilesets.Count} Landschaften (Kachelsätze) gefunden."
             // bug-739 (11.11.2026): der Einspieler legt NN.CWP/NN.PAL seit
             // ContentBuilder.CopyTilesets sehr wohl ab — der alte Text sagte das Gegenteil.
             : "Kein Kachelsatz gefunden — weder im Entwicklungsbaum (Assets/Legacy/DATA) noch "
             + "unter user://data/DATA noch auf einer eingelegten Spiel-CD. Der Einspieler legt "
             + "die NN.CWP/NN.PAL unter user://data/DATA ab — fehlen sie, die Daten neu "
-            + "einlesen, die CD einlegen oder oben den DATA-Ordner deiner Spielkopie waehlen.";
+            + "einlesen, die CD einlegen oder oben den DATA-Ordner deiner Spielkopie wählen.";
     }
 
     // ---- 11.11.2026 bug-800: Spieler und Groesse --------------------------
@@ -822,7 +822,7 @@ public partial class MapEditorScreen : Control
         int w = (int)_w.Value, h = (int)_h.Value;
         if (_ownSize.ButtonPressed)
         {
-            _sizeHint.Text = $"Eigene Groesse {w}×{h} Zellen" +
+            _sizeHint.Text = $"Eigene Größe {w}×{h} Zellen" +
                              (w * h < 150 * 150
                                  ? " — ⚠ kleiner als jede Mehrspielerkarte des Originals (kleinste: 150×150)."
                                  : ".");
@@ -879,10 +879,10 @@ public partial class MapEditorScreen : Control
                                   $"{100 * anteil:0} % der Kachelecken in den Originalkarten (gemessen, TileCorners)",
                 });
         }
-        string geb = m.FehlendeGebaeude.Count == 0 ? "alle 16 Gebaeudearten"
-            : $"{m.Gebaeudearten} von 16 Gebaeudearten (es fehlen: {string.Join(", ", m.FehlendeGebaeude)})";
+        string geb = m.FehlendeGebaeude.Count == 0 ? "alle 16 Gebäudearten"
+            : $"{m.Gebaeudearten} von 16 Gebäudearten (es fehlen: {string.Join(", ", m.FehlendeGebaeude)})";
         _tsMore.Text = m.Fehler.Length > 0 ? $"Messung unvollstaendig: {m.Fehler}"
-            : $"Bietet {geb} und {m.Gegenstaende} Objektbilder (Gebaeudeteile, Baeume, Felsen …).";
+            : $"Bietet {geb} und {m.Gegenstaende} Objektbilder (Gebäudeteile, Bäume, Felsen …).";
     }
 
     // ---- erzeugen -----------------------------------------------------------
@@ -925,17 +925,17 @@ public partial class MapEditorScreen : Control
     {
         var d = new ConfirmationDialog
         {
-            Title = "Karte ueberschreiben?",
+            Title = "Karte überschreiben?",
             DialogText = $"Die Karte »{outName["map_".Length..]}« gibt es schon.\n" +
                          "Erzeugen ersetzt sie — alles, was darauf gemalt wurde, ist dann weg.",
-            OkButtonText = "Ueberschreiben",
+            OkButtonText = "Überschreiben",
             CancelButtonText = "Abbrechen",
         };
         d.Confirmed += () => { _ueberschreibenOk = outName; d.QueueFree(); OnCreate(); };
         d.Canceled += () =>
         {
             d.QueueFree();
-            _status.Text = "Nicht erzeugt — einen anderen Namen waehlen oder das Ueberschreiben bestaetigen.";
+            _status.Text = "Nicht erzeugt — einen anderen Namen wählen oder das Überschreiben bestätigen.";
         };
         AddChild(d);
         d.PopupCentered();
@@ -946,7 +946,7 @@ public partial class MapEditorScreen : Control
         string name = Sanitise(_name.Text);
         if (name.Length == 0) { _status.Text = "Die Karte braucht einen Namen."; return; }
         if (_tileset.Selected < 0 || _tileset.Selected >= _tilesets.Count)
-        { _status.Text = "Kein Kachelsatz gewaehlt."; return; }
+        { _status.Text = "Kein Kachelsatz gewählt."; return; }
         int ts = _tilesets[_tileset.Selected];
 
         string outName = name.StartsWith("map_") ? name : "map_" + name;
@@ -958,7 +958,7 @@ public partial class MapEditorScreen : Control
         // Prueflauf --map-editor-auto bestaetigt selbst, er arbeitet mit eigenem Namen).
         if (MapOpen.IsDelivered(outName))
         {
-            _status.Text = $"»{name}« ist der Name einer mitgelieferten Karte — bitte einen anderen waehlen.";
+            _status.Text = $"»{name}« ist der Name einer mitgelieferten Karte — bitte einen anderen wählen.";
             return;
         }
         // P4: eine eben erst ERZEUGTE (nicht bearbeitete) Karte darf »Neu wuerfeln«
@@ -1020,7 +1020,7 @@ public partial class MapEditorScreen : Control
                 ? $"{outName["map_".Length..]} geschrieben.{fairZeile}"
                 : $"{outName["map_".Length..]} geschrieben — aber {warn.Count} Warnung(en): " +
                   warn[0].Trim().TrimStart('⚠', ' ') + (warn.Count > 1 ? " … (siehe Bericht)" : "");
-            if (_autoRun == "pruefen") OnCheck();
+            if (_autoRun == "prüfen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
             else if (_autoRun is "spielen" or "spielenfrage") OnPlayPressed();   // bug-743, C9: »spielenfrage« zeigt das Fenster (Bildlauf)
@@ -1047,9 +1047,9 @@ public partial class MapEditorScreen : Control
         if (alt.Length == 0) return;
         var feld = new LineEdit { Text = MapVerwaltung.Titel(alt), CustomMinimumSize = new Vector2(360, 0), MaxLength = 60 };
         var box = new VBoxContainer();
-        box.AddChild(new Label { Text = $"Anzeigename fuer »{alt["map_".Length..]}« (steht im Gefechtsaufbau unter dem Bild):" });
+        box.AddChild(new Label { Text = $"Anzeigename für »{alt["map_".Length..]}« (steht im Gefechtsaufbau unter dem Bild):" });
         box.AddChild(feld);
-        var d = new ConfirmationDialog { Title = "Titel der Karte", OkButtonText = "Uebernehmen", CancelButtonText = "Abbrechen" };
+        var d = new ConfirmationDialog { Title = "Titel der Karte", OkButtonText = "Übernehmen", CancelButtonText = "Abbrechen" };
         d.AddChild(box);
         d.Confirmed += () =>
         {
@@ -1087,7 +1087,7 @@ public partial class MapEditorScreen : Control
     {
         if (_umbenennen == null) return;
         string n = Gewaehlt();
-        string? warum = n.Length == 0 ? "keine Karte gewaehlt" : MapVerwaltung.Gesperrt(n);
+        string? warum = n.Length == 0 ? "keine Karte gewählt" : MapVerwaltung.Gesperrt(n);
         foreach (var b in new[] { _umbenennen, _kopieren, _loeschen, _titel }) b.Disabled = warum != null;
         if (_vorschau != null && _vorschauText != null)
         {
@@ -1098,7 +1098,7 @@ public partial class MapEditorScreen : Control
         if (n.Length > 0 && MapOpen.IsDelivered(n)) _kopieren.Disabled = false;
         _loeschen.TooltipText = warum != null
             ? $"Geht hier nicht: {warum}."
-            : "Loescht die gewaehlte Karte (alle vier Dateien) — nach Rueckfrage.";
+            : "Löscht die gewählte Karte (alle vier Dateien) — nach Rückfrage.";
     }
 
     private void NamensFrage(string titel, string ok, bool umbenennen)
@@ -1107,7 +1107,7 @@ public partial class MapEditorScreen : Control
         if (alt.Length == 0) return;
         var feld = new LineEdit { Text = alt["map_".Length..] + (umbenennen ? "" : "_kopie"), CustomMinimumSize = new Vector2(320, 0) };
         var box = new VBoxContainer();
-        box.AddChild(new Label { Text = $"Neuer Name fuer »{alt["map_".Length..]}« (Buchstaben, Ziffern, _ und -):" });
+        box.AddChild(new Label { Text = $"Neuer Name für »{alt["map_".Length..]}« (Buchstaben, Ziffern, _ und -):" });
         box.AddChild(feld);
         var d = new ConfirmationDialog { Title = titel, OkButtonText = ok, CancelButtonText = "Abbrechen" };
         d.AddChild(box);
@@ -1115,9 +1115,9 @@ public partial class MapEditorScreen : Control
         {
             string neu = Sanitise(feld.Text);
             d.QueueFree();
-            if (neu.Length == 0) { _status.Text = "Kein gueltiger Name — nichts geaendert."; return; }
+            if (neu.Length == 0) { _status.Text = "Kein gültiger Name — nichts geändert."; return; }
             string? f = umbenennen ? MapVerwaltung.Umbenennen(alt, neu) : MapVerwaltung.Kopieren(alt, neu);
-            VerwErgebnis(f, umbenennen ? $"»{alt["map_".Length..]}« heisst jetzt »{neu}«."
+            VerwErgebnis(f, umbenennen ? $"»{alt["map_".Length..]}« heißt jetzt »{neu}«."
                                        : $"Kopie »{neu}« angelegt.", alt, "map_" + neu.TrimStart());
         };
         d.Canceled += () => d.QueueFree();
@@ -1133,15 +1133,15 @@ public partial class MapEditorScreen : Control
         if (alt.Length == 0) return;
         var d = new ConfirmationDialog
         {
-            Title = "Karte loeschen?",
-            DialogText = $"Die Karte »{alt["map_".Length..]}« wird geloescht (alle vier Dateien).\n" +
-                         "Das laesst sich nicht rueckgaengig machen.",
-            OkButtonText = "Loeschen", CancelButtonText = "Abbrechen",
+            Title = "Karte löschen?",
+            DialogText = $"Die Karte »{alt["map_".Length..]}« wird gelöscht (alle vier Dateien).\n" +
+                         "Das laesst sich nicht rückgängig machen.",
+            OkButtonText = "Löschen", CancelButtonText = "Abbrechen",
         };
         d.Confirmed += () =>
         {
             d.QueueFree();
-            VerwErgebnis(MapVerwaltung.Loeschen(alt), $"»{alt["map_".Length..]}« geloescht.", alt, "");
+            VerwErgebnis(MapVerwaltung.Loeschen(alt), $"»{alt["map_".Length..]}« gelöscht.", alt, "");
         };
         d.Canceled += () => d.QueueFree();
         AddChild(d);
@@ -1196,7 +1196,7 @@ public partial class MapEditorScreen : Control
         }
         Gruppe("Eigene Karten", eigene);
         Gruppe("Empfangene Karten (Netzspiel)", netz);
-        Gruppe("Mitgelieferte Karten (werden als Kopie geoeffnet)", geliefert);
+        Gruppe("Mitgelieferte Karten (werden als Kopie geöffnet)", geliefert);
         for (int i = 0; i < _existingNames.Count; i++)
             if (_existingNames[i].Length > 0) { _existing.Selected = i; break; }
         VerwStand();
@@ -1228,14 +1228,14 @@ public partial class MapEditorScreen : Control
         _frischErzeugt = "";   // P4: bearbeitet/geoeffnet = nicht mehr frisch
         _status.Modulate = new Color(0.75f, 0.8f, 0.86f);
         int at = _existing.Selected;
-        if (at < 0 || at >= _existingNames.Count) { _status.Text = "Keine Karte gewaehlt."; return; }
+        if (at < 0 || at >= _existingNames.Count) { _status.Text = "Keine Karte gewählt."; return; }
         string outName = _existingNames[at];
-        if (outName.Length == 0) { _status.Text = "Keine Karte gewaehlt."; return; }
+        if (outName.Length == 0) { _status.Text = "Keine Karte gewählt."; return; }
         string stem = outName["map_".Length..];
 
         var lines = new List<string>();
         _create.Disabled = _open.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
-        _status.Text = $"oeffnet {outName} …";
+        _status.Text = $"öffnet {outName} …";
         _log.Text = "";
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
@@ -1252,11 +1252,11 @@ public partial class MapEditorScreen : Control
             _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
             _name.Text = held["map_".Length..];
             _status.Text = held != outName
-                ? $"{outName} ist eine gelieferte Karte — geoeffnet als Kopie {held} (Bruecken, "
+                ? $"{outName} ist eine gelieferte Karte — geöffnet als Kopie {held} (Brücken, "
                   + "Rampen, Waldtafel und Vorkommen fehlen der Kopie noch). F5 speichert die Kopie."
-                : $"{outName} geoeffnet, nichts geschrieben. F5 im Pinsel speichert an Ort und Stelle.";
+                : $"{outName} geöffnet, nichts geschrieben. F5 im Pinsel speichert an Ort und Stelle.";
             if (held != outName) FillExisting();
-            if (_autoRun == "pruefen") OnCheck();
+            if (_autoRun == "prüfen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
             else if (_autoRun is "spielen" or "spielenfrage") OnPlayPressed();   // bug-743, C9: »spielenfrage« zeigt das Fenster (Bildlauf)
@@ -1264,7 +1264,7 @@ public partial class MapEditorScreen : Control
         else
         {
             _made = "";
-            _status.Text = $"Oeffnen fehlgeschlagen (Rueckgabe {rc}) — siehe Bericht.";
+            _status.Text = $"Öffnen fehlgeschlagen (Rueckgabe {rc}) — siehe Bericht.";
         }
     }
 
@@ -1288,8 +1288,8 @@ public partial class MapEditorScreen : Control
         int rc = MapCheck.Run(_made, s => lines.Add(s));
         _log.Text = string.Join("\n", lines);
         _status.Text = rc == 0
-            ? $"{_made}: Pruefung ohne Beanstandung."
-            : $"{_made}: die Pruefung hat etwas gefunden (Rueckgabe {rc}) — siehe Bericht.";
+            ? $"{_made}: Prüfung ohne Beanstandung."
+            : $"{_made}: die Prüfung hat etwas gefunden (Rueckgabe {rc}) — siehe Bericht.";
     }
 
     private void OnViewPressed()
@@ -1338,8 +1338,8 @@ public partial class MapEditorScreen : Control
         box.AddThemeConstantOverride("separation", 10);
         box.AddChild(new Label
         {
-            Text = $"»{_made["map_".Length..]}« hat {plaetze.Count} besetzte Plaetze. Plaetze ohne Mensch und " +
-                   "ohne KI bleiben unbeteiligt stehen. Nach der Partie geht es zurueck in den Editor.",
+            Text = $"»{_made["map_".Length..]}« hat {plaetze.Count} besetzte Plätze. Plätze ohne Mensch und " +
+                   "ohne KI bleiben unbeteiligt stehen. Nach der Partie geht es zurück in den Editor.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(440, 0),
         });
         box.AddChild(grid);
@@ -1374,7 +1374,7 @@ public partial class MapEditorScreen : Control
                             set.Add(ow);
             l.AddRange(set);
         }
-        catch (Exception ex) { GD.PrintErr("Plaetze: " + ex.Message); }
+        catch (Exception ex) { GD.PrintErr("Plätze: " + ex.Message); }
         return l;
     }
 

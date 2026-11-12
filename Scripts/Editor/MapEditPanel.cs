@@ -78,7 +78,7 @@ public partial class MapEditOverlay
         if (GetViewport()?.GetCamera2D() is { } cam)
         {
             cam.Zoom = k.Zoom; cam.Position = k.Pos;
-            GD.Print($"map-editor: Blick nach F5 zurueck auf ({k.Pos.X:0},{k.Pos.Y:0}), Zoom {k.Zoom.X:0.##}");
+            GD.Print($"map-editor: Blick nach F5 zurück auf ({k.Pos.X:0},{k.Pos.Y:0}), Zoom {k.Zoom.X:0.##}");
         }
     }
 
@@ -164,12 +164,12 @@ public partial class MapEditOverlay
         tools.AddThemeConstantOverride("h_separation", 4);
         tools.AddThemeConstantOverride("v_separation", 4);
         v.AddChild(tools);
-        foreach (string head in new[] { "Gelaende", "Bauten/Truppen", "Objekte" })
+        foreach (string head in new[] { "Gelände", "Bauten/Truppen", "Objekte" })
             tools.AddChild(new Label { Text = head, Modulate = new Color(0.62f, 0.72f, 0.85f) });
         ToolButton(tools, Brush.Gelaende, "5 Bodenart");
-        ToolButton(tools, Brush.Gebaeude, "1 Gebaeude");
+        ToolButton(tools, Brush.Gebaeude, "1 Gebäude");
         ToolButton(tools, Brush.Gegenstand, "2 Wald/Fels");
-        ToolButton(tools, Brush.Hoehe, "6 Hoehe");
+        ToolButton(tools, Brush.Hoehe, "6 Höhe");
         ToolButton(tools, Brush.Einheit, "4 Einheiten");
         ToolButton(tools, Brush.Gleis, "3 Gleise");
         // P5 (12.11.2026): Wegnehmen und Vorkommen in einer Zeile, darunter Pinsel und Rueckgaengig
@@ -190,7 +190,7 @@ public partial class MapEditOverlay
             {
                 Text = $"{pg}x{pg}", ToggleMode = true, FocusMode = Control.FocusModeEnum.None,
                 CustomMinimumSize = new Vector2(52, 30),
-                TooltipText = "Pinselgroesse fuer Bodenart, Hoehe, Wald/Fels und Wegnehmen. Mit gedrueckter Maustaste ziehen malt.",
+                TooltipText = "Pinselgröße für Bodenart, Höhe, Wald/Fels und Wegnehmen. Mit gedrückter Maustaste ziehen malt.",
             };
             b.Pressed += () => { _pinsel = gg; _say = ""; Refresh(); QueueRedraw(); };
             _pinselKnoepfe[pg] = b;
@@ -202,12 +202,12 @@ public partial class MapEditOverlay
             Text = "⇅ Spiegeln", ToggleMode = true, FocusMode = Control.FocusModeEnum.None,
             CustomMinimumSize = new Vector2(0, 30),
             TooltipText = "Taste M: jeder Strich wird zugleich um die Kartenmitte gedreht gemalt (180°, wie bei "
-                        + "symmetrisch erzeugten Karten) — fuer Bodenart, Hoehe, Wald/Fels und Gleise.",
+                        + "symmetrisch erzeugten Karten) — für Bodenart, Höhe, Wald/Fels und Gleise.",
         };
-        _spiegelKnopf.Toggled += an => { _spiegeln = an; _say = an ? "Spiegeln AN (Bodenart, Hoehe, Wald/Fels, Gleise)" : "Spiegeln aus"; Refresh(); };
+        _spiegelKnopf.Toggled += an => { _spiegeln = an; _say = an ? "Spiegeln AN (Bodenart, Höhe, Wald/Fels, Gleise)" : "Spiegeln aus"; Refresh(); };
         pinselZeile.AddChild(_spiegelKnopf);
         pinselZeile.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
-        var zur = new Button { Text = "↶ zurück", TooltipText = "Rueckgaengig (Strg+Z)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 30) };
+        var zur = new Button { Text = "↶ zurück", TooltipText = "Rückgängig (Strg+Z)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 30) };
         zur.Pressed += Rueckgaengig;
         var vor = new Button { Text = "↷ vor", TooltipText = "Wiederholen (Strg+Y)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 30) };
         vor.Pressed += Wiederholen;
@@ -237,7 +237,7 @@ public partial class MapEditOverlay
             FixedIconSize = new Vector2I(48, 32),
             IconMode = ItemList.IconModeEnum.Left,
             FocusMode = Control.FocusModeEnum.None,
-            TooltipText = "Auswahl fuer das Werkzeug — oder +/- blaettern.",
+            TooltipText = "Auswahl für das Werkzeug — oder +/- blättern.",
         };
         _pList.ItemSelected += OnListPick;
         sel.AddChild(_pList);
@@ -269,8 +269,8 @@ public partial class MapEditOverlay
                 CustomMinimumSize = new Vector2(66, 30),
                 TooltipText = o switch
                 {
-                    11 => "herrenlos (Taste N) — ein neutrales Gebaeude, das man einnehmen kann",
-                    255 => "Kulisse (Taste K) — gehoert niemandem",
+                    11 => "herrenlos (Taste N) — ein neutrales Gebäude, das man einnehmen kann",
+                    255 => "Kulisse (Taste K) — gehört niemandem",
                     _ => $"Spieler {o + 1}",
                 },
             };
@@ -309,7 +309,7 @@ public partial class MapEditOverlay
         {
             Text = "Speichern (F5)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 34),
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            TooltipText = "Schreibt die Karte und laedt sie neu — erst danach sind Boden, Objekte und Gleise im Bild.",
+            TooltipText = "Schreibt die Karte und lädt sie neu — erst danach sind Boden, Objekte und Gleise im Bild.",
         };
         save.Pressed += SaveAndReload;
         row.AddChild(save);
@@ -317,20 +317,20 @@ public partial class MapEditOverlay
         {
             Text = "Spielen", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 34),
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            TooltipText = "Im Gefecht spielen: speichert (falls noetig), du Platz 1, die anderen Plaetze die KI.",
+            TooltipText = "Im Gefecht spielen: speichert (falls nötig), du Platz 1, die anderen Plätze die KI.",
         };
         play.Pressed += PlayNow;
         row.AddChild(play);
         _pBack = new Button
         {
-            Text = "Zurueck (Esc)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 34),
+            Text = "Zurück (Esc)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 34),
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            TooltipText = "Zurueck ins Menue. Ungespeichertes erst beim zweiten Druck verwerfen.",
+            TooltipText = "Zurück ins Menü. Ungespeichertes erst beim zweiten Druck verwerfen.",
         };
         _pBack.Pressed += ZurueckZumMenue;
         row.AddChild(_pBack);
         var keys = Small("Karte schieben: W A S D / mittlere Maustaste · Mausrad: Zoom · " +
-                         "+/− blaettert · N herrenlos · K Kulisse");
+                         "+/− blättert · N herrenlos · K Kulisse");
         keys.AddThemeFontSizeOverride("font_size", 13);
         unten.AddChild(keys);
     }
@@ -397,7 +397,7 @@ public partial class MapEditOverlay
         if (_pTitle == null) return;
         _pTitle.Text = $"KARTE BEARBEITEN — {MapEditSession.Name.Replace("map_", "")}";
         _pDirty.Text = MapEditSession.Dirty
-            ? $"● ungespeichert ({_mine.Count} Aenderungen) — F5 speichert"
+            ? $"● ungespeichert ({_mine.Count} Änderungen) — F5 speichert"
             : "gespeichert";
         _pDirty.Modulate = MapEditSession.Dirty ? new Color(1f, 0.6f, 0.4f) : new Color(0.6f, 0.85f, 0.6f);
         foreach (var (b, btn) in _toolButtons) btn.SetPressedNoSignal(b == _brush);
@@ -412,7 +412,7 @@ public partial class MapEditOverlay
         }
         _pOwnerNote.Text = _brush == Brush.Einheit
             ? "Einheiten gehoeren immer einem Spieler (Sp 1..8)."
-            : "herrenlos = einnehmbares Gebaeude; Kulisse = gehoert niemandem.";
+            : "herrenlos = einnehmbares Gebäude; Kulisse = gehört niemandem.";
 
         if (_listFor != _brush) FillList();
         SelectInList();
@@ -423,46 +423,46 @@ public partial class MapEditOverlay
         else if (_brush == Brush.Startplatz) _pListHead.Text = SpielerZeile();   // D5: Spielerzahl nach jedem Klick neu
         (string left, string right) = _brush switch
         {
-            Brush.Gebaeude => ($"setzt {sel} fuer {OwnerName(_owner)} (gruener Rahmen = Grundflaeche)",
-                               "nimmt das Gebaeude unter der Maus weg"),
-            Brush.Gegenstand => ("setzt das gewaehlte Objekt (Baum, Fels …) — sichtbar nach F5",
+            Brush.Gebaeude => ($"setzt {sel} für {OwnerName(_owner)} (gruener Rahmen = Grundfläche)",
+                               "nimmt das Gebäude unter der Maus weg"),
+            Brush.Gegenstand => ("setzt das gewählte Objekt (Baum, Fels …) — sichtbar nach F5",
                                  "nimmt das Objekt unter der Maus weg"),
-            Brush.Gleis => ($"legt ein Gleisstueck ({sel}; Gleise mit derselben Nummer bilden eine Strecke, auf der ein Zug faehrt); Ecken und Rampen waehlt der Editor — sichtbar nach F5",
+            Brush.Gleis => ($"legt ein Gleisstueck ({sel}; Gleise mit derselben Nummer bilden eine Strecke, auf der ein Zug fährt); Ecken und Rampen wählt der Editor — sichtbar nach F5",
                             "nimmt das Gleisstueck weg"),
-            Brush.Einheit => ($"stellt {sel} fuer {OwnerName(_owner)} auf",
+            Brush.Einheit => ($"stellt {sel} für {OwnerName(_owner)} auf",
                               "nimmt die Einheit unter der Maus weg (verschwindet nach F5)"),
             Brush.Gelaende => ($"malt »{GroundName(_ground)}« (zieht 9x9 Zellen Uebergaenge nach) — sichtbar nach F5",
                                "malt »frei« (es gibt keine leere Zelle)"),
             Brush.Hoehe => ("hebt die Zelle um eine Stufe (hoechstens 1 Stufe Unterschied zum Nachbarn)",
                             "senkt die Zelle um eine Stufe"),
-            Brush.Startplatz => ($"setzt den Startplatz fuer {OwnerName(_owner)}: Basis, Werk, Truppe — ein vorhandener wird verschoben",
+            Brush.Startplatz => ($"setzt den Startplatz für {OwnerName(_owner)}: Basis, Werk, Truppe — ein vorhandener wird verschoben",
                                  "nimmt den Startplatz dieses Spielers weg"),
             Brush.Vorkommen => ($"setzt ein Terranium-Vorkommen ({MapDeposits.Amount}) — gelbe Raute, mind. 8 Zellen Abstand",
-                                "nimmt das naechste Vorkommen weg"),
-            _ => ("nimmt weg, was dort steht: Einheit, sonst Gebaeude, sonst Gleis, sonst Objekt",
+                                "nimmt das nächste Vorkommen weg"),
+            _ => ("nimmt weg, was dort steht: Einheit, sonst Gebäude, sonst Gleis, sonst Objekt",
                   "ebenso"),
         };
         _pLeft.Text = "Linksklick: " + left;
         _pRight.Text = "Rechtsklick: " + right;
         _pSay.Text = _say;
         if (_backArmed && !MapEditSession.Dirty) _backArmed = false;
-        _pBack.Text = _backArmed ? "Verwerfen?" : "Zurueck (Esc)";
+        _pBack.Text = _backArmed ? "Verwerfen?" : "Zurück (Esc)";
     }
 
     private string ListTitle() => _brush switch
     {
-        Brush.Gebaeude => "Gebaeude", Brush.Gegenstand => "Wald/Fels", Brush.Gleis => "Gleis",
+        Brush.Gebaeude => "Gebäude", Brush.Gegenstand => "Wald/Fels", Brush.Gleis => "Gleis",
         Brush.Einheit => "Einheit", Brush.Gelaende => "Bodenart", _ => "",
     };
 
     private string Selection() => _brush switch
     {
-        Brush.Gebaeude => _types.Count > 0 ? $"»{KachelsatzInfo.GebaeudeName(_typ)}«" : "kein Gebaeude im Kachelsatz",
+        Brush.Gebaeude => _types.Count > 0 ? $"»{KachelsatzInfo.GebaeudeName(_typ)}«" : "kein Gebäude im Kachelsatz",
         Brush.Gegenstand => _props.Count > 0 ? PropText(_props[_propAt]) : "diese Karte hat keine Objekte",
         Brush.Gleis => $"Zugstrecke {_line + 1}",
         Brush.Einheit => $"»{UnitText(MapEditUnits.All[_unitAt])}«",
         Brush.Gelaende => $"»{GroundName(_ground)}«" + (MapEditSession.Tiles == null ? " ⚠ ohne Kacheltabelle" : ""),
-        Brush.Hoehe => "Hoehe aendern",
+        Brush.Hoehe => "Höhe ändern",
         Brush.Vorkommen => "Vorkommen",
         Brush.Startplatz => "Startplatz",
         _ => "Wegnehmen",
@@ -482,7 +482,7 @@ public partial class MapEditOverlay
         switch (_brush)
         {
             case Brush.Gebaeude:
-                _pListHead.Text = "Gebaeude";
+                _pListHead.Text = "Gebäude";
                 foreach (int t in _types)
                 {
                     var (fw, fh) = _layer.EditorFootprint(t);
@@ -514,9 +514,9 @@ public partial class MapEditOverlay
                 {
                     var (kurz, lang) = gr switch
                     {
-                        MapFactory.Ground.Free => ("frei", "befahrbar; bebaubar ab Hoehe 2"),
-                        MapFactory.Ground.Rough => ("rau", "Geroell — befahrbar, nicht bebaubar"),
-                        MapFactory.Ground.Water => ("Wasser", "nur auf der Hoehe des Wasserspiegels"),
+                        MapFactory.Ground.Free => ("frei", "befahrbar; bebaubar ab Höhe 2"),
+                        MapFactory.Ground.Rough => ("rau", "Geröll — befahrbar, nicht bebaubar"),
+                        MapFactory.Ground.Water => ("Wasser", "nur auf der Höhe des Wasserspiegels"),
                         _ => ("gesperrt", "unpassierbar"),
                     };
                     int at = _pList.AddItem($"{kurz} — {lang}", MapEditIcons.Swatch(GroundColor(gr)));
@@ -526,10 +526,10 @@ public partial class MapEditOverlay
             default:
                 _pListHead.Text = _brush switch
                 {
-                    Brush.Hoehe => "Hoehe: links anheben, rechts absenken",
+                    Brush.Hoehe => "Höhe: links anheben, rechts absenken",
                     Brush.Vorkommen => "Vorkommen: gelbe Rauten auf der Karte",
                     Brush.Startplatz => SpielerZeile(),
-                    _ => "Wegnehmen: keine Auswahl noetig",
+                    _ => "Wegnehmen: keine Auswahl nötig",
                 };
                 _pList.Visible = false;
                 _pPreview.Visible = false;
@@ -607,7 +607,7 @@ public partial class MapEditOverlay
         if (MapEditSession.Dirty && !_backArmed)
         {
             _backArmed = true;
-            _say = "Ungespeicherte Aenderungen! F5 speichert — noch einmal Esc/Zurueck verwirft sie.";
+            _say = "Ungespeicherte Änderungen! F5 speichert — noch einmal Esc/Zurück verwirft sie.";
             Refresh();
             return;
         }

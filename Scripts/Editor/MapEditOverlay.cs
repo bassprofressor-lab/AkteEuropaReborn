@@ -159,7 +159,7 @@ public partial class MapEditOverlay : Node2D
         if (!want) return;
 
         int before = CountBuildings();
-        GD.Print($"map-edit-check: Start — {before} Gebaeude, {CountRail()} Gleiszellen in der Karte");
+        GD.Print($"map-edit-check: Start — {before} Gebäude, {CountRail()} Gleiszellen in der Karte");
 
         // 1. ein Gebaeude auf die erste Stelle, die can_build_here erfuellt
         int put = 0;
@@ -168,7 +168,7 @@ public partial class MapEditOverlay : Node2D
             {
                 _say = "";
                 PutBuilding(new Vector2I(c, r));
-                if (_say.StartsWith("Typ ")) { put = 1; GD.Print($"map-edit-check: Gebaeude -> {_say}"); }
+                if (_say.StartsWith("Typ ")) { put = 1; GD.Print($"map-edit-check: Gebäude -> {_say}"); }
             }
         if (put == 0) GD.Print($"map-edit-check: ⚠ kein Bauplatz gefunden — zuletzt: {_say}");
 
@@ -195,7 +195,7 @@ public partial class MapEditOverlay : Node2D
             PutProp(new Vector2I(c, r));
             if (_map.CodeAt(c, r) == want2) props++;
         }
-        GD.Print($"map-edit-check: Gegenstaende -> {props} von 3 stehen im Raster " +
+        GD.Print($"map-edit-check: Gegenstände -> {props} von 3 stehen im Raster " +
                  $"({_props.Count} Arten zur Wahl)");
 
         // 3b. DIE GEGENPROBE ZUM SETZEN: dieselben Zellen wieder freiraeumen,
@@ -263,7 +263,7 @@ public partial class MapEditOverlay : Node2D
             }
         int kept = 0;
         foreach (var (c, r) in propCells) if (_map.CodeAt(c, r) >= CwpFile.ObjectCodeBase) kept++;
-        GD.Print($"map-edit-check: Gelaendestrich neben Gegenstaenden -> {strokes} Striche, " +
+        GD.Print($"map-edit-check: Gelaendestrich neben Gegenständen -> {strokes} Striche, " +
                  $"{kept} von {propsBefore} alten Gegenstandszellen behalten " +
                  $"(muss gleich sein), Gegenstandszellen jetzt {CountProps()} " +
                  "(darf STEIGEN — die gemessene Tabelle pflanzt selbst Bewuchs)");
@@ -362,7 +362,7 @@ public partial class MapEditOverlay : Node2D
             // dieselbe Zelle wie beim Setzen: der Eintrag steht in _mine
             var b = _mine.Find(x => x.What == Brush.Gebaeude);
             Take(new Vector2I(b.Col, b.Row));
-            GD.Print($"map-edit-check: Wegnehmen -> {_say}; Gebaeude {nachBau} -> {CountBuildings()} " +
+            GD.Print($"map-edit-check: Wegnehmen -> {_say}; Gebäude {nachBau} -> {CountBuildings()} " +
                      $"(vor dem Setzen {before})");
             // ⚠ Die zweite Haelfte, und sie ist die wichtigere: ist die
             // GRUNDFLAECHE wieder frei? Nur den Satz zu leeren waere der
@@ -388,7 +388,7 @@ public partial class MapEditOverlay : Node2D
                              $"Gleis {MapFactory.HasRail(_map, cc, rr)}, Code {_map.CodeAt(cc, rr)}");
                 }
             }
-            GD.Print($"map-edit-check: Grundflaeche nach dem Wegnehmen: {frei} von {ges} " +
+            GD.Print($"map-edit-check: Grundfläche nach dem Wegnehmen: {frei} von {ges} " +
                      "Zellen wieder BAUBAR (muss ges sein — sonst bleibt der Platz gesperrt)");
             // und gleich wieder hinstellen, damit die gespeicherte Karte einen
             // sichtbaren Zuwachs hat und der naechste Zaehler etwas aussagt
@@ -398,7 +398,7 @@ public partial class MapEditOverlay : Node2D
         // 4. speichern und nachzaehlen — was auf der Platte steht, zaehlt
         string? made = MapEditSession.Save(s => GD.Print("map-edit-check:   " + s));
         GD.Print($"map-edit-check: gespeichert als {made ?? "(nichts)"}; " +
-                 $"jetzt {CountBuildings()} Gebaeude (vorher {before}), " +
+                 $"jetzt {CountBuildings()} Gebäude (vorher {before}), " +
                  $"{CountRail()} Gleiszellen");
 
         // 5. DIE MESSLATTE VOR DEM GELAENDEPINSEL. ⚠ Erst jetzt, nach dem
@@ -458,7 +458,7 @@ public partial class MapEditOverlay : Node2D
     /// nachgezogener Umkreis kaputtmacht.</summary>
     private static readonly string[] MapCheckLines =
     {
-        "Gelaende:",                      // die Klassenverteilung
+        "Gelaende:",                      // die Klassenverteilung (Wortlaut von MapCheck, NICHT umlauten)
         "Landzellen am Wasser:",          // der Uferuebergang — die schaerfste
         "Nachbarpaare:",                  // Hoehenspruenge > 1
         "nicht darstellbare Hangformen",  // die zweite Schranke
@@ -503,7 +503,7 @@ public partial class MapEditOverlay : Node2D
     {
         if (MapEditSession.Tiles == null)
             GD.Print("map-edit-check: ⚠ keine Kacheltabelle in der Sitzung — der Pinsel " +
-                     "faellt auf den Bodenblock zurueck, und die Ufer-Zeile unten sagt es");
+                     "fällt auf den Bodenblock zurück, und die Ufer-Zeile unten sagt es");
 
         // ---- 5a. rau malen: eine Reihe freier Zellen ------------------------
         _brush = Brush.Gelaende;
@@ -520,7 +520,7 @@ public partial class MapEditOverlay : Node2D
                 if (MapEditTerrain.ClassAt(_map, c, r) == 1) rauIst++;
                 else { rauAbgewiesen++; GD.Print($"map-edit-check: ⚠ rau ({c},{r}): {_say}"); }
             }
-        GD.Print($"map-edit-check: Gelaende rau -> {rauIst} von {rauSoll} Zellen sind jetzt rau, " +
+        GD.Print($"map-edit-check: Gelände rau -> {rauIst} von {rauSoll} Zellen sind jetzt rau, " +
                  $"{rauAbgewiesen} abgewiesen; letzter Strich {MapEditTerrain.LastRetiled} Zellen " +
                  $"neu gekachelt, {MapEditTerrain.LastMissing} davon aus dem Bodenblock");
 
@@ -545,10 +545,10 @@ public partial class MapEditOverlay : Node2D
                         MapEditSession.Palette, c, r, MapFactory.Ground.Water, MapEditSession.Seed,
                         MapEditSession.Seams);
                     if (why != null) hochAbgewiesen++;
-                    else { hochDurch++; GD.Print($"map-edit-check: ⚠ Wasser auf ({c},{r}) Hoehe " +
+                    else { hochDurch++; GD.Print($"map-edit-check: ⚠ Wasser auf ({c},{r}) Höhe " +
                                                  $"{_map.ElevAt(c, r)} DURCHGELASSEN — Wasserspiegel ist {wasserHoehe}"); }
                 }
-            GD.Print($"map-edit-check: Wasser auf falscher Hoehe -> {hochAbgewiesen} abgewiesen, " +
+            GD.Print($"map-edit-check: Wasser auf falscher Höhe -> {hochAbgewiesen} abgewiesen, " +
                      $"{hochDurch} durchgelassen (durchgelassen muss 0 sein; Wasserspiegel {wasserHoehe})");
 
             // ---- 5c. Wasser AM Wasser, auf richtiger Hoehe: das muss gehen --
@@ -603,7 +603,7 @@ public partial class MapEditOverlay : Node2D
                 else { zweitDurch++; GD.Print($"map-edit-check: ⚠ ({c},{r}) liess sich auf " +
                                               $"{_map.ElevAt(c, r)} anheben — Sprung 2 zu den Nachbarn auf {e}"); }
             }
-        GD.Print($"map-edit-check: Hoehe -> {hebenIst} von 3 angehoben ({hebenAbgelehnt} abgelehnt); " +
+        GD.Print($"map-edit-check: Höhe -> {hebenIst} von 3 angehoben ({hebenAbgelehnt} abgelehnt); " +
                  $"zweite Anhebung: {zweitAbgelehnt} abgelehnt, {zweitDurch} durchgelassen " +
                  $"(durchgelassen muss 0 sein — MaxStep {MapTerrain.MaxStep}, gemessen 111 " +
                  "Ausnahmen in 1.202.757 Paaren)");
@@ -811,7 +811,7 @@ public partial class MapEditOverlay : Node2D
             case Key.M:                                                      // D6: Spiegeln
                 _spiegeln = !_spiegeln;
                 _spiegelKnopf?.SetPressedNoSignal(_spiegeln);
-                _say = _spiegeln ? "Spiegeln AN (Bodenart, Hoehe, Wald/Fels, Gleise)" : "Spiegeln aus";
+                _say = _spiegeln ? "Spiegeln AN (Bodenart, Höhe, Wald/Fels, Gleise)" : "Spiegeln aus";
                 Refresh(); GetViewport().SetInputAsHandled(); return;
             case Key.Bracketleft: PinselGroesse(-1); Refresh(); QueueRedraw(); GetViewport().SetInputAsHandled(); return;
             case Key.Bracketright: PinselGroesse(+1); Refresh(); QueueRedraw(); GetViewport().SetInputAsHandled(); return;
@@ -939,21 +939,21 @@ public partial class MapEditOverlay : Node2D
 
         _mine.Add((cell.X, cell.Y, Brush.Hoehe));
         MapEditSession.Dirty = true;
-        _say = $"({cell.X},{cell.Y}) auf Hoehe {_map.ElevAt(cell.X, cell.Y)} — " +
+        _say = $"({cell.X},{cell.Y}) auf Höhe {_map.ElevAt(cell.X, cell.Y)} — " +
                $"{MapEditTerrain.LastRetiled} Zellen neu gekachelt; sichtbar nach F5";
     }
 
     private void PutBuilding(Vector2I cell)
     {
         var cwp = MapEditSession.Cwp;
-        if (cwp == null) { _say = "kein Kachelsatz — kein Gebaeude"; return; }
+        if (cwp == null) { _say = "kein Kachelsatz — kein Gebäude"; return; }
         var bt = cwp.GetBuildingType(_typ);
         if (bt.IsEmpty) { _say = $"Typ {_typ} gibt es in diesem Kachelsatz nicht"; return; }
 
         var foot = _layer.EditorFootCells(_typ);
         var (fw, fh) = _layer.EditorFootprint(_typ);
         if (cell.X + fw > _map.Width || cell.Y + fh > _map.Height)
-        { _say = "das Gebaeude ragt ueber den Kartenrand"; return; }
+        { _say = "das Gebäude ragt über den Kartenrand"; return; }
 
         // can_build_here @0x4203C0, Zelle fuer Zelle — dieselbe Pruefung wie bei
         // den Vorkommen und den neutralen Gebaeuden, von dort geholt.
@@ -1023,7 +1023,7 @@ public partial class MapEditOverlay : Node2D
             {
                 int c = cell.X + dx, r = cell.Y + dy;
                 if (c >= _map.Width || r >= _map.Height)
-                { _say = "die Einheit ragt ueber den Kartenrand"; return; }
+                { _say = "die Einheit ragt über den Kartenrand"; return; }
                 if (MapFactory.Belegt(_map, c, r) is { } belegt) { _say = belegt; return; }   // B5: nicht stapeln
                 if (_layer.NavGridOf() is { } nav && !nav.CanEnter(c, r, mc))
                 {
@@ -1080,7 +1080,7 @@ public partial class MapEditOverlay : Node2D
 
     private void PutProp(Vector2I cell)
     {
-        if (_props.Count == 0) { _say = "diese Karte fuehrt keine Gegenstaende"; return; }
+        if (_props.Count == 0) { _say = "diese Karte fuehrt keine Gegenstände"; return; }
         int code = _props[_propAt];
         if (MapFactory.Belegt(_map, cell.X, cell.Y) is { } belegt) { _say = belegt; return; }   // B4
         int elev = _map.ElevAt(cell.X, cell.Y);
@@ -1159,7 +1159,7 @@ public partial class MapEditOverlay : Node2D
                 break;
             case Brush.Gebaeude:
                 int i = _layer.EditorBuildingAt(cell);
-                if (i < 0) { _say = "dort steht kein Gebaeude"; break; }
+                if (i < 0) { _say = "dort steht kein Gebäude"; break; }
                 int slot = _layer.EditorSlotOf(i);
                 // Erst die Karte, dann das Bild: schlaegt das Leeren des Satzes
                 // fehl, soll das Gebaeude sichtbar bleiben, statt aus der
@@ -1169,7 +1169,7 @@ public partial class MapEditOverlay : Node2D
                 _layer.EditorRemoveBuilding(slot);
                 _mine.RemoveAll(x => x.What == Brush.Gebaeude && x.Col == cell.X && x.Row == cell.Y);
                 MapEditSession.Dirty = true;
-                _say = $"Gebaeude auf Platz {slot} weg — Grundflaeche wieder frei";
+                _say = $"Gebäude auf Platz {slot} weg — Grundfläche wieder frei";
                 break;
             case Brush.Gleis:
                 if (MapFactory.PutRail(_map, cell.X, cell.Y, -1, _line) < 0)
@@ -1267,7 +1267,7 @@ public partial class MapEditOverlay : Node2D
         else
         {
             _say = $"({cell.X},{cell.Y}): hier steht nichts, was sich wegnehmen laesst " +
-                   "(Gebaeude, Einheit, Gleis oder Gegenstand)";
+                   "(Gebäude, Einheit, Gleis oder Gegenstand)";
             Refresh();
             QueueRedraw();
             return;

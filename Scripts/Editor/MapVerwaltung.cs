@@ -138,7 +138,7 @@ public static class MapVerwaltung
         var l = Dateien(name);
         if (l.Count == 0) return $"{Voll(name)[4..]} gibt es nicht";
         try { foreach (string p in l) File.Delete(p); }
-        catch (Exception ex) { return "Loeschen ging nicht: " + ex.Message; }
+        catch (Exception ex) { return "Löschen ging nicht: " + ex.Message; }
         if (Editor.MapEditSession.Name == Voll(name)) Editor.MapEditSession.Drop();
         return null;
     }

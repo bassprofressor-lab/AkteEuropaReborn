@@ -123,17 +123,17 @@ public partial class MapEditOverlay
         int[] g = { 1, 3, 5 };
         int i = Array.IndexOf(g, _pinsel);
         _pinsel = g[Math.Clamp(i + d, 0, g.Length - 1)];
-        _say = $"Pinselgroesse {_pinsel}x{_pinsel}";
+        _say = $"Pinselgröße {_pinsel}x{_pinsel}";
     }
 
     // ---- Rueckgaengig ----------------------------------------------------------
 
-    private void Rueckgaengig() => Springen(_zurueck, _vor, "rueckgaengig");
+    private void Rueckgaengig() => Springen(_zurueck, _vor, "rückgängig");
     private void Wiederholen() => Springen(_vor, _zurueck, "wiederholt");
 
     private void Springen(List<Stand> von, List<Stand> nach, string wort)
     {
-        if (von.Count == 0) { _say = wort == "rueckgaengig" ? "nichts mehr rueckgaengig zu machen" : "nichts zu wiederholen"; return; }
+        if (von.Count == 0) { _say = wort == "rückgängig" ? "nichts mehr rückgängig zu machen" : "nichts zu wiederholen"; return; }
         var ziel = von[^1];
         von.RemoveAt(von.Count - 1);
         nach.Add(Festhalten());
@@ -167,8 +167,8 @@ public partial class MapEditOverlay
             if (!einhNachher.Contains(z) && !_gone.Contains(z)) _gone.Add(z);
 
         MapEditSession.Dirty = true;
-        _say = $"{wort} — Gebaeude sofort, Gelaende/Objekte/Gleise sichtbar nach F5 " +
-               $"(noch {_zurueck.Count} Schritte zurueck, {_vor.Count} vor)";
+        _say = $"{wort} — Gebäude sofort, Gelände/Objekte/Gleise sichtbar nach F5 " +
+               $"(noch {_zurueck.Count} Schritte zurück, {_vor.Count} vor)";
         Refresh();
         QueueRedraw();
     }
@@ -207,7 +207,7 @@ public partial class MapEditOverlay
     {
         if (MapFactory.Belegt(_map, c.X, c.Y) is { } belegt) { _say = belegt; return; }
         if (MapEditTerrain.ClassAt(_map, c.X, c.Y) is 2 or 3)
-        { _say = $"({c.X},{c.Y}): ein Vorkommen gehoert auf begehbares Land"; return; }
+        { _say = $"({c.X},{c.Y}): ein Vorkommen gehört auf begehbares Land"; return; }
         foreach (var (tc, tr, _) in _map.Terra)
         {
             int dx = tc - c.X, dy = tr - c.Y;
@@ -303,7 +303,7 @@ public partial class MapEditOverlay
         for (int i = 0; i < 3; i++) Anwenden(new Vector2I(fc + 5, fr + i), true);
         Anwenden(new Vector2I(fc + 5, fr), true);    // dieselbe Zelle im selben Strich: nicht doppelt
         StrichEnden();
-        sb.AppendLine($"  Ziehen Hoehe: Strich ueber 3 Zellen, Zellen im Strich {_strichZellen.Count} (nach Ende 0) — {_say}");
+        sb.AppendLine($"  Ziehen Höhe: Strich über 3 Zellen, Zellen im Strich {_strichZellen.Count} (nach Ende 0) — {_say}");
 
         // 3. ein Gebaeude
         _brush = Brush.Gebaeude;
@@ -315,7 +315,7 @@ public partial class MapEditOverlay
                 StrichBeginnen(true); Anwenden(new Vector2I(c, r), true); StrichEnden();
                 if (_say.StartsWith("Typ ")) geb = 1; else _zurueck.RemoveAt(_zurueck.Count - 1);
             }
-        sb.AppendLine($"  Gebaeude gesetzt: {geb} — Saetze {geb0} -> {GebaeudeSaetze().Count}");
+        sb.AppendLine($"  Gebäude gesetzt: {geb} — Saetze {geb0} -> {GebaeudeSaetze().Count}");
 
         // 4. ein Vorkommen, weit weg von den vorhandenen
         _brush = Brush.Vorkommen;
@@ -334,8 +334,8 @@ public partial class MapEditOverlay
         for (int i = 0; i < schritte; i++) Rueckgaengig();
         ulong hz = Abdruck();
         bool zurueckOk = hz == h0 && _map.Terra.Count == terra0 && GebaeudeSaetze().Count == geb0;
-        sb.AppendLine($"  {schritte}x Rueckgaengig: Karte {(hz == h0 ? "BYTEGLEICH zum Anfang" : "ANDERS")}, " +
-                      $"Vorkommen {_map.Terra.Count}/{terra0}, Gebaeude {GebaeudeSaetze().Count}/{geb0}");
+        sb.AppendLine($"  {schritte}x Rückgängig: Karte {(hz == h0 ? "BYTEGLEICH zum Anfang" : "ANDERS")}, " +
+                      $"Vorkommen {_map.Terra.Count}/{terra0}, Gebäude {GebaeudeSaetze().Count}/{geb0}");
         for (int i = 0; i < schritte; i++) Wiederholen();
         ulong hv = Abdruck();
         sb.AppendLine($"  {schritte}x Wiederholen: Karte {(hv == h1 ? "BYTEGLEICH zum Stand danach" : "ANDERS")}");

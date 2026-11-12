@@ -156,6 +156,11 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Umlaute im Karteneditor**: Der Editor schrieb »Groesse«, »ZURUECK«, »OEFFNEN«,
+  »Gelaende« neben »Wüste mit Küste« und »Dünen«. Alle sichtbaren Texte des
+  Editorschirms und des Bedienfelds (Knöpfe, Überschriften, Hinweise, Meldungen) und
+  die Kartenbeschreibung im Gefechtsaufbau haben jetzt echte Umlaute und ß. Die Namen
+  der Prüfschalter (`pruefen` usw.) bleiben, wie sie sind.
 - **Luftkissen aufs Wasser, Läufer auf Geröll** (bug-825): Der Einheitenpinsel des
   Editors behandelte Luftkissen und Läufer wie gewöhnliche Fahrzeuge — ein Luftkissen
   ließ sich nicht aufs Wasser stellen, ein Läufer nicht auf rauen Boden, obwohl beide
