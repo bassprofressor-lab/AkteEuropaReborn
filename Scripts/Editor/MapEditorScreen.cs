@@ -1020,7 +1020,7 @@ public partial class MapEditorScreen : Control
                 ? $"{outName["map_".Length..]} geschrieben.{fairZeile}"
                 : $"{outName["map_".Length..]} geschrieben — aber {warn.Count} Warnung(en): " +
                   warn[0].Trim().TrimStart('⚠', ' ') + (warn.Count > 1 ? " … (siehe Bericht)" : "");
-            if (_autoRun == "prüfen") OnCheck();
+            if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
             else if (_autoRun is "spielen" or "spielenfrage") OnPlayPressed();   // bug-743, C9: »spielenfrage« zeigt das Fenster (Bildlauf)
@@ -1256,7 +1256,7 @@ public partial class MapEditorScreen : Control
                   + "Rampen, Waldtafel und Vorkommen fehlen der Kopie noch). F5 speichert die Kopie."
                 : $"{outName} geöffnet, nichts geschrieben. F5 im Pinsel speichert an Ort und Stelle.";
             if (held != outName) FillExisting();
-            if (_autoRun == "prüfen") OnCheck();
+            if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
             else if (_autoRun is "spielen" or "spielenfrage") OnPlayPressed();   // bug-743, C9: »spielenfrage« zeigt das Fenster (Bildlauf)
