@@ -506,6 +506,11 @@ public partial class MapEditorScreen : Control
         _vorschauText.AddThemeFontSizeOverride("font_size", 14);
         vRow.AddChild(_vorschauText);
         berichtBox.AddChild(vRow);
+        // C10 (12.11.2026): erst eine kurze Zusammenfassung, die technischen Zeilen
+        // (»can_build_here«, »Bodenblock«, »Faecher«) nur auf Wunsch.
+        _technisch = new CheckButton { Text = "Technische Einzelheiten zeigen", FocusMode = FocusModeEnum.None };
+        _technisch.Toggled += _ => BerichtZeigen();
+        berichtBox.AddChild(_technisch);
         berichtBox.AddChild(_log);
         right.AddChild(Group("Gewählte Karte und Bericht", berichtBox));
 
@@ -1003,13 +1008,21 @@ public partial class MapEditorScreen : Control
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
         int rc = MainMenu.MapNew(arg, s => lines.Add(s));
-        _log.Text = string.Join("\n", lines);
         _create.Disabled = false;
+        string ls = KachelsatzInfo.Of(ts).Name;
+        Bericht(lines, rc == 0
+            ? $"Karte »{outName["map_".Length..]}« erzeugt: {(int)_w.Value}×{(int)_h.Value} Felder, {_players} Spieler, Landschaft »{ls}«."
+              + Hinweise(lines)
+            : $"Erzeugen fehlgeschlagen (Rückgabe {rc}).");
 
         if (rc == 0)
         {
             _made = outName;
             _frischErzeugt = outName;
+            // D8 (12.11.2026): die neue Karte gleich in der Liste waehlen (Vorschau, Verwaltung)
+            FillExisting();
+            for (int i = 0; i < _existingNames.Count; i++)
+                if (_existingNames[i] == outName) { _existing.Selected = i; VerwStand(); break; }
             _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
             // ⭐ 12.11.2026 — P4/B8: Warnungen gehoeren in die Statuszeile, nicht nur in
             // den Bericht (»nur 0 von 8 Startplaetzen« stand frueher nur dort).
@@ -1240,7 +1253,7 @@ public partial class MapEditorScreen : Control
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
         int rc = MainMenu.MapNew($"{stem},0,0,0,oeffne={outName}", s => lines.Add(s));
-        _log.Text = string.Join("\n", lines);
+        Bericht(lines, rc == 0 ? $"»{stem}« geöffnet." : $"Öffnen fehlgeschlagen (Rückgabe {rc}).");
         _create.Disabled = _open.Disabled = false;
 
         if (rc == 0)
@@ -1281,12 +1294,55 @@ public partial class MapEditorScreen : Control
 
     // ---- pruefen und ansehen ------------------------------------------------
 
+    private CheckButton? _technisch;
+    private List<string> _berichtVoll = new();
+    private string _berichtKurz = "";
+
+    /// <summary>C10: Bericht ablegen — kurz für den Spieler, vollständig hinter dem Schalter.</summary>
+    private void Bericht(List<string> voll, string kurz)
+    {
+        _berichtVoll = new List<string>(voll);
+        _berichtKurz = kurz;
+        BerichtZeigen();
+    }
+
+    private void BerichtZeigen()
+    {
+        if (_technisch?.ButtonPressed == true || _berichtKurz.Length == 0)
+            _log.Text = string.Join("\n", _berichtVoll);
+        else
+            _log.Text = _berichtKurz + (_berichtVoll.Count > 0
+                ? $"\n\n({_berichtVoll.Count} Zeilen technischer Bericht — »Technische Einzelheiten zeigen«)" : "");
+    }
+
+    /// <summary>C10: die Warnzeilen des Erzeugens, ohne Werkstattwörter.</summary>
+    private static string Hinweise(List<string> lines)
+    {
+        var w = lines.FindAll(l => l.Contains("⚠ nur") || l.Contains("Vorkommen: ⚠") || l.Contains("Fairness:"));
+        return w.Count == 0 ? "\nKeine Warnungen." : "\n• " + string.Join("\n• ", w.ConvertAll(Sauber));
+    }
+
+    /// <summary>Werkstattzeile kürzen: Vorsilben (»map-editor:«), Adressen und Klammerzusätze weg.</summary>
+    private static string Sauber(string l)
+    {
+        string t = l.Trim();
+        foreach (string vor in new[] { "map-editor:", "map-check:" }) if (t.StartsWith(vor)) t = t[vor.Length..].Trim();
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"\s*@0x[0-9A-Fa-f]+", "");
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"\s*\[[^\]]*\]", "");
+        t = t.Replace("can_build_here", "Bauprüfung").Replace("⚠", "").Replace("^ FEHLER:", "").Trim();
+        return t.Length > 160 ? t[..157] + " …" : t;
+    }
+
     private void OnCheck()
     {
         if (_made.Length == 0) return;
         var lines = new List<string>();
         int rc = MapCheck.Run(_made, s => lines.Add(s));
-        _log.Text = string.Join("\n", lines);
+        var fehler = lines.FindAll(l => l.Contains("FEHLER") || l.Contains("DURCHGEFALLEN"));
+        Bericht(lines, rc == 0
+            ? $"Prüfung von »{_made["map_".Length..]}«: alles in Ordnung."
+            : $"Prüfung von »{_made["map_".Length..]}«: {fehler.Count} Beanstandung(en)." +
+              (fehler.Count > 0 ? "\n• " + string.Join("\n• ", fehler.ConvertAll(Sauber)) : ""));
         _status.Text = rc == 0
             ? $"{_made}: Prüfung ohne Beanstandung."
             : $"{_made}: die Prüfung hat etwas gefunden (Rueckgabe {rc}) — siehe Bericht.";

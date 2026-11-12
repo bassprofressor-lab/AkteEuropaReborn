@@ -364,7 +364,7 @@ public static class MapGenerator
                 geg.Add(bg);
             }
             string Spanne(List<double> l) => l.Count == 0 ? "—" : $"{System.Linq.Enumerable.Min(l):0}–{System.Linq.Enumerable.Max(l):0}";
-            say($"Fairness: naechstes Vorkommen {Spanne(vk)} Felder, naechster Gegner {Spanne(geg)} Felder" +
+            say($"Fairness: nächstes Vorkommen {Spanne(vk)} Felder, nächster Gegner {Spanne(geg)} Felder" +
                 (sym ? " (symmetrisch)" : ""));
         }
         return m;

@@ -144,6 +144,13 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Report in plain German**: after generating, opening and checking, the map
+  editor's report field showed the full workshop output ("can_build_here",
+  "Bodenblock", "Fächer unter 8 Beobachtungen", memory addresses). It now starts with
+  a short summary — "Karte »x« erzeugt: 150×150 Felder, 2 Spieler, Landschaft …",
+  warnings as bullet points, for a check "alles in Ordnung" or each complaint on its
+  own line. The full lines are behind the **Technische Einzelheiten zeigen** switch.
+  Also, a freshly generated map is selected in the map list right away (with preview).
 - **Umlauts in the map editor**: the editor wrote "Groesse", "ZURUECK", "OEFFNEN",
   "Gelaende" next to "Wüste mit Küste" and "Dünen". All visible texts of the editor
   screen and the edit panel (buttons, headings, hints, messages) and the map

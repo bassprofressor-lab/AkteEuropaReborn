@@ -156,6 +156,14 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Bericht in normalem Deutsch**: Das Berichtsfeld des Karteneditors zeigte nach
+  dem Erzeugen, Öffnen und Prüfen die volle Werkstattausgabe (»can_build_here«,
+  »Bodenblock«, »Fächer unter 8 Beobachtungen«, Speicheradressen). Jetzt steht oben
+  eine kurze Zusammenfassung — »Karte »x« erzeugt: 150×150 Felder, 2 Spieler,
+  Landschaft »Wüste mit Küste««, die Warnungen als Stichpunkte, bei der Prüfung
+  »alles in Ordnung« oder die Beanstandungen einzeln. Die vollständigen Zeilen gibt
+  es mit dem Schalter **Technische Einzelheiten zeigen**. Außerdem wird eine neu
+  erzeugte Karte gleich in der Kartenliste gewählt (mit Vorschau).
 - **Umlaute im Karteneditor**: Der Editor schrieb »Groesse«, »ZURUECK«, »OEFFNEN«,
   »Gelaende« neben »Wüste mit Küste« und »Dünen«. Alle sichtbaren Texte des
   Editorschirms und des Bedienfelds (Knöpfe, Überschriften, Hinweise, Meldungen) und
