@@ -139,19 +139,30 @@ public static class KachelsatzInfo
         string cache = ProjectSettings.GlobalizePath("user://cache/editor");
         var files = MapGenerator.FindTileset(ts, null);
         GebaeudeName(1);   // Namen auf dem Hauptfaden laden, nicht im Hintergrund
+        TileCorners.Vorbereiten();   // A2: Ordner auf dem Hauptfaden aufloesen
+        // ⭐ 12.11.2026 — A2 (Fable-Pruefung): im Faden NUR reine .NET-Arbeit.
+        // Bis heute lud der Faden Bilder (Image) und las Dateien ueber
+        // FileAccess/DirAccess; beim Schliessen des Schirms kurz nach dem Oeffnen
+        // endete das mit 0xC0000005. Das Vorschaubild entsteht jetzt auf dem
+        // Hauptfaden, im verzoegerten Rueckruf. Gegenschalter: keiner noetig.
         Task.Run(() =>
         {
             var m = new Messung();
-            try { Messe(ts, m, userRoot, cache, files); }
+            try { MesseKachelsatz(m, files, ts); }
             catch (Exception e) { m.Fehler = e.Message; }
-            lock (_fertig) { _fertig[ts] = m; _laeuft.Remove(ts); }
-            Callable.From(() => fertig(ts)).CallDeferred();
+            Callable.From(() =>
+            {
+                try { MesseBild(ts, m, userRoot, cache); }
+                catch (Exception e) { if (m.Fehler.Length == 0) m.Fehler = e.Message; }
+                lock (_fertig) { _fertig[ts] = m; _laeuft.Remove(ts); }
+                fertig(ts);
+            }).CallDeferred();
         });
         return null;
     }
 
-    private static void Messe(int ts, Messung m, string userRoot, string cache,
-                              (string Cwp, string Pal)? files)
+    /// <summary>Hauptfaden: das Vorschaubild.</summary>
+    private static void MesseBild(int ts, Messung m, string userRoot, string cache)
     {
         // 1. das Vorschaubild: zuerst der Zwischenspeicher, sonst aus der Karte
         string cached = $"{cache}/kachelsatz2_{ts:00}.png";
@@ -171,6 +182,11 @@ public static class KachelsatzInfo
             }
         }
 
+    }
+
+    /// <summary>Poolfaden: Gebaeudearten, Gegenstaende, Stoffkette — kein Godot-Aufruf.</summary>
+    private static void MesseKachelsatz(Messung m, (string Cwp, string Pal)? files, int ts)
+    {
         // 2. Gebaeudearten und Gegenstaende aus dem Kachelsatz
         if (files == null) return;
         var cwp = CwpFile.Load(files.Value.Cwp);

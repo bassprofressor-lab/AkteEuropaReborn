@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
+using System.IO;
 using Godot;
 
 /// <summary>
@@ -159,13 +160,23 @@ public sealed class TileCorners
                         }
             }
         var grids = new List<Grid>();
-        foreach (string dir in new[] { Core.Content.UserRoot + "Maps", Core.Content.DevRoot + "Maps" })
+        // ⭐ 12.11.2026 — A2/B7 (Fable-Pruefung): NUR System.IO, KEIN Godot-Aufruf.
+        // KachelsatzInfo ruft Learn auf einem Poolfaden; DirAccess/FileAccess dort
+        // endeten mit 0xC0000005 (godotsharp_method_bind_ptrcall). Die Ordner werden
+        // auf dem Hauptfaden aufgeloest (Vorbereiten). Und gelernt wird nur aus
+        // GELIEFERTEN Karten (map_NN, NETnn, DM_n, gameNNN) — nicht aus Kopien,
+        // Netz- oder eigenen Karten; der Kopf (Kachelsatz) wird vor dem ganzen
+        // Lesen geprueft. Gegenschalter --eckmodell-alle-karten (alter Kreis).
+        bool alle = Array.IndexOf(Core.CommandLine.Args, "--eckmodell-alle-karten") >= 0;
+        foreach (string dir in Ordner())
         {
-            if (!DirAccess.DirExistsAbsolute(dir)) continue;
-            foreach (string f in DirAccess.GetFilesAt(dir))
+            if (!Directory.Exists(dir)) continue;
+            foreach (string pfad in Directory.GetFiles(dir, "map_*.json"))
             {
+                string f = Path.GetFileName(pfad);
                 if (!f.StartsWith("map_") || !f.EndsWith(".json") || f.Contains(".entities.")) continue;
                 string stem = f[..^".json".Length];
+                if (!alle && !MapOpen.IsDelivered(stem)) continue;
                 if (tc.Sources.Contains(stem)) continue;
                 var g = Read(dir, stem, tileset);
                 if (g == null) continue;
@@ -183,11 +194,44 @@ public sealed class TileCorners
         return tc;
     }
 
+    private static string[]? _ordner;
+
+    /// <summary>A2: die Kartenordner als echte Pfade — auf dem HAUPTFADEN rufen,
+    /// bevor Learn auf einem anderen Faden laeuft.</summary>
+    public static void Vorbereiten() => Ordner();
+
+    private static string[] Ordner()
+        => _ordner ??= new[]
+        {
+            ProjectSettings.GlobalizePath(Core.Content.UserRoot + "Maps"),
+            ProjectSettings.GlobalizePath(Core.Content.DevRoot + "Maps"),
+        };
+
+    /// <summary>B7: der Kopf der .json (mission, tileset stehen vorn, MapMeta).</summary>
+    private static string Kopf(string pfad)
+    {
+        using var fs = new FileStream(pfad, FileMode.Open, System.IO.FileAccess.Read, FileShare.ReadWrite);
+        var buf = new byte[4096];
+        int n = fs.Read(buf, 0, buf.Length);
+        return System.Text.Encoding.UTF8.GetString(buf, 0, n);
+    }
+
     private static Grid? Read(string dir, string stem, int tileset)
     {
         string metaPath = $"{dir}/{stem}.json", entPath = $"{dir}/{stem}.entities.json";
-        if (!FileAccess.FileExists(metaPath) || !FileAccess.FileExists(entPath)) return null;
-        string text = FileAccess.GetFileAsString(metaPath);
+        if (!File.Exists(metaPath) || !File.Exists(entPath)) return null;
+        {
+            string kopf = Kopf(metaPath);
+            int k = kopf.IndexOf("\"tileset\":", StringComparison.Ordinal);
+            if (k >= 0)
+            {
+                int e = k + "\"tileset\":".Length, v = 0; bool any = false;
+                while (e < kopf.Length && kopf[e] == ' ') e++;
+                while (e < kopf.Length && kopf[e] >= '0' && kopf[e] <= '9') { v = v * 10 + (kopf[e++] - '0'); any = true; }
+                if (any && e < kopf.Length && v != tileset) return null;
+            }
+        }
+        string text = File.ReadAllText(metaPath);
         if (text.Length == 0) return null;
         // selbst erzeugt: NIE lernen (siehe TileModel.Feed, 13.08.2026)
         if (text.Contains("\"mission\":\"Editor ", StringComparison.Ordinal)) return null;
@@ -212,7 +256,7 @@ public sealed class TileCorners
                 g.Code[r * w + c] = t.GetProperty("code").GetInt32();
                 g.Flag[r * w + c] = t.GetProperty("flag").GetInt32();
             }
-            using var ent = JsonDocument.Parse(FileAccess.GetFileAsString(entPath));
+            using var ent = JsonDocument.Parse(File.ReadAllText(entPath));
             g.Zone = new int[w * h];
             Array.Fill(g.Zone, -1);
             if (ent.RootElement.TryGetProperty("zones", out var zs) && zs.TryGetProperty("grid", out var zgrid))
