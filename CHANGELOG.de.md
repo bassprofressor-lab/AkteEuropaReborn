@@ -156,6 +156,13 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **»Im Gefecht spielen« mit Wahl**: Der Knopf im Karteneditor startete bisher
+  immer als Spieler 1 gegen bis zu sieben Computergegner auf der Stufe, die zuletzt
+  im Gefechtsaufbau stand, und nach der Partie landete man im Startmenü. Jetzt fragt
+  ein Fenster, welchen der besetzten Plätze man spielt, wie viele Computergegner
+  mitspielen (auch »keine«, um die Karte allein zu erkunden) und auf welcher Stufe;
+  die übrigen Plätze bleiben unbeteiligt stehen. Nach der Partie geht es zurück in
+  den Editor, mit derselben Karte geöffnet. Gegenschalter `--editor-spielen-alt`.
 - **Eigene Karten verwalten**: Unter der Kartenauswahl im Karteneditor stehen jetzt
   drei Knöpfe — **Umbenennen …**, **Kopie anlegen …** und **Löschen …** (mit
   Rückfrage). Sie wirken auf alle vier Dateien einer Karte, und der Name wird auch

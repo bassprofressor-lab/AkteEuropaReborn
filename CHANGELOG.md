@@ -144,6 +144,13 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **"Play in skirmish" with a choice**: the map editor's button used to always
+  start you as player 1 against up to seven computer opponents on whatever level was
+  last set in the skirmish setup, and after the match you ended up in the main menu.
+  A window now asks which of the occupied slots you play, how many computer opponents
+  join (including "none", to explore the map alone) and on which level; the other
+  slots stay out of the game. After the match you return to the editor with the same
+  map open. Opt-out `--editor-spielen-alt`.
 - **Manage your own maps**: below the map list in the map editor there are now
   three buttons — **Rename …**, **Make a copy …** and **Delete …** (with a
   confirmation). They act on all four files of a map and also update the name stored

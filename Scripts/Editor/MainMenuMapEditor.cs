@@ -116,16 +116,21 @@ public partial class MainMenu
     /// Konto, Techstandard und Rohstoffe bleiben, was im Gefechtsaufbau zuletzt
     /// stand. Kein Netzspiel — Editorkarten stehen nicht in der Netzliste (M3 Teil 2 = E5).</para>
     /// </summary>
-    private void PlayMade(string mapName)
+    private void PlayMade(string mapName, int human, int aiCount, Rendering.MapEntityLayer.AiLevel level)
     {
         MapEditSession.Leave();
         SkirmishSetup.ViewMap = "";
         SkirmishSetup.Map = mapName;
-        SkirmishSetup.Human = 0;
-        SkirmishSetup.AiCount = 7;
+        SkirmishSetup.Human = human;
+        SkirmishSetup.AiCount = aiCount;
+        SkirmishSetup.Level = level;
         SkirmishSetup.CampaignMission = 0;
         SkirmishSetup.Active = true;
-        Say($"spielen: {mapName} im Gefecht (Platz 1 Mensch, Rest KI)");
+        // C9 (12.11.2026): nach der Partie zurueck in den Editorschirm, mit dieser Karte
+        // geoeffnet — derselbe Weg wie Esc aus dem Bearbeitungsmodus (P3/C2).
+        if (Array.IndexOf(Core.CommandLine.Args, "--editor-spielen-alt") < 0)
+            MapEditorScreen.ZurueckMit = mapName;
+        Say($"spielen: {mapName} im Gefecht (Platz {human + 1} Mensch, {aiCount} KI, Stufe {level})");
         StopBackdrop();
         GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
     }

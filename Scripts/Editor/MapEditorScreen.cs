@@ -71,7 +71,8 @@ public partial class MapEditorScreen : Control
     /// <summary>bug-743 (11.11.2026): wohin »Im Gefecht spielen« fuehrt — setzt
     /// das Hauptmenue (MainMenu.PlayMade), aus demselben Grund wie
     /// <see cref="OnView"/>.</summary>
-    public Action<string>? OnPlay { get; init; }
+    /// <summary>C9 (12.11.2026): Karte, eigener Platz (0..7), Zahl der KI-Gegner, KI-Stufe.</summary>
+    public Action<string, int, int, Rendering.MapEntityLayer.AiLevel>? OnPlay { get; init; }
 
     // ---- UNSERE Setzungen fuer die Eingabefelder ----------------------------
     //
@@ -999,7 +1000,7 @@ public partial class MapEditorScreen : Control
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
-            else if (_autoRun == "spielen") OnPlayPressed();   // bug-743
+            else if (_autoRun is "spielen" or "spielenfrage") OnPlayPressed();   // bug-743, C9: »spielenfrage« zeigt das Fenster (Bildlauf)
         }
         else
         {
@@ -1205,7 +1206,7 @@ public partial class MapEditorScreen : Control
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
             else if (_autoRun == "bearbeiten") OnEditPressed();
-            else if (_autoRun == "spielen") OnPlayPressed();   // bug-743
+            else if (_autoRun is "spielen" or "spielenfrage") OnPlayPressed();   // bug-743, C9: »spielenfrage« zeigt das Fenster (Bildlauf)
         }
         else
         {
@@ -1244,10 +1245,84 @@ public partial class MapEditorScreen : Control
         OnView(_made);
     }
 
+    /// <summary>
+    /// ⭐ 12.11.2026 — C9 (Fable-Pruefung): »IM GEFECHT SPIELEN« MIT WAHL. Vorher nahm
+    /// der Knopf immer Platz 1 gegen 7 KI auf der zuletzt im Gefechtsaufbau gewaehlten
+    /// Stufe. Jetzt fragt ein Fenster nach dem eigenen Platz (nur die besetzten Plaetze
+    /// der Karte), der Zahl der KI-Gegner und der Stufe; die uebrigen Plaetze bleiben
+    /// unbeteiligt. Der Prueflauf (--map-editor-run=spielen) nimmt die Vorgabe ohne
+    /// Fenster. Gegenschalter --editor-spielen-alt (alter Weg: Platz 1, 7 KI).
+    /// </summary>
     private void OnPlayPressed()
     {
         if (_made.Length == 0 || OnPlay == null) return;
-        OnPlay(_made);
+        var plaetze = Plaetze(_made);
+        if (Array.IndexOf(Core.CommandLine.Args, "--editor-spielen-alt") >= 0 || plaetze.Count == 0)
+        { OnPlay(_made, 0, 7, UI.SkirmishSetup.Level); return; }
+        if (_autoRun == "spielen")
+        { OnPlay(_made, plaetze[0], plaetze.Count - 1, UI.SkirmishSetup.Level); return; }
+
+        var platz = new OptionButton();
+        foreach (int p in plaetze) platz.AddItem($"Spieler {p + 1}", p);
+        var gegner = new OptionButton();
+        for (int n = 0; n < plaetze.Count; n++)
+            gegner.AddItem(n == 0 ? "keine (Karte allein erkunden)" : n == 1 ? "1 Gegner" : $"{n} Gegner", n);
+        gegner.Selected = plaetze.Count - 1;
+        var stufe = new OptionButton();
+        stufe.AddItem("Leicht", (int)Rendering.MapEntityLayer.AiLevel.Easy);
+        stufe.AddItem("Normal", (int)Rendering.MapEntityLayer.AiLevel.Normal);
+        stufe.AddItem("Schwer", (int)Rendering.MapEntityLayer.AiLevel.Hard);
+        stufe.Selected = (int)UI.SkirmishSetup.Level;
+
+        var grid = new GridContainer { Columns = 2 };
+        grid.AddThemeConstantOverride("h_separation", 16);
+        grid.AddThemeConstantOverride("v_separation", 8);
+        void Zeile(string t, Control c) { grid.AddChild(new Label { Text = t }); c.CustomMinimumSize = new Vector2(260, 0); grid.AddChild(c); }
+        Zeile("Du spielst", platz);
+        Zeile("Computergegner", gegner);
+        Zeile("KI-Stufe", stufe);
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 10);
+        box.AddChild(new Label
+        {
+            Text = $"»{_made["map_".Length..]}« hat {plaetze.Count} besetzte Plaetze. Plaetze ohne Mensch und " +
+                   "ohne KI bleiben unbeteiligt stehen. Nach der Partie geht es zurueck in den Editor.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(440, 0),
+        });
+        box.AddChild(grid);
+        var d = new ConfirmationDialog { Title = "Im Gefecht spielen", OkButtonText = "Starten", CancelButtonText = "Abbrechen" };
+        d.AddChild(box);
+        d.Confirmed += () =>
+        {
+            int mensch = platz.GetSelectedId(), ki = gegner.GetSelectedId();
+            var lv = (Rendering.MapEntityLayer.AiLevel)stufe.GetSelectedId();
+            d.QueueFree();
+            OnPlay(_made, mensch, ki, lv);
+        };
+        d.Canceled += () => d.QueueFree();
+        AddChild(d);
+        d.PopupCentered();
+    }
+
+    /// <summary>C9: die besetzten Plaetze einer Karte (Eigner 0..7 mit Gebaeude oder
+    /// Einheit), aus ihrer .entities.json gelesen.</summary>
+    private static List<int> Plaetze(string made)
+    {
+        var l = new List<int>();
+        try
+        {
+            string pfad = $"{MapOpen.MapsDir}/{made}.entities.json";
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(pfad));
+            var set = new SortedSet<int>();
+            foreach (string feld in new[] { "buildings", "entities" })
+                if (doc.RootElement.TryGetProperty(feld, out var arr))
+                    foreach (var e in arr.EnumerateArray())
+                        if (e.TryGetProperty("owner", out var o) && o.TryGetInt32(out int ow) && ow is >= 0 and <= 7)
+                            set.Add(ow);
+            l.AddRange(set);
+        }
+        catch (Exception ex) { GD.PrintErr("Plaetze: " + ex.Message); }
+        return l;
     }
 
     private void OnEditPressed()
