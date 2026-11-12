@@ -34,6 +34,10 @@ public static class MapVerwaltungCheck
         Soll(new FileInfo($"{dir}/map_zvw_c.json").Length == new FileInfo($"{dir}/map_zvw_a.json").Length
              && new FileInfo($"{dir}/map_zvw_c.png").Length == new FileInfo($"{dir}/map_zvw_a.png").Length, "Dateilaengen unveraendert");
 
+        Soll(MapVerwaltung.TitelSetzen("zvw_c", "Meine \"Testkarte\"") == null
+             && MapVerwaltung.Titel("zvw_c") == "Meine Testkarte"
+             && File.ReadAllText($"{dir}/map_zvw_c.entities.json").Contains("\"mission\":\"Meine Testkarte\""),
+             $"Titel gesetzt und gelesen (»{MapVerwaltung.Titel("zvw_c")}«, Anfuehrungszeichen entfernt)");
         int chk = MapCheck.Run("map_zvw_c", _ => { });
         Soll(chk == MapCheck.Run("map_zvw_a", _ => { }), $"map-check der Kopie wie das Original (Urteil {chk})");
 

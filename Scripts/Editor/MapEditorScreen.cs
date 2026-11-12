@@ -486,7 +486,28 @@ public partial class MapEditorScreen : Control
             SelectionEnabled = true,
             Text = "Noch nichts erzeugt.",
         };
-        right.AddChild(Group("Bericht", _log));
+        // D8 (12.11.2026): VORSCHAU der in der Liste gewaehlten Karte, ueber dem Bericht
+        var berichtBox = new VBoxContainer();
+        berichtBox.AddThemeConstantOverride("separation", 4);
+        var vRow = new HBoxContainer();
+        vRow.AddThemeConstantOverride("separation", 8);
+        _vorschau = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(150, 96),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        vRow.AddChild(_vorschau);
+        _vorschauText = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            Modulate = new Color(0.8f, 0.85f, 0.9f),
+        };
+        _vorschauText.AddThemeFontSizeOverride("font_size", 14);
+        vRow.AddChild(_vorschauText);
+        berichtBox.AddChild(vRow);
+        berichtBox.AddChild(_log);
+        right.AddChild(Group("Gewaehlte Karte und Bericht", berichtBox));
 
         // ---- die Knoepfe -----------------------------------------------------
         _create = new Button { Text = "KARTE ERZEUGEN", CustomMinimumSize = new Vector2(0, 44) };
@@ -523,6 +544,8 @@ public partial class MapEditorScreen : Control
         _umbenennen.Pressed += () => NamensFrage("Karte umbenennen", "Umbenennen", true);
         _kopieren = VerwKnopf("Kopie anlegen …", "Legt eine Kopie der gewaehlten Karte unter neuem Namen an.", verwRow);
         _kopieren.Pressed += () => NamensFrage("Kopie anlegen", "Kopieren", false);
+        _titel = VerwKnopf("Titel …", "Der Anzeigename der Karte — er steht im Gefechtsaufbau unter dem Kartenbild.", verwRow);
+        _titel.Pressed += TitelFrage;
         _loeschen = VerwKnopf("Loeschen …", "Loescht die gewaehlte Karte (alle vier Dateien) — nach Rueckfrage.", verwRow);
         _loeschen.Pressed += LoeschFrage;
         _existing.ItemSelected += _ => VerwStand();
@@ -1014,7 +1037,32 @@ public partial class MapEditorScreen : Control
     /// <summary>Die Karten, die schon geschrieben sind — beide Dateien muessen
     /// da sein, denn ohne die <c>.entities.json</c> laesst sich nichts
     /// zusammensetzen.</summary>
-    private Button _umbenennen = null!, _kopieren = null!, _loeschen = null!;
+    private Button _umbenennen = null!, _kopieren = null!, _loeschen = null!, _titel = null!;
+    private TextureRect? _vorschau;
+    private Label? _vorschauText;
+
+    private void TitelFrage()
+    {
+        string alt = Gewaehlt();
+        if (alt.Length == 0) return;
+        var feld = new LineEdit { Text = MapVerwaltung.Titel(alt), CustomMinimumSize = new Vector2(360, 0), MaxLength = 60 };
+        var box = new VBoxContainer();
+        box.AddChild(new Label { Text = $"Anzeigename fuer »{alt["map_".Length..]}« (steht im Gefechtsaufbau unter dem Bild):" });
+        box.AddChild(feld);
+        var d = new ConfirmationDialog { Title = "Titel der Karte", OkButtonText = "Uebernehmen", CancelButtonText = "Abbrechen" };
+        d.AddChild(box);
+        d.Confirmed += () =>
+        {
+            string t = feld.Text;
+            d.QueueFree();
+            VerwErgebnis(MapVerwaltung.TitelSetzen(alt, t), $"Titel von »{alt["map_".Length..]}« ist jetzt »{t.Trim()}«.", alt, alt);
+        };
+        d.Canceled += () => d.QueueFree();
+        AddChild(d);
+        d.PopupCentered();
+        feld.GrabFocus();
+        feld.SelectAll();
+    }
 
     private Button VerwKnopf(string text, string tip, Control row)
     {
@@ -1040,7 +1088,12 @@ public partial class MapEditorScreen : Control
         if (_umbenennen == null) return;
         string n = Gewaehlt();
         string? warum = n.Length == 0 ? "keine Karte gewaehlt" : MapVerwaltung.Gesperrt(n);
-        foreach (var b in new[] { _umbenennen, _kopieren, _loeschen }) b.Disabled = warum != null;
+        foreach (var b in new[] { _umbenennen, _kopieren, _loeschen, _titel }) b.Disabled = warum != null;
+        if (_vorschau != null && _vorschauText != null)
+        {
+            _vorschau.Texture = n.Length > 0 ? UI.MapPreview.Of(n) : null;
+            _vorschauText.Text = n.Length > 0 ? UI.MapPreview.Caption(n) : "";
+        }
         // eine mitgelieferte Karte darf man KOPIEREN (das ist der Weg, sie zu aendern)
         if (n.Length > 0 && MapOpen.IsDelivered(n)) _kopieren.Disabled = false;
         _loeschen.TooltipText = warum != null

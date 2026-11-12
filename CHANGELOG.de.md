@@ -156,6 +156,13 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Kartenverwaltung: Vorschau und Titel** (bug-824): Unter »Gewählte Karte und
+  Bericht« zeigt der Editor jetzt das Bild der in der Liste gewählten Karte mit Titel,
+  Größe und Startplätzen. Der neue Knopf **Titel …** setzt den Anzeigenamen, der im
+  Gefechtsaufbau unter dem Kartenbild steht. Dabei behoben: Die Vorschaubilder der
+  Kartenliste wurden einmal angelegt und nie erneuert — nach dem Bearbeiten zeigte der
+  Gefechtsaufbau das alte Bild. Jetzt wird ein Vorschaubild neu gemacht, sobald die Karte
+  neuer ist; beim Umbenennen und Löschen geht es mit. Gegenschalter `--vorschau-alt`.
 - **Spielerzahl sichtbar und änderbar**: Das Startplatz-Werkzeug (Taste 9) nennt jetzt,
   wie viele und welche Spieler die Karte hat (»die Karte hat 2 Spieler (Sp 1, Sp 2)«)
   und wie man das ändert: den nächsten freien Spieler wählen und klicken = ein Spieler

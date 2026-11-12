@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -90,12 +90,51 @@ public static class MapVerwaltung
         if (Gesperrt(von) is { } g) return g;
         string? f = Kopieren(von, nach);
         if (f != null) return f;
+        UI.MapPreview.Vergessen(Voll(von));
         return Loeschen(von);
+    }
+
+    /// <summary>D8: der ANZEIGENAME (Feld »mission« im Kopf beider Dateien) — er steht
+    /// im Gefechtsaufbau unter dem Kartenbild. null wenn es ging.</summary>
+    public static string? TitelSetzen(string name, string titel)
+    {
+        if (Gesperrt(name) is { } g) return g;
+        titel = titel.Replace("\"", "").Replace("\\", "").Trim();
+        if (titel.Length == 0) return "der Titel ist leer";
+        if (titel.Length > 60) titel = titel[..60];
+        foreach (string e in new[] { ".json", ".entities.json" })
+        {
+            string p = $"{MapOpen.MapsDir}/{Voll(name)}{e}";
+            if (!File.Exists(p)) return $"{Voll(name)[4..]} gibt es nicht";
+            string t = File.ReadAllText(p);
+            const string feld = "\"mission\":\"";
+            int i = t.IndexOf(feld, StringComparison.Ordinal);
+            if (i < 0 || i > 400) return "kein Titelfeld in der Karte";
+            int s = i + feld.Length, en = t.IndexOf('"', s);
+            File.WriteAllText(p, t[..s] + titel + t[en..]);
+        }
+        return null;
+    }
+
+    /// <summary>D8: der Anzeigename einer Karte, oder "".</summary>
+    public static string Titel(string name)
+    {
+        string p = $"{MapOpen.MapsDir}/{Voll(name)}.json";
+        if (!File.Exists(p)) return "";
+        using var r = new StreamReader(p);
+        var buf = new char[600];
+        string t = new string(buf, 0, r.Read(buf, 0, buf.Length));
+        const string feld = "\"mission\":\"";
+        int i = t.IndexOf(feld, StringComparison.Ordinal);
+        if (i < 0) return "";
+        int s = i + feld.Length, e = t.IndexOf('"', s);
+        return e > s ? t[s..e] : "";
     }
 
     public static string? Loeschen(string name)
     {
         if (Gesperrt(name) is { } g) return g;
+        UI.MapPreview.Vergessen(Voll(name));
         var l = Dateien(name);
         if (l.Count == 0) return $"{Voll(name)[4..]} gibt es nicht";
         try { foreach (string p in l) File.Delete(p); }

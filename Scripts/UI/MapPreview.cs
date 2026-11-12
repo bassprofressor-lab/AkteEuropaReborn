@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -27,16 +27,35 @@ public static class MapPreview
     /// picture (not imported yet, or the import failed).</summary>
     public static Texture2D? Of(string name)
     {
-        if (_cache.TryGetValue(name, out var hit)) return hit;
+        // ⭐ 12.11.2026 bug-824: das Vorschaubild hing am NAMEN und wurde nie erneuert —
+        // nach dem Bearbeiten (F5) zeigte die Gefechtsliste das alte Bild, im Speicher
+        // wie auf der Platte (Maps/thumbs). Jetzt gilt es nur, solange es nicht aelter
+        // ist als das Kartenbild. Gegenschalter --vorschau-alt.
+        ulong stand = Stand(name);
+        if (_cache.TryGetValue(name, out var hit) && (VorschauAlt || _stand.GetValueOrDefault(name) == stand)) return hit;
         var tex = Build(name);
         _cache[name] = tex;
+        _stand[name] = stand;
         return tex;
+    }
+
+    private static readonly Dictionary<string, ulong> _stand = new();
+    private static bool VorschauAlt => System.Array.IndexOf(Core.CommandLine.Args, "--vorschau-alt") >= 0;
+    private static ulong Stand(string name) => FileAccess.GetModifiedTime(Core.Content.Path("Maps/" + name + ".png"));
+
+    /// <summary>D8: die Vorschau einer Karte vergessen (umbenannt, geloescht).</summary>
+    public static void Vergessen(string name)
+    {
+        _cache.Remove(name); _stand.Remove(name);
+        string thumb = ProjectSettings.GlobalizePath(Core.Content.UserRoot + "Maps/thumbs/" + name + ".png");
+        if (System.IO.File.Exists(thumb)) System.IO.File.Delete(thumb);
     }
 
     private static Texture2D? Build(string name)
     {
         string thumb = Core.Content.UserRoot + "Maps/thumbs/" + name + ".png";
-        if (FileAccess.FileExists(thumb))
+        if (FileAccess.FileExists(thumb)
+            && (VorschauAlt || FileAccess.GetModifiedTime(thumb) >= Stand(name)))
         {
             var cached = Image.LoadFromFile(thumb);
             if (cached != null) return ImageTexture.CreateFromImage(cached);

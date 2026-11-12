@@ -144,6 +144,13 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Map management: preview and title** (bug-824): under "Gewählte Karte und
+  Bericht" the editor now shows the picture of the map selected in the list, with
+  title, size and start positions. The new **Titel …** button sets the display name
+  shown under the map picture in the skirmish setup. Fixed along the way: map list
+  thumbnails were made once and never renewed — after editing, the skirmish setup
+  showed the old picture. A thumbnail is now remade as soon as the map is newer, and
+  renaming or deleting takes it along. Opt-out `--vorschau-alt`.
 - **Player count visible and changeable**: the start position tool (key 9) now says
   how many and which players the map has ("die Karte hat 2 Spieler (Sp 1, Sp 2)") and
   how to change that: pick the next free player and click = one more player,
