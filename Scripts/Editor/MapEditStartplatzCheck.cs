@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Linq;
@@ -101,6 +101,63 @@ public partial class MapEditOverlay
         bool ok = d < 1f && Mathf.Abs(cam.Zoom.X - _kamZielZoom.X) < 0.01f;
         GD.Print($"map-edit-kamera-check: nach F5 Blick ({cam.Position.X:0},{cam.Position.Y:0}) Zoom {cam.Zoom.X:0.##}, " +
                  $"Abstand {d:0} px — {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
+        GetTree().Quit(ok ? 0 : 1);
+    }
+}
+
+/// <summary><c>--map-edit-minikarte-check</c> — D10 (12.11.2026): ein echter Mausklick
+/// auf die Minikarte im Bearbeitungsmodus muss die Kamera versetzen und darf die Karte
+/// NICHT bemalen.</summary>
+public partial class MapEditOverlay
+{
+    private async void MinikarteCheck()
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--map-edit-minikarte-check") < 0) return;
+        for (int i = 0; i < 6; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var mini = new System.Collections.Generic.List<Node>();
+        void Suche(Node n) { if (n is Rendering.Minimap) mini.Add(n); foreach (Node k in n.GetChildren()) Suche(k); }
+        Suche(GetTree().Root);
+        var cam = GetViewport().GetCamera2D();
+        if (mini.Count == 0 || cam == null)
+        { GD.Print($"map-edit-minikarte-check: DURCHGEFALLEN — Minikarte {mini.Count}, Kamera {cam != null}"); GetTree().Quit(1); return; }
+        var m = (Rendering.Minimap)mini[0];
+        ulong Abdruck()
+        {
+            ulong h = 14695981039346656037UL;
+            foreach (var a in _map.Sections) foreach (byte b in a) { h ^= b; h *= 1099511628211UL; }
+            return h;
+        }
+        _brush = Brush.Gelaende;
+        ulong h0 = Abdruck();
+        var r = m.GetGlobalRect();
+        var vorher = cam.Position;
+        bool treffer = true;
+        // ⚠ Input.ParseInputEvent rechnet in FENSTERpunkten, die Minikarte liegt in
+        // Spielflaechen-Punkten (Fenster 1920x1080, Flaeche 1600x900): umrechnen.
+        var nachFenster = GetViewport().GetFinalTransform();
+        foreach (var flaeche in new[] { r.Position + r.Size * new Vector2(0.5f, 0.1f), r.Position + r.Size * new Vector2(0.9f, 0.5f), r.Position + r.Size * new Vector2(0.3f, 0.9f) })
+        {
+            var punkt = nachFenster * flaeche;
+            ulong hv = Abdruck(); int sv = m.Spruenge;
+            Input.ParseInputEvent(new InputEventMouseMotion { Position = punkt, GlobalPosition = punkt });
+            for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            foreach (bool down in new[] { true, false })
+            {
+                Input.ParseInputEvent(new InputEventMouseButton
+                { ButtonIndex = MouseButton.Left, Pressed = down, Position = punkt, GlobalPosition = punkt });
+                for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+            var unter = GetViewport().GuiGetHoveredControl();
+            if (m.Spruenge == sv || Abdruck() != hv) treffer = false;
+            GD.Print($"map-edit-minikarte-check:   Klick ({punkt.X:0},{punkt.Y:0}): Sprung {(m.Spruenge > sv ? "ja" : "NEIN")}, " +
+                     $"Karte {(Abdruck() == hv ? "gleich" : "BEMALT")}, unter der Maus: {unter?.GetType().Name ?? "-"} {unter?.Name}");
+        }
+        float weg = cam.Position.DistanceTo(vorher);
+        bool karteGleich = Abdruck() == h0;
+        bool ok = weg > 50 && karteGleich && m.Visible && treffer;
+        GD.Print($"map-edit-minikarte-check: Minikarte {r.Size.X:0}x{r.Size.Y:0} bei ({r.Position.X:0},{r.Position.Y:0}), " +
+                 $"Kamera {weg:0} px versetzt, Karte {(karteGleich ? "unveraendert" : "BEMALT")}, Spruenge {m.Spruenge} — " +
+                 (ok ? "BESTANDEN" : "DURCHGEFALLEN"));
         GetTree().Quit(ok ? 0 : 1);
     }
 }

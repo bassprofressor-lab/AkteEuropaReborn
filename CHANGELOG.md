@@ -144,6 +144,13 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **The editor minimap is fully clickable** (bug-823): the edit-mode panel was taller
+  than its space and grew down over the upper part of the minimap — clicks there never
+  arrived, only its bottom strip was clickable. The panel now stays above the minimap:
+  its middle part (tools, selection, owner, help) scrolls when space runs short, and
+  Save / Play / Back stay fixed at the bottom. New check `--map-edit-minikarte-check`
+  (three real mouse clicks: the camera jumps, the map is not painted). Opt-out
+  `--editor-feld-alt`.
 - **Equally distant neighbours on wide and tall maps** (bug-822): start positions
   sat at equal ANGLES on an ellipse, so on a wide map they bunched up along the long
   sides while the two at the ends were far away — 254×125 with 8 players: nearest

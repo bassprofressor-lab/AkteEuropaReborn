@@ -124,7 +124,33 @@ public partial class MapEditOverlay
         // unterhalb des Randes).
         var v = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         v.AddThemeConstantOverride("separation", 5);
-        panel.AddChild(v);
+        // ⭐ 12.11.2026 D10/bug-823: in einem Fenster unter 1080 Zeilen war der Inhalt
+        // hoeher als der Platz, das Feld wuchs nach UNTEN ueber die Minikarte (1600x900:
+        // bis y ~800, Minikarte ab 696) und schluckte dort jeden Klick — nur ihr unterer
+        // Streifen war anklickbar. Jetzt rollt das Feld, wenn der Platz nicht reicht, und
+        // bleibt sonst wie bisher (die Liste nimmt, was uebrig ist). Gegenschalter
+        // --editor-feld-alt.
+        // Die Knoepfe (Speichern/Spielen/Zurueck) und die Tastenzeile stehen AUSSERHALB
+        // des Rollbereichs, fest unten — sie muessen immer zu sehen sein.
+        VBoxContainer unten = v;
+        if (Array.IndexOf(Core.CommandLine.Args, "--editor-feld-alt") < 0)
+        {
+            var aussen = new VBoxContainer();
+            aussen.AddThemeConstantOverride("separation", 5);
+            panel.AddChild(aussen);
+            v.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+            var roll = new ScrollContainer
+            {
+                HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+                SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            };
+            aussen.AddChild(roll);
+            roll.AddChild(v);
+            unten = new VBoxContainer();
+            unten.AddThemeConstantOverride("separation", 5);
+            aussen.AddChild(unten);
+        }
+        else panel.AddChild(v);
 
         // Kopf
         _pTitle = new Label { Text = "KARTE BEARBEITEN" };
@@ -265,10 +291,10 @@ public partial class MapEditOverlay
         v.AddChild(_pSay);
 
         // Knoepfe
-        v.AddChild(new HSeparator());
+        unten.AddChild(new HSeparator());
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 4);
-        v.AddChild(row);
+        unten.AddChild(row);
         var save = new Button
         {
             Text = "Speichern (F5)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 34),
@@ -296,7 +322,7 @@ public partial class MapEditOverlay
         var keys = Small("Karte schieben: W A S D / mittlere Maustaste · Mausrad: Zoom · " +
                          "+/− blaettert · N herrenlos · K Kulisse");
         keys.AddThemeFontSizeOverride("font_size", 13);
-        v.AddChild(keys);
+        unten.AddChild(keys);
     }
 
     private void ToolButton(Container h, Brush b, string text)

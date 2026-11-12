@@ -156,6 +156,14 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Minikarte im Editor ganz anklickbar** (bug-823): Das Bedienfeld des
+  Bearbeitungsmodus war höher als sein Platz und wuchs nach unten über den oberen Teil
+  der Minikarte — Klicks dort kamen nie an, anklickbar war nur ihr unterer Streifen.
+  Jetzt bleibt das Feld über der Minikarte: der Mittelteil (Werkzeuge, Auswahl,
+  Besitzer, Hilfe) rollt, wenn der Platz nicht reicht, und Speichern / Spielen /
+  Zurück stehen fest unten. Neuer Prüflauf `--map-edit-minikarte-check` (drei echte
+  Mausklicks: Kamera springt, die Karte wird nicht bemalt). Gegenschalter
+  `--editor-feld-alt`.
 - **Gleich weite Nachbarn auf breiten und hohen Karten** (bug-822): Die Startplätze
   lagen mit gleichem WINKEL auf einer Ellipse. Auf einer breiten Karte rückten sie
   dadurch an den langen Seiten zusammen, während die zwei an den Enden weit weg lagen

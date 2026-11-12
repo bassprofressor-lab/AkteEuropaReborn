@@ -108,6 +108,7 @@ public partial class MapEditOverlay : Node2D
         P5Check();                // P5 (12.11.2026)
         StartCheck();             // P6/D5 (12.11.2026)
         KameraCheck();            // C1 (12.11.2026)
+        MinikarteCheck();         // D10 (12.11.2026)
     }
 
     /// <summary>
