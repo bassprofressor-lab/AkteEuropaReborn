@@ -144,6 +144,12 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Shipped maps: your copy is opened again** (bug-821): opening a shipped map in the
+  editor created a NEW working copy every time (`01_kopie`, `01_kopie2`,
+  `01_kopie3` …) — the map list filled up with half-finished copies, and last time's
+  work sat in a different one. The editor now opens your existing copy (writing
+  nothing); another one is made on purpose with "Make a copy …". Checked: opened three
+  times, one copy. Opt-out `--editor-kopie-neu`.
 - **No more pinched waterways in generated maps** (bug-820): where a waterway ran
   diagonally and only one corner wide, its narrowest point left a single water cell
   without a straight neighbour — the check reported an "isolated water area" and the

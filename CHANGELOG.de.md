@@ -156,6 +156,13 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Mitgelieferte Karten: deine Kopie wird wieder geöffnet** (bug-821): Wer eine
+  mitgelieferte Karte im Editor öffnete, bekam bei JEDEM Öffnen eine neue Arbeitskopie
+  (`01_kopie`, `01_kopie2`, `01_kopie3` …) — die Kartenliste lief mit halbfertigen
+  Kopien voll, und die Arbeit vom letzten Mal lag in einer anderen. Jetzt öffnet der
+  Editor deine vorhandene Kopie (und schreibt dabei nichts); eine weitere legt man
+  bewusst mit »Kopie anlegen …« an. Geprüft: dreimal geöffnet, eine Kopie.
+  Gegenschalter `--editor-kopie-neu`.
 - **Keine abgeschnürten Wasserstraßen mehr in erzeugten Karten** (bug-820): Lief eine
   Wasserstraße schräg und nur eine Ecke breit, blieb an ihrer engsten Stelle eine
   einzelne Wasserzelle ohne geraden Nachbarn stehen — die Prüfung meldete ein

@@ -328,7 +328,23 @@ public partial class MainMenu
             if (open != null && !MapOpen.OeffnenAlt)
             {
                 string openFull = MapOpen.FullName(open);
-                if (outName == openFull && MapOpen.IsDelivered(openFull))
+                // ⭐ 12.11.2026 bug-821: gibt es die Arbeitskopie schon, wird SIE geoeffnet —
+                // vorher legte jedes Oeffnen eine neue an (01_kopie, 01_kopie2, 01_kopie3 …),
+                // und die Liste lief mit halbfertigen Kopien voll. Eine frische Kopie gibt es
+                // ueber »Kopie anlegen …«. Gegenschalter --editor-kopie-neu.
+                string vorhanden = openFull + "_kopie";
+                if (outName == openFull && MapOpen.IsDelivered(openFull)
+                    && System.IO.File.Exists($"{MapOpen.MapsDir}/{vorhanden}.json")
+                    && System.IO.File.Exists($"{MapOpen.MapsDir}/{vorhanden}.entities.json")
+                    && Array.IndexOf(Core.CommandLine.Args, "--editor-kopie-neu") < 0)
+                {
+                    say($"{openFull} ist eine GELIEFERTE Karte — deine Kopie {vorhanden} gibt es schon, " +
+                        "sie wird geoeffnet (nichts geschrieben). Eine weitere Kopie: »Kopie anlegen …«.");
+                    open = vorhanden;
+                    outName = vorhanden;
+                    skipWrite = true;
+                }
+                else if (outName == openFull && MapOpen.IsDelivered(openFull))
                 {
                     outName = MapOpen.CopyName(openFull);
                     say($"{openFull} ist eine GELIEFERTE Karte — sie wird nicht angefasst. " +
