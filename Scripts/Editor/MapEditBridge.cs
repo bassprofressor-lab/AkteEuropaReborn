@@ -139,7 +139,9 @@ public partial class MapEntityLayer
             Hp = energy, HpMax = energy, Fuel = fuel, FuelMax = fuel,
             Elev = el, IsBuilding = false, IsProp = false, Infantry = -1,
             Footprint = CellRect(_ox, _oy, col, row, el),
-            Move = Simulation.NavGrid.ClassOf(art, -1),
+            // B6 (12.11.2026): Fahrwerk aus dem gemessenen Satz (Luftkissen/Laeufer)
+            Move = Simulation.NavGrid.ClassOf(art, System.Array.IndexOf(Core.CommandLine.Args, "--editor-fahrwerk-alt") < 0
+                                                   && Editor.MapEditUnits.SatzOf(unitType) is { } satz ? satz.Chassis : -1),
             Pos = CellCenter(col, row),
         };
         e.Mobile = !ImmobileTypes.Contains(unitType);

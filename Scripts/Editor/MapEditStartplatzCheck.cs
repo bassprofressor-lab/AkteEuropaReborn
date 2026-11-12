@@ -211,3 +211,43 @@ public partial class MapEditOverlay
         GetTree().Quit(ok ? 0 : 1);
     }
 }
+
+/// <summary><c>--map-edit-fahrwerk-check</c> — B6 (12.11.2026): Luftkissen aufs Wasser,
+/// Laeufer auf rauen Boden muessen gehen; Reifen aufs Wasser nicht.</summary>
+public partial class MapEditOverlay
+{
+    private async void FahrwerkCheck()
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--map-edit-fahrwerk-check") < 0) return;
+        for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Vector2I? Suche(int klasse)
+        {
+            for (int r = 3; r < _map.Height - 3; r++)
+                for (int c = 3; c < _map.Width - 3; c++)
+                    if (MapEditTerrain.ClassAt(_map, c, r) == klasse && MapFactory.Belegt(_map, c, r) == null
+                        && _map.CodeAt(c, r) < CwpFile.ObjectCodeBase)
+                        return new Vector2I(c, r);
+            return null;
+        }
+        int Index(int typ) { for (int i = 0; i < MapEditUnits.All.Length; i++) if (MapEditUnits.All[i].Type == typ) return i; return -1; }
+        bool Setze(int typ, Vector2I? z)
+        {
+            if (z is not { } zz) return false;
+            _brush = Brush.Einheit; _owner = 0; _unitAt = Index(typ); _say = "";
+            StrichBeginnen(true); Anwenden(zz, true); StrichEnden();
+            return _say.Contains(" auf (");
+        }
+        var wasser = Suche(2); var rau = Suche(1);
+        bool kissen = Setze(166, wasser);
+        string sk = _say;
+        bool laeufer = Setze(174, rau);
+        string sl = _say;
+        var wasser2 = Suche(2);
+        bool reifen = Setze(161, wasser2);
+        bool ok = wasser != null && rau != null && kissen && laeufer && !reifen;
+        GD.Print($"map-edit-fahrwerk-check: Luftkissen auf Wasser {wasser}: {(kissen ? "gesetzt" : "ABGEWIESEN")} ({sk})");
+        GD.Print($"map-edit-fahrwerk-check: Laeufer auf rau {rau}: {(laeufer ? "gesetzt" : "ABGEWIESEN")} ({sl})");
+        GD.Print($"map-edit-fahrwerk-check: Reifen auf Wasser {wasser2}: {(reifen ? "GESETZT" : "abgewiesen")} — {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
+        GetTree().Quit(ok ? 0 : 1);
+    }
+}

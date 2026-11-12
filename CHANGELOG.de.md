@@ -156,6 +156,12 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Luftkissen aufs Wasser, Läufer auf Geröll** (bug-825): Der Einheitenpinsel des
+  Editors behandelte Luftkissen und Läufer wie gewöhnliche Fahrzeuge — ein Luftkissen
+  ließ sich nicht aufs Wasser stellen, ein Läufer nicht auf rauen Boden, obwohl beide
+  dort im Spiel fahren. Jetzt zählt das Fahrwerk wie im Spiel. Prüflauf
+  `--map-edit-fahrwerk-check` (Luftkissen auf Wasser und Läufer auf Geröll gesetzt,
+  Reifen auf Wasser abgewiesen). Gegenschalter `--editor-fahrwerk-alt`.
 - **Keine geraden Seeränder und Dämme mehr in erzeugten Karten**: Auf symmetrischen
   Karten wurde das Rauschfeld zur Hälfte kopiert — an der Kartenmitte stießen zwei
   unabhängige Hälften aneinander, und Seen und Bodenarten brachen dort als gerade

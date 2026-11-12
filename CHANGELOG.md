@@ -144,6 +144,12 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Hovercraft on water, walkers on rubble** (bug-825): the editor's unit brush treated
+  hovercraft and walkers like ordinary vehicles — a hovercraft couldn't be placed on
+  water and a walker not on rough ground, although both go there in the game. The
+  chassis now counts as it does in the game. Check `--map-edit-fahrwerk-check`
+  (hovercraft on water and walker on rubble placed, wheels on water refused). Opt-out
+  `--editor-fahrwerk-alt`.
 - **No more straight lake edges and dams in generated maps**: on symmetric maps the
   noise field was half copied — at the map centre two unrelated halves met, and lakes
   and ground types broke off there in a straight edge. The field is now averaged with

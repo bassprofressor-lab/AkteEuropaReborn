@@ -111,6 +111,7 @@ public partial class MapEditOverlay : Node2D
         KameraCheck();            // C1 (12.11.2026)
         MinikarteCheck();         // D10 (12.11.2026)
         SpiegelCheck();           // D6 (12.11.2026)
+        FahrwerkCheck();          // B6 (12.11.2026)
     }
 
     /// <summary>
@@ -1010,7 +1011,13 @@ public partial class MapEditOverlay : Node2D
         { _say = $"eine Einheit braucht einen Spielerplatz 0..7, nicht {OwnerName(_owner)}"; return; }
 
         int side = Simulation.NavGrid.HullSide(u.Art);
-        var mc = Simulation.NavGrid.ClassOf(u.Art, -1);
+        // ⭐ 12.11.2026 B6 (Fable-Pruefung): das FAHRWERK mitgeben — mit -1 galten Luftkissen
+        // (Rumpf 7) und Laeufer (Rumpf 0x11) als gewoehnliche Fahrzeuge: das Luftkissen durfte
+        // nicht aufs Wasser, der Laeufer nicht auf rauen Boden. Das Rumpfbyte steht im
+        // gemessenen Kampfsatz (MapEditUnits.SatzOf). Gegenschalter --editor-fahrwerk-alt.
+        int rumpf = Array.IndexOf(Core.CommandLine.Args, "--editor-fahrwerk-alt") < 0
+                    && MapEditUnits.SatzOf(u.Type) is { } satz ? satz.Chassis : -1;
+        var mc = Simulation.NavGrid.ClassOf(u.Art, rumpf);
         for (int dy = 0; dy < side; dy++)
             for (int dx = 0; dx < side; dx++)
             {
