@@ -104,6 +104,18 @@ public sealed class MapLandscape
         L._sym = sym;
         int MV(int v) => NV - 1 - v;
         void SymV<T>(T[] a) { if (sym) for (int v = 0; v < NV; v++) if (MV(v) < v) a[v] = a[MV(v)]; }
+        // ⭐ 12.11.2026 (Editor-Liste »gerade Seeraender an der Spiegelnaht«): ein RAUSCHFELD
+        // wurde zur Haelfte KOPIERT — an der Mittellinie stiessen zwei voneinander
+        // unabhaengige Haelften aneinander, und Wasser/Stoffe brachen dort als gerade Kante
+        // ab. Jetzt der Mittelwert mit dem Spiegelbild, (f(v) + f(MV v)) / 2: ebenso exakt
+        // symmetrisch, aber stetig — keine Naht. Gegenschalter --generator-naht-alt.
+        bool nahtAlt = Array.IndexOf(Core.CommandLine.Args, "--generator-naht-alt") >= 0;
+        void SymF(double[] a)
+        {
+            if (!sym) return;
+            if (nahtAlt) { SymV(a); return; }
+            for (int v = 0; v < NV; v++) if (MV(v) < v) { double m = 0.5 * (a[v] + a[MV(v)]); a[v] = m; a[MV(v)] = m; }
+        }
 
         // ---- 1. Startplaetze --------------------------------------------------
         var centers = L.PlaceStarts(players, plotW, plotH, seed, say);
@@ -145,6 +157,31 @@ public sealed class MapLandscape
             }
             return false;
         }
+        // ⭐ 12.11.2026: die Verbindungsstreifen zwischen benachbarten Startplaetzen liefen
+        // als SCHNURGERADE Daemme durch die Seen. Jetzt wird der Punkt vor der Frage leicht
+        // verschoben (Rauschen, bis ~5 Ecken, Wellenlaenge ~16) — der Damm schwingt, bleibt
+        // aber ein zusammenhaengendes Band (stetige Verschiebung). Auf symmetrischen Karten
+        // ist die Verschiebung gegenlaeufig zum Spiegelpunkt, damit die Symmetrie haelt.
+        // Gegenschalter --generator-damm-alt.
+        bool dammAlt = Array.IndexOf(Core.CommandLine.Args, "--generator-damm-alt") >= 0;
+        (double, double) Wackel(double x, double y)
+        {
+            double Nx(double px, double py) => 2.0 * (Noise(px / 16.0, py / 16.0, seed ^ 0xDA77u, 2) - 0.5);   // Noise liegt in [0,1]
+            double Ny(double px, double py) => 2.0 * (Noise(px / 16.0, py / 16.0, seed ^ 0x0DA7u, 2) - 0.5);
+            double dx = Nx(x, y), dy = Ny(x, y);
+            if (sym)
+            {
+                double mx = CW - 1 - x, my = CH - 1 - y;
+                dx = 0.5 * (dx - Nx(mx, my)); dy = 0.5 * (dy - Ny(mx, my));
+            }
+            return (x + 7.0 * dx, y + 7.0 * dy);
+        }
+        bool NearSegW(double x, double y, double rad)
+        {
+            if (dammAlt) return NearSeg(x, y, rad);
+            var (wx, wy) = Wackel(x, y);
+            return NearSeg(wx, wy, rad);
+        }
 
         // ---- 2. Wasser auf dem Eckraster -------------------------------------
         // Rauschkoordinaten pixeltreu: eine Zeile ist 20 px, eine Spalte 40 px —
@@ -159,10 +196,10 @@ public sealed class MapLandscape
                 {
                     int v = y * CW + x;
                     f[v] = Noise(2.0 * x / waveL, y / waveL, seed ^ 0x1A4Du, 4);
-                    if (InZone(x, y, 1.7) || NearSeg(x, y, 3.5)) f[v] += 2.0;
+                    if (InZone(x, y, 1.7) || NearSegW(x, y, 3.5)) f[v] += 2.0;
                     order[v] = v;
                 }
-            SymV(f);                                                    // P6
+            SymF(f);                                                    // P6, stetig
             Array.Sort(order, (a, b) => f[a] != f[b] ? f[a].CompareTo(f[b]) : a.CompareTo(b));
             int nWater = (int)Math.Round(Math.Clamp(waterShare, 0.0, 0.8) * NV);
             for (int k = 0; k < nWater; k++) water[order[k]] = true;
@@ -170,7 +207,7 @@ public sealed class MapLandscape
         for (int pass = 0; pass < 3; pass++) water = Majority(water, CW, CH);
         for (int y = 0; y < CH; y++)
             for (int x = 0; x < CW; x++)
-                if (InZone(x, y, 1.7) || NearSeg(x, y, 3.5)) water[y * CW + x] = false;
+                if (InZone(x, y, 1.7) || NearSegW(x, y, 3.5)) water[y * CW + x] = false;
         int removedWater = RemoveSmall(water, CW, CH, true, MinWaterCorners, null);
         var startCorner = new List<int>();
         foreach (var (cx, cy) in centers)
@@ -293,7 +330,7 @@ public sealed class MapLandscape
                          + 0.4 * Math.Min(dist[v], Dw) / Dw;
                     land.Add(v);
                 }
-            SymV(g);                                                    // P6
+            SymF(g);                                                    // P6, stetig
             land.Sort((a, b) => g[a] != g[b] ? g[a].CompareTo(g[b]) : a.CompareTo(b));
             double landShare = 0;
             for (int d = 1; d <= tc.MaxDepth; d++) landShare += tc.LabelShare[tc.LabelOfDepth[d]];
@@ -490,7 +527,7 @@ public sealed class MapLandscape
                 for (int c = 0; c < w; c++)
                 {
                     int i = r * w + c;
-                    if (!NearSeg(c + 0.5, r + 0.5, 1.6)) continue;
+                    if (!NearSegW(c + 0.5, r + 0.5, 1.6)) continue;
                     if (forestCell[i]) { forestCell[i] = false; forest--; corridor++; }
                     if (L.Class[i] == 1 && !shore[i]) { L.Class[i] = 0; corridor++; }
                 }
@@ -993,7 +1030,16 @@ public sealed class MapLandscape
                 key[i] = Noise(2.0 * c / waveE, r / waveE, seed ^ 0xE1E7u, 3);
                 elig.Add(i);
             }
-        if (_sym) for (int i = 0; i < n; i++) if (n - 1 - i < i) key[i] = key[n - 1 - i];   // P6
+        if (_sym)                                                       // P6, stetig (siehe SymF)
+        {
+            bool alt = Array.IndexOf(Core.CommandLine.Args, "--generator-naht-alt") >= 0;
+            for (int i = 0; i < n; i++)
+                if (n - 1 - i < i)
+                {
+                    if (alt) key[i] = key[n - 1 - i];
+                    else { double m = 0.5 * (key[i] + key[n - 1 - i]); key[i] = m; key[n - 1 - i] = m; }
+                }
+        }
         elig.Sort((a, b) => key[a] != key[b] ? key[a].CompareTo(key[b]) : a.CompareTo(b));
         // gemessene Hoehenverteilung, oben bei MaxLevel gedeckelt (UNSERE SETZUNG)
         var share = new double[MaxLevel + 1];

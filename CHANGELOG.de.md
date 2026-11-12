@@ -156,6 +156,15 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Keine geraden Seeränder und Dämme mehr in erzeugten Karten**: Auf symmetrischen
+  Karten wurde das Rauschfeld zur Hälfte kopiert — an der Kartenmitte stießen zwei
+  unabhängige Hälften aneinander, und Seen und Bodenarten brachen dort als gerade
+  Kante ab. Jetzt wird das Feld mit seinem Spiegelbild gemittelt: ebenso genau
+  symmetrisch, aber ohne Naht. Außerdem liefen die Landverbindungen zwischen
+  benachbarten Startplätzen als schnurgerade Dämme durch die Seen; sie schwingen jetzt
+  leicht (bleiben aber durchgehend befahrbar, die Fahrwege zum nächsten Gegner bleiben
+  gleich lang). 8 Probekarten, alle bestanden. Gegenschalter `--generator-naht-alt`
+  und `--generator-damm-alt`.
 - **Kartenverwaltung: Vorschau und Titel** (bug-824): Unter »Gewählte Karte und
   Bericht« zeigt der Editor jetzt das Bild der in der Liste gewählten Karte mit Titel,
   Größe und Startplätzen. Der neue Knopf **Titel …** setzt den Anzeigenamen, der im

@@ -144,6 +144,14 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **No more straight lake edges and dams in generated maps**: on symmetric maps the
+  noise field was half copied — at the map centre two unrelated halves met, and lakes
+  and ground types broke off there in a straight edge. The field is now averaged with
+  its mirror image: just as exactly symmetric, but seamless. Also, the land links
+  between neighbouring start positions ran through lakes as dead-straight dams; they
+  now curve slightly (still drivable all the way, road distances to the nearest enemy
+  stay equal). 8 sample maps, all passing. Opt-outs `--generator-naht-alt` and
+  `--generator-damm-alt`.
 - **Map management: preview and title** (bug-824): under "Gewählte Karte und
   Bericht" the editor now shows the picture of the map selected in the list, with
   title, size and start positions. The new **Titel …** button sets the display name
