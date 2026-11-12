@@ -128,6 +128,17 @@ your own copy of the 1997 game.
     palm trees in the bushes. The picture references came from the host, the
     object image from the local bake. Both now match; everything the simulation
     reads still comes unchanged from the host.
+- **Painting as you'd expect** (bug-814):
+  - Dragging with the mouse button held paints ground, height, forest/rock,
+    rails and removal — each cell once per stroke. Before, it was one click per
+    cell.
+  - Brush size 1×1, 3×3 or 5×5 (buttons or `[` `]`); the frame under the mouse
+    shows the size.
+  - Undo and redo (Ctrl+Z / Ctrl+Y or the buttons), up to 30 steps. One step is
+    one stroke. Buildings appear/disappear at once, terrain after F5 as before.
+  - New tool "8 Deposits": left places a terranium deposit, right removes one.
+    All deposits show as a yellow diamond on the map — before they were invisible
+    in the editor and only the generator could place them.
 - **Create with choices** (bug-813):
   - Every map gets a random number, and "Neu würfeln" (re-roll) makes a new one.
     Until now the same settings always produced the same map. The number is

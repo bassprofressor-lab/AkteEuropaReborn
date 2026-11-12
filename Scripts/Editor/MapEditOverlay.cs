@@ -55,7 +55,7 @@ public partial class MapEditOverlay : Node2D
     /// <summary>Was der Pinsel gerade setzt.</summary>
     /// <remarks>11.11.2026 bug-802: <c>Wegnehmen</c> (Taste 7) neu — nimmt weg,
     /// was unter der Maus steht, egal welche Art.</remarks>
-    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit, Gelaende, Hoehe, Wegnehmen }
+    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit, Gelaende, Hoehe, Wegnehmen, Vorkommen }
 
     private MapEntityLayer _layer = null!;
     private CwmFile _map = null!;
@@ -102,6 +102,7 @@ public partial class MapEditOverlay : Node2D
         BuildUi();
         Refresh();
         Harness();
+        P5Check();                // P5 (12.11.2026)
     }
 
     /// <summary>
@@ -736,16 +737,29 @@ public partial class MapEditOverlay : Node2D
         if (e is InputEventMouseMotion)
         {
             var cell = _layer.CellAt(GetLocalMousePosition());
-            if (cell != _hover) { _hover = cell; QueueRedraw(); }
+            if (cell != _hover) { _hover = cell; Ziehen(cell); QueueRedraw(); }   // P5: Ziehen
             return;
         }
 
+        // P5 (12.11.2026): Druecken beginnt einen Strich (ein Rueckgaengig-Schritt),
+        // Loslassen beendet ihn.
+        if (e is InputEventMouseButton { Pressed: false } los
+            && los.ButtonIndex is MouseButton.Left or MouseButton.Right)
+        {
+            StrichEnden();
+            return;
+        }
         if (e is InputEventMouseButton { Pressed: true } mb)
         {
             var cell = _layer.CellAt(GetLocalMousePosition());
             if (cell == null) return;
-            if (mb.ButtonIndex == MouseButton.Left) { Put(cell.Value); GetViewport().SetInputAsHandled(); }
-            else if (mb.ButtonIndex == MouseButton.Right) { Take(cell.Value); GetViewport().SetInputAsHandled(); }
+            if (mb.ButtonIndex is MouseButton.Left or MouseButton.Right)
+            {
+                bool links = mb.ButtonIndex == MouseButton.Left;
+                StrichBeginnen(links);
+                Anwenden(cell.Value, links);
+                GetViewport().SetInputAsHandled();
+            }
             return;
         }
 
@@ -760,6 +774,11 @@ public partial class MapEditOverlay : Node2D
             case Key.Key5: _brush = Brush.Gelaende; break;
             case Key.Key6: _brush = Brush.Hoehe; break;
             case Key.Key7: _brush = Brush.Wegnehmen; break;          // bug-802
+            case Key.Key8: _brush = Brush.Vorkommen; break;          // P5/D7
+            case Key.Bracketleft: PinselGroesse(-1); Refresh(); QueueRedraw(); GetViewport().SetInputAsHandled(); return;
+            case Key.Bracketright: PinselGroesse(+1); Refresh(); QueueRedraw(); GetViewport().SetInputAsHandled(); return;
+            case Key.Z when k.CtrlPressed: Rueckgaengig(); GetViewport().SetInputAsHandled(); return;
+            case Key.Y when k.CtrlPressed: Wiederholen(); GetViewport().SetInputAsHandled(); return;
             case Key.Equal or Key.Plus or Key.KpAdd: Step(+1); break;
             case Key.Minus or Key.KpSubtract: Step(-1); break;
             // ⚠ DER EIGNER HAT JETZT EIGENE TASTEN, und das ist eine
@@ -834,6 +853,7 @@ public partial class MapEditOverlay : Node2D
             case Brush.Gelaende: PutGround(cell, _ground); break;
             case Brush.Hoehe: PutHeight(cell, +1); break;
             case Brush.Wegnehmen: TakeAny(cell); return;              // bug-802
+            case Brush.Vorkommen: PutVorkommen(cell); break;          // P5/D7
         }
         Refresh();
         QueueRedraw();
@@ -1081,6 +1101,9 @@ public partial class MapEditOverlay : Node2D
     {
         switch (_brush)
         {
+            case Brush.Vorkommen:                                       // P5/D7
+                TakeVorkommen(cell);
+                break;
             case Brush.Gebaeude:
                 int i = _layer.EditorBuildingAt(cell);
                 if (i < 0) { _say = "dort steht kein Gebaeude"; break; }
@@ -1223,9 +1246,13 @@ public partial class MapEditOverlay : Node2D
 
     public override void _Draw()
     {
-        if (_hover is { } h)
+        VorkommenZeichnen();                                            // P5/D7
+        if (_hover is { } h0)
         {
-            var (fw, fh) = _brush == Brush.Gebaeude ? _layer.EditorFootprint(_typ) : (1, 1);
+            // P5: die Pinselgroesse im Rahmen zeigen (mittig um die Maus)
+            int pr = Flaechig(_brush) ? _pinsel / 2 : 0;
+            var h = new Vector2I(Math.Max(0, h0.X - pr), Math.Max(0, h0.Y - pr));
+            var (fw, fh) = _brush == Brush.Gebaeude ? _layer.EditorFootprint(_typ) : (1 + 2 * pr, 1 + 2 * pr);
             var col = _brush switch
             {
                 Brush.Wegnehmen => new Color(1f, 0.25f, 0.2f, 0.95f),   // bug-802
@@ -1233,6 +1260,7 @@ public partial class MapEditOverlay : Node2D
                 Brush.Gegenstand => new Color(1f, 0.85f, 0.2f, 0.9f),
                 Brush.Gelaende => GroundColor(_ground),
                 Brush.Hoehe => new Color(1f, 0.5f, 0.9f, 0.9f),
+                Brush.Vorkommen => new Color(1f, 0.75f, 0.1f, 0.95f),
                 _ => new Color(0.4f, 0.8f, 1f, 0.9f),
             };
             // Zelle fuer Zelle gefuellt statt als ein Rechteck: die Kacheln

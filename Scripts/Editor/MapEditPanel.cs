@@ -41,6 +41,7 @@ public partial class MapEditOverlay
     private TextureRect _pPreview = null!;
     private VBoxContainer _pOwnerBox = null!;
     private readonly Dictionary<Brush, Button> _toolButtons = new();
+    private readonly Dictionary<int, Button> _pinselKnoepfe = new();   // P5
     private readonly Dictionary<int, Button> _ownerButtons = new();
     private Button _pBack = null!;
     private bool _backArmed;
@@ -119,7 +120,36 @@ public partial class MapEditOverlay
         ToolButton(tools, Brush.Hoehe, "6 Hoehe");
         ToolButton(tools, Brush.Einheit, "4 Einheiten");
         ToolButton(tools, Brush.Gleis, "3 Gleise");
-        ToolButton(v, Brush.Wegnehmen, "7 Wegnehmen — was dort steht");
+        // P5 (12.11.2026): Wegnehmen und Vorkommen in einer Zeile, darunter Pinsel und Rueckgaengig
+        var zeile7 = new HBoxContainer();
+        zeile7.AddThemeConstantOverride("separation", 4);
+        v.AddChild(zeile7);
+        ToolButton(zeile7, Brush.Wegnehmen, "7 Wegnehmen");
+        ToolButton(zeile7, Brush.Vorkommen, "8 Vorkommen");
+        var pinselZeile = new HBoxContainer();
+        pinselZeile.AddThemeConstantOverride("separation", 4);
+        v.AddChild(pinselZeile);
+        pinselZeile.AddChild(new Label { Text = "Pinsel [ ]" });
+        foreach (int pg in new[] { 1, 3, 5 })
+        {
+            int gg = pg;
+            var b = new Button
+            {
+                Text = $"{pg}x{pg}", ToggleMode = true, FocusMode = Control.FocusModeEnum.None,
+                CustomMinimumSize = new Vector2(52, 30),
+                TooltipText = "Pinselgroesse fuer Bodenart, Hoehe, Wald/Fels und Wegnehmen. Mit gedrueckter Maustaste ziehen malt.",
+            };
+            b.Pressed += () => { _pinsel = gg; _say = ""; Refresh(); QueueRedraw(); };
+            _pinselKnoepfe[pg] = b;
+            pinselZeile.AddChild(b);
+        }
+        pinselZeile.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        var zur = new Button { Text = "↶ zurück", TooltipText = "Rueckgaengig (Strg+Z)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 30) };
+        zur.Pressed += Rueckgaengig;
+        var vor = new Button { Text = "↷ vor", TooltipText = "Wiederholen (Strg+Y)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 30) };
+        vor.Pressed += Wiederholen;
+        pinselZeile.AddChild(zur);
+        pinselZeile.AddChild(vor);
         _pTool = new Label { Visible = false };
         v.AddChild(_pTool);
 
@@ -301,6 +331,7 @@ public partial class MapEditOverlay
             : "gespeichert";
         _pDirty.Modulate = MapEditSession.Dirty ? new Color(1f, 0.6f, 0.4f) : new Color(0.6f, 0.85f, 0.6f);
         foreach (var (b, btn) in _toolButtons) btn.SetPressedNoSignal(b == _brush);
+        foreach (var (g, btn) in _pinselKnoepfe) { btn.SetPressedNoSignal(g == _pinsel); btn.Disabled = !Flaechig(_brush); }
 
         bool owned = _brush is Brush.Gebaeude or Brush.Einheit;
         _pOwnerBox.Visible = owned;
@@ -333,6 +364,8 @@ public partial class MapEditOverlay
                                "malt »frei« (es gibt keine leere Zelle)"),
             Brush.Hoehe => ("hebt die Zelle um eine Stufe (hoechstens 1 Stufe Unterschied zum Nachbarn)",
                             "senkt die Zelle um eine Stufe"),
+            Brush.Vorkommen => ($"setzt ein Terranium-Vorkommen ({MapDeposits.Amount}) — gelbe Raute, mind. 8 Zellen Abstand",
+                                "nimmt das naechste Vorkommen weg"),
             _ => ("nimmt weg, was dort steht: Einheit, sonst Gebaeude, sonst Gleis, sonst Objekt",
                   "ebenso"),
         };
@@ -357,6 +390,7 @@ public partial class MapEditOverlay
         Brush.Einheit => $"»{MapEditUnits.All[_unitAt].Name}«",
         Brush.Gelaende => $"»{GroundName(_ground)}«" + (MapEditSession.Tiles == null ? " ⚠ ohne Kacheltabelle" : ""),
         Brush.Hoehe => "Hoehe aendern",
+        Brush.Vorkommen => "Vorkommen",
         _ => "Wegnehmen",
     };
 

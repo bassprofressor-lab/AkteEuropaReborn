@@ -139,6 +139,17 @@ bisher nur dort beschrieben.*
     Gebüsch. Die Bildverweise kamen vom Gastgeber, das Objektbild aber aus dem
     eigenen Backlauf. Jetzt passt beides zusammen; was die Simulation liest,
     kommt weiter unverändert vom Gastgeber.
+- **Malen wie gewohnt** (bug-814):
+  - Mit gedrückter Maustaste ziehen malt Bodenart, Höhe, Wald/Fels, Gleise und
+    Wegnehmen — jede Zelle einmal je Strich. Bisher war es ein Klick je Zelle.
+  - Pinselgröße 1×1, 3×3 oder 5×5 (Knöpfe oder Tasten `[` `]`); der Rahmen unter
+    der Maus zeigt die Größe.
+  - Rückgängig und Wiederholen (Strg+Z / Strg+Y oder die Knöpfe), bis zu 30
+    Schritte. Ein Schritt ist ein Strich. Gebäude erscheinen bzw. verschwinden
+    sofort, Gelände wie bisher nach F5.
+  - Neues Werkzeug »8 Vorkommen«: links setzt ein Terranium-Vorkommen, rechts
+    nimmt eins weg. Alle Vorkommen stehen als gelbe Raute auf der Karte — vorher
+    waren sie im Editor unsichtbar und nur vom Generator zu setzen.
 - **Erzeugen mit Wahl** (bug-813):
   - Jede Karte bekommt eine Zufallszahl, und »Neu würfeln« macht eine neue. Bisher
     ergaben gleiche Einstellungen immer dieselbe Karte. Die Zahl steht sichtbar
