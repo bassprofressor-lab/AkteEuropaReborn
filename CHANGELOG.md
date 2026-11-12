@@ -149,7 +149,7 @@ your own copy of the 1997 game.
   without a straight neighbour — the check reported an "isolated water area" and the
   waterway was closed there for path finding (measured on 1 of 4 sample maps). The
   generator now widens such pinches by one corner, mirrored on symmetric maps too.
-  Maps without such a spot stay byte for byte the same (5 more sample maps checked).
+  On maps without such a spot the rule does nothing (5 more sample maps: no change reported).
   The check now also names the cell of any tiny water area. Opt-out
   `--generator-sattel-alt`.
 - **Clear names in the map editor**: units were only named after their chassis

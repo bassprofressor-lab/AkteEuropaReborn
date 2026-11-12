@@ -161,8 +161,8 @@ bisher nur dort beschrieben.*
   einzelne Wasserzelle ohne geraden Nachbarn stehen — die Prüfung meldete ein
   »isoliertes Wassergebiet«, und die Straße war für die Wegsuche dort zu (gemessen
   an 1 von 4 Probekarten). Der Generator verbreitert solche Engstellen jetzt um eine
-  Ecke, auch auf symmetrischen Karten spiegelgleich. Karten ohne solche Stelle
-  bleiben Byte für Byte, wie sie waren (5 weitere Probekarten geprüft). Die Prüfung
+  Ecke, auch auf symmetrischen Karten spiegelgleich. Auf Karten ohne solche
+  Stelle greift die Regel nicht (5 weitere Probekarten: keine Änderung gemeldet). Die Prüfung
   nennt bei winzigen Wassergebieten jetzt auch die Zelle. Gegenschalter
   `--generator-sattel-alt`.
 - **Verständliche Namen im Karteneditor**: Einheiten hießen nur nach ihrem Fahrwerk
