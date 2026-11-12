@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using Godot;
@@ -59,6 +59,22 @@ public partial class MapEditOverlay
                    (weg > 0 ? $" — der alte Startplatz ist weg ({weg} Teile)" : "");
         }
         finally { _typ = typ0; _unitAt = unit0; }
+    }
+
+    /// <summary>D5 (12.11.2026): die SPIELERZAHL der Karte — wer eine Basis hat. Sie aendert
+    /// sich mit diesem Werkzeug: einen freien Spieler waehlen und klicken = ein Spieler mehr,
+    /// Rechtsklick = einer weniger. Bisher stand das nirgends.</summary>
+    private string SpielerZeile()
+    {
+        var mit = new System.Collections.Generic.SortedSet<int>();
+        foreach (var g in GebaeudeSaetze().Values)
+            if (g.Typ == MapGenerator.BaseType && g.Owner is >= 0 and <= 7) mit.Add(g.Owner);
+        string wer = mit.Count == 0 ? "keiner" : string.Join(", ", System.Linq.Enumerable.Select(mit, p => $"Sp {p + 1}"));
+        int frei = -1;
+        for (int p = 0; p < 8 && frei < 0; p++) if (!mit.Contains(p)) frei = p;
+        return $"Startplatz — die Karte hat {mit.Count} Spieler ({wer}). " +
+               (frei >= 0 ? $"Mehr Spieler: Sp {frei + 1} waehlen und klicken. " : "") +
+               "Weniger: Rechtsklick nimmt den Startplatz des gewaehlten Spielers weg.";
     }
 
     /// <summary>Den Schritt, den StrichBeginnen gemerkt hat, ganz zuruecknehmen.</summary>

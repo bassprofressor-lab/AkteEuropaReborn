@@ -156,6 +156,10 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Spielerzahl sichtbar und änderbar**: Das Startplatz-Werkzeug (Taste 9) nennt jetzt,
+  wie viele und welche Spieler die Karte hat (»die Karte hat 2 Spieler (Sp 1, Sp 2)«)
+  und wie man das ändert: den nächsten freien Spieler wählen und klicken = ein Spieler
+  mehr, Rechtsklick = einer weniger. Die Zeile wird nach jedem Klick nachgezählt.
 - **Spiegeln beim Malen**: Im Bearbeitungsmodus gibt es neben der Pinselgröße den
   Knopf **⇅ Spiegeln** (Taste **M**). Ist er an, landet jeder Strich zugleich auf der
   um die Kartenmitte gedrehten Zelle (180°, genau wie bei symmetrisch erzeugten

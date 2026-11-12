@@ -144,6 +144,10 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Player count visible and changeable**: the start position tool (key 9) now says
+  how many and which players the map has ("die Karte hat 2 Spieler (Sp 1, Sp 2)") and
+  how to change that: pick the next free player and click = one more player,
+  right-click = one fewer. The line is recounted after every click.
 - **Mirror while painting**: next to the brush size, edit mode now has a
   **⇅ Spiegeln** button (key **M**). When on, every stroke also lands on the cell
   rotated about the map centre (180°, exactly like symmetric generated maps) — for

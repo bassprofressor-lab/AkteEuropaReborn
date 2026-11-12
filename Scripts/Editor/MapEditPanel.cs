@@ -420,6 +420,7 @@ public partial class MapEditOverlay
         string sel = Selection();
         _pTool.Text = sel;
         if (_pList.Visible) _pListHead.Text = $"{ListTitle()}: {sel}   (+/−)";
+        else if (_brush == Brush.Startplatz) _pListHead.Text = SpielerZeile();   // D5: Spielerzahl nach jedem Klick neu
         (string left, string right) = _brush switch
         {
             Brush.Gebaeude => ($"setzt {sel} fuer {OwnerName(_owner)} (gruener Rahmen = Grundflaeche)",
@@ -527,7 +528,7 @@ public partial class MapEditOverlay
                 {
                     Brush.Hoehe => "Hoehe: links anheben, rechts absenken",
                     Brush.Vorkommen => "Vorkommen: gelbe Rauten auf der Karte",
-                    Brush.Startplatz => "Startplatz: Spieler waehlen, Karte klicken",
+                    Brush.Startplatz => SpielerZeile(),
                     _ => "Wegnehmen: keine Auswahl noetig",
                 };
                 _pList.Visible = false;
