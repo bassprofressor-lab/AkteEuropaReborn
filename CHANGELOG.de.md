@@ -148,6 +148,12 @@ bisher nur dort beschrieben.*
     gegenüberliegen. Geht nur bei gerader Spielerzahl.
   - Nach dem Erzeugen steht eine Fairness-Zeile in der Statuszeile: Entfernung
     jedes Spielers zum nächsten Vorkommen und zum nächsten Gegner.
+  - Neues Werkzeug »9 Startplatz«: ein Klick setzt für den gewählten Spieler
+    Basis, Werk und Truppe als Paket. Hat er schon einen Startplatz, wird der
+    alte weggenommen — so verschiebt man ihn. Rechtsklick nimmt ihn weg. Passt
+    das Paket nicht (Hang, Wasser, belegt), bleibt die Karte unverändert, und die
+    Zeile sagt, woran es lag. Rückgängig nimmt das ganze Paket in einem Schritt
+    zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
 - **Malen wie gewohnt** (bug-814):

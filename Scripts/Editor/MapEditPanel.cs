@@ -126,6 +126,7 @@ public partial class MapEditOverlay
         v.AddChild(zeile7);
         ToolButton(zeile7, Brush.Wegnehmen, "7 Wegnehmen");
         ToolButton(zeile7, Brush.Vorkommen, "8 Vorkommen");
+        ToolButton(zeile7, Brush.Startplatz, "9 Startplatz");
         var pinselZeile = new HBoxContainer();
         pinselZeile.AddThemeConstantOverride("separation", 4);
         v.AddChild(pinselZeile);
@@ -333,12 +334,12 @@ public partial class MapEditOverlay
         foreach (var (b, btn) in _toolButtons) btn.SetPressedNoSignal(b == _brush);
         foreach (var (g, btn) in _pinselKnoepfe) { btn.SetPressedNoSignal(g == _pinsel); btn.Disabled = !Flaechig(_brush); }
 
-        bool owned = _brush is Brush.Gebaeude or Brush.Einheit;
+        bool owned = _brush is Brush.Gebaeude or Brush.Einheit or Brush.Startplatz;
         _pOwnerBox.Visible = owned;
         foreach (var (o, btn) in _ownerButtons)
         {
             btn.SetPressedNoSignal(o == _owner);
-            btn.Disabled = _brush == Brush.Einheit && o is < 0 or > 7;
+            btn.Disabled = (_brush is Brush.Einheit or Brush.Startplatz) && o is < 0 or > 7;
         }
         _pOwnerNote.Text = _brush == Brush.Einheit
             ? "Einheiten gehoeren immer einem Spieler (Sp 1..8)."
@@ -364,6 +365,8 @@ public partial class MapEditOverlay
                                "malt »frei« (es gibt keine leere Zelle)"),
             Brush.Hoehe => ("hebt die Zelle um eine Stufe (hoechstens 1 Stufe Unterschied zum Nachbarn)",
                             "senkt die Zelle um eine Stufe"),
+            Brush.Startplatz => ($"setzt den Startplatz fuer {OwnerName(_owner)}: Basis, Werk, Truppe — ein vorhandener wird verschoben",
+                                 "nimmt den Startplatz dieses Spielers weg"),
             Brush.Vorkommen => ($"setzt ein Terranium-Vorkommen ({MapDeposits.Amount}) — gelbe Raute, mind. 8 Zellen Abstand",
                                 "nimmt das naechste Vorkommen weg"),
             _ => ("nimmt weg, was dort steht: Einheit, sonst Gebaeude, sonst Gleis, sonst Objekt",
@@ -391,6 +394,7 @@ public partial class MapEditOverlay
         Brush.Gelaende => $"»{GroundName(_ground)}«" + (MapEditSession.Tiles == null ? " ⚠ ohne Kacheltabelle" : ""),
         Brush.Hoehe => "Hoehe aendern",
         Brush.Vorkommen => "Vorkommen",
+        Brush.Startplatz => "Startplatz",
         _ => "Wegnehmen",
     };
 
@@ -448,8 +452,13 @@ public partial class MapEditOverlay
                 }
                 break;
             default:
-                _pListHead.Text = _brush == Brush.Hoehe ? "Hoehe: links anheben, rechts absenken"
-                                                        : "Wegnehmen: keine Auswahl noetig";
+                _pListHead.Text = _brush switch
+                {
+                    Brush.Hoehe => "Hoehe: links anheben, rechts absenken",
+                    Brush.Vorkommen => "Vorkommen: gelbe Rauten auf der Karte",
+                    Brush.Startplatz => "Startplatz: Spieler waehlen, Karte klicken",
+                    _ => "Wegnehmen: keine Auswahl noetig",
+                };
                 _pList.Visible = false;
                 _pPreview.Visible = false;
                 break;

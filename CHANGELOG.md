@@ -136,6 +136,12 @@ your own copy of the 1997 game.
     the bases really face each other. Even player counts only.
   - After creating, the status line shows a fairness line: each player's
     distance to the nearest deposit and the nearest enemy.
+  - New tool "9 Start position": one click places base, factory and troop for
+    the selected player as one package. If the player already has a start
+    position, the old one is removed — that's how you move it. Right click
+    removes it. If the package doesn't fit (slope, water, occupied), the map stays
+    unchanged and the line says why. Undo takes the whole package back in one
+    step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
 - **Painting as you'd expect** (bug-814):
