@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -369,6 +369,16 @@ public partial class MapEditOverlay : Node2D
                     MapDeposits.Free(_map, imap2, b.Col + dx, b.Row + dy) &&
                     MapDeposits.Corners(zone2, _map.Width, _map.Height, b.Col + dx, b.Row + dy))
                     frei++;
+                else if (imap2 != null && zone2 != null)
+                {
+                    int cc = b.Col + dx, rr = b.Row + dy, ii = (cc * MapFactory.ImapStride + rr) * 2;
+                    GD.Print($"map-edit-check:   gesperrt ({cc},{rr}): imap {(imap2[ii] | (imap2[ii + 1] << 8)):X4}, " +
+                             $"Hang {_map.FlagAt(cc, rr)}, sec2 {MapDeposits.Zone(zone2, _map.Width, _map.Height, cc, rr)}/" +
+                             $"{MapDeposits.Zone(zone2, _map.Width, _map.Height, cc + 1, rr)}/" +
+                             $"{MapDeposits.Zone(zone2, _map.Width, _map.Height, cc, rr + 1)}/" +
+                             $"{MapDeposits.Zone(zone2, _map.Width, _map.Height, cc + 1, rr + 1)}, " +
+                             $"Gleis {MapFactory.HasRail(_map, cc, rr)}, Code {_map.CodeAt(cc, rr)}");
+                }
             }
             GD.Print($"map-edit-check: Grundflaeche nach dem Wegnehmen: {frei} von {ges} " +
                      "Zellen wieder BAUBAR (muss ges sein — sonst bleibt der Platz gesperrt)");

@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
@@ -668,6 +668,10 @@ public partial class MapEditorScreen : Control
                 int ki = _tilesets.IndexOf(kt);
                 if (ki >= 0) { _tileset.Selected = ki; ShowTilesetInfo(); }
             }
+            // 12.11.2026: feste Zufallszahl fuer Prueflaeufe — ohne sie wuerfelt jeder Lauf
+            // eine andere Karte, und ein Fehler, der nur auf manchen Karten auftritt, laesst
+            // sich nicht wiederholen.
+            else if (a.StartsWith("--map-editor-samen=")) _samen.Text = a["--map-editor-samen=".Length..];
             else if (a.StartsWith("--map-editor-open=")) _autoOpen = a["--map-editor-open=".Length..];
             else if (a == "--map-editor-run" || a.StartsWith("--map-editor-run="))
             {

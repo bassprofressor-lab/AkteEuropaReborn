@@ -163,6 +163,9 @@ public static class MapFactory
     /// mitziehen.</para>
     /// </summary>
     /// <returns>false, wenn dort gar kein gebautes Gebaeude steht.</returns>
+    /// <summary>Gegenschalter zu bug-818: Zone 3 beim Wegnehmen wieder als gesperrt lesen.</summary>
+    public static bool Zone3Alt => Array.IndexOf(Core.CommandLine.Args, "--editor-zone3-alt") >= 0;
+
     public static bool ClearBuilding(CwmFile m, int slot)
     {
         var s = m.Sec(3);
@@ -192,9 +195,17 @@ public static class MapFactory
                     if (!IsHandleOf(imap[i] | (imap[i + 1] << 8), slot)) continue;
                     int z = zone != null && c * ZoneStride + r < zone.Length
                           ? zone[c * ZoneStride + r] : ZoneLand;
+                    // ⭐ 12.11.2026 bug-818: der GENERATOR schreibt sec2 aus der gemessenen
+                    // Ecken-Tafel (MapLandscape.CornerSec) und dort kommt auch 3 vor — Land,
+                    // das can_build_here (corners_carry: Ecke >= 2) ebenso traegt. Bis heute
+                    // fiel 3 in den »sonst«-Zweig und wurde GESPERRT: nach dem Wegnehmen
+                    // eines Gebaeudes blieben 5..20 der 37 Zellen fuer immer unbebaubar
+                    // (--map-edit-check, Samen 11: 17 von 37). Jetzt zaehlt jede Zone ab
+                    // 2 als Land. Gegenschalter --editor-zone3-alt.
                     int v = z switch
                     {
                         ZoneLand => ImapFree,
+                        > ZoneLand when !Zone3Alt => ImapFree,
                         ZoneShore => ImapRough,
                         _ => ImapBlocked,          // Zone 0: Wasser ODER gesperrt
                     };

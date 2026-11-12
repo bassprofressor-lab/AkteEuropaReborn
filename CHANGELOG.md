@@ -144,6 +144,15 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Removed buildings free their whole footprint again** (bug-818): placing and
+  then removing a building on a generated map in the map editor often gave back only
+  part of the footprint — depending on the map, 5 to 20 of the 37 cells stayed
+  unbuildable for good. Cause: removal read terrain value 3, which the generator
+  writes for open land, as "blocked". Every value from 2 up now counts as land, just
+  like when building. `--map-edit-check` now reports 37 of 37 cells (before e.g.
+  17 of 37) and names every cell still blocked, with the reason;
+  `--map-editor-samen=<number>` makes its map repeatable. Opt-out
+  `--editor-zone3-alt`.
 - **No more sand bars in the forest of generated maps** (bug-817): along forest
   edges there were diagonal rows of sand-coloured bars, visible between the
   bushes. The ground fill under forest cells copied its neighbour's tile — even a

@@ -156,6 +156,15 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Weggenommene Gebäude geben ihren Platz wieder ganz frei** (bug-818): Wer im
+  Karteneditor auf einer erzeugten Karte ein Gebäude setzte und wieder wegnahm,
+  bekam oft nur einen Teil der Grundfläche zurück — je nach Karte blieben 5 bis 20
+  der 37 Zellen für immer unbebaubar. Grund: Das Wegnehmen las den Geländewert 3,
+  den der Generator für offenes Land schreibt, als »gesperrt«. Jetzt gilt jeder
+  Wert ab 2 als Land, wie beim Bauen selbst. Der Prüflauf `--map-edit-check` meldet
+  jetzt 37 von 37 Zellen (vorher z. B. 17 von 37) und nennt bei einem Rest jede
+  gesperrte Zelle mit Grund; `--map-editor-samen=<Zahl>` macht seine Karte
+  wiederholbar. Gegenschalter `--editor-zone3-alt`.
 - **Keine Sandbalken mehr im Wald erzeugter Karten** (bug-817): Am Waldrand
   standen diagonale Reihen sandfarbener Balken, zwischen den Büschen sichtbar.
   Ursache war die Bodenfüllung unter Waldzellen: Sie übernahm die Kachel des
