@@ -144,6 +144,16 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Equally distant neighbours on wide and tall maps** (bug-822): start positions
+  sat at equal ANGLES on an ellipse, so on a wide map they bunched up along the long
+  sides while the two at the ends were far away — 254×125 with 8 players: nearest
+  enemy 69 / 44 cells, road-distance spread 0.327 (limit 0.2). They now sit at equal
+  DISTANCES along the ellipse (straight line 59 / 54, road spread 0.135), still
+  symmetric. Measured on 3 maps that failed before (254×125 twice, 150×200), all
+  passing now; square maps stay practically the same. Also: a lake at the map edge
+  that leaves only 2–3 water cells inside the map becomes land. ⚠ From 3 players on,
+  the same seed now gives a different map than before. Opt-outs
+  `--generator-ring-alt` (placement) and `--generator-sattel-alt`.
 - **Shipped maps: your copy is opened again** (bug-821): opening a shipped map in the
   editor created a NEW working copy every time (`01_kopie`, `01_kopie2`,
   `01_kopie3` …) — the map list filled up with half-finished copies, and last time's

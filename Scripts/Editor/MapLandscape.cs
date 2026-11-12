@@ -227,8 +227,50 @@ public sealed class MapLandscape
                     }
                 if (saettel == vor) break;
             }
+        // bug-822 (12.11.2026): ein See am KARTENRAND kann im Eckraster gross genug sein
+        // (>= MinWaterCorners) und innerhalb der Karte doch nur 2..3 volle Wasserzellen
+        // haben (254x125, Samen 67: Zelle (202,0)) — map-check »Gebiete unter 4 Zellen«.
+        // Solche Zellgebiete werden Land; danach raeumt RemoveSmall die Eckreste ab.
+        int randSeen = 0;
+        if (Array.IndexOf(Core.CommandLine.Args, "--generator-sattel-alt") < 0)
+        {
+            int cw = CW - 1, chh = CH - 1;
+            bool Voll(int x, int y) => water[y * CW + x] && water[y * CW + x + 1] && water[(y + 1) * CW + x] && water[(y + 1) * CW + x + 1];
+            var seen = new bool[cw * chh];
+            var q = new Queue<int>(); var comp = new List<int>();
+            for (int s0 = 0; s0 < cw * chh; s0++)
+            {
+                if (seen[s0] || !Voll(s0 % cw, s0 / cw)) continue;
+                comp.Clear(); q.Enqueue(s0); seen[s0] = true;
+                while (q.Count > 0)
+                {
+                    int i = q.Dequeue(); comp.Add(i);
+                    int x = i % cw, y = i / cw;
+                    foreach (var (nx, ny) in new[] { (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1) })
+                    {
+                        if (nx < 0 || ny < 0 || nx >= cw || ny >= chh) continue;
+                        int j = ny * cw + nx;
+                        if (seen[j] || !Voll(nx, ny)) continue;
+                        seen[j] = true; q.Enqueue(j);
+                    }
+                }
+                if (comp.Count >= 4) continue;
+                foreach (int i in comp)
+                {
+                    int x = i % cw, y = i / cw;
+                    foreach (int v in new[] { y * CW + x, y * CW + x + 1, (y + 1) * CW + x, (y + 1) * CW + x + 1 })
+                    {
+                        water[v] = false;
+                        if (sym) water[MV(v)] = false;
+                    }
+                }
+                randSeen++;
+            }
+            if (randSeen > 0) RemoveSmall(water, CW, CH, true, MinWaterCorners, null);
+        }
         int nW = 0; foreach (bool b in water) if (b) nW++;
-        if (saettel > 0) say($"Wassersattel aufgeloest: {saettel} Ecken (bug-820)");
+        if (saettel > 0 || randSeen > 0)
+            say($"Wassersattel aufgeloest: {saettel} Ecken (bug-820); Kleinstseen am Rand zu Land: {randSeen} (bug-822)");
         say($"Eckgelaende {w}x{h}: Wasser {nW} von {NV} Ecken ({100.0 * nW / NV:0.0} %, Soll " +
             $"{100 * waterShare:0.0} %), Wellenlaenge {waveL:0} Halbzellen; weg: {removedWater + removedWater2} " +
             $"Wasserflecken < {MinWaterCorners} Ecken, {removedIslands} Inseln < {MinIslandCorners} Ecken; " +
@@ -613,10 +655,38 @@ public sealed class MapLandscape
                 // Spielern Randabstaende 23/13/14/16 (Streuung 0,237)
                 bool half = (MapTerrain.Hash(3, 5, seed ^ 0x57A7u) & 1) != 0;
                 double t0 = -Math.PI / 2 + (half ? Math.PI / n : 0);
-                for (int p = 0; p < n; p++)
+                if (Array.IndexOf(Core.CommandLine.Args, "--generator-ring-alt") >= 0)
+                    for (int p = 0; p < n; p++)
+                    {
+                        double t = t0 + 2 * Math.PI * p / n;
+                        pts.Add((cx + a * Math.Cos(t), cy + b * Math.Sin(t)));
+                    }
+                else
                 {
-                    double t = t0 + 2 * Math.PI * p / n;
-                    pts.Add((cx + a * Math.Cos(t), cy + b * Math.Sin(t)));
+                    // ⭐ 12.11.2026 bug-822: GLEICHE BOGENLAENGE statt gleicher Winkel. Auf
+                    // einer breiten Karte drangen gleiche Winkel die Plaetze an den langen
+                    // Seiten zusammen: 254x125, 8 Spieler, Samen 66 — naechster Gegner
+                    // [69 44 44 45 69 44 44 45], Fahrweg-Streuung 0,327 (Urteil <= 0,2).
+                    // Gestartet wird an derselben Stelle wie vorher (oben bzw. halbe
+                    // Teilung), die Lage bleibt also achsensymmetrisch.
+                    const int N = 4096;
+                    var cum = new double[N + 1];
+                    double Px(double t) => cx + a * Math.Cos(t);
+                    double Py(double t) => cy + b * Math.Sin(t);
+                    for (int k = 1; k <= N; k++)
+                    {
+                        double ta = t0 + 2 * Math.PI * (k - 1) / N, tb = t0 + 2 * Math.PI * k / N;
+                        cum[k] = cum[k - 1] + Math.Sqrt(Math.Pow(Px(tb) - Px(ta), 2) + Math.Pow(Py(tb) - Py(ta), 2));
+                    }
+                    int at = 0;
+                    for (int p = 0; p < n; p++)
+                    {
+                        double ziel = cum[N] * p / n;
+                        while (at < N && cum[at + 1] < ziel) at++;
+                        double f = at < N && cum[at + 1] > cum[at] ? (ziel - cum[at]) / (cum[at + 1] - cum[at]) : 0;
+                        double t = t0 + 2 * Math.PI * (at + f) / N;
+                        pts.Add((Px(t), Py(t)));
+                    }
                 }
             }
             // ganze Zellen, Platte im Rand

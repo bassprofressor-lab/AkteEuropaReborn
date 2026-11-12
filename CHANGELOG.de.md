@@ -156,6 +156,17 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Gleich weite Nachbarn auf breiten und hohen Karten** (bug-822): Die Startplätze
+  lagen mit gleichem WINKEL auf einer Ellipse. Auf einer breiten Karte rückten sie
+  dadurch an den langen Seiten zusammen, während die zwei an den Enden weit weg lagen
+  — 254×125 mit 8 Spielern: nächster Gegner 69 / 44 Zellen, Fahrwegstreuung 0,327
+  (Prüfgrenze 0,2). Jetzt liegen sie im gleichen ABSTAND entlang der Ellipse
+  (Luftlinie 59 / 54, Fahrweg-Streuung 0,135); die Lage bleibt achsensymmetrisch.
+  Gemessen an 3 Karten, die vorher durchfielen (254×125 zweimal, 150×200), jetzt alle
+  bestanden; quadratische Karten bleiben praktisch gleich. Dazu: ein See am Kartenrand,
+  von dem innerhalb der Karte nur 2–3 Wasserzellen übrig bleiben, wird zu Land.
+  ⚠ Dieselbe Zufallszahl ergibt ab 3 Spielern damit eine andere Karte als vorher.
+  Gegenschalter `--generator-ring-alt` (Platzwahl) und `--generator-sattel-alt`.
 - **Mitgelieferte Karten: deine Kopie wird wieder geöffnet** (bug-821): Wer eine
   mitgelieferte Karte im Editor öffnete, bekam bei JEDEM Öffnen eine neue Arbeitskopie
   (`01_kopie`, `01_kopie2`, `01_kopie3` …) — die Kartenliste lief mit halbfertigen
