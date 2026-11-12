@@ -68,6 +68,9 @@ public partial class MapEditOverlay : Node2D
     private int _unitAt;
     private readonly List<int> _types = new();
     private readonly List<int> _props = new();
+    /// <summary>C4: je Objektcode, was er auf dieser Karte ist (aus der Belegung sec6
+    /// der Zellen, auf denen er steht) und wie oft er vorkommt.</summary>
+    private readonly Dictionary<int, (string Art, int Anzahl)> _propInfo = new();
     private Vector2I? _hover;
     private string _say = "";
 
@@ -707,6 +710,7 @@ public partial class MapEditOverlay : Node2D
             }
 
         var seen = new Dictionary<int, int>();
+        var artZahl = new Dictionary<(int, string), int>();
         for (int c = 0; c < _map.Width; c++)
             for (int r = 0; r < _map.Height; r++)
             {
@@ -714,10 +718,22 @@ public partial class MapEditOverlay : Node2D
                 if (code < CwpFile.ObjectCodeBase) continue;
                 if (bTiles.Contains(code - CwpFile.ObjectCodeBase)) continue;
                 seen[code] = seen.TryGetValue(code, out int n) ? n + 1 : 1;
+                int bel = BelegungAt(c, r);
+                string art = Import.MapForest.IstWald(bel) ? "Wald"
+                           : bel >= Import.MapForest.ObjektVon && bel < Import.MapForest.ObjektBis ? "zerstoerbar"
+                           : "Fels/Hindernis";
+                artZahl[(code, art)] = artZahl.TryGetValue((code, art), out int k) ? k + 1 : 1;
             }
         var all = new List<KeyValuePair<int, int>>(seen);
         all.Sort((a, b) => b.Value != a.Value ? b.Value.CompareTo(a.Value) : a.Key.CompareTo(b.Key));
         foreach (var kv in all) _props.Add(kv.Key);
+        foreach (var kv in all)
+        {
+            string best = "Fels/Hindernis"; int bn = -1;
+            foreach (var ak in artZahl)
+                if (ak.Key.Item1 == kv.Key && ak.Value > bn) { bn = ak.Value; best = ak.Key.Item2; }
+            _propInfo[kv.Key] = (best, kv.Value);
+        }
     }
 
     // ---- die Bedienleiste ---------------------------------------------------
@@ -1088,7 +1104,7 @@ public partial class MapEditOverlay : Node2D
         _mine.Add((cell.X, cell.Y, Brush.Gleis));
         RefreshRailAround(cell);
         MapEditSession.Dirty = true;
-        _say = $"Gleis auf ({cell.X},{cell.Y}), Linie {_line} — sichtbar nach F5";
+        _say = $"Gleis auf ({cell.X},{cell.Y}), Zugstrecke {_line + 1} — sichtbar nach F5";
     }
 
     /// <summary>Das Bild einer Gleiszelle aus ihren Nachbarn UND ihrem
@@ -1345,4 +1361,26 @@ public partial class MapEditOverlay : Node2D
         MapFactory.Ground.Water => new Color(0.3f, 0.6f, 1f, 0.9f),
         _ => new Color(1f, 0.3f, 0.3f, 0.9f),
     };
+
+    /// <summary>C4: die Belegung sec6 einer Zelle (u16, Index col*256+row).</summary>
+    private int BelegungAt(int c, int r)
+    {
+        var imap = _map.Sec(6);
+        int i = (c * MapFactory.ImapStride + r) * 2;
+        return imap == null || i + 1 >= imap.Length ? 0 : imap[i] | (imap[i + 1] << 8);
+    }
+
+    /// <summary>C4: der Listentext eines Objekts — Art, Nummer, Haeufigkeit.</summary>
+    private string PropText(int code, bool zweizeilig = false)
+        => _propInfo.TryGetValue(code, out var pi)
+            ? $"{pi.Art} Nr. {code - CwpFile.ObjectCodeBase}{(zweizeilig ? " · " : "  ")}{pi.Anzahl}x auf der Karte"
+            : $"Objekt Nr. {code - CwpFile.ObjectCodeBase}";
+
+    /// <summary>C4: der Listentext einer Einheit — Fahrwerk und Waffe.</summary>
+    private static string UnitText(MapEditUnits.Kind u, bool zweizeilig = false)
+    {
+        string w = MapEditUnits.SatzOf(u.Type) is { } s ? MapEntityLayer.EditorWaffenName(s.Weapon) : "";
+        string t = w.Length > 0 ? $"{u.Name} · {w}" : u.Name;
+        return u.Art is 4 or 5 ? $"{t}  (nur Wasser)" : t;
+    }
 }

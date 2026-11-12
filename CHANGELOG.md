@@ -144,6 +144,15 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Clear names in the map editor**: units were only named after their chassis
+  ("Reifen", "Ketten"), objects "Objekt 555" and rails "Linie 0..9". Every unit now
+  shows its weapon too ("Ketten · Leichte Bordkanone", names from the game's
+  component table), every object what it is and how often it appears on the map
+  ("Wald Nr. 647 · 40x auf der Karte", read from the map's occupancy: forest,
+  destructible or rock/obstacle), and rails are called "Zugstrecke 1..10" with a
+  note that rails with the same number form one line. The selection list now gets
+  the full width (the preview sits small in the header), and every entry also
+  shows its full name as a tooltip.
 - **"Play in skirmish" with a choice**: the map editor's button used to always
   start you as player 1 against up to seven computer opponents on whatever level was
   last set in the skirmish setup, and after the match you ended up in the main menu.

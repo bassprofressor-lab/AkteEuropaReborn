@@ -181,8 +181,15 @@ public partial class MapEditOverlay
         v.AddChild(_pTool);
 
         // Auswahl
+        // C4 (12.11.2026): das Vorschaubild sitzt in der Kopfzeile, damit die Liste die
+        // volle Breite hat — »Schwere Ketten · Schwere Bordkanone« passte sonst nicht.
+        var kopf = new HBoxContainer();
+        kopf.AddThemeConstantOverride("separation", 6);
+        v.AddChild(kopf);
         _pListHead = Head("Auswahl");
-        v.AddChild(_pListHead);
+        _pListHead.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _pListHead.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        kopf.AddChild(_pListHead);
         var sel = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         sel.AddThemeConstantOverride("separation", 6);
         v.AddChild(sel);
@@ -200,12 +207,12 @@ public partial class MapEditOverlay
         sel.AddChild(_pList);
         _pPreview = new TextureRect
         {
-            CustomMinimumSize = new Vector2(96, 96),
+            CustomMinimumSize = new Vector2(72, 56),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             SizeFlagsVertical = Control.SizeFlags.ShrinkBegin,
         };
-        sel.AddChild(_pPreview);
+        kopf.AddChild(_pPreview);
 
         // Besitzer
         _pOwnerBox = new VBoxContainer();
@@ -383,7 +390,7 @@ public partial class MapEditOverlay
                                "nimmt das Gebaeude unter der Maus weg"),
             Brush.Gegenstand => ("setzt das gewaehlte Objekt (Baum, Fels …) — sichtbar nach F5",
                                  "nimmt das Objekt unter der Maus weg"),
-            Brush.Gleis => ($"legt ein Gleisstueck ({sel}); Ecken und Rampen waehlt der Editor — sichtbar nach F5",
+            Brush.Gleis => ($"legt ein Gleisstueck ({sel}; Gleise mit derselben Nummer bilden eine Strecke, auf der ein Zug faehrt); Ecken und Rampen waehlt der Editor — sichtbar nach F5",
                             "nimmt das Gleisstueck weg"),
             Brush.Einheit => ($"stellt {sel} fuer {OwnerName(_owner)} auf",
                               "nimmt die Einheit unter der Maus weg (verschwindet nach F5)"),
@@ -414,9 +421,9 @@ public partial class MapEditOverlay
     private string Selection() => _brush switch
     {
         Brush.Gebaeude => _types.Count > 0 ? $"»{KachelsatzInfo.GebaeudeName(_typ)}«" : "kein Gebaeude im Kachelsatz",
-        Brush.Gegenstand => _props.Count > 0 ? $"Objekt {_props[_propAt] - CwpFile.ObjectCodeBase}" : "diese Karte hat keine Objekte",
-        Brush.Gleis => $"Linie {_line}",
-        Brush.Einheit => $"»{MapEditUnits.All[_unitAt].Name}«",
+        Brush.Gegenstand => _props.Count > 0 ? PropText(_props[_propAt]) : "diese Karte hat keine Objekte",
+        Brush.Gleis => $"Zugstrecke {_line + 1}",
+        Brush.Einheit => $"»{UnitText(MapEditUnits.All[_unitAt])}«",
         Brush.Gelaende => $"»{GroundName(_ground)}«" + (MapEditSession.Tiles == null ? " ⚠ ohne Kacheltabelle" : ""),
         Brush.Hoehe => "Hoehe aendern",
         Brush.Vorkommen => "Vorkommen",
@@ -449,17 +456,19 @@ public partial class MapEditOverlay
             case Brush.Gegenstand:
                 _pListHead.Text = "Wald/Fels (wie auf dieser Karte)";
                 for (int i = 0; i < _props.Count; i++)
-                    _pList.AddItem($"Objekt {_props[i] - CwpFile.ObjectCodeBase}",
+                    _pList.AddItem(PropText(_props[i], true),
                                    cwp != null && pal != null ? MapEditIcons.Prop(cwp, pal, _props[i]) : null);
                 break;
             case Brush.Gleis:
-                _pListHead.Text = "Gleislinie";
-                for (int i = 0; i < RailLines; i++) _pList.AddItem($"Linie {i}");
+                // C4: »Linie 0..9« sagte nicht, was eine Linie ist — es ist die Zugstrecke,
+                // zu der ein Gleisstueck gehoert (sec22 +4; ein Zug faehrt auf seiner Strecke).
+                _pListHead.Text = "Zugstrecke (Gleise mit derselben Nummer bilden eine Strecke)";
+                for (int i = 0; i < RailLines; i++) _pList.AddItem($"Zugstrecke {i + 1}");
                 break;
             case Brush.Einheit:
                 _pListHead.Text = "Einheit";
                 foreach (var u in MapEditUnits.All)
-                    _pList.AddItem(u.Art is 4 or 5 ? $"{u.Name}  (nur Wasser)" : u.Name, MapEditIcons.Unit(u.Type));
+                    _pList.AddItem(UnitText(u, true), MapEditIcons.Unit(u.Type));
                 break;
             case Brush.Gelaende:
                 _pListHead.Text = "Bodenart";
@@ -489,6 +498,8 @@ public partial class MapEditOverlay
                 _pPreview.Visible = false;
                 break;
         }
+        if (_brush is Brush.Einheit or Brush.Gegenstand or Brush.Gebaeude)          // C4: voller Name als Tooltip
+            for (int i = 0; i < _pList.ItemCount; i++) _pList.SetItemTooltip(i, _pList.GetItemText(i));
         _fillingList = false;
     }
 

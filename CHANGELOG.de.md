@@ -156,6 +156,15 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Verständliche Namen im Karteneditor**: Einheiten hießen nur nach ihrem Fahrwerk
+  (»Reifen«, »Ketten«), Objekte »Objekt 555« und Gleise »Linie 0..9«. Jetzt steht
+  bei jeder Einheit die Waffe dabei (»Ketten · Leichte Bordkanone«, Namen aus der
+  Bauteiltafel des Spiels), bei jedem Objekt, was es ist und wie oft es auf der
+  Karte steht (»Wald Nr. 647 · 40x auf der Karte«, aus der Belegung der Karte:
+  Wald, zerstörbar oder Fels/Hindernis), und Gleise heißen »Zugstrecke 1..10« mit
+  dem Hinweis, dass Gleise mit derselben Nummer eine Strecke bilden. Die Auswahlliste
+  hat dafür die volle Breite (das Vorschaubild sitzt jetzt klein in der Kopfzeile),
+  und jeder Eintrag zeigt seinen vollen Namen auch als Tooltip.
 - **»Im Gefecht spielen« mit Wahl**: Der Knopf im Karteneditor startete bisher
   immer als Spieler 1 gegen bis zu sieben Computergegner auf der Stufe, die zuletzt
   im Gefechtsaufbau stand, und nach der Partie landete man im Startmenü. Jetzt fragt

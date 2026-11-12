@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -197,5 +197,14 @@ public partial class MapEntityLayer
             for (int dy = 0; dy < CwpFile.PatternHeight; dy++)
                 if (p.PatternTile(bt.FirstPattern, dx, dy) != 0) list.Add((dx, dy));
         return list;
+    }
+
+    /// <summary>C4 (12.11.2026): der Name eines Waffenaufsatzes aus der Bauteiltafel
+    /// (component_stats.json), fuer die Auswahlliste des Editors; "" wenn unbekannt.</summary>
+    public static string EditorWaffenName(int comp)
+    {
+        if (comp <= 0) return "";
+        string n = WeaponOf(comp).Name;
+        return n.StartsWith("BAUTEIL") ? "" : n;
     }
 }
