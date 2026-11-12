@@ -156,6 +156,18 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Keine blauen Punkte mehr nach dem Malen** (bug-819): Wer im Karteneditor auf
+  einer erzeugten Karte die Höhe änderte oder Geröll malte, bekam rundherum
+  Kacheln, deren Ecken nicht zusammenpassten — mitten im Land tauchten kleine
+  blaue Wasserpunkte auf, und die Prüfung meldete eine Beanstandung. Grund: Der
+  Generator wählt seine Kacheln nach den vier Ecken, die Pinsel zogen sie noch aus
+  der alten Tabelle und legten dabei den ganzen Umkreis neu (bis zu 75 Kacheln je
+  Klick). Jetzt arbeiten die Pinsel wie der Generator: Sie lesen die Ecken aus den
+  liegenden Kacheln, ziehen nur Zellen neu, deren Ecken oder Hang sich wirklich
+  geändert haben, und lassen den Rest liegen. Gemessen nach drei Anhebungen und
+  acht Geröllstrichen: 0 statt 8 blaue Punkte, Eckpassquote 99,98 % statt 99,57 %
+  (Originalkarten 99,96–100 %), harte Nähte 0,25 % statt 0,37 %. Die Prüfung nennt
+  bei blauen Punkten jetzt auch deren Lage. Gegenschalter `--editor-pinsel-ecken-alt`.
 - **Weggenommene Gebäude geben ihren Platz wieder ganz frei** (bug-818): Wer im
   Karteneditor auf einer erzeugten Karte ein Gebäude setzte und wieder wegnahm,
   bekam oft nur einen Teil der Grundfläche zurück — je nach Karte blieben 5 bis 20

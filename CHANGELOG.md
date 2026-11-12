@@ -144,6 +144,18 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **No more blue dots after painting** (bug-819): changing the height or painting
+  rubble on a generated map in the map editor left tiles around the stroke whose
+  corners didn't match — small blue water dots appeared in the middle of land, and
+  the check reported a complaint. Cause: the generator picks tiles by their four
+  corners, while the brushes still drew from the old table and re-laid the whole
+  surrounding area (up to 75 tiles per click). The brushes now work like the
+  generator: they read the corners from the tiles already there, re-pick only cells
+  whose corners or slope actually changed, and leave the rest alone. Measured after
+  three raises and eight rubble strokes: 0 instead of 8 blue dots, corner match
+  99.98 % instead of 99.57 % (original maps 99.96–100 %), hard seams 0.25 % instead
+  of 0.37 %. The check now also says where any blue dots are. Opt-out
+  `--editor-pinsel-ecken-alt`.
 - **Removed buildings free their whole footprint again** (bug-818): placing and
   then removing a building on a generated map in the map editor often gave back only
   part of the footprint — depending on the map, 5 to 20 of the 37 cells stayed

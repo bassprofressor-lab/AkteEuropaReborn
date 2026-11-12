@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -108,7 +108,7 @@ public static class MapEditTerrain
                    "erst die Hoehe angleichen";
 
         MapFactory.Paint(m, col, row, m.CodeAt(col, row), elev, g);
-        Refresh(m, model, pal, col, row, seed, seams);
+        Refresh(m, model, pal, col, row, seed, seams, (int)g);
         return null;
     }
 
@@ -292,23 +292,59 @@ public static class MapEditTerrain
     /// Kachel anders zieht als der Generator, malt sichtbare Flicken.</para>
     /// </summary>
     private static void Refresh(CwmFile m, TileModel? model, TilePalette? pal,
-                                int col, int row, uint seed, TileSeams? seams)
+                                int col, int row, uint seed, TileSeams? seams, int malKlasse = -1)
     {
         LastRetiled = LastMissing = LastShoreFixed = LastShoreLeft = LastPropsKept = 0;
+        LastCornerPicked = LastCornerKept = 0;
         var grid = Grid(m);
         var dist = TileModel.WaterDistance(m.Width, m.Height, grid);
         var inner = pal == null ? new HashSet<int>() : new HashSet<int>(pal.Ground);
         Func<int, int, bool, double>? seamCost = seams == null ? null : seams.Cost;
         int tries = seams?.Tries ?? 1;
 
+        FlagBeimLegen.Clear();
         for (int dy = -Reach; dy <= Reach; dy++)
             for (int dx = -Reach; dx <= Reach; dx++)
             {
                 int c = col + dx, r = row + dy;
                 if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) continue;
+                FlagBeimLegen[(c, r)] = m.FlagAt(c, r);
                 int f = HangOf(m, c, r);
                 m.SetCell(c, r, m.CodeAt(c, r), m.ElevAt(c, r), f < 0 ? 0 : f);
             }
+
+        // ⭐ 12.11.2026 bug-819: DER ECKWEG. Der Generator waehlt seine Kacheln seit
+        // bug-771 nach den VIER ECKSTOFFEN (TileCorners); dieser Pinsel zog bis heute
+        // aus der alten Tabelle (TileModel) und kachelte dabei den ganzen Umkreis neu.
+        // Auf einer erzeugten Karte passten danach die Ecken nicht mehr: nach drei
+        // Anhebungen und acht Geroellstrichen meldete map-check 8 »Wasserflecken im
+        // Land« (blaue Punkte), vorher 0. Jetzt: die Eckstoffe des Umkreises aus den
+        // liegenden Kacheln lesen, bei einer Klassenmalerei die vier Ecken der Zelle
+        // auf den Stoff der neuen Klasse setzen, und nur Zellen neu ziehen, deren
+        // Ecken oder Hangbyte sich geaendert haben — der Rest bleibt liegen. Passt
+        // keine gemessene Kachel zu Ecken+Hangbyte, faellt die Zelle auf den alten
+        // Weg zurueck (gezaehlt). Gegenschalter --editor-pinsel-ecken-alt.
+        var tc = EckModell(m);
+        int[]? vtx = null; int vx0 = col - Reach, vy0 = row - Reach, vw = 2 * Reach + 2;
+        int ziel = -1;
+        if (tc != null)
+        {
+            vtx = new int[vw * vw];
+            for (int vy = 0; vy < vw; vy++)
+                for (int vx = 0; vx < vw; vx++)
+                    vtx[vy * vw + vx] = EckStoff(m, tc, vx0 + vx, vy0 + vy);
+            ziel = malKlasse >= 0 ? StoffDerKlasse(tc, malKlasse) : -1;
+            if (ziel >= 0)
+                for (int k = 0; k < 4; k++)
+                    vtx[(row - vy0 + k / 2) * vw + (col - vx0 + k % 2)] = ziel;
+        }
+        int QuadAus(int c, int r)
+        {
+            int a0 = vtx![(r - vy0) * vw + (c - vx0)], a1 = vtx[(r - vy0) * vw + (c - vx0 + 1)];
+            int a2 = vtx[(r - vy0 + 1) * vw + (c - vx0)], a3 = vtx[(r - vy0 + 1) * vw + (c - vx0 + 1)];
+            if (a0 < 0 || a1 < 0 || a2 < 0 || a3 < 0) return -1;
+            return TileCorners.Quad(a0, a1, a2, a3);
+        }
 
         // ⚠ Zeilenweise von oben links nach unten rechts, wie im Generator:
         // die Nahtwahl fragt nach dem WESTLICHEN und dem NOERDLICHEN Nachbarn,
@@ -339,6 +375,33 @@ public static class MapEditTerrain
                 // Mit dem <c>continue</c>: <b>653 von 653</b>.
                 if (m.CodeAt(c, r) >= CwpFile.ObjectCodeBase) { LastPropsKept++; continue; }
                 int i = r * m.Width + c;
+                // ⚠ Gemessen (Kachelsatz 47): »rau« hat KEINEN eigenen Eckstoff — Geroell
+                // gibt es in den Originalen nur am Hang. Fuer die bemalte Zelle selbst
+                // bleibt dann der alte Weg (sonst hiesse sie rau und saehe aus wie Wiese);
+                // ihre Nachbarn bleiben liegen.
+                bool alterWeg = malKlasse >= 0 && ziel < 0 && c == col && r == row;
+                if (tc != null && !alterWeg)
+                {
+                    int quad = QuadAus(c, r);
+                    int alt = m.CodeAt(c, r);
+                    int flag = m.FlagAt(c, r);
+                    if (quad >= 0 && tc.Knows(alt) && tc.QuadOf(alt) == quad && tc.Has(quad, flag)
+                        && FlagBeimLegen.TryGetValue((c, r), out int f0) && f0 == flag)
+                    { LastCornerKept++; continue; }               // Ecken und Hang wie vorher: liegen lassen
+                    if (quad >= 0 && tc.Has(quad, flag))
+                    {
+                        uint roll0 = MapTerrain.Hash(c, r, seed ^ 0xC0DEu);
+                        int w0 = c > 0 && m.CodeAt(c - 1, r) < TileCorners.GroundMax ? m.CodeAt(c - 1, r) : -1;
+                        int n0 = r > 0 && m.CodeAt(c, r - 1) < TileCorners.GroundMax ? m.CodeAt(c, r - 1) : -1;
+                        int k0 = tc.Pick(quad, flag, roll0, seamCost, Math.Min(tries, 12), w0, n0);
+                        if (k0 >= 0)
+                        {
+                            m.SetCell(c, r, k0, m.ElevAt(c, r), flag);
+                            LastCornerPicked++; LastRetiled++;
+                            continue;
+                        }
+                    }
+                }
                 int cls = grid[i];
                 int wm = TileModel.WaterMask(m.Width, m.Height, grid, c, r);
                 // ⚠ DERSELBE Wurf wie im Generator (seed ^ 0xC0DE, nicht ein
@@ -381,5 +444,66 @@ public static class MapEditTerrain
                 m.SetCell(c, r, code, m.ElevAt(c, r), m.FlagAt(c, r));
                 LastRetiled++;
             }
+    }
+
+    // ---- bug-819: der Eckweg ------------------------------------------------
+
+    /// <summary>Wie viele Zellen der letzte Strich nach Ecken neu zog bzw. liegen liess.</summary>
+    public static int LastCornerPicked, LastCornerKept;
+
+    public static bool EckenAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-pinsel-ecken-alt") >= 0;
+
+    private static readonly Dictionary<(int, int), int> FlagBeimLegen = new();
+    private static readonly Dictionary<int, TileCorners?> _eck = new();
+
+    /// <summary>Das Eckmodell des Kachelsatzes, einmal gelernt und behalten.</summary>
+    private static TileCorners? EckModell(CwmFile m)
+    {
+        if (EckenAlt) return null;
+        int ts = m.Tileset;
+        if (!_eck.TryGetValue(ts, out var tc))
+        {
+            try { tc = TileCorners.Learn(ts, _ => { }, MapEditSession.Cwp); }
+            catch (Exception) { tc = null; }
+            _eck[ts] = tc;
+        }
+        return tc;
+    }
+
+    /// <summary>Der Stoff einer Ecke: die Mehrheit der bis zu vier anliegenden
+    /// Bodenkacheln (dieselbe Regel wie map-check »Wasserflecken im Eckraster«).
+    /// −1, wenn keine anliegende Kachel bekannt ist.</summary>
+    private static int EckStoff(CwmFile m, TileCorners tc, int x, int y)
+    {
+        var n = new int[16];
+        int best = -1, bestN = 0;
+        void V(int c, int r, int k)
+        {
+            if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) return;
+            int code = m.CodeAt(c, r);
+            if (code >= TileCorners.GroundMax || !tc.Knows(code)) return;
+            int l = tc.Corner(code, k);
+            if (l < 0 || l > 15) return;
+            n[l]++;
+            if (n[l] > bestN) { bestN = n[l]; best = l; }
+        }
+        V(x - 1, y - 1, 3); V(x, y - 1, 2); V(x - 1, y, 1); V(x, y, 0);
+        return best;
+    }
+
+    /// <summary>Der Stoff, der eine Klasse am haeufigsten traegt: der Stoff, dessen
+    /// gleichfoermige Kachel (vier gleiche Ecken) diese Klasse hat, mit dem
+    /// groessten gemessenen Anteil. −1, wenn es keinen gibt.</summary>
+    private static int StoffDerKlasse(TileCorners tc, int klasse)
+    {
+        int best = -1; double bestA = -1;
+        for (int l = 0; l < tc.Labels; l++)
+        {
+            int q = TileCorners.Quad(l, l, l, l);
+            if (!tc.Has(q, 0) || tc.ClassOf(q) != klasse) continue;
+            double a = l < tc.LabelShare.Length ? tc.LabelShare[l] : 0;
+            if (a > bestA) { bestA = a; best = l; }
+        }
+        return best;
     }
 }

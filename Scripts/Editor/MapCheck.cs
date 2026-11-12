@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -1107,8 +1107,10 @@ public static class MapCheck
                     V(x - 1, y - 1, 3); V(x, y - 1, 2); V(x - 1, y, 1); V(x, y, 0);
                     wc[y * cw + x] = yes > 0 && yes >= no;
                 }
-            var (_, spots) = Tiny(cw, ch, wc, 4);
-            say($"    Wasserflecken im Eckraster unter 4 Ecken (blaue Punkte im Land): {spots}");
+            var spotAt = new List<int>();
+            var (_, spots) = Tiny(cw, ch, wc, 4, spotAt);
+            say($"    Wasserflecken im Eckraster unter 4 Ecken (blaue Punkte im Land): {spots}" +
+                (spots > 0 ? "  bei Ecke " + string.Join(" ", spotAt.Take(12).Select(i => $"({i % cw},{i / cw})")) : ""));
             if (erzeugt && spots > 0) fails.Add($"{spots} Wasserflecken < 4 Ecken");
         }
 
@@ -1253,7 +1255,7 @@ public static class MapCheck
 
     /// <summary>Zellen ohne Vierer-Nachbarn derselben Maske, und Gebiete unter
     /// <paramref name="min"/> Zellen.</summary>
-    private static (int Iso, int Tiny) Tiny(int w, int h, bool[] mask, int min)
+    private static (int Iso, int Tiny) Tiny(int w, int h, bool[] mask, int min, List<int>? wo = null)
     {
         int iso = 0, tiny = 0;
         var seen = new bool[w * h];
@@ -1278,7 +1280,7 @@ public static class MapCheck
                 }
             }
             if (size == 1) iso++;
-            if (size < min) tiny++;
+            if (size < min) { tiny++; wo?.Add(s); }
         }
         return (iso, tiny);
     }
