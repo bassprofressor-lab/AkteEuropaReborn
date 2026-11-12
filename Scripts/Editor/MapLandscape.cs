@@ -93,13 +93,21 @@ public sealed class MapLandscape
 
     public static MapLandscape Build(int w, int h, uint seed, double waterShare, int players,
                                      int plotW, int plotH, TileCorners tc, TileSeams? seams,
-                                     Action<string> say)
+                                     Action<string> say, bool sym = false)
     {
         var L = new MapLandscape(w, h);
         int CW = w + 1, CH = h + 1, NV = CW * CH;
+        // ⭐ 12.11.2026 — P6/D6 (Fable-Pruefung): PUNKTSYMMETRIE (180°). Jede Ecke v hat
+        // ihr Gegenstueck MV(v), jede Zelle i ihr MC(i). Die Felder werden vom
+        // »kanonischen« Teil (kleinerer Index) gespiegelt; Hangbytes rechnet FlagAt
+        // aus den gespiegelten Hoehen neu (sie drehen sich mit). UNSERE SETZUNG.
+        L._sym = sym;
+        int MV(int v) => NV - 1 - v;
+        void SymV<T>(T[] a) { if (sym) for (int v = 0; v < NV; v++) if (MV(v) < v) a[v] = a[MV(v)]; }
 
         // ---- 1. Startplaetze --------------------------------------------------
         var centers = L.PlaceStarts(players, plotW, plotH, seed, say);
+        if (sym) centers = L.StartsSpiegeln(plotW, plotH, say);
         double zrx = plotW / 2.0 + 5, zry = plotH / 2.0 + 5;
         bool InZone(double x, double y, double scale)
         {
@@ -154,6 +162,7 @@ public sealed class MapLandscape
                     if (InZone(x, y, 1.7) || NearSeg(x, y, 3.5)) f[v] += 2.0;
                     order[v] = v;
                 }
+            SymV(f);                                                    // P6
             Array.Sort(order, (a, b) => f[a] != f[b] ? f[a].CompareTo(f[b]) : a.CompareTo(b));
             int nWater = (int)Math.Round(Math.Clamp(waterShare, 0.0, 0.8) * NV);
             for (int k = 0; k < nWater; k++) water[order[k]] = true;
@@ -192,6 +201,7 @@ public sealed class MapLandscape
                          + 0.4 * Math.Min(dist[v], Dw) / Dw;
                     land.Add(v);
                 }
+            SymV(g);                                                    // P6
             land.Sort((a, b) => g[a] != g[b] ? g[a].CompareTo(g[b]) : a.CompareTo(b));
             double landShare = 0;
             for (int d = 1; d <= tc.MaxDepth; d++) landShare += tc.LabelShare[tc.LabelOfDepth[d]];
@@ -285,6 +295,19 @@ public sealed class MapLandscape
                 if (ch2 == 0) break;
             }
             FixCells();
+        }
+        if (sym)
+        {
+            // P6: exakt spiegeln, dann die Kettenregel noch einmal (die Naht in der Mitte)
+            for (int round = 0; round < 4; round++)
+            {
+                int diff = 0;
+                for (int v = 0; v < NV; v++)
+                    if (MV(v) < v && depth[v] != depth[MV(v)]) { depth[v] = Math.Min(depth[v], depth[MV(v)]); depth[MV(v)] = depth[v]; diff++; }
+                if (diff == 0) break;
+                Repair(depth, CW, CH, locked);
+                FixCells();
+            }
         }
         L.CornerSec = new int[NV];
         for (int v = 0; v < NV; v++) L.CornerSec[v] = tc.SecOfLabel[tc.LabelOfDepth[depth[v]]];
@@ -381,6 +404,15 @@ public sealed class MapLandscape
                 }
         if (seg.Count > 0) say($"Korridore zwischen benachbarten Startplaetzen: {seg.Count} Strecken, {corridor} Zellen frei");
 
+        if (sym)
+            for (int i = 0; i < n; i++)
+            {
+                int j = n - 1 - i;                                      // P6: Zelle (w-1-c, h-1-r)
+                if (j >= i) continue;
+                L.Class[i] = L.Class[j];
+                forestCell[i] = forestCell[j];
+            }
+
         // ---- 7. Kacheln -------------------------------------------------------
         Func<int, int, bool, double>? seamCost = seams == null ? null : seams.Cost;
         int tries = seams == null ? 1 : Math.Min(seams.Tries, 12);
@@ -460,6 +492,37 @@ public sealed class MapLandscape
 
     private static int QuadOf(TileCorners tc, int a, int b, int d, int e)
         => TileCorners.Quad(tc.LabelOfDepth[a], tc.LabelOfDepth[b], tc.LabelOfDepth[d], tc.LabelOfDepth[e]);
+
+    // ---- Symmetrie (P6, 12.11.2026) -------------------------------------------
+
+    private bool _sym;
+
+    private bool SymOk()
+    {
+        int n = W * H;
+        for (int i = 0; i < n; i++) if (Elev[i] != Elev[n - 1 - i]) return false;
+        return true;
+    }
+
+    /// <summary>P6: die zweite Haelfte der Platten als Spiegelbild der ersten (180° um die
+    /// Kartenmitte). Bei ungerader Spielerzahl geht das nicht — dann bleibt es beim
+    /// Ring und das wird gesagt.</summary>
+    private List<(double X, double Y)> StartsSpiegeln(int plotW, int plotH, Action<string> say)
+    {
+        var o = new List<(double, double)>();
+        int k = Plots.Count;
+        if (k % 2 == 1)
+            say($"Symmetrie: {k} Spieler ist ungerade — Startplaetze nur auf dem Ring, nicht gespiegelt");
+        else
+            for (int p = k / 2; p < k; p++)
+            {
+                var q = Plots[p - k / 2];
+                Plots[p] = (Plots[p].Player, W - q.Col - plotW, H - q.Row - plotH);
+            }
+        foreach (var (_, c, r) in Plots) o.Add((c + plotW / 2.0, r + plotH / 2.0));
+        if (k % 2 == 0) say($"Symmetrie: {k} Startplaetze paarweise um die Kartenmitte gespiegelt (180°)");
+        return o;
+    }
 
     // ---- Startplaetze --------------------------------------------------------
 
@@ -810,6 +873,7 @@ public sealed class MapLandscape
                 key[i] = Noise(2.0 * c / waveE, r / waveE, seed ^ 0xE1E7u, 3);
                 elig.Add(i);
             }
+        if (_sym) for (int i = 0; i < n; i++) if (n - 1 - i < i) key[i] = key[n - 1 - i];   // P6
         elig.Sort((a, b) => key[a] != key[b] ? key[a].CompareTo(key[b]) : a.CompareTo(b));
         // gemessene Hoehenverteilung, oben bei MaxLevel gedeckelt (UNSERE SETZUNG)
         var share = new double[MaxLevel + 1];
@@ -852,6 +916,12 @@ public sealed class MapLandscape
         int rounds = 0, stepLow = 0, tileLow = 0;
         for (; rounds < 400; rounds++)
         {
+            if (_sym)                                                   // P6: Paare auf das Minimum
+                for (int i = 0; i < n; i++)
+                {
+                    int j = n - 1 - i;
+                    if (j < i && Elev[i] != Elev[j]) { int mn = Math.Min(Elev[i], Elev[j]); Elev[i] = Elev[j] = mn; }
+                }
             int changed = 0;
             for (int i = 0; i < n; i++)
             {
@@ -878,7 +948,7 @@ public sealed class MapLandscape
                     if (Elev[j] > e) { Elev[j] = e; tileLow++; changed++; }
                 }
             }
-            if (changed == 0) break;
+            if (changed == 0 && (!_sym || SymOk())) break;
         }
         int slopes = 0, unrep = 0;
         var lv0 = new int[MaxLevel + 1];

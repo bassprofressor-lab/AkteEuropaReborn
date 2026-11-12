@@ -128,6 +128,16 @@ your own copy of the 1997 game.
     palm trees in the bushes. The picture references came from the host, the
     object image from the local bake. Both now match; everything the simulation
     reads still comes unchanged from the host.
+- **Fair multiplayer maps** (bug-815):
+  - New choice "Symmetrisch: ja": the map is point-symmetric, each half is the
+    other rotated by 180° — water, ground, heights, forest, start positions and
+    deposits. Measured: heights 100 % mirrored, terrain 96 % (the rest is
+    buildings and units). On mirrored start plots base and factory swap sides so
+    the bases really face each other. Even player counts only.
+  - After creating, the status line shows a fairness line: each player's
+    distance to the nearest deposit and the nearest enemy.
+  - The status line only turns yellow for really missing start positions or
+    deposits (a statistics line used to trigger it too).
 - **Painting as you'd expect** (bug-814):
   - Dragging with the mouse button held paints ground, height, forest/rock,
     rails and removal — each cell once per stroke. Before, it was one click per

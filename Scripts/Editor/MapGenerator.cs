@@ -103,7 +103,7 @@ public static class MapGenerator
                                 double waterShare = MapTerrain.WaterShareDefault,
                                 uint seed = 1, TileModel? model = null,
                                 TileSeams? seams = null, CwpFile? cwp = null,
-                                int neutrals = -1)
+                                int neutrals = -1, bool sym = false)
     {
         var m = MapFactory.Empty(width, height, tileset, stem);
         m.Mission = $"Editor {stem} {width}x{height}";
@@ -119,7 +119,7 @@ public static class MapGenerator
             var tc = TileCorners.Learn(tileset, say, cwp);
             if (tc != null && tc.IsChain)
                 return BuildCorners(m, width, height, tc, say, players, troop, waterShare,
-                                    seed, seams, cwp, neutrals);
+                                    seed, seams, cwp, neutrals, sym);
             say(tc == null
                 ? "Eckmodell: keine gelieferte Karte dieses Kachelsatzes — alter Generator"
                 : $"Eckmodell: keine Stoffkette ({tc.ChainWhy}) — alter Generator");
@@ -289,10 +289,10 @@ public static class MapGenerator
     private static CwmFile BuildCorners(CwmFile m, int width, int height, TileCorners tc,
                                         Action<string> say, int players, int troop,
                                         double waterShare, uint seed, TileSeams? seams,
-                                        CwpFile? cwp, int neutrals)
+                                        CwpFile? cwp, int neutrals, bool sym = false)
     {
         int want = players <= 0 ? 0 : Math.Min(players, StartmarkeAlt ? 5 : PlayersMax);
-        var L = MapLandscape.Build(width, height, seed, waterShare, want, PlotW, PlotH, tc, seams, say);
+        var L = MapLandscape.Build(width, height, seed, waterShare, want, PlotW, PlotH, tc, seams, say, sym);
         for (int r = 0; r < height; r++)
             for (int c = 0; c < width; c++)
             {
@@ -324,7 +324,11 @@ public static class MapGenerator
         foreach (var (p, col, row) in L.Plots) starts.Add(new Start(p, col, row, PlotW, PlotH));
         if (want > 0 && starts.Count < want)
             say($"⚠ nur {starts.Count} von {want} Startplaetzen passen auf {width}x{height}");
-        int usedSlots = starts.Count > 0 ? Populate(m, L.Class, width, starts, troop, say, cwp) : 0;
+        // P6: welche Platten Spiegelbilder sind (zweite Haelfte bei gerader Zahl)
+        var gespiegelt = new HashSet<int>();
+        if (sym && starts.Count % 2 == 0)
+            for (int p = starts.Count / 2; p < starts.Count; p++) gespiegelt.Add(starts[p].Player);
+        int usedSlots = starts.Count > 0 ? Populate(m, L.Class, width, starts, troop, say, cwp, gespiegelt) : 0;
 
         var clear = new List<(int Col, int Row)>();
         var fair = new List<(int Col, int Row)>();
@@ -338,11 +342,50 @@ public static class MapGenerator
             // Truppe unter der Basis (Heimpunkt aus den Einheiten,
             // GefechtStartbasis). Mit der Plattenmitte kippten bei 8 Spielern
             // die Gebietsgrenzen: Vorkommen [1 1 1 1 1 2 0 1] im Pruefstand.
-            fair.Add((s.Col + 3, s.Row + BaseFootH + 1));
+            fair.Add(gespiegelt.Contains(s.Player) ? (s.Col + PlotW - 4, s.Row + BaseFootH + 1)
+                                                   : (s.Col + 3, s.Row + BaseFootH + 1));
         }
         MapNeutrals.Place(m, seed, cwp, usedSlots, clear, say, neutrals, fair);
         MapDeposits.Place(m, seed, cwp, say, fair);
+        if (sym) VorkommenSpiegeln(m, say);                              // P6
+        // ⭐ 12.11.2026 — P6/D6: FAIRNESS-ZEILE. Je Spieler die Entfernung vom Heimpunkt
+        // zum naechsten Vorkommen und zum naechsten Gegner; der Editorschirm zeigt sie.
+        if (fair.Count >= 2)
+        {
+            var vk = new List<double>(); var geg = new List<double>();
+            for (int p = 0; p < fair.Count; p++)
+            {
+                double best = double.MaxValue, bg = double.MaxValue;
+                foreach (var (tc2, tr2, _) in m.Terra)
+                    best = Math.Min(best, Math.Sqrt(Math.Pow(tc2 - fair[p].Col, 2) + Math.Pow(tr2 - fair[p].Row, 2)));
+                for (int q = 0; q < fair.Count; q++)
+                    if (q != p) bg = Math.Min(bg, Math.Sqrt(Math.Pow(fair[q].Col - fair[p].Col, 2) + Math.Pow(fair[q].Row - fair[p].Row, 2)));
+                if (best < double.MaxValue) vk.Add(best);
+                geg.Add(bg);
+            }
+            string Spanne(List<double> l) => l.Count == 0 ? "—" : $"{System.Linq.Enumerable.Min(l):0}–{System.Linq.Enumerable.Max(l):0}";
+            say($"Fairness: naechstes Vorkommen {Spanne(vk)} Felder, naechster Gegner {Spanne(geg)} Felder" +
+                (sym ? " (symmetrisch)" : ""));
+        }
         return m;
+    }
+
+    /// <summary>P6: Vorkommen punktsymmetrisch — die der kanonischen Haelfte bleiben,
+    /// jedes bekommt sein Gegenstueck (w-1-c, h-1-r).</summary>
+    private static void VorkommenSpiegeln(CwmFile m, Action<string> say)
+    {
+        int w = m.Width, h = m.Height, vorher = m.Terra.Count;
+        var neu = new List<(int Col, int Row, int Amount)>();
+        foreach (var t in m.Terra)
+        {
+            int i = t.Row * w + t.Col, j = (h - 1 - t.Row) * w + (w - 1 - t.Col);
+            if (i > j) continue;
+            neu.Add(t);
+            if (i != j) neu.Add((w - 1 - t.Col, h - 1 - t.Row, t.Amount));
+        }
+        m.Terra.Clear();
+        m.Terra.AddRange(neu);
+        say($"Symmetrie: Vorkommen {vorher} -> {m.Terra.Count}, paarweise gespiegelt");
     }
 
     // ========================================================================
@@ -430,7 +473,7 @@ public static class MapGenerator
     /// Ohne diese Zahl haetten die neutralen Gebaeude die Startbasen
     /// ueberschrieben, und zwar still.</summary>
     private static int Populate(CwmFile m, byte[] cls, int tw, List<Start> starts, int troop,
-                                 Action<string> say, CwpFile? cwp = null)
+                                 Action<string> say, CwpFile? cwp = null, HashSet<int>? gespiegelt = null)
     {
         int bldSlot = 0, units = 0, blds = 0;
         // ⭐ 11.11.2026 — bug-740 (E2, M2): die Truppe aus der GEMESSENEN Tafel
@@ -447,6 +490,13 @@ public static class MapGenerator
         {
             int bcol = s.Col, brow = s.Row;
             int fcol = s.Col + BaseFootW + 1, frow = s.Row;
+            // P6 (12.11.2026): auf gespiegelten Platten Werk links, Basis rechts — sonst
+            // liegt die Basis nicht gegenueber, und das naechste Vorkommen war 11..23 entfernt
+            if (gespiegelt != null && gespiegelt.Contains(s.Player))
+            {
+                fcol = s.Col + PlotW - BaseFootW - 1 - FactoryFootW;   // Spiegel von [7..12] in 15 = [2..7]
+                bcol = s.Col + PlotW - BaseFootW;
+            }
             if (MapFactory.PutBuilding(m, bldSlot, BaseType, s.Player, s.Player, bcol, brow,
                                        BaseFootW, BaseFootH, BaseHp, $"Start{s.Player + 1}",
                                        new[] { (4, 2) }, 100, 200, 500, cwp: cwp))

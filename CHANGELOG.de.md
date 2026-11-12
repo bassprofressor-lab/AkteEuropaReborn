@@ -139,6 +139,17 @@ bisher nur dort beschrieben.*
     Gebüsch. Die Bildverweise kamen vom Gastgeber, das Objektbild aber aus dem
     eigenen Backlauf. Jetzt passt beides zusammen; was die Simulation liest,
     kommt weiter unverändert vom Gastgeber.
+- **Faire Mehrspielerkarten** (bug-815):
+  - Neue Auswahl »Symmetrisch: ja«: Die Karte ist punktsymmetrisch, jede Hälfte
+    ist das um 180° gedrehte Bild der anderen — Wasser, Bodenarten, Höhen, Wald,
+    Startplätze und Vorkommen. Gemessen: Höhen zu 100 % gespiegelt, Gelände zu
+    96 % (der Rest sind Gebäude und Einheiten). Auf gespiegelten Startplätzen
+    stehen Basis und Werk seitenverkehrt, damit die Basen wirklich
+    gegenüberliegen. Geht nur bei gerader Spielerzahl.
+  - Nach dem Erzeugen steht eine Fairness-Zeile in der Statuszeile: Entfernung
+    jedes Spielers zum nächsten Vorkommen und zum nächsten Gegner.
+  - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
+    Vorkommen (vorher schlug auch eine Statistikzeile an).
 - **Malen wie gewohnt** (bug-814):
   - Mit gedrückter Maustaste ziehen malt Bodenart, Höhe, Wald/Fels, Gleise und
     Wegnehmen — jede Zelle einmal je Strich. Bisher war es ein Klick je Zelle.

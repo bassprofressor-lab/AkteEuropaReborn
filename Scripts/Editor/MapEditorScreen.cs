@@ -393,6 +393,13 @@ public partial class MapEditorScreen : Control
             ("normal", 1.0, "so dicht wie in den Originalkarten"),
             ("viele", 1.7, "deutlich mehr Gebäude zum Einnehmen"),
         }, 2, v => _neutral = v);
+        // ⭐ 12.11.2026 — P6/D6: punktsymmetrische Karte (180°) fuer faire Mehrspielerkarten
+        Stufen("Symmetrisch", new[]
+        {
+            ("nein", 0.0, "freie Landschaft"),
+            ("ja", 1.0, "jede Haelfte ist das um 180° gedrehte Spiegelbild der anderen — Gelaende, " +
+                        "Hoehen, Wald, Startplaetze und Vorkommen; nur bei gerader Spielerzahl"),
+        }, 0, v => _symmetrisch = v > 0);
         form.AddChild(Row("Mengen", mengen));
         _tileset.ItemSelected += _ => ShowTilesetInfo();
 
@@ -849,6 +856,7 @@ public partial class MapEditorScreen : Control
     /// erscheinen.</para></summary>
     private LineEdit _samen = null!;
     private double _wasser = MapTerrain.WaterShareDefault, _neutral = 1.0;
+    private bool _symmetrisch;
     /// <summary>P4: die Karte, die in diesem Schirm eben erzeugt (und nicht bearbeitet) wurde.</summary>
     private string _frischErzeugt = "";
 
@@ -942,6 +950,7 @@ public partial class MapEditorScreen : Control
                    // P4/D1 (12.11.2026): Zufallszahl, Wasser, Neutrale
                    + (uint.TryParse(_samen.Text.Trim(), out uint sm) && sm > 0 ? $",samen={sm}" : "")
                    + $",wasser={_wasser.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                   + (_symmetrisch ? ",symmetrie" : "")
                    + (_neutral <= 0 ? ",ohneneutral"
                       : $",neutralfaktor={_neutral.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
 
@@ -962,10 +971,11 @@ public partial class MapEditorScreen : Control
             _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = false;
             // ⭐ 12.11.2026 — P4/B8: Warnungen gehoeren in die Statuszeile, nicht nur in
             // den Bericht (»nur 0 von 8 Startplaetzen« stand frueher nur dort).
-            var warn = lines.FindAll(l => l.Contains('⚠') && (l.Contains("Startpl") || l.Contains("Vorkommen")));   // die zaehlen fuers Spiel
+            var warn = lines.FindAll(l => l.Contains("⚠ nur") || l.Contains("Vorkommen: ⚠"));   // die zaehlen fuers Spiel: fehlende Startplaetze/Vorkommen
             _status.Modulate = warn.Count > 0 ? new Color(1f, 0.82f, 0.35f) : new Color(0.75f, 0.8f, 0.86f);
+            string fairZeile = lines.Find(l => l.Contains("Fairness:")) is { } fz ? "  " + fz[(fz.IndexOf("Fairness:"))..] : "";
             _status.Text = warn.Count == 0
-                ? $"{outName["map_".Length..]} geschrieben. Jetzt prüfen, ansehen, bearbeiten oder spielen."
+                ? $"{outName["map_".Length..]} geschrieben.{fairZeile}"
                 : $"{outName["map_".Length..]} geschrieben — aber {warn.Count} Warnung(en): " +
                   warn[0].Trim().TrimStart('⚠', ' ') + (warn.Count > 1 ? " … (siehe Bericht)" : "");
             if (_autoRun == "pruefen") OnCheck();

@@ -215,6 +215,7 @@ public partial class MainMenu
         // (keine neutralen Gebaeude, also die Karte von vor dem 14.08.2026).
         int neutrals = -1;
         double neutralFaktor = 1.0;
+        bool sym = false;
         for (int i = 4; i < p.Length; i++)
         {
             if (p[i] == "flach" || p[i] == "flat") flat = true;
@@ -234,6 +235,7 @@ public partial class MainMenu
             else if (p[i].StartsWith("truppe=")) int.TryParse(p[i]["truppe=".Length..], out troop);
             else if (p[i].StartsWith("neutral=")) int.TryParse(p[i]["neutral=".Length..], out neutrals);
             else if (p[i] == "ohneneutral") neutrals = 0;
+            else if (p[i] == "symmetrie") sym = true;                   // P6/D6
             else if (p[i].StartsWith("neutralfaktor=") &&
                      double.TryParse(p[i]["neutralfaktor=".Length..], System.Globalization.NumberStyles.Float,
                                      System.Globalization.CultureInfo.InvariantCulture, out double nf))
@@ -409,7 +411,7 @@ public partial class MainMenu
                 {
                     m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
                                            players, troop, waterShare, seed, model, seams, cwp,
-                                           neutrals);
+                                           neutrals, sym);
                 }
                 finally { MapNeutrals.Faktor = 1.0; }
                 say($"Zufallszahl {seed}, Wasser {waterShare:0.###}, Neutrale x{neutralFaktor:0.##}");
