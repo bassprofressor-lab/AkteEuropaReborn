@@ -196,6 +196,16 @@ public partial class MapEditOverlay
             _pinselKnoepfe[pg] = b;
             pinselZeile.AddChild(b);
         }
+        // D6 (12.11.2026): Spiegeln beim Malen
+        _spiegelKnopf = new Button
+        {
+            Text = "⇅ Spiegeln", ToggleMode = true, FocusMode = Control.FocusModeEnum.None,
+            CustomMinimumSize = new Vector2(0, 30),
+            TooltipText = "Taste M: jeder Strich wird zugleich um die Kartenmitte gedreht gemalt (180°, wie bei "
+                        + "symmetrisch erzeugten Karten) — fuer Bodenart, Hoehe, Wald/Fels und Gleise.",
+        };
+        _spiegelKnopf.Toggled += an => { _spiegeln = an; _say = an ? "Spiegeln AN (Bodenart, Hoehe, Wald/Fels, Gleise)" : "Spiegeln aus"; Refresh(); };
+        pinselZeile.AddChild(_spiegelKnopf);
         pinselZeile.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
         var zur = new Button { Text = "↶ zurück", TooltipText = "Rueckgaengig (Strg+Z)", FocusMode = Control.FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 30) };
         zur.Pressed += Rueckgaengig;

@@ -161,3 +161,53 @@ public partial class MapEditOverlay
         GetTree().Quit(ok ? 0 : 1);
     }
 }
+
+/// <summary><c>--map-edit-spiegel-check</c> — D6 (12.11.2026): Taste M schaltet das Spiegeln
+/// (und NICHT den Entwurfsschirm des Spiels), ein Geroellstrich landet zugleich auf der
+/// gespiegelten Zelle, ein Gebaeude nicht; ein Rueckgaengig nimmt beide zurueck.</summary>
+public partial class MapEditOverlay
+{
+    private async void SpiegelCheck()
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--map-edit-spiegel-check") < 0) return;
+        for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        ulong Abdruck()
+        {
+            ulong h = 14695981039346656037UL;
+            foreach (var a in _map.Sections) foreach (byte b in a) { h ^= b; h *= 1099511628211UL; }
+            return h;
+        }
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.M, PhysicalKeycode = Key.M, Pressed = true });
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.M, PhysicalKeycode = Key.M, Pressed = false });
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        bool designer = _layer.Designer.Active;
+        bool an = _spiegeln;
+        // eine freie Zelle suchen, deren Spiegelzelle auch frei ist
+        Vector2I? z = null;
+        for (int r = 4; r < _map.Height / 2 && z == null; r++)
+            for (int c = 4; c < _map.Width - 4 && z == null; c++)
+            {
+                int sc = _map.Width - 1 - c, sr = _map.Height - 1 - r;
+                if (MapEditTerrain.ClassAt(_map, c, r) == 0 && MapEditTerrain.ClassAt(_map, sc, sr) == 0
+                    && _map.CodeAt(c, r) < CwpFile.ObjectCodeBase && _map.CodeAt(sc, sr) < CwpFile.ObjectCodeBase)
+                    z = new Vector2I(c, r);
+            }
+        ulong h0 = Abdruck();
+        bool spiegelOk = false, rueckOk = false;
+        if (z is { } zz)
+        {
+            _brush = Brush.Gelaende; _ground = MapFactory.Ground.Rough; _pinsel = 1;
+            StrichBeginnen(true); Anwenden(zz, true); StrichEnden();
+            int sc = _map.Width - 1 - zz.X, sr = _map.Height - 1 - zz.Y;
+            spiegelOk = MapEditTerrain.ClassAt(_map, zz.X, zz.Y) == 1 && MapEditTerrain.ClassAt(_map, sc, sr) == 1;
+            GD.Print($"map-edit-spiegel-check: Geroell auf ({zz.X},{zz.Y}) -> Spiegelzelle ({sc},{sr}) " +
+                     $"{(spiegelOk ? "auch rau" : "NICHT rau")} — {_say}");
+            Rueckgaengig();
+            rueckOk = Abdruck() == h0;
+        }
+        bool ok = an && !designer && spiegelOk && rueckOk;
+        GD.Print($"map-edit-spiegel-check: Taste M -> Spiegeln {(an ? "AN" : "aus")}, Entwurfsschirm {(designer ? "OFFEN" : "zu")}, " +
+                 $"1x Rueckgaengig {(rueckOk ? "bytegleich" : "ANDERS")} — {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
+        GetTree().Quit(ok ? 0 : 1);
+    }
+}

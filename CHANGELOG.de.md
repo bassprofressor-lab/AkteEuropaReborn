@@ -156,6 +156,12 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Spiegeln beim Malen**: Im Bearbeitungsmodus gibt es neben der Pinselgröße den
+  Knopf **⇅ Spiegeln** (Taste **M**). Ist er an, landet jeder Strich zugleich auf der
+  um die Kartenmitte gedrehten Zelle (180°, genau wie bei symmetrisch erzeugten
+  Karten) — für Bodenart, Höhe, Wald/Fels und Gleise. Gebäude, Einheiten, Startplätze
+  und Vorkommen hängen an Spielern und werden bewusst nicht gespiegelt. Ein
+  Rückgängig nimmt beide Hälften zurück. Prüflauf `--map-edit-spiegel-check`.
 - **Minikarte im Editor ganz anklickbar** (bug-823): Das Bedienfeld des
   Bearbeitungsmodus war höher als sein Platz und wuchs nach unten über den oberen Teil
   der Minikarte — Klicks dort kamen nie an, anklickbar war nur ihr unterer Streifen.

@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -85,9 +85,29 @@ public partial class MapEditOverlay
                 var c = new Vector2I(mitte.X + dx, mitte.Y + dy);
                 if (c.X < 0 || c.Y < 0 || c.X >= _map.Width || c.Y >= _map.Height) continue;
                 if (!_strichZellen.Add((c.X, c.Y))) continue;
+                string say0 = "";
                 if (links) Put(c); else Take(c);
+                say0 = _say;
+                // ⭐ 12.11.2026 D6: SPIEGELN BEIM MALEN — dieselbe Zelle, um die Kartenmitte
+                // gedreht (180°, wie der Generator symmetrische Karten baut, P6). Nur fuer
+                // Gelaende, Hoehe, Wald/Fels und Gleise: Gebaeude, Einheiten, Startplaetze
+                // und Vorkommen haengen an Spielern und Grundflaechen — die spiegelt das
+                // Werkzeug nicht (UNSERE SETZUNG, steht in der Leiste).
+                if (_spiegeln && Spiegelbar(_brush))
+                {
+                    var s = new Vector2I(_map.Width - 1 - c.X, _map.Height - 1 - c.Y);
+                    if (_strichZellen.Add((s.X, s.Y)))
+                    {
+                        if (links) Put(s); else Take(s);
+                        _say = say0 + "  (gespiegelt)";
+                    }
+                }
             }
     }
+
+    /// <summary>D6: Spiegeln beim Malen an/aus (Taste M).</summary>
+    private bool _spiegeln;
+    private static bool Spiegelbar(Brush b) => b is Brush.Gelaende or Brush.Hoehe or Brush.Gegenstand or Brush.Gleis;
 
     /// <summary>Beim Ziehen: neue Zelle unter der Maus?</summary>
     private void Ziehen(Vector2I? zelle)

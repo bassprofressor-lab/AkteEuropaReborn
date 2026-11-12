@@ -68,6 +68,7 @@ public partial class MapEditOverlay : Node2D
     private int _unitAt;
     private readonly List<int> _types = new();
     private readonly List<int> _props = new();
+    private Button? _spiegelKnopf;                                          // D6
     /// <summary>C4: je Objektcode, was er auf dieser Karte ist (aus der Belegung sec6
     /// der Zellen, auf denen er steht) und wie oft er vorkommt.</summary>
     private readonly Dictionary<int, (string Art, int Anzahl)> _propInfo = new();
@@ -109,6 +110,7 @@ public partial class MapEditOverlay : Node2D
         StartCheck();             // P6/D5 (12.11.2026)
         KameraCheck();            // C1 (12.11.2026)
         MinikarteCheck();         // D10 (12.11.2026)
+        SpiegelCheck();           // D6 (12.11.2026)
     }
 
     /// <summary>
@@ -805,6 +807,11 @@ public partial class MapEditOverlay : Node2D
             case Key.Key7: _brush = Brush.Wegnehmen; break;          // bug-802
             case Key.Key8: _brush = Brush.Vorkommen; break;          // P5/D7
             case Key.Key9: _brush = Brush.Startplatz; if (_owner is < 0 or > 7) _owner = 0; break;   // P6/D5
+            case Key.M:                                                      // D6: Spiegeln
+                _spiegeln = !_spiegeln;
+                _spiegelKnopf?.SetPressedNoSignal(_spiegeln);
+                _say = _spiegeln ? "Spiegeln AN (Bodenart, Hoehe, Wald/Fels, Gleise)" : "Spiegeln aus";
+                Refresh(); GetViewport().SetInputAsHandled(); return;
             case Key.Bracketleft: PinselGroesse(-1); Refresh(); QueueRedraw(); GetViewport().SetInputAsHandled(); return;
             case Key.Bracketright: PinselGroesse(+1); Refresh(); QueueRedraw(); GetViewport().SetInputAsHandled(); return;
             case Key.Z when k.CtrlPressed: Rueckgaengig(); GetViewport().SetInputAsHandled(); return;

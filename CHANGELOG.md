@@ -144,6 +144,12 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Mirror while painting**: next to the brush size, edit mode now has a
+  **⇅ Spiegeln** button (key **M**). When on, every stroke also lands on the cell
+  rotated about the map centre (180°, exactly like symmetric generated maps) — for
+  ground type, height, forest/rock and rails. Buildings, units, start positions and
+  deposits belong to players and are deliberately not mirrored. One undo takes back
+  both halves. Check `--map-edit-spiegel-check`.
 - **The editor minimap is fully clickable** (bug-823): the edit-mode panel was taller
   than its space and grew down over the upper part of the minimap — clicks there never
   arrived, only its bottom strip was clickable. The panel now stays above the minimap:
