@@ -511,6 +511,20 @@ public partial class MapEditorScreen : Control
         };
         _open.Pressed += OnOpen;
         openRow.AddChild(_open);
+
+        // ⭐ 12.11.2026 — D8 (Fable-Pruefung): KARTENVERWALTUNG. Eigene und empfangene
+        // Karten umbenennen, kopieren, loeschen (mit Rueckfrage). Mitgelieferte bleiben
+        // gesperrt — die Knoepfe sind dann grau und sagen warum.
+        var verwRow = new HBoxContainer();
+        verwRow.AddThemeConstantOverride("separation", 8);
+        leftCol.AddChild(verwRow);
+        _umbenennen = VerwKnopf("Umbenennen …", "Gibt der gewaehlten Karte einen neuen Namen.", verwRow);
+        _umbenennen.Pressed += () => NamensFrage("Karte umbenennen", "Umbenennen", true);
+        _kopieren = VerwKnopf("Kopie anlegen …", "Legt eine Kopie der gewaehlten Karte unter neuem Namen an.", verwRow);
+        _kopieren.Pressed += () => NamensFrage("Kopie anlegen", "Kopieren", false);
+        _loeschen = VerwKnopf("Loeschen …", "Loescht die gewaehlte Karte (alle vier Dateien) — nach Rueckfrage.", verwRow);
+        _loeschen.Pressed += LoeschFrage;
+        _existing.ItemSelected += _ => VerwStand();
         FillExisting();
 
         var after = new HBoxContainer();
@@ -999,6 +1013,105 @@ public partial class MapEditorScreen : Control
     /// <summary>Die Karten, die schon geschrieben sind — beide Dateien muessen
     /// da sein, denn ohne die <c>.entities.json</c> laesst sich nichts
     /// zusammensetzen.</summary>
+    private Button _umbenennen = null!, _kopieren = null!, _loeschen = null!;
+
+    private Button VerwKnopf(string text, string tip, Control row)
+    {
+        var b = new Button
+        {
+            Text = text, TooltipText = tip, CustomMinimumSize = new Vector2(0, 32),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        row.AddChild(b);
+        return b;
+    }
+
+    /// <summary>Der Name hinter der gewaehlten Zeile, oder "".</summary>
+    private string Gewaehlt()
+    {
+        int at = _existing.Selected;
+        return at >= 0 && at < _existingNames.Count ? _existingNames[at] : "";
+    }
+
+    /// <summary>D8: die drei Knoepfe nur fuer Karten, die man verwalten darf.</summary>
+    private void VerwStand()
+    {
+        if (_umbenennen == null) return;
+        string n = Gewaehlt();
+        string? warum = n.Length == 0 ? "keine Karte gewaehlt" : MapVerwaltung.Gesperrt(n);
+        foreach (var b in new[] { _umbenennen, _kopieren, _loeschen }) b.Disabled = warum != null;
+        // eine mitgelieferte Karte darf man KOPIEREN (das ist der Weg, sie zu aendern)
+        if (n.Length > 0 && MapOpen.IsDelivered(n)) _kopieren.Disabled = false;
+        _loeschen.TooltipText = warum != null
+            ? $"Geht hier nicht: {warum}."
+            : "Loescht die gewaehlte Karte (alle vier Dateien) — nach Rueckfrage.";
+    }
+
+    private void NamensFrage(string titel, string ok, bool umbenennen)
+    {
+        string alt = Gewaehlt();
+        if (alt.Length == 0) return;
+        var feld = new LineEdit { Text = alt["map_".Length..] + (umbenennen ? "" : "_kopie"), CustomMinimumSize = new Vector2(320, 0) };
+        var box = new VBoxContainer();
+        box.AddChild(new Label { Text = $"Neuer Name fuer »{alt["map_".Length..]}« (Buchstaben, Ziffern, _ und -):" });
+        box.AddChild(feld);
+        var d = new ConfirmationDialog { Title = titel, OkButtonText = ok, CancelButtonText = "Abbrechen" };
+        d.AddChild(box);
+        d.Confirmed += () =>
+        {
+            string neu = Sanitise(feld.Text);
+            d.QueueFree();
+            if (neu.Length == 0) { _status.Text = "Kein gueltiger Name — nichts geaendert."; return; }
+            string? f = umbenennen ? MapVerwaltung.Umbenennen(alt, neu) : MapVerwaltung.Kopieren(alt, neu);
+            VerwErgebnis(f, umbenennen ? $"»{alt["map_".Length..]}« heisst jetzt »{neu}«."
+                                       : $"Kopie »{neu}« angelegt.", alt, "map_" + neu.TrimStart());
+        };
+        d.Canceled += () => d.QueueFree();
+        AddChild(d);
+        d.PopupCentered();
+        feld.GrabFocus();
+        feld.SelectAll();
+    }
+
+    private void LoeschFrage()
+    {
+        string alt = Gewaehlt();
+        if (alt.Length == 0) return;
+        var d = new ConfirmationDialog
+        {
+            Title = "Karte loeschen?",
+            DialogText = $"Die Karte »{alt["map_".Length..]}« wird geloescht (alle vier Dateien).\n" +
+                         "Das laesst sich nicht rueckgaengig machen.",
+            OkButtonText = "Loeschen", CancelButtonText = "Abbrechen",
+        };
+        d.Confirmed += () =>
+        {
+            d.QueueFree();
+            VerwErgebnis(MapVerwaltung.Loeschen(alt), $"»{alt["map_".Length..]}« geloescht.", alt, "");
+        };
+        d.Canceled += () => d.QueueFree();
+        AddChild(d);
+        d.PopupCentered();
+    }
+
+    private void VerwErgebnis(string? fehler, string gut, string alt, string waehlen)
+    {
+        _status.Modulate = fehler == null ? new Color(0.6f, 0.95f, 0.6f) : new Color(1f, 0.85f, 0.35f);
+        _status.Text = fehler ?? gut;
+        if (fehler != null) return;
+        // die gehaltene Karte gibt es so nicht mehr: Folgeknoepfe aus
+        if (_made == alt && !MapVerwaltung.Gibt(alt))
+        {
+            _made = "";
+            _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
+        }
+        FillExisting();
+        if (waehlen.Length > 0)
+            for (int i = 0; i < _existingNames.Count; i++)
+                if (_existingNames[i] == waehlen) { _existing.Selected = i; break; }
+        VerwStand();
+    }
+
     private void FillExisting()
     {
         _existing.Clear();
@@ -1032,6 +1145,7 @@ public partial class MapEditorScreen : Control
         Gruppe("Mitgelieferte Karten (werden als Kopie geoeffnet)", geliefert);
         for (int i = 0; i < _existingNames.Count; i++)
             if (_existingNames[i].Length > 0) { _existing.Selected = i; break; }
+        VerwStand();
     }
 
     /// <summary>P3/C2: die Karte, mit der der Bearbeitungsmodus per Esc/Zurueck

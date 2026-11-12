@@ -156,6 +156,13 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Eigene Karten verwalten**: Unter der Kartenauswahl im Karteneditor stehen jetzt
+  drei Knöpfe — **Umbenennen …**, **Kopie anlegen …** und **Löschen …** (mit
+  Rückfrage). Sie wirken auf alle vier Dateien einer Karte, und der Name wird auch
+  im Inneren der Karte nachgezogen. Mitgelieferte Karten bleiben gesperrt (von ihnen
+  lässt sich nur eine Kopie anlegen), vorhandene Namen werden nie überschrieben, und
+  eine Karte mit ungespeicherten Pinselstrichen lässt sich nicht umbenennen oder
+  löschen. Prüflauf `--map-verwaltung-check` (12 Schritte auf echten Dateien).
 - **F5 behält den Blick**: Speichern mit F5 im Karteneditor lädt die Karte neu —
   bisher sprang die Ansicht danach an den Kartenanfang und auf den kleinsten Zoom,
   und man musste die Stelle, an der man gerade malte, erst wieder suchen. Jetzt

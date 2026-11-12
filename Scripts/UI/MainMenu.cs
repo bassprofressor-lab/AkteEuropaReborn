@@ -1330,6 +1330,12 @@ public partial class MainMenu : Control
                 GetTree().Quit(Editor.MapCheck.Run(a["--map-check=".Length..], Say));
                 return;
             }
+            // D8 (12.11.2026): Kartenverwaltung auf echten Dateien durchspielen
+            else if (a == "--map-verwaltung-check")
+            {
+                GetTree().Quit(Editor.MapVerwaltungCheck.Run(Say));
+                return;
+            }
             else if (a.StartsWith("--selftest-rail="))
             {
                 GetTree().Quit(Import.ImportSelfTest.RunRail(a["--selftest-rail=".Length..]));

@@ -144,6 +144,12 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Manage your own maps**: below the map list in the map editor there are now
+  three buttons — **Rename …**, **Make a copy …** and **Delete …** (with a
+  confirmation). They act on all four files of a map and also update the name stored
+  inside it. Shipped maps stay locked (you can only make a copy of them), existing
+  names are never overwritten, and a map with unsaved brush strokes can't be renamed
+  or deleted. Check `--map-verwaltung-check` (12 steps on real files).
 - **F5 keeps your view**: saving with F5 in the map editor reloads the map — until
   now the view then jumped to the start of the map at the smallest zoom, and you had
   to find the spot you were painting all over again. Position and zoom now stay
