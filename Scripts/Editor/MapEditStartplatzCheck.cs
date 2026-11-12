@@ -316,3 +316,59 @@ public partial class MapEditOverlay
         GetTree().Quit(ok ? 0 : 1);
     }
 }
+
+/// <summary><c>--map-edit-sofort-check</c> — D4 (12.11.2026): ein Geroellstrich muss ohne F5
+/// im Bodenbild ankommen (Bildpunkte der Zelle aendern sich), ein Rueckgaengig ebenso
+/// (Bildpunkte wie vorher).</summary>
+public partial class MapEditOverlay
+{
+    private static byte[]? _ganzVorher;
+    private async void SofortCheck()
+    {
+        if (Array.IndexOf(Core.CommandLine.Args, "--map-edit-sofort-check") < 0) return;
+        for (int i = 0; i < 6; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (_layer.GetParent() is not Rendering.MapViewer v || v.EditorBodenTextur == null)
+        { GD.Print("map-edit-sofort-check: DURCHGEFALLEN — kein Bodenbild"); GetTree().Quit(1); return; }
+        Vector2I? z = null;
+        for (int r = 6; r < _map.Height - 6 && z == null; r++)
+            for (int c = 6; c < _map.Width - 6 && z == null; c++)
+                if (MapEditTerrain.ClassAt(_map, c, r) == 0 && _map.FlagAt(c, r) == 0 && _map.CodeAt(c, r) < CwpFile.ObjectCodeBase)
+                    z = new Vector2I(c, r);
+        if (z is not { } zz) { GD.Print("map-edit-sofort-check: DURCHGEFALLEN — keine freie Zelle"); GetTree().Quit(1); return; }
+        var p0 = _layer.EditorCellTopLeft(zz.X, zz.Y);
+        var rect = new Rect2I((int)p0.X, (int)p0.Y, MapBaker.TileW, MapBaker.TileH);
+        byte[] Pixel() { using var im = v.EditorBodenTextur!.GetImage(); return im.GetRegion(rect).GetData(); }
+        bool Gleich(byte[] a, byte[] b) => a.Length == b.Length && a.AsSpan().SequenceEqual(b);
+        var vorher = Pixel();
+        { using var g0 = v.EditorBodenTextur!.GetImage(); _ganzVorher = g0.GetData(); }
+        async System.Threading.Tasks.Task<bool> Warten(int soll)
+        {
+            for (int i = 0; i < 600 && SofortGetauscht < soll; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            return SofortGetauscht >= soll;
+        }
+        _brush = Brush.Gelaende; _ground = MapFactory.Ground.Rough; _pinsel = 3;
+        StrichBeginnen(true); Anwenden(zz, true); StrichEnden();
+        bool b1 = await Warten(1);
+        var nachher = Pixel();
+        bool anders = !Gleich(vorher, nachher);
+        {
+            using var ganz = v.EditorBodenTextur!.GetImage();
+            var d1 = ganz.GetData(); int diff = 0, x0 = int.MaxValue, y0 = int.MaxValue, x1 = 0, y1 = 0, w = ganz.GetWidth();
+            if (_ganzVorher != null && _ganzVorher.Length == d1.Length)
+                for (int i = 0; i < d1.Length; i += 4)
+                    if (d1[i] != _ganzVorher[i] || d1[i + 1] != _ganzVorher[i + 1] || d1[i + 2] != _ganzVorher[i + 2])
+                    { diff++; int px = (i / 4) % w, py = (i / 4) / w; x0 = Math.Min(x0, px); y0 = Math.Min(y0, py); x1 = Math.Max(x1, px); y1 = Math.Max(y1, py); }
+            anders = diff > 0;
+            GD.Print($"map-edit-sofort-check:   ganzes Bild: {diff} Bildpunkte anders, Bereich x {x0}..{x1}, y {y0}..{y1}; Zellrechteck {rect}");
+        }
+        GD.Print($"map-edit-sofort-check: Geroell 3x3 auf {zz}: Bild {(b1 ? "getauscht" : "NICHT getauscht")}, Bild {(anders ? "veraendert" : "UNVERAENDERT")} — {SofortZeile}");
+        Rueckgaengig();
+        bool b2 = await Warten(2);
+        bool zurueck;
+        { using var g2 = v.EditorBodenTextur!.GetImage(); zurueck = _ganzVorher != null && Gleich(_ganzVorher, g2.GetData()); }
+        GD.Print($"map-edit-sofort-check: Rueckgaengig: Bild {(b2 ? "getauscht" : "NICHT getauscht")}, ganzes Bild {(zurueck ? "bytegleich wie vorher" : "ANDERS")}");
+        bool ok = b1 && anders && b2 && zurueck;
+        GD.Print($"map-edit-sofort-check: {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
+        GetTree().Quit(ok ? 0 : 1);
+    }
+}

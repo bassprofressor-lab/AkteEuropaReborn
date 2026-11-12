@@ -114,6 +114,7 @@ public partial class MapEditOverlay : Node2D
         FahrwerkCheck();          // B6 (12.11.2026)
         SpielenCheck();           // C9 (12.11.2026)
         WaldCheck();              // Wald brennt (12.11.2026)
+        SofortCheck();            // D4 (12.11.2026)
     }
 
     /// <summary>

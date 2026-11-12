@@ -71,8 +71,10 @@ public partial class MapEditOverlay
 
     private void StrichEnden()
     {
+        bool warStrich = _strichLinks || _strichRechts;
         _strichLinks = _strichRechts = false;
         _strichZellen.Clear();
+        if (warStrich && Bildwirksam(_brush)) SofortbildPlanen();   // D4
     }
 
     /// <summary>Den Pinsel an dieser Zelle anwenden — mit Groesse, jede Zelle einmal je Strich.</summary>
@@ -128,8 +130,8 @@ public partial class MapEditOverlay
 
     // ---- Rueckgaengig ----------------------------------------------------------
 
-    private void Rueckgaengig() => Springen(_zurueck, _vor, "rückgängig");
-    private void Wiederholen() => Springen(_vor, _zurueck, "wiederholt");
+    private void Rueckgaengig() { Springen(_zurueck, _vor, "rückgängig"); SofortbildPlanen(); }   // D4
+    private void Wiederholen() { Springen(_vor, _zurueck, "wiederholt"); SofortbildPlanen(); }
 
     private void Springen(List<Stand> von, List<Stand> nach, string wort)
     {

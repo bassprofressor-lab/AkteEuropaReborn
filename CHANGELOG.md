@@ -144,6 +144,15 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **Instant picture in the map editor**: every brush stroke used to show only after F5
+  (saving and reloading the whole scene). After a stroke — with a short delay so a drag
+  doesn't bake dozens of times — the editor now bakes a copy of the map in the
+  background, with the same baker as saving, and swaps the ground picture and the
+  trees/rocks in the running view. Measured on 150×150: visible 0.8 s after the stroke;
+  undo is just as quick and brings the picture back byte for byte. Nothing is saved;
+  F5 stays the save. Limit: if a stroke raises a cell above the map's highest level so
+  far, the picture size changes — the panel then says "F5 zeigt es". Check
+  `--map-edit-sofort-check`. Opt-out `--editor-sofortbild-aus`.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original

@@ -1888,6 +1888,9 @@ public sealed class ContentBuilder
 
     /// <summary>The map's own description: size, tileset, and the per-cell grid
     /// the game needs for elevation and walkability.</summary>
+    /// <summary>D4 (12.11.2026): dasselbe Kartenmeta fuer das Sofortbild des Editors.</summary>
+    public static string MapMetaText(CwmFile m, MapBaker b) => MapMeta(m, b);
+
     private static string MapMeta(CwmFile m, MapBaker b)
     {
         var sb = new StringBuilder(1 << 20);

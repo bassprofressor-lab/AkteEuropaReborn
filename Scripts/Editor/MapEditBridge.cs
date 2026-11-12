@@ -214,4 +214,17 @@ public partial class MapEntityLayer
         string n = WeaponOf(comp).Name;
         return n.StartsWith("BAUTEIL") ? "" : n;
     }
+
+    /// <summary>D4 (12.11.2026): Sofortbild des Editors — Bodenbild beim Betrachter tauschen,
+    /// Objektebene aus dem frischen Meta neu aufbauen.</summary>
+    public bool EditorSofortbild(Image boden, Image? objekte, string metaJson, out string warum)
+    {
+        warum = "";
+        if (GetParent() is not MapViewer v) { warum = "kein Kartenbetrachter"; return false; }
+        if (!v.EditorBodenTauschen(boden, out warum)) return false;
+        var meta = Core.JsonMeta.Parse(metaJson);
+        EditorObjektebene(meta, objekte != null ? ImageTexture.CreateFromImage(objekte) : null);
+        QueueRedraw();
+        return true;
+    }
 }

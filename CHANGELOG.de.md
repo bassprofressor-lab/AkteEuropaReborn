@@ -156,6 +156,16 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Sofortbild im Karteneditor**: Bisher war jeder Pinselstrich erst nach F5 im Bild
+  (Speichern und Neuladen der ganzen Szene). Jetzt backt der Editor nach einem Strich —
+  mit kurzer Wartezeit, damit ein Zug nicht dutzendfach backt — eine Kopie der Karte im
+  Hintergrund, mit demselben Backofen wie beim Speichern, und tauscht Bodenbild und
+  Bäume/Felsen im laufenden Bild aus. Gemessen auf 150×150: 0,8 s nach dem Strich ist
+  er zu sehen; Rückgängig wirkt genauso schnell und bringt das Bild bytegleich zurück.
+  Gespeichert wird dabei nichts, F5 bleibt das Speichern. Grenze: hebt ein Strich eine
+  Zelle über die bisher höchste Stufe der Karte, ändert sich die Bildgröße — dann sagt
+  die Leiste »F5 zeigt es«. Prüflauf `--map-edit-sofort-check`. Gegenschalter
+  `--editor-sofortbild-aus`.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:

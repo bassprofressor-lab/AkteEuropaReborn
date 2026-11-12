@@ -550,6 +550,25 @@ public partial class MapEntityLayer
             if (im != null) _objTex = ImageTexture.CreateFromImage(im);
         }
         if (_objTex == null) return;
+        ObjektebeneFuellen(meta, mapName);
+    }
+
+    /// <summary>D4 (12.11.2026): die Objektebene aus einem frisch gebackenen Bild und
+    /// Meta neu aufbauen — ohne Datei, fuer das Sofortbild des Editors.</summary>
+    public void EditorObjektebene(JObj meta, Texture2D? tex)
+    {
+        _objTex = null;
+        _objDraw.Clear();
+        _objSchwelle.Clear();
+        ObjectsBurning = 0;
+        if (NoObjectOcclusion || tex == null) return;
+        _objTex = tex;
+        ObjektebeneFuellen(meta, "(Sofortbild)");
+        QueueRedraw();
+    }
+
+    private void ObjektebeneFuellen(JObj meta, string mapName)
+    {
 
         // ⚠ Der STREIFEN mit den verkohlten Bäumen hängt UNTEN an derselben
         // Ebene an (MapBaker.BurntAtlas). Eine Karte aus einem älteren Import

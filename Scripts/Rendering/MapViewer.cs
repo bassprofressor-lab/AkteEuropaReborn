@@ -9288,6 +9288,26 @@ _mausProbePunkt = karte;
     // Zugriff darauf fuetterte den DisposablesTracker (7/10 Abstuerze, siehe
     // Core.JsonMeta und berichte/sturm-fable.md). JsonObject kennt keinen
     // Finalizer — es gibt nichts mehr zu verwalten.
+    /// <summary>D4 (12.11.2026): das Bodenbild im laufenden Betrachter tauschen. Nur bei
+    /// GLEICHER Groesse — sonst verschiebt sich der Ursprung, an dem Einheiten und
+    /// Gebaeude haengen, und das muss F5 (Neuladen) machen.</summary>
+    public Texture2D? EditorBodenTextur => _sprite.Texture;
+
+    public bool EditorBodenTauschen(Image img, out string warum)
+    {
+        warum = "";
+        if (_sprite.Texture is not { } alt) { warum = "kein Bild geladen"; return false; }
+        var groesse = new Vector2I(img.GetWidth(), img.GetHeight());
+        if ((Vector2I)alt.GetSize() != groesse)
+        {
+            warum = $"Bildgröße ändert sich ({alt.GetWidth()}x{alt.GetHeight()} -> {groesse.X}x{groesse.Y})";
+            return false;
+        }
+        if (alt is ImageTexture it) it.Update(img);
+        else _sprite.Texture = ImageTexture.CreateFromImage(img);
+        return true;
+    }
+
     private static JObj LoadMeta(string name)
         => Core.JsonMeta.Lies(MapFile(name + ".json"));
 
