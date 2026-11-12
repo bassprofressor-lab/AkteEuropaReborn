@@ -111,6 +111,23 @@ your own copy of the 1997 game.
 
 ### Map editor
 
+- **The map editor no longer breaks things** (review by Fable, bug-804..808):
+  - "Create map" overwrote an existing map without asking, and with the name
+    `NET07` or `01` even a shipped one. Names of shipped maps are now refused, a
+    dialog asks before overwriting your own map, and the suggested name is the
+    first free one (`eigen02`, `eigen03` …).
+  - A newly placed building could overwrite an existing one (after removing,
+    saving and placing again). It now takes the first free slot.
+  - Every editor map carried 50 invisible "phantom ramps" in the map corner, so
+    the pioneer could not build a landing ramp on custom maps, and a ramp sprite
+    sat in the top-left corner. New maps are clean, old ones are healed on load.
+  - Saving writes to a temporary file and renames it afterwards, so a crash while
+    saving no longer leaves half a map. The shared tile set files are only
+    written when their content changes.
+  - A map sent over the network looked wrong for the joining player: water and
+    palm trees in the bushes. The picture references came from the host, the
+    object image from the local bake. Both now match; everything the simulation
+    reads still comes unchanged from the host.
 - **Fixed map sizes instead of counting up** (bug-800). Seven sizes to click,
   each modelled on an original map: Small 100×100, Medium 150×150 (like NET03),
   Large 168×168 (NET01), Very large 230×230 (NET02), Huge 254×254 (NET05/06),

@@ -148,9 +148,41 @@ public static class NetzKarte
         Editor.MapGenerator.Write(m, cwp, pal, name, s => GD.Print("netzkarte: " + s));
         // … und die Simulationsdateien wieder byte-gleich zurück: gerechnet wird aus
         // genau den Bytes des Gastgebers, nicht aus einem Rundlauf (MapOpen kennt nicht jeden Block).
-        File.WriteAllBytes($"{MapsDir}/{name}.json", json);
-        File.WriteAllBytes($"{MapsDir}/{name}.entities.json", ent);
-        ulong probe = Pruefsumme(name);
-        GD.Print($"netzkarte: {name} empfangen und gebacken, Prüfsumme {(probe == hash ? "GLEICH" : $"ANDERS {probe:X16}")}");
+        //
+        // ⭐ 12.11.2026 — A4 (Fable-Pruefung): DIE BILDTEILE DER .json GEHOEREN ZUM
+        // EIGENEN objects.png. objects[].bild, burnt und nebelboden[].slot zeigen auf
+        // Streifenkacheln des objects.png, das DIESER Backlauf gebaut hat — die Nummern
+        // des Gastgebers zeigten hier auf andere Kacheln (Wasser und Palmen im Gebuesch).
+        // Sie liest nur der Zeichner (Rendering/MapObjects.cs), nicht die Simulation.
+        // Also: Gastgeber-.json, aber diese drei Teile aus dem eigenen Backlauf.
+        // Gegenschalter --netzkarte-bild-alt (alles vom Gastgeber, wie 0.7.0-Vorab).
+        string eigen = File.ReadAllText($"{MapsDir}/{name}.json");
+        string zusammen = BildTeileTauschen(json, eigen, out string notiz);
+        Import.SicherSchreiben.Text($"{MapsDir}/{name}.json", zusammen);
+        Import.SicherSchreiben.Bytes($"{MapsDir}/{name}.entities.json", ent);
+        GD.Print($"netzkarte: {name} empfangen und gebacken — {notiz}");
+    }
+
+    private static readonly string[] BildTeile = { "objects", "burnt", "nebelboden" };
+
+    /// <summary>A4: Gastgeber-.json mit den Bildteilen des eigenen Backlaufs. Die
+    /// uebrigen Teile bleiben Token fuer Token die des Gastgebers.</summary>
+    private static string BildTeileTauschen(byte[] gastJson, string eigenJson, out string notiz)
+    {
+        string gast = new System.Text.UTF8Encoding(false).GetString(gastJson);
+        if (Array.IndexOf(Core.CommandLine.Args, "--netzkarte-bild-alt") >= 0)
+        { notiz = "Bildteile vom Gastgeber (--netzkarte-bild-alt)"; return gast; }
+        var g = System.Text.Json.Nodes.JsonNode.Parse(gast)!.AsObject();
+        var e = System.Text.Json.Nodes.JsonNode.Parse(eigenJson)!.AsObject();
+        var teile = new List<string>();
+        foreach (string k in BildTeile)
+        {
+            var neu = e[k]?.DeepClone();
+            if (neu == null) { g.Remove(k); continue; }
+            g[k] = neu;
+            teile.Add($"{k} {(neu is System.Text.Json.Nodes.JsonArray a ? a.Count : 1)}");
+        }
+        notiz = "Bildteile aus eigenem Backlauf (" + string.Join(", ", teile) + "), Rest inhaltsgleich vom Gastgeber";
+        return g.ToJsonString();
     }
 }

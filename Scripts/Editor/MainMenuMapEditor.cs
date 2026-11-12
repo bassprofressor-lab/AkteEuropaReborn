@@ -294,6 +294,14 @@ public partial class MainMenu
                 $"{cwp.ObjectCount} Objekte)");
 
             string outName = name.StartsWith("map_") ? name : "map_" + name;
+            // ⭐ 12.11.2026 — A1 (Fable-Pruefung): ERZEUGEN unter dem Namen einer
+            // gelieferten Karte ist verboten (vorher wurde z. B. map_NET07 ersetzt —
+            // danach passte die Karte im Netz nicht mehr zu der der Mitspieler).
+            if (open == null && MapOpen.IsDelivered(outName))
+            {
+                say($"{outName} ist eine GELIEFERTE Karte — Erzeugen unter diesem Namen ist gesperrt.");
+                return 2;
+            }
             // ⭐ 11.11.2026 — bug-739 (Paket E1, M1): OEFFNEN SCHREIBT NICHT MEHR
             // AN ORT UND STELLE. Bis 0.6.13 rief dieser Weg nach »oeffne=« immer
             // MapGenerator.Write unter demselben Namen — schon das Oeffnen

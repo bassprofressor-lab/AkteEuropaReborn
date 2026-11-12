@@ -64,6 +64,10 @@ namespace AkteEuropaReborn.Rendering;
 /// </summary>
 public partial class MapEntityLayer
 {
+    /// <summary>B1 (12.11.2026): Gegenschalter — Nullsaetze in ramps_table wieder als Rampen lesen.</summary>
+    private static readonly bool EditorRampenAlt =
+        System.Array.IndexOf(Core.CommandLine.Args, "--editor-rampen-alt") >= 0;
+
     /// <summary>sec17 der geladenen Karte: Platznummer → Satz. Leer, wenn die
     /// Karte keine Brücken hat (8 der 33 Kampagnenkarten).</summary>
     private readonly Dictionary<int, (int Col, int Row, int Hp)> _karteBruecken = new();
@@ -106,6 +110,12 @@ public partial class MapEntityLayer
                 if (item is not JObj r) continue;
                 int mark = GetI(r, "mark", 0xFF);
                 if (mark == 0xFF) continue;
+                // ⭐ 12.11.2026 — B1: Editorkarten bis 0.7.0 tragen 50 Nullsaetze
+                // (0,0, Marke 0, Zaehler 0) statt des Leerwerts. Ein echter Satz hat
+                // Zaehler > 0 (NET07: 5 Saetze, Zaehler 200). Die
+                // Nullsaetze gelten als frei. Gegenschalter --editor-rampen-alt.
+                if (mark == 0 && GetI(r, "count", 200) == 0 && GetI(r, "col") == 0 && GetI(r, "row") == 0
+                    && !EditorRampenAlt) continue;
                 _moleSaetze.Add(new Rampe
                 {
                     Karte = true, Slot = GetI(r, "slot"), Col = GetI(r, "col"), Row = GetI(r, "row"),

@@ -238,7 +238,7 @@ public partial class MapEditorScreen : Control
 
         _name = new LineEdit
         {
-            Text = "eigen01",
+            Text = FreierName(),                           // A1 (12.11.2026)
             PlaceholderText = "eigen01",
             TooltipText = "Die Dateien heissen danach map_<name>.png, .json und .entities.json in "
                         + Core.Content.UserDir + "Maps.",
@@ -763,6 +763,43 @@ public partial class MapEditorScreen : Control
     /// Lauf haelt den Faden fest (er backt das ganze Kartenbild), und ohne das
     /// eine gewartete Einzelbild wuerde die Zeile erst NACH dem Lauf
     /// erscheinen.</para></summary>
+    /// <summary>A1: der Name, dessen Ueberschreiben der Spieler bestaetigt hat.</summary>
+    private string _ueberschreibenOk = "";
+
+    /// <summary>A1: erster freier Vorgabename eigen01, eigen02 …</summary>
+    private static string FreierName()
+    {
+        string maps = ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\') + "/Maps";
+        for (int n = 1; n < 1000; n++)
+        {
+            string k = $"eigen{n:00}";
+            if (!File.Exists($"{maps}/map_{k}.json") && !File.Exists($"{maps}/map_{k}.entities.json"))
+                return k;
+        }
+        return "eigen01";
+    }
+
+    /// <summary>A1: »Ueberschreiben?« als gewohntes Bestaetigungsfenster.</summary>
+    private void FrageUeberschreiben(string outName)
+    {
+        var d = new ConfirmationDialog
+        {
+            Title = "Karte ueberschreiben?",
+            DialogText = $"Die Karte »{outName["map_".Length..]}« gibt es schon.\n" +
+                         "Erzeugen ersetzt sie — alles, was darauf gemalt wurde, ist dann weg.",
+            OkButtonText = "Ueberschreiben",
+            CancelButtonText = "Abbrechen",
+        };
+        d.Confirmed += () => { _ueberschreibenOk = outName; d.QueueFree(); OnCreate(); };
+        d.Canceled += () =>
+        {
+            d.QueueFree();
+            _status.Text = "Nicht erzeugt — einen anderen Namen waehlen oder das Ueberschreiben bestaetigen.";
+        };
+        AddChild(d);
+        d.PopupCentered();
+    }
+
     private async void OnCreate()
     {
         string name = Sanitise(_name.Text);
@@ -774,8 +811,23 @@ public partial class MapEditorScreen : Control
         string outName = name.StartsWith("map_") ? name : "map_" + name;
         var lines = new List<string>();
         string maps = ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\') + "/Maps";
+        // ⭐ 12.11.2026 — A1 (Fable-Pruefung): ERZEUGEN UEBERSCHRIEB OHNE RUECKFRAGE,
+        // auch gelieferte Karten (»NET07«, »01«). Gelieferte Namen werden jetzt
+        // abgewiesen; eine vorhandene eigene Karte erst nach Bestaetigung (der
+        // Prueflauf --map-editor-auto bestaetigt selbst, er arbeitet mit eigenem Namen).
+        if (MapOpen.IsDelivered(outName))
+        {
+            _status.Text = $"»{name}« ist der Name einer mitgelieferten Karte — bitte einen anderen waehlen.";
+            return;
+        }
+        if (File.Exists($"{maps}/{outName}.json") && _ueberschreibenOk != outName && _autoRun.Length == 0)
+        {
+            FrageUeberschreiben(outName);
+            return;
+        }
+        _ueberschreibenOk = "";
         if (File.Exists($"{maps}/{outName}.json"))
-            lines.Add($"⚠ {outName} gibt es schon — die Dateien werden ueberschrieben.");
+            lines.Add($"⚠ {outName} gab es schon — die Dateien werden ueberschrieben (bestaetigt).");
 
         // ⚠ Der Ordner geht als »from=« mit, und der Trenner der Zeichenkette
         // ist das Komma: ein Pfad MIT Komma darin kaeme falsch an. Das ist die

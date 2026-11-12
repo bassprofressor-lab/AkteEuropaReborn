@@ -69,6 +69,11 @@ public static class MapFactory
         MarkEmpty(m, 5, CwmData.EntityStride, 0x09);
         MarkEmpty(m, 4, CwmData.MarkerStride, 0x02);
         MarkEmpty(m, 22, CwmExtra.RailStride, 0x02);
+        // ⭐ 12.11.2026 — B1 (Fable-Pruefung): auch sec21 (Rampen). Der leere Satz
+        // ist 00 00 FF 00 (CwmExtra.Ramp); ohne diese Zeile trug jede Editorkarte
+        // 50 Rampen auf Zelle (0,0) mit Marke 0 — der Pionier fand keinen freien
+        // Rampenplatz, und jedes Bild malte 50-mal eine Schadensrampe in die Ecke.
+        MarkEmpty(m, 21, CwmExtra.RampStride, 0x02);
 
         // die imap: erst alles gesperrt, damit auch die Flaeche AUSSERHALB der
         // Karte nicht als Einheitenplatz 0 gelesen wird (0x0000 waere genau

@@ -113,7 +113,7 @@ public static class NebelMasken
             var img = Bauen(cwp, pal, out int n, out _);
             if (img == null) return 0;
             Directory.CreateDirectory(dir);
-            img.SavePng($"{dir}/{Datei(tileset)}");
+            SicherSchreiben.Png($"{dir}/{Datei(tileset)}", img);   // A5
             return n;
         }
         catch (Exception e) { GD.PrintErr($"Nebelmasken Kachelsatz {tileset:00}: {e.Message}"); return 0; }

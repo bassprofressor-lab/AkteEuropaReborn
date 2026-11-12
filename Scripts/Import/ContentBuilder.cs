@@ -1773,22 +1773,21 @@ public sealed class ContentBuilder
         Directory.CreateDirectory(mapsDir);
         baker = new MapBaker(m, cwp, pal);
         var img = baker.Bake();
-        img.SavePng($"{mapsDir}/{outName}.png");
+        SicherSchreiben.Png($"{mapsDir}/{outName}.png", img);   // A5
         // ⚠ 18.08.2026 — DIE ZWEITE EBENE: nur die aufragenden Objekte, alles
         // andere durchsichtig. Ohne sie koennen Baeume keine Einheit verdecken
         // (siehe MapBaker.RagtAbPx). Fehlt die Datei, faellt der Zeichner auf
         // den alten Zustand zurueck — eine Karte aus einem aelteren Import
         // bleibt also spielbar, sie verdeckt nur nichts.
         var ol = baker.ObjectLayer();
-        if (ol != null) ol.SavePng($"{mapsDir}/{outName}.objects.png");
-        File.WriteAllText($"{mapsDir}/{outName}.json", MapMeta(m, baker), new UTF8Encoding(false));
+        if (ol != null) SicherSchreiben.Png($"{mapsDir}/{outName}.objects.png", ol);
+        SicherSchreiben.Text($"{mapsDir}/{outName}.json", MapMeta(m, baker));
         // the game state: units, buildings, markers, rails, zones. Without
         // it a map draws but nothing stands on it — and Content.Ready looks
         // for exactly this file to decide whether content exists at all.
         doc = EntitiesJson.Decode(m);
-        File.WriteAllText($"{mapsDir}/{outName}.entities.json",
-                          EntitiesJson.Write(doc, outName.StartsWith("map_") ? outName["map_".Length..] : outName),
-                          new UTF8Encoding(false));
+        SicherSchreiben.Text($"{mapsDir}/{outName}.entities.json",
+                          EntitiesJson.Write(doc, outName.StartsWith("map_") ? outName["map_".Length..] : outName));
         return img;
     }
 
@@ -1879,12 +1878,11 @@ public sealed class ContentBuilder
         if (!cwp.HasBuildings) return 0;
         string dir = $"{dstRoot.TrimEnd('/', '\\')}/Buildings";
         Directory.CreateDirectory(dir);
-        File.WriteAllText($"{dir}/tileset_{tileset:00}.json",
-                          BuildingPatterns.Write(cwp, tileset), new UTF8Encoding(false));
+        SicherSchreiben.Text($"{dir}/tileset_{tileset:00}.json", BuildingPatterns.Write(cwp, tileset));   // A5 (12.11.2026): nur bei Aenderung, in einem Zug
         var (png, meta) = BuildingPatterns.WriteAtlas(cwp, pal, tileset);
         if (png == null || meta.Length == 0) return 0;
-        png.SavePng($"{dir}/tileset_{tileset:00}_tiles.png");
-        File.WriteAllText($"{dir}/tileset_{tileset:00}_tiles.json", meta, new UTF8Encoding(false));
+        SicherSchreiben.Png($"{dir}/tileset_{tileset:00}_tiles.png", png);
+        SicherSchreiben.Text($"{dir}/tileset_{tileset:00}_tiles.json", meta);
         return png.GetWidth() * png.GetHeight();
     }
 

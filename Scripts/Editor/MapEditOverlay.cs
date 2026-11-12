@@ -911,6 +911,12 @@ public partial class MapEditOverlay : Node2D
 
         int hp = MapNeutrals.HpOf(_typ);
         var doors = MapNeutrals.DoorsOf(_typ);
+        // ⭐ 12.11.2026 — A3 (Fable-Pruefung): der Platz war die ZAHL der Gebaeude.
+        // Nach »wegnehmen -> F5 -> setzen« (oder auf Kopien gelieferter Karten mit
+        // Luecken) ueberschrieb das neue Gebaeude den Satz eines vorhandenen. Jetzt
+        // der erste FREIE Platz (+0x18 IsBuilt != 1), wie NextUnitSlot fuer Einheiten.
+        _nextSlot = NextBuildingSlot();
+        if (_nextSlot < 0) { _say = "kein Gebaeudeplatz mehr frei (255)"; return; }
         if (!MapFactory.PutBuilding(_map, _nextSlot, _typ, _owner, 0, cell.X, cell.Y,
                                     fw, fh, hp, "", doors, cwp: cwp))   // bug-742: Musterstempel
         { _say = "kein Gebaeudeplatz mehr frei (255)"; return; }
@@ -978,6 +984,19 @@ public partial class MapEditOverlay : Node2D
     /// Satz, wenn <c>+0x09 == 0xFF</c> ist — derselbe Leerwert, den
     /// <see cref="CwmData.Entities"/> prueft und den
     /// <see cref="MapFactory.Empty"/> setzt.</summary>
+    private int NextBuildingSlot()
+    {
+        var s = _map.Sec(3);
+        if (s == null) return -1;
+        for (int i = 0; i < 255; i++)
+        {
+            int o = i * CwmData.BuildingStride;
+            if (o + CwmData.BuildingStride > s.Length) break;
+            if (s[o + 0x18] != 1) return i;
+        }
+        return -1;
+    }
+
     private int NextUnitSlot(int owner)
     {
         var s = _map.Sec(5);

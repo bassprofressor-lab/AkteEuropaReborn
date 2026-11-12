@@ -120,6 +120,25 @@ bisher nur dort beschrieben.*
 
 ### Karteneditor
 
+- **Der Karteneditor macht nichts mehr kaputt** (Prüfung durch Fable, bug-804..808):
+  - »Karte erzeugen« überschrieb eine vorhandene Karte ohne Rückfrage, mit dem
+    Namen `NET07` oder `01` sogar eine mitgelieferte. Jetzt werden die Namen
+    mitgelieferter Karten abgewiesen, vor dem Überschreiben einer eigenen Karte
+    fragt ein Fenster nach, und der vorgeschlagene Name ist der erste freie
+    (`eigen02`, `eigen03` …).
+  - Ein neu gesetztes Gebäude konnte ein vorhandenes überschreiben (nach
+    Wegnehmen, Speichern und neu Setzen). Es nimmt jetzt den ersten freien Platz.
+  - Jede Editorkarte trug 50 unsichtbare »Phantomrampen« in der Kartenecke. Darum
+    konnte der Pionier auf eigenen Karten keine Landungsrampe bauen, und in der
+    Ecke oben links lag ein Rampenbild. Neue Karten sind sauber, alte werden beim
+    Laden geheilt.
+  - Speichern schreibt in eine Zwischendatei und benennt sie erst dann um — ein
+    Absturz beim Speichern hinterlässt keine halbe Karte mehr. Die gemeinsamen
+    Kachelsatzdateien werden nur noch geschrieben, wenn sich ihr Inhalt ändert.
+  - Eine mitgereiste Karte sah beim Mitspieler falsch aus: Wasser und Palmen im
+    Gebüsch. Die Bildverweise kamen vom Gastgeber, das Objektbild aber aus dem
+    eigenen Backlauf. Jetzt passt beides zusammen; was die Simulation liest,
+    kommt weiter unverändert vom Gastgeber.
 - **Feste Kartengrößen statt Hochzählen** (bug-800). Sieben Größen zum
   Anklicken, jede nach einer Karte des Originals gewählt: Klein 100×100,
   Mittel 150×150 (wie NET03), Groß 168×168 (NET01), Sehr groß 230×230 (NET02),
