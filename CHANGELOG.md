@@ -144,6 +144,12 @@ your own copy of the 1997 game.
     step.
   - The status line only turns yellow for really missing start positions or
     deposits (a statistics line used to trigger it too).
+- **No more sand bars in the forest of generated maps** (bug-817): along forest
+  edges there were diagonal rows of sand-coloured bars, visible between the
+  bushes. The ground fill under forest cells copied its neighbour's tile — even a
+  transition tile with a sand edge — and passed it on cell by cell. Even ground
+  tiles now vote first; a transition only counts when nothing else is around
+  (counter-switch `--fuellung-uebergang-alt`).
 - **Painting as you'd expect** (bug-814):
   - Dragging with the mouse button held paints ground, height, forest/rock,
     rails and removal — each cell once per stroke. Before, it was one click per

@@ -76,6 +76,9 @@ public sealed class MapBaker
         public int W, H, YOff;
         public byte[] Rgba = Array.Empty<byte>();     // premultiplied by nothing: a or 0
         public bool Full;                             // fills a whole ground cell
+        /// <summary>Farbabstand zwischen den Vierteln (max. Paar, RGB) — klein bei
+        /// einer gleichmaessigen Bodenkachel, gross bei einer Uebergangskachel.</summary>
+        public double Spread;
     }
 
     private readonly Dictionary<int, Sprite?> _frame = new();
@@ -330,8 +333,44 @@ public sealed class MapBaker
         }
         double cov = 100.0 * opaque / (f.Width * f.Height);
         s.Full = cov >= 99.0 && f.Width >= TileW && f.Height >= 18 && f.Height <= 22;
+        if (s.Full) s.Spread = Viertelabstand(s);
         return s;
     }
+
+    /// <summary>Mittelfarbe je Viertel, groesster Abstand zweier Viertel.</summary>
+    private static double Viertelabstand(Sprite s)
+    {
+        var sum = new double[4, 4];
+        for (int y = 0; y < s.H; y++)
+            for (int x = 0; x < s.W; x++)
+            {
+                int o = (y * s.W + x) * 4;
+                if (s.Rgba[o + 3] == 0) continue;
+                int q = (x * 2 / s.W) + 2 * (y * 2 / s.H);
+                sum[q, 0] += s.Rgba[o]; sum[q, 1] += s.Rgba[o + 1]; sum[q, 2] += s.Rgba[o + 2]; sum[q, 3]++;
+            }
+        double best = 0;
+        for (int a = 0; a < 4; a++)
+            for (int b = a + 1; b < 4; b++)
+            {
+                if (sum[a, 3] == 0 || sum[b, 3] == 0) continue;
+                double d2 = 0;
+                for (int k = 0; k < 3; k++) { double d = sum[a, k] / sum[a, 3] - sum[b, k] / sum[b, 3]; d2 += d * d; }
+                best = Math.Max(best, Math.Sqrt(d2));
+            }
+        return best;
+    }
+
+    /// <summary>Ab diesem Viertelabstand gilt eine volle Kachel als UEBERGANG
+    /// (GEMESSEN 12.11.2026 an den vollen Kacheln einer Generatorkarte auf
+    /// Kachelsatz 47: 36 Kacheln unter 16, dann eine Luecke, Uebergaenge 20..155,
+    /// die Sandkante 270 hat 78). UNSERE SETZUNG.</summary>
+    public const double UebergangAb = 18.0;
+
+    /// <summary>Gegenschalter: Flutfuellung wie vor dem 12.11.2026 — auch
+    /// Uebergangskacheln werden in Waldzellen weitergereicht.</summary>
+    public static bool FuellungUebergangAlt
+        => Array.IndexOf(Core.CommandLine.Args, "--fuellung-uebergang-alt") >= 0;
 
     private Sprite? Frame(int i)
     {
@@ -751,15 +790,34 @@ public sealed class MapBaker
             // Die Mehrheit ist keine Messung des Originals, sondern die bessere
             // Schaetzung: eine 3x2-Halle hat rundum Beton und nur an einer Ecke
             // Gras. Bei Gleichstand gewinnt der erste - das ist der alte Weg.
+            // ⭐ 12.11.2026 — UEBERGANGSKACHELN NICHT WEITERREICHEN. Gemeldet
+            // (Generatorkarten): diagonale Reihen sandfarbener Balken im Gras.
+            // Gemessen (Pixelherkunft): eine Waldzelle bekam von ihrem Nachbarn
+            // die Kachel 270 (Sand am linken Rand), die naechste Waldzelle von
+            // DIESER wieder 270 — die Flutfuellung trug den Uebergang treppab
+            // durch den ganzen Waldrand, und zwischen den Bueschen sieht man ihn.
+            // Jetzt stimmen gleichmaessige Kacheln zuerst; nur wenn kein Nachbar
+            // eine hat, zaehlt der Uebergang. Gegenschalter --fuellung-uebergang-alt.
             var stimmen = new Dictionary<int, int>();
-            for (int k = 0; k < 8; k++)
+            bool alt = FuellungUebergangAlt, glatt = false;
+            for (int pass = 0; pass < 2 && stimmen.Count == 0; pass++)
+                for (int k = 0; k < 8; k++)
+                {
+                    int nc = c + dc[k], nr = r + dr[k];
+                    if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                    int v = grid[nr * w + nc];
+                    if (v < 0) continue;
+                    if (!alt && pass == 0 && Frame(v)!.Spread >= UebergangAb) continue;
+                    if (pass == 0 && !alt) glatt = true;
+                    stimmen[v] = stimmen.GetValueOrDefault(v) + 1;
+                    if (found < 0) found = v;
+                }
+            if (!alt && !glatt && stimmen.Count > 0 && guard < w * h * 2)
             {
-                int nc = c + dc[k], nr = r + dr[k];
-                if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
-                int v = grid[nr * w + nc];
-                if (v < 0) continue;
-                stimmen[v] = stimmen.GetValueOrDefault(v) + 1;
-                if (found < 0) found = v;
+                // nur Uebergaenge ringsum: spaeter noch einmal, vielleicht hat dann
+                // ein Nachbar eine glatte Kachel bekommen
+                holes.Enqueue(i);
+                continue;
             }
             if (stimmen.Count > 1)
             {

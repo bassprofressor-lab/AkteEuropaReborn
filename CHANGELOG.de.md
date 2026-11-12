@@ -156,6 +156,13 @@ bisher nur dort beschrieben.*
     zurück.
   - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
     Vorkommen (vorher schlug auch eine Statistikzeile an).
+- **Keine Sandbalken mehr im Wald erzeugter Karten** (bug-817): Am Waldrand
+  standen diagonale Reihen sandfarbener Balken, zwischen den Büschen sichtbar.
+  Ursache war die Bodenfüllung unter Waldzellen: Sie übernahm die Kachel des
+  Nachbarn, auch eine Übergangskachel mit Sandkante, und reichte sie von Zelle zu
+  Zelle treppab weiter. Jetzt zählen zuerst gleichmäßige Bodenkacheln, ein
+  Übergang nur, wenn ringsum nichts anderes liegt (Gegenschalter
+  `--fuellung-uebergang-alt`).
 - **Malen wie gewohnt** (bug-814):
   - Mit gedrückter Maustaste ziehen malt Bodenart, Höhe, Wald/Fels, Gleise und
     Wegnehmen — jede Zelle einmal je Strich. Bisher war es ein Klick je Zelle.
