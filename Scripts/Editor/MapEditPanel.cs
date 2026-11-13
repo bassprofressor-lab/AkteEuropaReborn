@@ -35,8 +35,8 @@ using AkteEuropaReborn.Rendering;
 /// </summary>
 public partial class MapEditOverlay
 {
-    private Label _pTitle = null!, _pDirty = null!, _pTool = null!, _pLeft = null!, _pRight = null!,
-                  _pSay = null!, _pOwnerNote = null!, _pListHead = null!;
+    private Label _pTitle = null!, _pDirty = null!, _pLeft = null!, _pRight = null!,
+                  _pSay = null!, _pListHead = null!;
     private ItemList _pList = null!;
     private TextureRect _pPreview = null!;
     private VBoxContainer _pOwnerBox = null!;
@@ -214,8 +214,6 @@ public partial class MapEditOverlay
         vor.Pressed += Wiederholen;
         pinselZeile.AddChild(zur);
         pinselZeile.AddChild(vor);
-        _pTool = new Label { Visible = false };
-        v.AddChild(_pTool);
 
         // Auswahl
         // C4 (12.11.2026): das Vorschaubild sitzt in der Kopfzeile, damit die Liste die
@@ -286,9 +284,6 @@ public partial class MapEditOverlay
             _ownerButtons[o] = b;
             g.AddChild(b);
         }
-        _pOwnerNote = Small("");
-        _pOwnerNote.Visible = false;   // Platz: steht im Tooltip der Knoepfe
-        _pOwnerBox.AddChild(_pOwnerNote);
 
         // Was ein Klick tut
         _pLeft = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -411,15 +406,11 @@ public partial class MapEditOverlay
             btn.SetPressedNoSignal(o == _owner);
             btn.Disabled = (_brush is Brush.Einheit or Brush.Startplatz) && o is < 0 or > 7;
         }
-        _pOwnerNote.Text = _brush == Brush.Einheit
-            ? "Einheiten gehoeren immer einem Spieler (Sp 1..8)."
-            : "herrenlos = einnehmbares Gebäude; Kulisse = gehört niemandem.";
 
         if (_listFor != _brush) FillList();
         SelectInList();
 
         string sel = Selection();
-        _pTool.Text = sel;
         if (_pList.Visible) _pListHead.Text = $"{ListTitle()}: {sel}   (+/−)";
         else if (_brush == Brush.Startplatz) _pListHead.Text = SpielerZeile();   // D5: Spielerzahl nach jedem Klick neu
         (string left, string right) = _brush switch

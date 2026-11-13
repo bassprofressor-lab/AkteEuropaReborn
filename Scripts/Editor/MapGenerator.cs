@@ -432,7 +432,7 @@ public static class MapGenerator
                 $"{PlotW + 8}x{PlotH + 8} Zellen — keine Basen");
             return made;
         }
-        foreach (var (wc, wr) in Spots(w, h, players, made.Count))
+        foreach (var (wc, wr) in Spots(w, h, players))
         {
             int p = made.Count;
             var found = Search(t, wc, wr, made);
@@ -561,7 +561,7 @@ public static class MapGenerator
 
     /// <summary>Die Wunschorte verteilen: gegenueberliegende Ecken bei zwei
     /// Spielern, sonst auf einem Kreis. UNSERE Setzung.</summary>
-    private static List<(int Col, int Row)> Spots(int w, int h, int players, int _)
+    private static List<(int Col, int Row)> Spots(int w, int h, int players)
     {
         var o = new List<(int, int)>();
         int mx = Math.Max(4, w / 8), my = Math.Max(4, h / 8);
