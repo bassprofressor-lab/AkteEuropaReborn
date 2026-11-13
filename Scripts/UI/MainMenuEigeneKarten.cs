@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 namespace AkteEuropaReborn.UI;
 
 using Godot;
@@ -20,16 +20,27 @@ public partial class MainMenu
 {
     private static void EigeneKartenAufnehmen()
     {
-        var dir = DirAccess.Open(Core.Content.Path("Maps"));
-        if (dir == null) return;
+        // ⭐ 13.11.2026 — Fable B1: Core.Content.Path prueft mit FileExists, und ein ORDNER ist
+        // keine Datei — »Maps« fiel darum immer auf res://Assets/Legacy/Maps zurueck, wo keine
+        // eigene Karte liegt. Die Liste blieb in BEIDEN exe leer. Jetzt direkt der Datenordner
+        // des Spielers (dorthin schreibt der Editor). Gegenschalter --eigene-karten-alt.
+        string ordner = System.Array.IndexOf(Core.CommandLine.Args, "--eigene-karten-alt") >= 0
+            ? Core.Content.Path("Maps") : Core.Content.UserRoot + "Maps";
+        var dir = DirAccess.Open(ordner);
+        if (dir == null) { GD.Print($"eigene karten: Ordner {ordner} nicht lesbar"); return; }
+        var aufgenommen = new System.Collections.Generic.List<string>();
         foreach (string f in dir.GetFiles())
         {
             if (!f.EndsWith(".entities.json")) continue;
             string map = f[..^".entities.json".Length];
+            // eine abgebrochene mitgereiste Karte (ohne Fertig-Marke, Fable A3) nicht anbieten
+            if (map.StartsWith("map_netz_") && !FileAccess.FileExists($"{ordner}/{map}.fertig")) continue;
             if (Editor.MapOpen.IsDelivered(map)) continue;
             if (Maps.FindIndex(m => m.File == map) >= 0) continue;
             Maps.Add((map, EigenerTitel(map)));
+            aufgenommen.Add(map);
         }
+        GD.Print($"eigene karten: {aufgenommen.Count} aus {ordner} — {string.Join(", ", aufgenommen)}");
     }
 
     private static string EigenerTitel(string map)
