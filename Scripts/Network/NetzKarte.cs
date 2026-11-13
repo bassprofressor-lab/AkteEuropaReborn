@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 namespace AkteEuropaReborn.Network;
 
 using System;
@@ -41,6 +41,15 @@ public static class NetzKarte
     public static bool Vorhanden(string map)
         => File.Exists($"{MapsDir}/{map}.json") && File.Exists($"{MapsDir}/{map}.entities.json")
            && File.Exists($"{MapsDir}/{map}.png");
+
+    /// <summary>⭐ 13.11.2026 — Fable A3: eine MITGEREISTE Karte gilt erst als vorhanden, wenn ihr
+    /// Backlauf zu Ende kam (Marke <c>.fertig</c>, als letzter Schritt von <see cref="Ablegen"/>
+    /// geschrieben). Brach das Backen ab, lagen .json/.entities.json/.png schon da, und jeder
+    /// weitere Versuch nahm die halbe Karte ohne Backen. Gegenschalter --netzkarte-marke-alt.</summary>
+    private static bool NetzVorhanden(string name)
+        => Vorhanden(name) && (MarkeAlt || File.Exists($"{MapsDir}/{name}.fertig"));
+
+    private static bool MarkeAlt => Array.IndexOf(Core.CommandLine.Args, "--netzkarte-marke-alt") >= 0;
 
     /// <summary>FNV-1a 64 über Gelände- und Einheitendatei, so wie sie auf der Platte stehen.</summary>
     public static ulong Pruefsumme(string map)
@@ -100,7 +109,7 @@ public static class NetzKarte
         return (da, a.Length);
     }
 
-    public static bool Fertig(ulong hash) => _fertig.Contains(hash) || Vorhanden(LokalerName(hash));
+    public static bool Fertig(ulong hash) => _fertig.Contains(hash) || NetzVorhanden(LokalerName(hash));
 
     /// <summary>Ein Kartenpaket aufnehmen (Leser steht hinter der Paketart).</summary>
     public static void Nimm(NetReader r, byte[] roh, int kopf)
@@ -108,7 +117,7 @@ public static class NetzKarte
         ulong hash = r.U64();
         int nr = r.U16(), von = r.U16(), len = r.U16();
         if (r.Bad || von == 0 || nr >= von) return;
-        if (_fertig.Contains(hash) || Vorhanden(LokalerName(hash))) { _fertig.Add(hash); return; }
+        if (_fertig.Contains(hash) || NetzVorhanden(LokalerName(hash))) { _fertig.Add(hash); return; }
         if (!_teile.TryGetValue(hash, out var a) || a.Length != von) { a = new byte[]?[von]; _teile[hash] = a; }
         int start = roh.Length - len;
         if (start < 0) return;
@@ -158,6 +167,18 @@ public static class NetzKarte
         File.WriteAllBytes($"{MapsDir}/{name}.json", json);
         File.WriteAllBytes($"{MapsDir}/{name}.entities.json", ent);
 
+        // ⭐ 13.11.2026 — Fable A1: VOR DEM BACKEN AUFRAEUMEN. Der Mitspieler stuerzte beim Backen
+        // einer grossen mitgereisten Karte ab (map_eigen01 168x168/Satz 02, .json 4,26 MB):
+        // »Internal CLR error 0x80131506« immer bei einer GROSSEN Speicheranforderung
+        // (StringBuilder in MapMeta, JSON-Umkodierung beim Laden) — 5/5 bei gelöschter Netzkarte.
+        // Im Netzprozess liegen da viele Godot-Objekte aus Menue und Hintergrund zum Finalisieren
+        // an; der Finalisierer-Faden gibt sie frei, waehrend der Hauptfaden backt. GEMESSEN: mit
+        // erzwungener Sammlung + WaitForPendingFinalizers davor 3/3 gruen, ohne 5/5 Absturz;
+        // derselbe Backweg in einem ruhigen Prozess (--map-new oeffne=) war immer sauber.
+        // Gegenschalter --netzkarte-gc-alt. ⚠ Behebt den Ausloeser, nicht die Ursache in
+        // Godots Finalisierung.
+        if (Array.IndexOf(Core.CommandLine.Args, "--netzkarte-gc-alt") < 0)
+        { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); GD.Print("netzkarte: vor dem Backen aufgeraeumt (A1)"); }
         // Bild backen: öffnen wie der Editor (oeffne=), mit dem EIGENEN Kachelsatz schreiben …
         var m = Editor.MapOpen.Load(name, s => GD.Print("netzkarte: " + s))
                 ?? throw new InvalidDataException("MapOpen.Load lieferte nichts");
@@ -180,6 +201,7 @@ public static class NetzKarte
         string zusammen = BildTeileTauschen(json, eigen, out string notiz);
         Import.SicherSchreiben.Text($"{MapsDir}/{name}.json", zusammen);
         Import.SicherSchreiben.Bytes($"{MapsDir}/{name}.entities.json", ent);
+        File.WriteAllText($"{MapsDir}/{name}.fertig", "");     // A3: zuletzt — erst jetzt gilt die Karte als vorhanden
         GD.Print($"netzkarte: {name} empfangen und gebacken — {notiz}");
     }
 

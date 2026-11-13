@@ -258,6 +258,14 @@ bisher nur dort beschrieben.*
   NET07-Prüfsummen sind über 30 s Spielzeit Bild für Bild gleich wie mit .NET 8, Kampagne 1
   läuft 3000 s durch, Spielstände laden deckungsgleich. Der Installer wird dadurch rund
   1,7 MB größer. Gebaut wird der Installer jetzt mit Inno Setup 7.1.1.
+- **Mehrspieler: kein Absturz mehr beim Empfang großer eigener Karten** (Fable-Prüfung A1/A3):
+  Spielte der Gastgeber eine große Editorkarte (z. B. 168×168), stürzte der Mitspieler beim
+  Aufbereiten der mitgereisten Karte ab — 12 von 12 Versuchen. Der Absturz kam immer bei
+  einer großen Speicheranforderung, während im Hintergrund Godot-Objekte aus dem Menü
+  aufgeräumt wurden. Jetzt wird vor dem Aufbereiten aufgeräumt; gemessen 3 von 3 Partien
+  ohne Absturz (vorher 5 von 5 mit). Außerdem galt eine abgebrochene Karte danach für
+  immer als vorhanden — jetzt zählt sie erst, wenn sie vollständig aufbereitet ist.
+  Gegenschalter `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
 - **Karteneditor aufgeräumt** (Prüfpunkt F): Der Ordner für eigene Kachelsätze darf jetzt
   ein Komma enthalten — der Schirm reicht seine Einstellungen als Auftrag weiter statt als
   Befehlszeile, die am Komma zerlegt wurde (erzeugte Karten byte-gleich wie vorher). Der

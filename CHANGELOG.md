@@ -239,6 +239,13 @@ your own copy of the 1997 game.
   14 Nov 2028). Nothing changes in play: the NET07 checksums over 30 s of game time are
   identical frame by frame to .NET 8, campaign 1 runs 3000 s, saves load identically. The
   installer grows by about 1.7 MB. The installer is now built with Inno Setup 7.1.1.
+- **Multiplayer: no more crash when receiving large own maps** (Fable review A1/A3): when the
+  host played a large editor map (e.g. 168×168), the other player crashed while preparing
+  the transferred map — 12 of 12 attempts. The crash always came on a large memory request
+  while Godot objects from the menu were being cleaned up in the background. The game now
+  cleans up before preparing; measured 3 of 3 matches without a crash (before 5 of 5 with).
+  Also, an aborted map counted as present forever — it now counts only once fully prepared.
+  Opt-outs `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
 - **Map editor tidied up** (check item F): the folder for own tilesets may now contain a
   comma — the screen passes its settings on as an order instead of a command line split at
   commas (generated maps byte-identical to before). The edit mode's test harness (500
