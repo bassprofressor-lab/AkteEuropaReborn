@@ -1,4 +1,4 @@
-; Akte Europa Reborn — Windows-Installer (Inno Setup 6)
+﻿; Akte Europa Reborn — Windows-Installer (Inno Setup 7, seit 13.11.2026; vorher 6.7.3)
 ;
 ; Was hier hineingeht, ist AUSSCHLIESSLICH die Engine: die exportierte .exe, die
 ; .pck und die .NET-Laufzeit. Nichts aus dem Spiel von 1997 wird mitgeliefert —
@@ -6,8 +6,8 @@
 ; Rechner des Spielers aus dessen eigenen CDs (siehe Core/ContentSources.cs).
 ;
 ; Bauen:
-;   "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" packaging\AkteEuropaReborn.iss
-; (Inno Setup 6 installiert sich ohne Adminrechte NICHT nach Program Files —
+;   "%LOCALAPPDATA%\Programs\Inno Setup 7\ISCC.exe" packaging\AkteEuropaReborn.iss
+; (Inno Setup installiert sich ohne Adminrechte NICHT nach Program Files —
 ;  dort steht es auf diesem Rechner nicht, und die alte Zeile hat einen Lauf
 ;  gekostet.)
 ; Voraussetzung: build\windows\ ist frisch exportiert
