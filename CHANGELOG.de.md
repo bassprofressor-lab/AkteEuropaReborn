@@ -237,6 +237,21 @@ bisher nur dort beschrieben.*
   Editoreinheiten werden wie die Einheiten der Originalkarten auf ihren Entwurf
   nachgezogen (NET07: 24 von 24; eine Editorkarte vorher 0, jetzt 23). Prüflauf
   `--map-edit-satz-check`. Gegenschalter `--editor-satzfelder-alt`.
+- **Gefecht: neue Rohstoffstufe »wie auf der Karte« — und Lager im Karteneditor**: Bisher
+  füllte das Gefecht beim Start alle Lager nach der gewählten Stufe (keine / wenige /
+  normal / viele) — so macht es auch das Original, und die Lagerwerte einer Karte gingen
+  dabei verloren. Die neue fünfte Stufe »wie auf der Karte« lässt jedes Gebäude mit dem
+  Lager starten, das in der Karte steht (bewusste Abweichung vom Original, nur im Gefecht;
+  die vier Stufen des Originals bleiben unverändert). Neu aufgestellte Startbasen, die die
+  Karte nicht kennt, bekommen dann das Lager von »normal«. Passend dazu gibt es im
+  Karteneditor beim Gebäudepinsel eine Lagerauswahl mit den Werten der Originalkarten:
+  Bauteile für Basis und Depot (keine / 500-500-500 / 1000-1500-800 / 1500-2000-1000),
+  Terranium für Fabriken (0 bis 2000) und Minen (0 bis 200); ein Klick auf ein stehendes
+  Gebäude übernimmt die Auswahl. Gemessen: Basis aus dem Editor mit 500/500/500 startet mit
+  »wie auf der Karte« genau so, mit »normal« wie bisher mit 300/400/200. Einen
+  Gebäudenamen bietet der Editor bewusst nicht an — das Original überschreibt ihn beim
+  Missionsstart mit der Platznummer. Prüflauf `--map-edit-lager-check`; Gegenschalter
+  `--editor-lager-aus`.
 - **Karteneditor aufgeräumt** (Prüfpunkt F): Der Ordner für eigene Kachelsätze darf jetzt
   ein Komma enthalten — der Schirm reicht seine Einstellungen als Auftrag weiter statt als
   Befehlszeile, die am Komma zerlegt wurde (erzeugte Karten byte-gleich wie vorher). Der

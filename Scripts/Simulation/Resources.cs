@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 
 namespace AkteEuropaReborn.Rendering;
@@ -135,6 +135,9 @@ public partial class MapEntityLayer : Node2D
         var names = new List<string>();
         if (_resLevels == null) return names;
         foreach (var l in _resLevels) names.Add(l.Name.Length > 0 ? l.Name : $"Stufe {l.Level}");
+        // 13.11.2026: unsere fuenfte Stufe (UI.SkirmishSetup.ResourcesKarte) — nur wenn die
+        // Tafel des Originals genau ihre vier Stufen hat, sonst stimmte der Index nicht.
+        if (names.Count == UI.SkirmishSetup.ResourcesKarte) names.Add(UI.SkirmishSetup.ResourcesKarteName);
         return names;
     }
 
@@ -160,6 +163,14 @@ public partial class MapEntityLayer : Node2D
     public bool ApplyResources(int level)
     {
         LoadResources();
+        // 13.11.2026: »wie auf der Karte« — nichts fuellen, die Kartenwerte bleiben.
+        if (level == UI.SkirmishSetup.ResourcesKarte)
+        {
+            _resName = UI.SkirmishSetup.ResourcesKarteName;
+            _resStores = _resFactories = _resMines = _resCleared = _resSkipped = 0;
+            GD.Print("Rohstoffe: wie auf der Karte — Lager aus der Kartendatei, keine Fuellung (unsere Stufe)");
+            return true;
+        }
         if (_resLevels == null || level < 0 || level >= _resLevels.Count) return false;
         var r = _resLevels[level];
         _resName = r.Name;

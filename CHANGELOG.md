@@ -220,6 +220,20 @@ your own copy of the 1997 game.
   gewehr", Ketten → "Leichter Panzer"). In skirmish, editor units are now pulled onto their
   design like the units of the original maps (NET07: 24 of 24; an editor map 0 before,
   now 23). Check `--map-edit-satz-check`. Opt-out `--editor-satzfelder-alt`.
+- **Skirmish: new resource level "wie auf der Karte" (as on the map) — and stores in the
+  map editor**: so far skirmish filled every store at the start according to the chosen
+  level (none / few / normal / many) — the original does the same, and a map's own store
+  values were lost. The new fifth level "wie auf der Karte" starts every building with the
+  stores written in the map (a deliberate deviation from the original, skirmish only; the
+  original's four levels are unchanged). Newly placed start bases the map does not know get
+  the "normal" stores. To go with it, the map editor's building brush now offers store
+  choices with the values of the original maps: parts for base and depot (none /
+  500-500-500 / 1000-1500-800 / 1500-2000-1000), terranium for factories (0 to 2000) and
+  mines (0 to 200); clicking a placed building applies the choice. Measured: an editor base
+  with 500/500/500 starts exactly so with "wie auf der Karte", and with 300/400/200 on
+  "normal" as before. The editor deliberately offers no building name — the original
+  overwrites it with the slot number at mission start. Check `--map-edit-lager-check`;
+  opt-out `--editor-lager-aus`.
 - **Map editor tidied up** (check item F): the folder for own tilesets may now contain a
   comma — the screen passes its settings on as an order instead of a command line split at
   commas (generated maps byte-identical to before). The edit mode's test harness (500

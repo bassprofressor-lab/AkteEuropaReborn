@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using AkteEuropaReborn.Rendering;
 
@@ -49,6 +49,15 @@ public static class SkirmishSetup
     /// what its level file gives it. Default 2, which is what the numbers call
     /// normal.</summary>
     public static int Resources = 2;
+
+    /// <summary>⭐ 13.11.2026 — Spielerentscheidung (»ja bau das ins gefecht«): die fuenfte
+    /// Rohstoffstufe »wie auf der Karte«. UNSERE ABWEICHUNG vom Original (Gefecht = Wettkampf-
+    /// modus, darf abweichen): die Fuellroutine 0x41A002 laeuft dann NICHT, jedes Gebaeude
+    /// behaelt das Lager aus der Kartendatei — so wirken die Lagerwerte des Editors. Index
+    /// hinter den vier Stufen des Originals, damit deren Nummern (0..3, auch im Netz und auf
+    /// der Befehlszeile) bleiben, wie sie sind.</summary>
+    public const int ResourcesKarte = 4;
+    public const string ResourcesKarteName = "wie auf der Karte";
 
     /// <summary>
     /// <b>»Techstandard« — die Technikstufe, mit der ein Gefecht anfängt.</b>

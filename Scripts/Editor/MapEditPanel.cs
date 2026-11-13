@@ -249,6 +249,8 @@ public partial class MapEditOverlay
         };
         kopf.AddChild(_pPreview);
 
+        LagerUiBauen(v);          // D9 (13.11.2026): Lager des Gebaeudes
+
         // Besitzer
         _pOwnerBox = new VBoxContainer();
         _pOwnerBox.AddThemeConstantOverride("separation", 4);
@@ -409,6 +411,7 @@ public partial class MapEditOverlay
 
         if (_listFor != _brush) FillList();
         SelectInList();
+        LagerUiAuffrischen();
 
         string sel = Selection();
         if (_pList.Visible) _pListHead.Text = $"{ListTitle()}: {sel}   (+/−)";

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 using Godot;
 
@@ -182,8 +182,13 @@ public partial class MapEntityLayer
         var geduennt = StartbasisDuennen(ohne, StarterTroop);
 
         LoadResources();
-        ResourceLevel? r = _resLevels != null && stufe >= 0 && stufe < _resLevels.Count
-                           ? _resLevels[stufe] : null;
+        // 13.11.2026: bei »wie auf der Karte« bekommen NEU aufgestellte Gebaeude (die die Karte
+        // ja nicht kennt) das Lager der Stufe »normal« (2) — UNSERE SETZUNG; eine uebergebene
+        // neutrale Fabrik behaelt ihr Kartenlager (siehe unten).
+        bool karte = stufe == UI.SkirmishSetup.ResourcesKarte;
+        int st = karte ? 2 : stufe;
+        ResourceLevel? r = _resLevels != null && st >= 0 && st < _resLevels.Count
+                           ? _resLevels[st] : null;
 
         int neu = 0;
         foreach (int p in ohne)
@@ -258,7 +263,7 @@ public partial class MapEntityLayer
             if (nb >= 0)
             {
                 Hand(_entities[nb], p);
-                StartbasisLager(_entities[nb], r);
+                if (!karte) StartbasisLager(_entities[nb], r);
                 vergeben.Add(nb);
                 ein.Fabrik = nb;
                 ein.Notiz = $"neutrale Fabrik uebergeben, Abstand^2 {nd}";

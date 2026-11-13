@@ -121,6 +121,7 @@ public partial class MapEditOverlay : Node2D
         BrueckeCheck();           // D9 (13.11.2026)
         RampeCheck();             // D9 (13.11.2026)
         SatzCheck();              // B3 (13.11.2026)
+        LagerCheck();             // D9 (13.11.2026)
     }
 
 
@@ -462,6 +463,8 @@ public partial class MapEditOverlay : Node2D
     {
         var cwp = MapEditSession.Cwp;
         if (cwp == null) { _say = "kein Kachelsatz — kein Gebäude"; return; }
+        // D9 (13.11.2026): Klick auf ein stehendes Gebaeude uebernimmt das gewaehlte Lager
+        if (!LagerAus && LagerUebernehmen(cell)) return;
         var bt = cwp.GetBuildingType(_typ);
         if (bt.IsEmpty) { _say = $"Typ {_typ} gibt es in diesem Kachelsatz nicht"; return; }
 
@@ -492,15 +495,18 @@ public partial class MapEditOverlay : Node2D
         // der erste FREIE Platz (+0x18 IsBuilt != 1), wie NextUnitSlot fuer Einheiten.
         _nextSlot = NextBuildingSlot();
         if (_nextSlot < 0) { _say = "kein Gebaeudeplatz mehr frei (255)"; return; }
+        var lager = LagerFuer(_typ);        // D9 (13.11.2026): Lager aus dem Bedienfeld
         if (!MapFactory.PutBuilding(_map, _nextSlot, _typ, _owner, 0, cell.X, cell.Y,
-                                    fw, fh, hp, "", doors, cwp: cwp))   // bug-742: Musterstempel
+                                    fw, fh, hp, "", doors, lager.W, lager.F, lager.S, lager.T,
+                                    cwp: cwp))   // bug-742: Musterstempel
         { _say = "kein Gebaeudeplatz mehr frei (255)"; return; }
 
         _layer.EditorAddBuilding(_nextSlot, _typ, _owner, cell.X, cell.Y, fw, fh, hp);
         _mine.Add((cell.X, cell.Y, Brush.Gebaeude));
         _nextSlot++;
         MapEditSession.Dirty = true;
-        _say = $"Typ {_typ} auf ({cell.X},{cell.Y}), {fw}x{fh}, {OwnerName(_owner)}";
+        string lt = LagerText(_typ, lager);
+        _say = $"Typ {_typ} auf ({cell.X},{cell.Y}), {fw}x{fh}, {OwnerName(_owner)}" + (lt.Length > 0 ? $", {lt}" : "");
     }
 
     /// <summary>
