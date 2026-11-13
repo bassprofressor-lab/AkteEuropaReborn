@@ -195,6 +195,18 @@ bisher nur dort beschrieben.*
   eigenen Tafel, ein Editorflieger hieße ein Dateiformat erfinden. Prüflauf
   `--map-edit-fussvolk-check` (Satz, lebende Einheit, gespeicherte Datei, mit
   `--fussvolk-shot=<datei>` ein Fensterbild). Gegenschalter `--editor-fussvolk-aus`.
+- **Brücken im Karteneditor** (Werkzeug »0 Brücke«): Ein Klick auf eine Uferzelle baut
+  eine Brücke über 1 bis 3 Wasserzellen zum Gegenufer, die Vorschau zeigt sie vorher grün.
+  Geschrieben wird genau das, was der Brückenbau des Originals schreibt (0x4CC280): 3 Zellen
+  breit, Fahrbahn in der Mitte eine Stufe über dem Wasser, Geländer links und rechts,
+  Brückensatz mit 500 Trefferpunkten, Lagen- und Kopfbytes. Gemessen an allen 52 Brücken
+  der 23 Originalkarten (705 Zellen) — die Editorbrücke erfüllt jede dieser Regeln ohne
+  Ausnahme, sieht aus wie eine Kartenbrücke (Steinbrücke) und lässt sich im Spiel
+  zerstören wie diese. Abgewiesen wird mit Grund: kein Wasser daneben, Wasser an zwei
+  Seiten, Gegenufer zu weit, Ufer verschieden hoch, etwas steht im Weg. Zurück nimmt sie
+  Strg+Z. Prüfläufe `--map-edit-bruecke-check` (mit `--bruecke-shot=<datei>` ein
+  Fensterbild) und `--bruecken-muster` (die Messung an den Originalen). Gegenschalter
+  `--editor-bruecke-aus`.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:

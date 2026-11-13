@@ -179,6 +179,7 @@ public partial class MapEditOverlay
         ToolButton(zeile7, Brush.Wegnehmen, "7 Wegnehmen");
         ToolButton(zeile7, Brush.Vorkommen, "8 Vorkommen");
         ToolButton(zeile7, Brush.Startplatz, "9 Startplatz");
+        ToolButton(zeile7, Brush.Bruecke, "0 Brücke");                 // D9 (13.11.2026)
         var pinselZeile = new HBoxContainer();
         pinselZeile.AddThemeConstantOverride("separation", 4);
         v.AddChild(pinselZeile);
@@ -437,6 +438,8 @@ public partial class MapEditOverlay
                             "senkt die Zelle um eine Stufe"),
             Brush.Startplatz => ($"setzt den Startplatz für {OwnerName(_owner)}: Basis, Werk, Truppe — ein vorhandener wird verschoben",
                                  "nimmt den Startplatz dieses Spielers weg"),
+            Brush.Bruecke => ("baut von der Uferzelle unter der Maus eine Brücke über 1 bis 3 Wasserzellen (grün = so wird sie)",
+                              "— Brücke zurücknehmen mit Strg+Z"),
             Brush.Vorkommen => ($"setzt ein Terranium-Vorkommen ({MapDeposits.Amount}) — gelbe Raute, mind. 8 Zellen Abstand",
                                 "nimmt das nächste Vorkommen weg"),
             _ => ("nimmt weg, was dort steht: Einheit, sonst Gebäude, sonst Gleis, sonst Objekt",
@@ -465,6 +468,7 @@ public partial class MapEditOverlay
         Brush.Hoehe => "Höhe ändern",
         Brush.Vorkommen => "Vorkommen",
         Brush.Startplatz => "Startplatz",
+        Brush.Bruecke => "Brücke",
         _ => "Wegnehmen",
     };
 
@@ -529,6 +533,7 @@ public partial class MapEditOverlay
                     Brush.Hoehe => "Höhe: links anheben, rechts absenken",
                     Brush.Vorkommen => "Vorkommen: gelbe Rauten auf der Karte",
                     Brush.Startplatz => SpielerZeile(),
+                    Brush.Bruecke => "Brücke: Uferzelle anklicken — wie die Brücken der Originalkarten (3 breit, Fahrbahn in der Mitte)",
                     _ => "Wegnehmen: keine Auswahl nötig",
                 };
                 _pList.Visible = false;

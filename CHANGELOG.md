@@ -180,6 +180,17 @@ your own copy of the 1997 game.
   the original keeps them in a separate table, and an editor aircraft would mean
   inventing a file format. Check `--map-edit-fussvolk-check` (record, live unit, saved
   file, with `--fussvolk-shot=<file>` a window picture). Opt-out `--editor-fussvolk-aus`.
+- **Bridges in the map editor** (tool "0 Brücke"): a click on a shore cell builds a bridge
+  over 1 to 3 water cells to the far bank; the preview shows it in green first. The editor
+  writes exactly what the original's bridge builder writes (0x4CC280): 3 cells wide, the
+  roadway in the middle one level above the water, railings on both sides, a bridge record
+  with 500 hit points, layer and head bytes. Measured on all 52 bridges of the 23 original
+  maps (705 cells) — the editor bridge meets every one of these rules without exception,
+  looks like a map bridge (stone) and can be destroyed in game like one. Refused with a
+  reason: no water next to it, water on two sides, far bank too far, banks at different
+  heights, something in the way. Ctrl+Z takes it back. Checks `--map-edit-bruecke-check`
+  (with `--bruecke-shot=<file>` a window picture) and `--bruecken-muster` (the measurement
+  on the originals). Opt-out `--editor-bruecke-aus`.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original

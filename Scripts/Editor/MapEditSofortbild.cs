@@ -48,7 +48,7 @@ public partial class MapEditOverlay
     }
 
     private static bool Bildwirksam(Brush b) => b is Brush.Gelaende or Brush.Hoehe or Brush.Gegenstand
-                                                  or Brush.Gleis or Brush.Wegnehmen;
+                                                  or Brush.Gleis or Brush.Wegnehmen or Brush.Bruecke;
 
     /// <summary>Nach einem Strich (oder Rueckgaengig) aufrufen.</summary>
     private async void SofortbildPlanen()

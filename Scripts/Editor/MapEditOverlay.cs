@@ -55,7 +55,7 @@ public partial class MapEditOverlay : Node2D
     /// <summary>Was der Pinsel gerade setzt.</summary>
     /// <remarks>11.11.2026 bug-802: <c>Wegnehmen</c> (Taste 7) neu — nimmt weg,
     /// was unter der Maus steht, egal welche Art.</remarks>
-    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit, Gelaende, Hoehe, Wegnehmen, Vorkommen, Startplatz }
+    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit, Gelaende, Hoehe, Wegnehmen, Vorkommen, Startplatz, Bruecke }
 
     private MapEntityLayer _layer = null!;
     private CwmFile _map = null!;
@@ -118,6 +118,7 @@ public partial class MapEditOverlay : Node2D
         WaldCheck();              // Wald brennt (12.11.2026)
         SofortCheck();            // D4 (12.11.2026)
         FussvolkCheck();          // D9 (13.11.2026)
+        BrueckeCheck();           // D9 (13.11.2026)
     }
 
     /// <summary>
@@ -443,7 +444,7 @@ public partial class MapEditOverlay : Node2D
         _brush = n switch
         {
             1 => Brush.Gebaeude, 2 => Brush.Gegenstand, 3 => Brush.Gleis,
-            4 => Brush.Einheit, 5 => Brush.Gelaende, 6 => Brush.Hoehe, 8 => Brush.Vorkommen, 9 => Brush.Startplatz, _ => Brush.Wegnehmen,
+            4 => Brush.Einheit, 5 => Brush.Gelaende, 6 => Brush.Hoehe, 8 => Brush.Vorkommen, 9 => Brush.Startplatz, 10 => Brush.Bruecke, _ => Brush.Wegnehmen,
         };
         Refresh();
     }
@@ -814,6 +815,7 @@ public partial class MapEditOverlay : Node2D
             case Key.Key7: _brush = Brush.Wegnehmen; break;          // bug-802
             case Key.Key8: _brush = Brush.Vorkommen; break;          // P5/D7
             case Key.Key9: _brush = Brush.Startplatz; if (_owner is < 0 or > 7) _owner = 0; break;   // P6/D5
+            case Key.Key0: _brush = Brush.Bruecke; break;                                            // D9 (13.11.2026)
             case Key.M:                                                      // D6: Spiegeln
                 _spiegeln = !_spiegeln;
                 _spiegelKnopf?.SetPressedNoSignal(_spiegeln);
@@ -904,6 +906,7 @@ public partial class MapEditOverlay : Node2D
             case Brush.Wegnehmen: TakeAny(cell); return;              // bug-802
             case Brush.Vorkommen: PutVorkommen(cell); break;          // P5/D7
             case Brush.Startplatz: PutStartplatz(cell); break;        // P6/D5
+            case Brush.Bruecke: PutBruecke(cell); break;              // D9 (13.11.2026)
         }
         Refresh();
         QueueRedraw();
@@ -1171,6 +1174,9 @@ public partial class MapEditOverlay : Node2D
             case Brush.Vorkommen:                                       // P5/D7
                 TakeVorkommen(cell);
                 break;
+            case Brush.Bruecke:                                         // D9 (13.11.2026)
+                _say = "eine Brücke nimmt Rückgängig (Strg+Z) zurück";
+                break;
             case Brush.Startplatz:                                      // P6/D5
                 if (_owner is >= 0 and <= 7)
                 {
@@ -1322,6 +1328,7 @@ public partial class MapEditOverlay : Node2D
     public override void _Draw()
     {
         VorkommenZeichnen();                                            // P5/D7
+        BrueckeVorschauZeichnen();                                      // D9 (13.11.2026)
         if (_hover is { } h0)
         {
             // P5: die Pinselgroesse im Rahmen zeigen (mittig um die Maus)
@@ -1339,6 +1346,7 @@ public partial class MapEditOverlay : Node2D
                 Brush.Hoehe => new Color(1f, 0.5f, 0.9f, 0.9f),
                 Brush.Vorkommen => new Color(1f, 0.75f, 0.1f, 0.95f),
                 Brush.Startplatz => new Color(0.3f, 0.9f, 1f, 0.95f),
+                Brush.Bruecke => new Color(0.4f, 1f, 0.5f, 0.95f),
                 _ => new Color(0.4f, 0.8f, 1f, 0.9f),
             };
             // Zelle fuer Zelle gefuellt statt als ein Rechteck: die Kacheln
