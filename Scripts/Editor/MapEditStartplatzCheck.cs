@@ -322,52 +322,122 @@ public partial class MapEditOverlay
 /// (Bildpunkte wie vorher).</summary>
 public partial class MapEditOverlay
 {
-    private static byte[]? _ganzVorher;
     private async void SofortCheck()
     {
         if (Array.IndexOf(Core.CommandLine.Args, "--map-edit-sofort-check") < 0) return;
         for (int i = 0; i < 6; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        if (_layer.GetParent() is not Rendering.MapViewer v || v.EditorBodenTextur == null)
+        if (_layer.GetParent() is not Rendering.MapViewer v || v.EditorBodenTextur == null
+            || MapEditSession.Cwp == null || MapEditSession.Pal == null)
         { GD.Print("map-edit-sofort-check: DURCHGEFALLEN — kein Bodenbild"); GetTree().Quit(1); return; }
+        // ⭐ 13.11.2026 bug-827: eine freie Zelle OHNE Wasser im Umkreis 4 — sonst darf
+        // der Kettenring (Geroell braucht Gras zwischen sich und Sand/Wasser) nicht greifen,
+        // und gestern lag die Probezelle (78,6) direkt am Ufer.
+        bool Trocken(int c, int r)
+        {
+            for (int dy = -MapEditTerrain.Reach; dy <= MapEditTerrain.Reach; dy++)
+                for (int dx = -MapEditTerrain.Reach; dx <= MapEditTerrain.Reach; dx++)
+                    if (MapEditTerrain.ClassAt(_map, c + dx, r + dy) is 2 or 3) return false;
+            return true;
+        }
         Vector2I? z = null;
-        for (int r = 6; r < _map.Height - 6 && z == null; r++)
-            for (int c = 6; c < _map.Width - 6 && z == null; c++)
-                if (MapEditTerrain.ClassAt(_map, c, r) == 0 && _map.FlagAt(c, r) == 0 && _map.CodeAt(c, r) < CwpFile.ObjectCodeBase)
+        for (int r = 8; r < _map.Height - 8 && z == null; r++)
+            for (int c = 8; c < _map.Width - 8 && z == null; c++)
+                if (MapEditTerrain.ClassAt(_map, c, r) == 0 && _map.FlagAt(c, r) == 0
+                    && _map.CodeAt(c, r) < CwpFile.ObjectCodeBase && Trocken(c, r))
                     z = new Vector2I(c, r);
         if (z is not { } zz) { GD.Print("map-edit-sofort-check: DURCHGEFALLEN — keine freie Zelle"); GetTree().Quit(1); return; }
         var p0 = _layer.EditorCellTopLeft(zz.X, zz.Y);
         var rect = new Rect2I((int)p0.X, (int)p0.Y, MapBaker.TileW, MapBaker.TileH);
-        byte[] Pixel() { using var im = v.EditorBodenTextur!.GetImage(); return im.GetRegion(rect).GetData(); }
-        bool Gleich(byte[] a, byte[] b) => a.Length == b.Length && a.AsSpan().SequenceEqual(b);
-        var vorher = Pixel();
-        { using var g0 = v.EditorBodenTextur!.GetImage(); _ganzVorher = g0.GetData(); }
+
+        // ⚠ Verglichen wird das GEBACKENE Bild, nicht die Textur: kopflos liefert
+        // ImageTexture.GetImage() nach Update weiter das erste Bild (Dummy-Renderer).
+        // Gemessen 13.11.: Codes 8 -> 255/216/657, Textur 0 Bildpunkte anders.
+        var vorherBild = new MapBaker(KartenKopie(), MapEditSession.Cwp, MapEditSession.Pal).Bake();
+        int Unterschied(Image a, Image b, out Rect2I bereich)
+        {
+            bereich = new Rect2I();
+            if (a.GetWidth() != b.GetWidth() || a.GetHeight() != b.GetHeight()) return -1;
+            var da = a.GetData(); var db = b.GetData();
+            if (da.Length != db.Length) return -1;
+            int n = 0, x0 = int.MaxValue, y0 = int.MaxValue, x1 = 0, y1 = 0, w = a.GetWidth();
+            int bpp = da.Length / (w * a.GetHeight());
+            for (int i = 0; i + 2 < da.Length; i += bpp)
+                if (da[i] != db[i] || da[i + 1] != db[i + 1] || da[i + 2] != db[i + 2])
+                {
+                    n++; int px = (i / bpp) % w, py = (i / bpp) / w;
+                    x0 = Math.Min(x0, px); y0 = Math.Min(y0, py); x1 = Math.Max(x1, px); y1 = Math.Max(y1, py);
+                }
+            if (n > 0) bereich = new Rect2I(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+            return n;
+        }
         async System.Threading.Tasks.Task<bool> Warten(int soll)
         {
             for (int i = 0; i < 600 && SofortGetauscht < soll; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             return SofortGetauscht >= soll;
         }
+        var tc = _map.CodeAt(zz.X, zz.Y);
         _brush = Brush.Gelaende; _ground = MapFactory.Ground.Rough; _pinsel = 3;
         StrichBeginnen(true); Anwenden(zz, true); StrichEnden();
+        int ring = MapEditTerrain.LastRingGeaendert, abgelehnt = MapEditTerrain.LastRingAbgelehnt;
+        bool rau = MapEditTerrain.ClassAt(_map, zz.X, zz.Y) == 1;
+        int codeNach = _map.CodeAt(zz.X, zz.Y);
         bool b1 = await Warten(1);
-        var nachher = Pixel();
-        bool anders = !Gleich(vorher, nachher);
-        {
-            using var ganz = v.EditorBodenTextur!.GetImage();
-            var d1 = ganz.GetData(); int diff = 0, x0 = int.MaxValue, y0 = int.MaxValue, x1 = 0, y1 = 0, w = ganz.GetWidth();
-            if (_ganzVorher != null && _ganzVorher.Length == d1.Length)
-                for (int i = 0; i < d1.Length; i += 4)
-                    if (d1[i] != _ganzVorher[i] || d1[i + 1] != _ganzVorher[i + 1] || d1[i + 2] != _ganzVorher[i + 2])
-                    { diff++; int px = (i / 4) % w, py = (i / 4) / w; x0 = Math.Min(x0, px); y0 = Math.Min(y0, py); x1 = Math.Max(x1, px); y1 = Math.Max(y1, py); }
-            anders = diff > 0;
-            GD.Print($"map-edit-sofort-check:   ganzes Bild: {diff} Bildpunkte anders, Bereich x {x0}..{x1}, y {y0}..{y1}; Zellrechteck {rect}");
-        }
-        GD.Print($"map-edit-sofort-check: Geroell 3x3 auf {zz}: Bild {(b1 ? "getauscht" : "NICHT getauscht")}, Bild {(anders ? "veraendert" : "UNVERAENDERT")} — {SofortZeile}");
+        var ber1 = new Rect2I();
+        int diff1 = SofortLetzterBoden == null ? -1 : Unterschied(vorherBild, SofortLetzterBoden, out ber1);
+        // streng: Bildpunkte IN der bemalten Zelle (vorher reichte, dass sich die Nachbarn
+        // aenderten — genau so sah der Befund aus: Zelle gleich, Rand anders)
+        int inZ = SofortLetzterBoden == null ? -1
+            : Unterschied(vorherBild.GetRegion(rect), SofortLetzterBoden.GetRegion(rect), out _);
+        bool inZelle = inZ > 0;
+        GD.Print($"map-edit-sofort-check: Geroell 3x3 auf {zz} (Code {tc} -> {codeNach}, Klasse {(rau ? "rau" : "NICHT rau")}, " +
+                 $"Kettenring {ring} Ecken, abgelehnt {abgelehnt}): Bild {(b1 ? "getauscht" : "NICHT getauscht")}, " +
+                 $"{diff1} Bildpunkte anders{(diff1 > 0 ? $" in {ber1}" : "")}, in der Zelle {rect} {inZ} — {SofortZeile}");
         Rueckgaengig();
         bool b2 = await Warten(2);
-        bool zurueck;
-        { using var g2 = v.EditorBodenTextur!.GetImage(); zurueck = _ganzVorher != null && Gleich(_ganzVorher, g2.GetData()); }
-        GD.Print($"map-edit-sofort-check: Rueckgaengig: Bild {(b2 ? "getauscht" : "NICHT getauscht")}, ganzes Bild {(zurueck ? "bytegleich wie vorher" : "ANDERS")}");
-        bool ok = b1 && anders && b2 && zurueck;
+        int diff2 = SofortLetzterBoden == null ? -1 : Unterschied(vorherBild, SofortLetzterBoden, out _);
+        GD.Print($"map-edit-sofort-check: Rueckgaengig: Bild {(b2 ? "getauscht" : "NICHT getauscht")}, " +
+                 $"{(diff2 == 0 ? "bytegleich wie vorher" : $"{diff2} Bildpunkte ANDERS")}");
+        // ---- Probe 2: Geroell auf SAND — der Kettenring muss Gras dazwischenlegen ----
+        bool sandOk = true;
+        var tcm = MapEditSession.Tiles == null ? null : MapEditTerrain.EckModellFuer(_map);
+        Vector2I? zs = null;
+        if (tcm != null && tcm.IsChain)
+            for (int r = 8; r < _map.Height - 8 && zs == null; r++)
+                for (int c = 8; c < _map.Width - 8 && zs == null; c++)
+                {
+                    int code = _map.CodeAt(c, r);
+                    if (MapEditTerrain.ClassAt(_map, c, r) != 0 || _map.FlagAt(c, r) != 0 || !tcm.Knows(code)) continue;
+                    int l = tcm.Corner(code, 0);
+                    if (l < 0 || tcm.Depth[l] != 1) continue;               // Stufe 1 = Sand (Wasser–Sand–…)
+                    bool alle = true;
+                    for (int k = 1; k < 4; k++) alle &= tcm.Corner(code, k) == l;
+                    if (alle && Trocken(c, r)) zs = new Vector2I(c, r);
+                }
+        if (zs is { } s2)
+        {
+            int vor = _map.CodeAt(s2.X, s2.Y);
+            _pinsel = 1;
+            StrichBeginnen(true); Anwenden(s2, true); StrichEnden();
+            int ring2 = MapEditTerrain.LastRingGeaendert, abg2 = MapEditTerrain.LastRingAbgelehnt;
+            int nach = _map.CodeAt(s2.X, s2.Y);
+            int ecken = 0, bruch = 0;
+            for (int r = s2.Y - 1; r <= s2.Y + 1; r++)
+                for (int c = s2.X - 1; c <= s2.X + 1; c++)
+                {
+                    int code = _map.CodeAt(c, r);
+                    if (!tcm!.Knows(code)) continue;
+                    int lo = 99, hi = -1;
+                    for (int k = 0; k < 4; k++) { int d = tcm.Depth[tcm.Corner(code, k)]; lo = Math.Min(lo, d); hi = Math.Max(hi, d); }
+                    ecken++; if (hi - lo > 1) bruch++;
+                }
+            bool geroell = tcm!.Knows(nach) && tcm.Depth[tcm.Corner(nach, 0)] == tcm.MaxDepth;
+            sandOk = geroell && abg2 == 0 && ring2 > 0 && bruch == 0;
+            GD.Print($"map-edit-sofort-check: Geroell auf Sand {s2} (Code {vor} -> {nach}, {(geroell ? "Geroellbild" : "KEIN Geroellbild")}): " +
+                     $"Kettenring {ring2} Ecken, abgelehnt {abg2}, Kettenbrueche in 3x3 {bruch}/{ecken} — {(sandOk ? "ok" : "FALSCH")}");
+            Rueckgaengig();
+        }
+        else GD.Print("map-edit-sofort-check: Geroell auf Sand — keine trockene Sandzelle, Probe entfaellt");
+        bool ok = b1 && rau && inZelle && b2 && diff2 == 0 && sandOk;
         GD.Print($"map-edit-sofort-check: {(ok ? "BESTANDEN" : "DURCHGEFALLEN")}");
         GetTree().Quit(ok ? 0 : 1);
     }

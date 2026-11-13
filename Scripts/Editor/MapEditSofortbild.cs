@@ -33,6 +33,19 @@ public partial class MapEditOverlay
     /// <summary>Wie viele Bilder schon getauscht wurden (fuer den Pruefstand).</summary>
     public int SofortGetauscht { get; private set; }
     public string SofortZeile { get; private set; } = "";
+    /// <summary>Das zuletzt getauschte Bodenbild (fuer den Pruefstand: kopflos liefert
+    /// <c>ImageTexture.GetImage()</c> nach <c>Update</c> weiter das ALTE Bild — der
+    /// Dummy-Renderer behaelt nur das erste, bug-827).</summary>
+    public Image? SofortLetzterBoden { get; private set; }
+
+    /// <summary>Eine Kopie der bearbeiteten Karte (alle Sektionen geklont).</summary>
+    private CwmFile KartenKopie()
+    {
+        var kopie = CwmFile.Create(_map.Width, _map.Height, _map.Tileset, _map.Stem, _map.Mission);
+        for (int i = 0; i < _map.Sections.Count && i < kopie.Sections.Count; i++)
+            kopie.Sections[i] = (byte[])_map.Sections[i].Clone();
+        return kopie;
+    }
 
     private static bool Bildwirksam(Brush b) => b is Brush.Gelaende or Brush.Hoehe or Brush.Gegenstand
                                                   or Brush.Gleis or Brush.Wegnehmen;
@@ -61,9 +74,7 @@ public partial class MapEditOverlay
         if (stand == _sofortStand) return;                          // nichts Neues
         _sofortLaeuft = true;
         // die Kopie auf dem Hauptfaden — der Pinsel darf weitermalen, waehrend gebacken wird
-        var kopie = CwmFile.Create(_map.Width, _map.Height, _map.Tileset, _map.Stem, _map.Mission);
-        for (int i = 0; i < _map.Sections.Count && i < kopie.Sections.Count; i++)
-            kopie.Sections[i] = (byte[])_map.Sections[i].Clone();
+        var kopie = KartenKopie();
         var cwp = MapEditSession.Cwp!; var pal = MapEditSession.Pal!;
         var t0 = DateTime.UtcNow;
         (Image Boden, Image? Objekte, string Meta)? fertig = null;
@@ -85,7 +96,7 @@ public partial class MapEditOverlay
         if (fertig is { } f)
         {
             bool ok = _layer.EditorSofortbild(f.Boden, f.Objekte, f.Meta, out string warum);
-            if (ok) { _sofortStand = stand; SofortGetauscht++; }
+            if (ok) { _sofortStand = stand; SofortGetauscht++; SofortLetzterBoden = f.Boden; }
             SofortZeile = ok ? $"Bild aktualisiert ({ms / 1000:0.0} s)" : $"Bild: {warum} — F5 zeigt es";
             _say = SofortZeile;
             GD.Print($"map-editor: Sofortbild {(ok ? "getauscht" : "NICHT getauscht: " + warum)} nach {ms:0} ms");

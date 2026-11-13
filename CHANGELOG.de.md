@@ -166,6 +166,22 @@ bisher nur dort beschrieben.*
   Zelle über die bisher höchste Stufe der Karte, ändert sich die Bildgröße — dann sagt
   die Leiste »F5 zeigt es«. Prüflauf `--map-edit-sofort-check`. Gegenschalter
   `--editor-sofortbild-aus`.
+- **Der Geröllpinsel malt Geröll** (bug-827): Auf flachem Land blieb die bemalte Zelle
+  selbst unverändert, nur ihre Nachbarn änderten sich; ein 3×3-Strich auf Sand änderte
+  keinen einzigen Bildpunkt. Ursache, gemessen an den Originalkarten von Kachelsatz 47:
+  »rau« hat dort kein eigenes Bild — rau ist meist Gras am Hang, und die Geröllkacheln
+  sind fast immer als »frei« eingetragen (4356 frei gegen 417 rau). Der Pinsel fand für
+  »rau« also keinen Bildstoff und zog eine Kachel, die aussah wie vorher. Jetzt malt er
+  das **Geröllbild** und setzt die Zelle auf rau (unsere Setzung, das Original hat keinen
+  Editor). Damit die Übergänge stimmen — im Original grenzt Geröll nur an Gras, Gras an
+  Sand, Sand an Wasser —, legt er bei Bedarf von selbst einen **Grasring** um die Stelle
+  (gemessen: Geröll auf Sand, 8 Ecken Gras dazwischen, 0 Kettenbrüche). Wasser wird dafür
+  nie umgemalt: liegt die Zelle zu nah am Ufer, bleibt es dort beim bisherigen Verhalten.
+  Nebenbei passen nach den Strichen des Prüflaufs alle Kachelecken (Eckpassquote 100,000 %
+  statt 99,975 %, harte Nähte 0,24 % statt 0,26 %). Der Prüflauf `--map-edit-sofort-check`
+  vergleicht jetzt das gebackene Bild und die Bildpunkte in der bemalten Zelle selbst
+  (kopflos zeigte die Textur das neue Bild nie, der alte Lauf maß also nichts).
+  Gegenschalter `--editor-geroellbild-aus` und `--editor-kettenring-aus`.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:

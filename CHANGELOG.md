@@ -153,6 +153,22 @@ your own copy of the 1997 game.
   F5 stays the save. Limit: if a stroke raises a cell above the map's highest level so
   far, the picture size changes — the panel then says "F5 zeigt es". Check
   `--map-edit-sofort-check`. Opt-out `--editor-sofortbild-aus`.
+- **The rubble brush paints rubble** (bug-827): on flat land the painted cell itself
+  stayed unchanged, only its neighbours changed; a 3×3 stroke on sand changed not a
+  single pixel. Cause, measured on the original maps of tileset 47: "rough" has no
+  picture of its own there — rough is mostly grass on slopes, and the rubble tiles are
+  almost always marked "free" (4356 free vs. 417 rough). The brush found no material for
+  "rough" and drew a tile that looked like the old one. It now paints the **rubble
+  picture** and sets the cell to rough (our choice, the original has no editor). To keep
+  transitions right — in the originals rubble only borders grass, grass borders sand,
+  sand borders water — it lays a **ring of grass** around the spot when needed
+  (measured: rubble on sand, 8 grass corners in between, 0 chain breaks). Water is never
+  repainted for this: if the cell is too close to the shore, the old behaviour stays
+  there. As a side effect, all tile corners now match after the check's strokes (corner
+  match 100.000 % instead of 99.975 %, hard seams 0.24 % instead of 0.26 %). The check
+  `--map-edit-sofort-check` now compares the baked picture and the pixels in the painted
+  cell itself (headless, the texture never showed the new picture, so the old check
+  measured nothing). Opt-outs `--editor-geroellbild-aus` and `--editor-kettenring-aus`.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original

@@ -96,7 +96,7 @@ public static class MapEditTerrain
                                      TileSeams? seams = null)
     {
         if (col < 0 || col >= m.Width || row < 0 || row >= m.Height) return "ausserhalb der Karte";
-        if (ClassAt(m, col, row) == (int)g) return null;      // schon so, kein Strich
+        if (ClassAt(m, col, row) == (int)g && !GeroellBildFehlt(m, col, row, g)) return null;  // schon so, kein Strich
 
         int elev = m.ElevAt(col, row);
         // ⚠ Wasser liegt auf seiner eigenen Hoehe. Im Original haben 36.278 von
@@ -351,6 +351,7 @@ public static class MapEditTerrain
     {
         LastRetiled = LastMissing = LastShoreFixed = LastShoreLeft = LastPropsKept = 0;
         LastCornerPicked = LastCornerKept = 0;
+        LastRingAbgelehnt = LastRingGeaendert = 0;
         var grid = Grid(m);
         var dist = TileModel.WaterDistance(m.Width, m.Height, grid);
         var inner = pal == null ? new HashSet<int>() : new HashSet<int>(pal.Ground);
@@ -388,10 +389,33 @@ public static class MapEditTerrain
             for (int vy = 0; vy < vw; vy++)
                 for (int vx = 0; vx < vw; vx++)
                     vtx[vy * vw + vx] = EckStoff(m, tc, vx0 + vx, vy0 + vy);
-            ziel = malKlasse >= 0 ? StoffDerKlasse(tc, malKlasse) : -1;
+            ziel = malKlasse >= 0 ? ZielStoff(tc, malKlasse) : -1;
             if (ziel >= 0)
-                for (int k = 0; k < 4; k++)
-                    vtx[(row - vy0 + k / 2) * vw + (col - vx0 + k % 2)] = ziel;
+            {
+                // ⭐ 13.11.2026 bug-827: DER KETTENRING. Eine Ecke darf sich hoechstens
+                // um so viele Kettenstufen vom Zielstoff unterscheiden, wie sie Ecken
+                // von der bemalten Zelle entfernt liegt (Schachbrettabstand). Damit
+                // legt sich um Geroell in Sand von selbst ein Grasring, und keine
+                // Zelle mischt zwei Stoffe, die in der Kette nicht benachbart sind
+                // (Satz 47: Wasser–Sand–Gras–Geroell). Die Randecken des Fensters
+                // liegen R=4 entfernt und bleiben damit immer, wie sie sind.
+                // ⚠ Wasserecken werden NIE umgestoffen (Wasser ist Klasse und Hoehe,
+                // nicht nur Bild) — muesste eine, bleibt es bei den vier Ecken der
+                // Zelle wie bis gestern (gezaehlt in LastRingAbgelehnt).
+                // ⚠ Gemessen 13.11. (--map-edit-check, Zelle (78,5) am Ufer): lehnt der Ring
+                // ab und das Geroellbild setzt trotzdem die vier Ecken, entsteht ein
+                // Wasserfleck im Eckraster (Ecke 79,5). Dann gilt fuer das GEROELLBILD
+                // wieder der Weg von gestern (StoffDerKlasse, fuer rau: keiner).
+                if (tc.IsChain && !KettenringAlt && !RingSetzen(tc, vtx, vw, col - vx0, row - vy0, ziel))
+                {
+                    LastRingAbgelehnt++;
+                    int vorher = StoffDerKlasse(tc, malKlasse);
+                    if (vorher != ziel) ziel = vorher;
+                }
+                if (ziel >= 0)
+                    for (int k = 0; k < 4; k++)
+                        vtx[(row - vy0 + k / 2) * vw + (col - vx0 + k % 2)] = ziel;
+            }
         }
         int QuadAus(int c, int r)
         {
@@ -511,6 +535,9 @@ public static class MapEditTerrain
     private static readonly Dictionary<(int, int), int> FlagBeimLegen = new();
     private static readonly Dictionary<int, TileCorners?> _eck = new();
 
+    /// <summary>Fuer Pruefstaende: das Eckmodell der Karte (null mit Gegenschalter).</summary>
+    public static TileCorners? EckModellFuer(CwmFile m) => EckModell(m);
+
     /// <summary>Das Eckmodell des Kachelsatzes, einmal gelernt und behalten.</summary>
     private static TileCorners? EckModell(CwmFile m)
     {
@@ -544,6 +571,83 @@ public static class MapEditTerrain
         }
         V(x - 1, y - 1, 3); V(x, y - 1, 2); V(x - 1, y, 1); V(x, y, 0);
         return best;
+    }
+
+    // ---- bug-827: Geroellbild und Kettenring --------------------------------
+
+    /// <summary>Wie viele Ecken der letzte Strich fuer den Kettenring umgestofft hat,
+    /// und ob der Ring abgelehnt wurde (eine Wasserecke haette sich aendern muessen).</summary>
+    public static int LastRingGeaendert, LastRingAbgelehnt;
+
+    public static bool KettenringAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-kettenring-aus") >= 0;
+    public static bool GeroellBildAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-geroellbild-aus") >= 0;
+
+    /// <summary>
+    /// ⭐ 13.11.2026 bug-827: der Stoff, den eine Malklasse im Bild bekommt.
+    /// <para><b>GEMESSEN (Satz 47, NET02+NET07):</b> »rau« hat KEIN eigenes Bild. Die
+    /// gleichfoermigen Kacheln je Stoff tragen als Zellklasse frei/rau/Wasser/gesperrt:
+    /// Gras 18518/3446/0/97, Sand 8399/219/0/17, Geroell(148) 4356/417/0/19 — rau ist
+    /// in den Originalen meist Gras am Hang, und das Geroellbild ist fast immer »frei«.
+    /// <see cref="StoffDerKlasse"/> fand fuer rau deshalb nichts, die bemalte Zelle
+    /// ging den alten Weg und bekam eine Kachel, die aussah wie vorher: ein 3x3-Strich
+    /// auf Sand aenderte keinen einzigen Bildpunkt (--map-edit-sofort-check).</para>
+    /// <para><b>UNSERE SETZUNG:</b> der Geroellpinsel (so heisst er im Bedienfeld) malt
+    /// das GEROELLBILD — den Stoff am wasserfernen Ende der Kette, wenn der nicht der
+    /// Stoff von »frei« ist — und setzt die Zelle auf rau. Gegenschalter
+    /// <c>--editor-geroellbild-aus</c>.</para>
+    /// </summary>
+    private static int ZielStoff(TileCorners tc, int klasse)
+    {
+        int l = StoffDerKlasse(tc, klasse);
+        if (l >= 0 || klasse != (int)MapFactory.Ground.Rough || GeroellBildAlt || !tc.IsChain) return l;
+        int ende = tc.LabelOfDepth[tc.MaxDepth];
+        if (ende == tc.WaterLabel || ende == StoffDerKlasse(tc, (int)MapFactory.Ground.Free)) return -1;
+        int q = TileCorners.Quad(ende, ende, ende, ende);
+        return tc.Has(q, 0) ? ende : -1;
+    }
+
+    /// <summary>Ob eine Zelle schon die Klasse hat, aber noch nicht das Bild des
+    /// Geroellpinsels — dann ist ein Strich doch noetig.</summary>
+    private static bool GeroellBildFehlt(CwmFile m, int col, int row, MapFactory.Ground g)
+    {
+        if (g != MapFactory.Ground.Rough) return false;
+        var tc = EckModell(m);
+        if (tc == null) return false;
+        int ziel = ZielStoff(tc, (int)g);
+        if (ziel < 0) return false;
+        int code = m.CodeAt(col, row);
+        if (code >= CwpFile.ObjectCodeBase || !tc.Knows(code)) return false;
+        for (int k = 0; k < 4; k++) if (tc.Corner(code, k) != ziel) return true;
+        return false;
+    }
+
+    /// <summary>Den Kettenring legen: jede Ecke v wird auf
+    /// Zielstufe ± Schachbrettabstand(v, Zelle) begrenzt. Ist die alte Karte in sich
+    /// kettentreu, ist es danach auch das Ergebnis (die Begrenzung aendert sich je
+    /// Nachbarecke um hoechstens eine Stufe). false, wenn dabei eine Wasserecke
+    /// umgestofft werden muesste — dann wird NICHTS geaendert.</summary>
+    private static bool RingSetzen(TileCorners tc, int[] vtx, int vw, int lx, int ly, int ziel)
+    {
+        int z = tc.Depth[ziel];
+        var neu = (int[])vtx.Clone();
+        int geaendert = 0;
+        for (int y = 0; y < vw; y++)
+            for (int x = 0; x < vw; x++)
+            {
+                int l = vtx[y * vw + x];
+                if (l < 0) continue;
+                int d = Math.Max(Math.Max(0, Math.Max(lx - x, x - (lx + 1))),
+                                 Math.Max(0, Math.Max(ly - y, y - (ly + 1))));
+                if (d == 0) continue;                              // die vier Zellecken setzt der Aufrufer
+                int t = Math.Clamp(tc.Depth[l], z - d, z + d);
+                if (t == tc.Depth[l]) continue;
+                if (l == tc.WaterLabel) return false;
+                neu[y * vw + x] = tc.LabelOfDepth[t];
+                geaendert++;
+            }
+        Array.Copy(neu, vtx, vtx.Length);
+        LastRingGeaendert += geaendert;
+        return true;
     }
 
     /// <summary>Der Stoff, der eine Klasse am haeufigsten traegt: der Stoff, dessen
