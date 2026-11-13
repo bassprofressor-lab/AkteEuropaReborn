@@ -225,6 +225,18 @@ bisher nur dort beschrieben.*
   die steht noch im Eckraster der Karte (gemessen: alle vier Ecken 0 heißt Wasser, bei 3747
   von 3747 Wasserzellen; eine Ecke 0 heißt raues Ufer). Danach kachelt der Geländepinsel
   sauber nach. Im Prüflauf bekamen 12 von 12 Brückenzellen ihre alte Art zurück.
+- **Editorfahrzeuge tragen ihren Entwurf und die Leerwerte des Originals** (Prüfpunkt B3):
+  Der Editor schrieb in einen Fahrzeugsatz außer Kampfwerten, Leben und Tank nur Nullen.
+  Die Originalkarten tragen dort je Bauart einheitlich »leer«-Markierungen (FF) und an
+  zwei Stellen den **Entwurf** der Einheit. Mit 0 hieß jede Editoreinheit im Infofenster
+  wie Entwurf 0 und wurde danach bewertet. Jetzt schreibt der Editor je Bauart die Werte,
+  die auf den 55 Originalkarten bei mindestens 60 % der Sätze stehen, und den Entwurf aus
+  der Entwurfstafel des Spiels, der genau zu Fahrwerk, Waffe und Ausrüstung passt — für 11
+  von 12 Landbauarten gibt es genau einen, und es ist auch der häufigste auf den Karten
+  (z. B. Reifen → »Maschinengewehr«, Ketten → »Leichter Panzer«). Folge im Gefecht:
+  Editoreinheiten werden wie die Einheiten der Originalkarten auf ihren Entwurf
+  nachgezogen (NET07: 24 von 24; eine Editorkarte vorher 0, jetzt 23). Prüflauf
+  `--map-edit-satz-check`. Gegenschalter `--editor-satzfelder-alt`.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:

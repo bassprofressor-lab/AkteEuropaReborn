@@ -671,6 +671,11 @@ public static class MapFactory
             s[o + 0x3d] = (byte)k.Reload;
         }
 
+        // ⭐ 13.11.2026 B3: die uebrigen Satzfelder (Leerwerte FF, Entwurf +0x3E/+0x43 …),
+        // gemessen je Bauart — siehe MapEditUnits.SatzFelder.
+        foreach (var (off, wert) in MapEditUnits.SatzFelderOf(unitType))
+            if (off < CwmData.EntityStride) s[o + off] = wert;
+
         // ⭐ 13.11.2026 D9: gibt es fuer die Bauart einen gemessenen GANZEN Satz
         // (Fussvolk), dann gilt der — Byte fuer Byte, nur Lage, Richtung und der
         // Zellversatz des Soldaten (+0x1D/+0x1E) sind je Einheit.

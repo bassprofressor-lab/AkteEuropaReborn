@@ -120,6 +120,7 @@ public partial class MapEditOverlay : Node2D
         FussvolkCheck();          // D9 (13.11.2026)
         BrueckeCheck();           // D9 (13.11.2026)
         RampeCheck();             // D9 (13.11.2026)
+        SatzCheck();              // B3 (13.11.2026)
     }
 
     /// <summary>

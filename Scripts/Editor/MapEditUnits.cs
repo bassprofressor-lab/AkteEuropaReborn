@@ -196,6 +196,54 @@ public static class MapEditUnits
     public static Kind[] Liste
         => FussvolkAus ? System.Array.FindAll(All, k => k.Art != 1) : All;
 
+    // ========================================================================
+    // ⭐ 13.11.2026 — B3 (Fable-Pruefung): DIE UEBRIGEN SATZFELDER DER FAHRZEUGE
+    // ========================================================================
+    //
+    // Bis heute schrieb der Editor ausser Kampfsatz, Leben, Tank und Gattung NUR
+    // Nullen. Die Originalsaetze tragen dort je Bauart einheitlich FF an +0x04,
+    // +0x11, +0x17, +0x1A, +0x34/35, +0x45 (Leerwerte, »kein …«), Schiffe +0x13 = 2,
+    // Luftkissen/Kugelroller +0x22 = 1 — und an +0x3E/+0x43 den ENTWURF, nach dem das
+    // Infofenster die Einheit benennt (0x4701CF) und den Verkaufswert rechnet; mit 0
+    // hiess jede Editoreinheit wie Entwurf 0 des Spielers.
+    //
+    // GEMESSEN an allen Rohsaetzen der 55 gelieferten Karten (scratchpad b3.py): je
+    // Bauart und Byte der Mehrheitswert, nur wenn er bei >= 60 % der Saetze steht
+    // (Anteile hinter jeder Zeile). Der ENTWURF dagegen nicht nach Mehrheit, sondern
+    // aus der globalen Entwurfstafel (unit_designs.json, GAME.EXE): der eine Entwurf
+    // mit Fahrwerk = Bauart, Waffe = Kampfsatz-Waffe − 20 und Ausruestung = Kampfsatz —
+    // 11 von 12 Landbauarten haben genau einen, und er ist auch der haeufigste auf den
+    // Karten bei dieser Waffe (z. B. 161 → 84 »Maschinengewehr« 262/262). Kugelroller
+    // 168: kein passender Eintrag in der Tafel, gemessen 49 (35/43 bei Waffe 27).
+    // Schiffe: Schiffstafel, gemessener Wert. Gegenschalter --editor-satzfelder-alt.
+
+    private static readonly System.Collections.Generic.Dictionary<int, (int Off, byte Wert)[]> SatzFelder = new()
+    {
+        [161] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x17, 255), (0x34, 255), (0x35, 255), (0x3E, 84), (0x43, 84), (0x45, 255) },   // Mehrheit je Byte    286/426, 402/426, 402/426, 398/426, 398/426, 262/426, 262/426, 402/426; Entwurf 84
+        [163] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 85), (0x43, 85), (0x45, 255) },   // Mehrheit je Byte    416/453, 453/453, 452/453, 389/453, 438/453, 438/453, 453/453; Entwurf 85
+        [164] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 86), (0x43, 86), (0x45, 255) },   // Mehrheit je Byte    436/480, 480/480, 479/480, 373/480, 441/480, 440/480, 480/480; Entwurf 86
+        [165] = new (int, byte)[] { (0x04, 255), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 92), (0x43, 92), (0x45, 255) },   // Mehrheit je Byte    176/220, 218/220, 137/220, 184/220, 184/220, 220/220; Entwurf 92
+        [162] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 93), (0x43, 93), (0x45, 255) },   // Mehrheit je Byte    122/145, 145/145, 143/145, 103/145, 142/145, 142/145, 97/145, 97/145, 145/145; Entwurf 93
+        [160] = new (int, byte)[] { (0x04, 255), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 97), (0x43, 97), (0x45, 255) },   // Mehrheit je Byte    90/100, 100/100, 75/100, 99/100, 99/100, 83/100, 83/100, 100/100; Entwurf 97
+        [166] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x17, 255), (0x1A, 255), (0x22, 1), (0x34, 255), (0x35, 255), (0x3E, 89), (0x43, 89), (0x45, 255) },   // Mehrheit je Byte    71/74, 74/74, 74/74, 55/74, 74/74, 68/74, 68/74, 73/74, 73/74, 74/74; Entwurf 89
+        [167] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x15, 1), (0x17, 255), (0x34, 255), (0x35, 255), (0x3E, 88), (0x43, 88), (0x45, 255) },   // Mehrheit je Byte    21/33, 33/33, 26/33, 32/33, 32/33, 32/33, 27/33, 27/33, 33/33; Entwurf 88
+        [168] = new (int, byte)[] { (0x04, 255), (0x17, 255), (0x22, 1), (0x34, 255), (0x35, 255), (0x36, 255), (0x37, 255), (0x3E, 49), (0x43, 49), (0x45, 255) },   // Mehrheit je Byte    34/43, 43/43, 43/43, 31/43, 31/43, 26/43, 26/43, 35/43, 35/43, 43/43; Entwurf 49
+        [173] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 81), (0x43, 81), (0x45, 255) },   // Mehrheit je Byte    29/32, 32/32, 32/32, 20/32, 32/32, 32/32, 32/32, 32/32, 32/32; Entwurf 81
+        [174] = new (int, byte)[] { (0x04, 255), (0x11, 1), (0x17, 255), (0x34, 255), (0x35, 255), (0x3E, 112), (0x43, 112), (0x45, 255) },   // Mehrheit je Byte    170/221, 144/221, 220/221, 188/221, 188/221, 221/221; Entwurf 112
+        [171] = new (int, byte)[] { (0x04, 255), (0x11, 7), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 104), (0x43, 104), (0x45, 255) },   // Mehrheit je Byte    981/982, 980/982, 982/982, 975/982, 980/982, 980/982, 982/982; Entwurf 104
+        [151] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x13, 2), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 1), (0x43, 1) },   // Mehrheit je Byte    101/117, 117/117, 117/117, 117/117, 100/117, 115/117, 115/117, 116/117, 91/117; Entwurf 1
+        [150] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x13, 2), (0x17, 255), (0x18, 20), (0x19, 20), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 0), (0x43, 0), (0x45, 255) },   // Mehrheit je Byte    25/29, 29/29, 29/29, 29/29, 25/29, 25/29, 25/29, 29/29, 29/29, 20/29; Entwurf 0
+        [153] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x13, 2), (0x17, 255), (0x18, 20), (0x19, 20), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 3), (0x43, 3), (0x45, 255) },   // Mehrheit je Byte    17/17, 17/17, 17/17, 17/17, 17/17, 17/17, 17/17, 17/17, 17/17, 17/17, 16/17, 12/17; Entwurf 3
+        [157] = new (int, byte)[] { (0x04, 255), (0x11, 255), (0x13, 2), (0x15, 1), (0x17, 255), (0x1A, 255), (0x34, 255), (0x35, 255), (0x3E, 7), (0x43, 7) },   // Mehrheit je Byte    24/26, 26/26, 26/26, 16/26, 26/26, 17/26, 26/26, 26/26, 26/26, 26/26; Entwurf 7
+    };
+
+    public static bool SatzfelderAlt
+        => System.Array.IndexOf(Core.CommandLine.Args, "--editor-satzfelder-alt") >= 0;
+
+    /// <summary>B3: die gemessenen uebrigen Satzfelder einer Bauart (leer mit Gegenschalter).</summary>
+    public static (int Off, byte Wert)[] SatzFelderOf(int type)
+        => !SatzfelderAlt && !EinheitAlt && SatzFelder.TryGetValue(type, out var f) ? f : System.Array.Empty<(int, byte)>();
+
     /// <summary>D9: der Zellversatz nach der Formel des Originals (create_unit
     /// 0x4B38BA/0x4B38D1: dx = 18 − rand%37, dy = 7 − rand%15). UNSERE SETZUNG: der
     /// Wurf kommt aus einem festen Hash (Karte ist eine Datei, kein Spielverlauf).</summary>

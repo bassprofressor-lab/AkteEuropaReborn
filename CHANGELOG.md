@@ -209,6 +209,17 @@ your own copy of the 1997 game.
   raster (measured: all four corners 0 means water, for 3747 of 3747 water cells; one
   corner 0 means rough shore). Then the terrain brush retiles cleanly. In the check, 12 of
   12 bridge cells got their old type back.
+- **Editor vehicles carry their design and the original's empty markers** (check item
+  B3): apart from combat values, health and fuel the editor wrote only zeros into a vehicle
+  record. The original maps carry uniform "empty" markers (FF) per type there, and the
+  unit's **design** in two places. With 0, every editor unit was named and valued like
+  design 0 in the info window. The editor now writes, per type, the values found in at
+  least 60 % of the records on the 55 original maps, and the design from the game's design
+  table that matches chassis, weapon and equipment exactly — 11 of 12 land types have
+  exactly one, and it is also the most frequent on the maps (e.g. Reifen → "Maschinen-
+  gewehr", Ketten → "Leichter Panzer"). In skirmish, editor units are now pulled onto their
+  design like the units of the original maps (NET07: 24 of 24; an editor map 0 before,
+  now 23). Check `--map-edit-satz-check`. Opt-out `--editor-satzfelder-alt`.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original
