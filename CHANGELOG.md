@@ -246,6 +246,21 @@ your own copy of the 1997 game.
   cleans up before preparing; measured 3 of 3 matches without a crash (before 5 of 5 with).
   Also, an aborted map counted as present forever — it now counts only once fully prepared.
   Opt-outs `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
+- **Map editor: the harbour stands in the water, the shipyard on land** (reported: "the harbour
+  often stands on land, though it must be in the water"): the generator placed the harbour like
+  any other neutral building on building land, and with no link to its shipyard it pointed at
+  building slot 0 — usually a base. Measured on the original maps: the harbour stands fully in
+  the water, the shipyard that pays for its ships fully on land at the shore, both as a pair 6
+  to 15 cells apart. The generator now places exactly such a pair and links the harbour to its
+  shipyard; on the test maps every harbour stood fully in water and pointed at its shipyard.
+  Opt-out `--editor-hafen-paar-alt`. Still open: placing a harbour into water by hand with the
+  building brush.
+- **Multiplayer details** (Fable review): own editor maps are back in the map list of skirmish
+  and multiplayer (they were missing entirely); "Zurück zum Menü" while waiting for a network
+  match closes the connection (before, a later campaign start ended with an error); a running
+  network match can be left via "Spiel verlassen" (the others play on); a broken connection
+  no longer floods the log with thousands of identical errors. Opt-outs `--eigene-karten-alt`,
+  `--netz-verlassen-alt`, `--netz-pump-alt`.
 - **Map editor tidied up** (check item F): the folder for own tilesets may now contain a
   comma — the screen passes its settings on as an order instead of a command line split at
   commas (generated maps byte-identical to before). The edit mode's test harness (500

@@ -274,6 +274,13 @@ public static class MapNeutrals
                                                  : a.Idx.CompareTo(b.Idx));
             for (int i = 0; given < want && i < rest.Count; i++, given++) need[rest[i].Idx]++;
         }
+        // bug-832: Hafen und Werft kommen paarweise (Originale 36:37) — die Werft zaehlt so oft wie
+        // der Hafen, sonst rundet die Verteilung bei kleinen Zahlen eine von beiden weg.
+        if (!PaarAlt)
+        {
+            int hi = kinds.FindIndex(x => x.K.Typ == HafenTyp), wi = kinds.FindIndex(x => x.K.Typ == WerftTyp);
+            if (hi >= 0 && wi >= 0) { int paar = Math.Max(need[hi], need[wi]); need[hi] = need[wi] = paar; }
+        }
         var target = (int[])need.Clone();
 
         // ⭐ 11.11.2026 — bug-770: mit <paramref name="fair"/> reihum je
@@ -327,9 +334,14 @@ public static class MapNeutrals
             });
 
             int chosen = -1;
+            (int Col, int Row)? hafenPlatz = null;
+            int hafenArt = kinds.FindIndex(x => x.K.Typ == HafenTyp);
             foreach (int i in order)
             {
                 var e = kinds[i];
+                // ⭐ 13.11.2026 bug-832: der Hafen wird NIE allein gesetzt — nur als Paar mit seiner
+                // Werft (unten). Bis heute galt fuer ihn die Landpruefung wie fuer alle: er stand an Land.
+                if (!PaarAlt && e.K.Typ == HafenTyp) continue;
                 // Jede Zelle der Grundflaeche muss can_build_here erfuellen —
                 // die Tuerzellen ausdruecklich mit, denn sie bleiben begehbar
                 // und muessen erreichbar sein.
@@ -341,6 +353,16 @@ public static class MapNeutrals
                         if (!MapDeposits.Free(m, imap, c, r) ||
                             !MapDeposits.Corners(zone, w, h, c, r)) { ok = false; break; }
                     }
+                // bug-832: eine Werft nur, wenn ihr Hafen 6..15 Zellen weiter ganz im Wasser Platz hat
+                if (ok && !PaarAlt && e.K.Typ == WerftTyp)
+                {
+                    if (hafenArt < 0 || need[hafenArt] <= 0) { ok = false; }
+                    else
+                    {
+                        hafenPlatz = HafenSuchen(m, kinds[hafenArt].Foot, cd.Col, cd.Row, w, h, edge);
+                        ok = hafenPlatz != null;
+                    }
+                }
                 if (ok) { chosen = i; break; }
             }
             if (chosen < 0) { blockedSite++; return false; }
@@ -353,7 +375,23 @@ public static class MapNeutrals
                 return false;
             placed.Add((cd.Col, cd.Row, pick.K.Typ));
             need[chosen]--;
+            int werftSlot = slot;
             slot++;
+            if (hafenPlatz is { } hp && hafenArt >= 0 && slot < SlotsMax)
+            {
+                var hk = kinds[hafenArt];
+                int idx = NaechsterHafenIndex(m);
+                if (idx >= 0 && MapFactory.PutBuilding(m, slot, HafenTyp, NeutralOwner, idx,
+                                                       hp.Col, hp.Row, hk.FootW, hk.FootH, hk.K.Hp, "",
+                                                       hk.K.Doors, cwp: cwp))
+                {
+                    HafenVerknuepfen(m, idx, slot, werftSlot);
+                    placed.Add((hp.Col, hp.Row, HafenTyp));
+                    need[hafenArt]--;
+                    slot++;
+                    Paare++;
+                }
+            }
             return true;
         }
 
@@ -383,5 +421,66 @@ public static class MapNeutrals
             yield return kv.Value.Soll == kv.Value.Ist
                 ? $"Typ{kv.Key}x{kv.Value.Ist}"
                 : $"Typ{kv.Key}x{kv.Value.Ist}(von {kv.Value.Soll})";
+    }
+
+    // ========================================================================
+    // ⭐ 13.11.2026 — bug-832 (Spielermeldung »der Hafen steht oft auf dem land«): HAFEN UND WERFT
+    // ALS PAAR. GEMESSEN an den Originalkarten (scratchpad hafen.py, Eckraster, 4 Ecken 0 = Wasser):
+    // Hafen (11) 36x, seine Flaeche und Umgebung zu 90..100 % Wasser; Werft (16) 37x, Flaeche zu 0 %
+    // Wasser, das Wasser beginnt neben ihr; beide paarweise (gleiche Eigner), Abstand 6..15 Zellen.
+    // Verknuepft ueber sec29 (4 Byte je Hafen, Index = cisTyp +0x19): +0x00 der Hafen, +0x02 die
+    // Werft, die die Schiffe bezahlt (CwmData Instance). UNSERE SETZUNG: Suche in Ringen um die
+    // Werft, ganze Grundflaeche des Hafens Wasser (Klasse 2) und frei. Gegenschalter
+    // --editor-hafen-paar-alt (der alte Weg: Hafen wie jedes Gebaeude an Land).
+    // ========================================================================
+
+    public const int HafenTyp = 11, WerftTyp = 16;
+    public static int Paare;
+
+    public static bool PaarAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-hafen-paar-alt") >= 0;
+
+    /// <summary>Ein Platz 6..15 Zellen von der Werft, an dem jede Zelle der Hafen-Grundflaeche
+    /// Wasser ist. null, wenn keiner.</summary>
+    public static (int Col, int Row)? HafenSuchen(CwmFile m, List<(int Dx, int Dy)> foot, int wc, int wr,
+                                                  int w, int h, int edge)
+    {
+        for (int rad = 6; rad <= 15; rad++)
+            for (int dy = -rad; dy <= rad; dy++)
+                for (int dx = -rad; dx <= rad; dx++)
+                {
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != rad) continue;
+                    if (dx * dx + dy * dy is < 36 or > 225) continue;   // echter Abstand 6..15 wie gemessen
+                    int c0 = wc + dx, r0 = wr + dy;
+                    if (c0 < edge || r0 < edge) continue;
+                    bool ok = true;
+                    foreach (var (fx, fy) in foot)
+                    {
+                        int c = c0 + fx, r = r0 + fy;
+                        if (c >= w - edge || r >= h - edge || MapEditTerrain.ClassAt(m, c, r) != 2) { ok = false; break; }
+                    }
+                    if (ok) return (c0, r0);
+                }
+        return null;
+    }
+
+    /// <summary>Der naechste freie sec29-Index (je Hafen einer, 0..49).</summary>
+    public static int NaechsterHafenIndex(CwmFile m)
+    {
+        var s3 = m.Sec(3);
+        if (s3 == null) return -1;
+        var belegt = new HashSet<int>();
+        for (int o = 0; o + CwmData.BuildingStride <= s3.Length; o += CwmData.BuildingStride)
+            if (s3[o + 0x18] == 1 && s3[o + 0x04] == HafenTyp) belegt.Add(s3[o + 0x19]);
+        for (int i = 0; i < 50; i++) if (!belegt.Contains(i)) return i;
+        return -1;
+    }
+
+    /// <summary>sec29-Eintrag: +0x00 der Hafen, +0x02 seine Werft (Gebaeudeplaetze).</summary>
+    public static void HafenVerknuepfen(CwmFile m, int idx, int hafenSlot, int werftSlot)
+    {
+        var s = m.Sec(29);
+        if (s == null || (idx + 1) * 4 > s.Length) return;
+        s[idx * 4] = (byte)hafenSlot; s[idx * 4 + 1] = (byte)(hafenSlot >> 8);
+        s[idx * 4 + 2] = (byte)werftSlot; s[idx * 4 + 3] = (byte)(werftSlot >> 8);
     }
 }

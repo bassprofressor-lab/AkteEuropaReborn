@@ -266,6 +266,22 @@ bisher nur dort beschrieben.*
   ohne Absturz (vorher 5 von 5 mit). Außerdem galt eine abgebrochene Karte danach für
   immer als vorhanden — jetzt zählt sie erst, wenn sie vollständig aufbereitet ist.
   Gegenschalter `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
+- **Karteneditor: der Hafen steht im Wasser, die Werft an Land** (gemeldet: »Der Hafen steht oft
+  auf dem Land, wobei er ja im Wasser stehen muss«): Der Generator setzte den Hafen wie jedes
+  andere herrenlose Gebäude auf Bauland, und weil die Verknüpfung zur Werft fehlte, zeigte er
+  auf Gebäudeplatz 0 — meist eine Basis. Gemessen an den Originalkarten: der Hafen steht ganz im
+  Wasser, die Werft, die seine Schiffe bezahlt, ganz an Land am Ufer, beide als Paar 6 bis 15
+  Felder auseinander. Jetzt setzt der Generator genau so ein Paar und verknüpft den Hafen mit
+  seiner Werft; auf den Probekarten stand jeder Hafen vollständig im Wasser und verwies auf
+  seine Werft. Gegenschalter `--editor-hafen-paar-alt`. ⚠ Noch offen: den Hafen von Hand mit
+  dem Gebäudepinsel ins Wasser setzen.
+- **Mehrspieler-Kleinigkeiten** (Fable-Prüfung): Eigene Editorkarten stehen wieder in der
+  Kartenliste von Gefecht und Mehrspieler (sie fehlten ganz); »Zurück zum Menü« beim Warten auf
+  eine Netzpartie bricht die Verbindung ab (vorher endete ein späterer Kampagnenstart mit einem
+  Fehler); eine laufende Netzpartie lässt sich über »Spiel verlassen« verlassen (die anderen
+  spielen weiter); eine abgerissene Verbindung schreibt das Protokoll nicht mehr mit tausenden
+  gleichen Fehlern voll. Gegenschalter `--eigene-karten-alt`, `--netz-verlassen-alt`,
+  `--netz-pump-alt`.
 - **Karteneditor aufgeräumt** (Prüfpunkt F): Der Ordner für eigene Kachelsätze darf jetzt
   ein Komma enthalten — der Schirm reicht seine Einstellungen als Auftrag weiter statt als
   Befehlszeile, die am Komma zerlegt wurde (erzeugte Karten byte-gleich wie vorher). Der
