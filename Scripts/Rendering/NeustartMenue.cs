@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System;
 using System.Threading.Tasks;
@@ -73,8 +73,16 @@ public partial class MapViewer
     private void NetzMenueSperren(UI.MainMenuWindow w)
     {
         const string netz = "Im Netzspiel gesperrt: ";
-        w.OnQuit = null;
-        w.GrundHier[9] = netz + "»Spiel verlassen« (Befehl 995/996) ist noch nicht gebaut.";
+        // ⭐ 13.11.2026 — Fable B3: eine laufende Netzpartie liess sich nicht verlassen. Jetzt der
+        // netzfeste Abgang (Ausschalten, wie Ctrl-E). UNSERE SETZUNG statt 995/996 des Originals.
+        // Gegenschalter --netz-verlassen-alt (gesperrt wie bisher).
+        if (NetGameRunner.VerlassenImNetz is { } weg && System.Array.IndexOf(Core.CommandLine.Args, "--netz-verlassen-alt") < 0)
+            w.OnQuit = () => weg();
+        else
+        {
+            w.OnQuit = null;
+            w.GrundHier[9] = netz + "»Spiel verlassen« (Befehl 995/996) ist noch nicht gebaut.";
+        }
         w.OnSubMissions = null;
         w.GrundHier[4] = netz + "Untermissionen gibt es nur in der Kampagne.";
         if (!SpeicherfensterNeu || MapEntityLayer.Alt2("spielstand"))

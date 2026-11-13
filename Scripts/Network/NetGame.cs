@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System;
 using System.Collections.Generic;
@@ -87,6 +87,11 @@ using AkteEuropaReborn.Simulation.Commands;
 /// </summary>
 public sealed partial class NetGameRunner : Node
 {
+    /// <summary>⭐ 13.11.2026 — Fable B3: »Spiel verlassen« im Spielmenue einer Netzpartie. Gesetzt,
+    /// solange eine gespielte Netzpartie laeuft; ruft denselben netzfesten Abgang wie Ctrl-E
+    /// (Ausschalten, Paket 10 — die anderen schneiden diesen Platz ab und spielen weiter).</summary>
+    public static System.Action? VerlassenImNetz;
+
     private MapEntityLayer _sim = null!;
     private NetLink _link = null!;
     private NetSession _s = null!;
@@ -250,6 +255,7 @@ public sealed partial class NetGameRunner : Node
                 Takt = () => _tick,
             };
             AddChild(_ui);
+            VerlassenImNetz = () => Abschied("Du hast die Partie verlassen.");
             _chatSeen = NetworkManager.Lobby?.Chat.Count ?? 0;
         }
 
@@ -1024,6 +1030,7 @@ public sealed partial class NetGameRunner : Node
     {
         if (_phase == Phase.Ende) return;
         _phase = Phase.Ende;
+        VerlassenImNetz = null;
         Say("netz: Abschied — " + meldung);
         if (!_link.Cut.ContainsKey(_s.Me)) _link.SendAusschalten(_s.Me, _s.Me);
         _link.FlushNow();

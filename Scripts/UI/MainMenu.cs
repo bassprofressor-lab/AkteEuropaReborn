@@ -1118,7 +1118,14 @@ public partial class MainMenu : Control
         // startet, hat zwei Wege in dieselbe Sache und keinen davon dort, wo
         // man ihn sucht.
         var back = new Button { Text = "Zurueck zum Menue" };
-        back.Pressed += ShowStartMenu;
+        // ⭐ 13.11.2026 — Fable A2: waehrend des Wartens auf eine Netzpartie liess »Zurueck«
+        // die Leitung offen; der naechste Kampagnenstart endete dann mit »NETZ-FEHLER: es steht
+        // keine Partie« (Rueckgabe 2). Jetzt erst abbrechen wie »Abbrechen«, dann zurueck.
+        back.Pressed += () =>
+        {
+            if (_netWaiting) BackToLobby("Zurück zum Menü — die Netzpartie ist abgebrochen.");
+            ShowStartMenu();
+        };
         box.AddChild(back);
 
         _hint = new Label
