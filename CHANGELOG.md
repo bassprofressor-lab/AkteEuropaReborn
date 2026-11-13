@@ -169,6 +169,17 @@ your own copy of the 1997 game.
   `--map-edit-sofort-check` now compares the baked picture and the pixels in the painted
   cell itself (headless, the texture never showed the new picture, so the old check
   measured nothing). Opt-outs `--editor-geroellbild-aus` and `--editor-kettenring-aus`.
+- **Infantry in the map editor, facing for all units** (D9): "4 Einheiten" now lists
+  "Leichter Soldat" and "Schwerer Soldat". The editor writes the whole map record as it
+  most often appears on the 55 original maps (light 266 of 617 identical, heavy 156 of
+  447): health 20/35, attack 2/5, infantry set and picture as in the original. Each
+  soldier gets its in-cell offset by the original's formula (up to 18 px sideways, 7 px
+  vertically), so squads don't stand in a rigid row. **R** turns the facing of the next
+  unit (Shift+R back); the list shows the pictures in the chosen direction. **Aircraft
+  are left out on purpose:** not one original map has an aircraft in its unit table —
+  the original keeps them in a separate table, and an editor aircraft would mean
+  inventing a file format. Check `--map-edit-fussvolk-check` (record, live unit, saved
+  file, with `--fussvolk-shot=<file>` a window picture). Opt-out `--editor-fussvolk-aus`.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original

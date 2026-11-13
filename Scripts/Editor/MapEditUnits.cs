@@ -28,12 +28,19 @@ namespace AkteEuropaReborn.Editor;
 /// <b>157, 158</b> — kein einziger Landtyp. Wer den Katalogwert nähme, setzte
 /// Abwehrstellungen, die nur auf Wasser stehen können.</para>
 ///
-/// <para>⚠ <b>Fußsoldaten fehlen absichtlich.</b> 148 »Leichter« und 149
-/// »Schwerer« sind mit 617 und 447 Stück die zweit- und dritthäufigsten
-/// Einträge, aber sie tragen <c>hp_max 0</c> und kommen aus einer eigenen
-/// Bilderbank; ihr Satz hat ein Feld mehr, das hier nicht gelesen ist
-/// (<c>Entity.Infantry</c>). Sie zu setzen wäre geraten, und dann stünde eine
-/// Einheit ohne Bild und ohne Leben auf der Karte. Lieber eine ehrliche Lücke.</para>
+/// <para><s>Fußsoldaten fehlen absichtlich</s> — ⭐ 13.11.2026 (D9): sie sind DA.
+/// Das Feld, das hier als »nicht gelesen« stand, ist seit langem gelesen:
+/// <c>+0x0B</c> ist der Fußvolksatz (gerade, 0..22 → ROBO.CWR, Bilder
+/// <c>Units/infantry/&lt;satz&gt;/</c>). Geschrieben wird der GANZE häufigste
+/// Rohsatz der Originalkarten (<see cref="Vorlage"/>), nicht ein Feld nach dem
+/// anderen.</para>
+///
+/// <para>⚠ <b>Flugzeuge gibt es in den Kartensätzen nicht.</b> Gezählt über alle
+/// 55 gelieferten Karten (13.11.2026): die Gattungen sind 0 (Land), 1 (Fußvolk),
+/// 3 (nur Typ 138 »Dicke Bertha«, 10 Stück), 4 und 5 (Schiffe) — kein einziger
+/// Flieger. Flugzeuge liegen im Original in einer eigenen Flugzeugtafel
+/// (20000+i), nicht in sec5. Ein Editorflieger hiesse ein Format erfinden;
+/// darum keiner.</para>
 /// </summary>
 public static class MapEditUnits
 {
@@ -71,6 +78,9 @@ public static class MapEditUnits
         new("Stahlsucher",     173, 0, 0, 20,  13, 1000,   "22/32"),
         new("Läufer",         174, 0, 0, 20,  80,  300,  "29/221"),
         new("Abwehrstellung",  171, 1, 0, 13, 178,   40, "390/982"),
+        // ⭐ 13.11.2026 D9: das Fußvolk — Zahlen aus der Vorlage unten (+0x26, +0x29)
+        new("Leichter Soldat", 148, 0, 1,  2,  20,    0, "266/617"),
+        new("Schwerer Soldat", 149, 0, 1,  5,  35,    0, "156/447"),
         // ⚠ Die Schiffsruempfe. Ihre Gattung 4/5 ist das, worauf Can_go
         // @0x4055D0 den 2x2- bzw. 4x4-Rumpf prueft — wer eines davon auf Land
         // setzt, bekommt eine Einheit, die nirgends stehen darf. Der Editor
@@ -152,6 +162,45 @@ public static class MapEditUnits
     /// Bauart oder Gegenschalter).</summary>
     public static Satz? SatzOf(int type)
         => !EinheitAlt && Saetze.TryGetValue(type, out var s) ? s : null;
+
+    // ========================================================================
+    // ⭐ 13.11.2026 — D9: DIE VORLAGE (der ganze Rohsatz)
+    // ========================================================================
+    //
+    // GEMESSEN an allen 55 gelieferten Karten (scratchpad inf.py): je Bauart der
+    // haeufigste GANZE Satz (78 Byte), ohne die Felder, die je Einheit schwanken —
+    // Lage +0x00/+0x01, Richtung +0x02/+0x03 und der Zellversatz +0x1D/+0x1E (der
+    // streut bei JEDEM Soldaten: −18..18 / −7..7, nie 0/0). 148: 266 von 617
+    // gleich, 149: 156 von 447. Der Rest sind angeschlagene oder besondere Saetze
+    // (+0x0B = 16/20/22 bzw. 10: andere Fussvolksaetze, Missionsfiguren).
+    // Gegenschalter --editor-fussvolk-aus (Fussvolk nicht in der Liste).
+
+    private static readonly System.Collections.Generic.Dictionary<int, string> Vorlagen = new()
+    {
+        [148] = "00000000ff0000001400010000be009400000000000000ff0000ff00000000000400000010270201001400020300000000000000ffff000000000000001432000000003200ff0000000000000000",
+        [149] = "00000000ff0000002300010200bf009500000000000000ff0000ff00000000000600000010270502002300040600000000000000ffff000000000000001433000000003300ff0000000000000000",
+    };
+
+    public static bool FussvolkAus
+        => System.Array.IndexOf(Core.CommandLine.Args, "--editor-fussvolk-aus") >= 0;
+
+    /// <summary>D9: der gemessene ganze Rohsatz einer Bauart, oder null.</summary>
+    public static byte[]? Vorlage(int type)
+        => !FussvolkAus && Vorlagen.TryGetValue(type, out var h) ? System.Convert.FromHexString(h) : null;
+
+    /// <summary>D9: der Fussvolksatz (+0x0B) einer Bauart, −1 wenn keine Fussvolkbauart.</summary>
+    public static int Fussvolksatz(int type)
+        => Vorlage(type) is { } v && v[0x0A] == 1 ? v[0x0B] : -1;
+
+    /// <summary>D9: die Auswahl, wie das Bedienfeld sie zeigt (mit Gegenschalter ohne Fussvolk).</summary>
+    public static Kind[] Liste
+        => FussvolkAus ? System.Array.FindAll(All, k => k.Art != 1) : All;
+
+    /// <summary>D9: der Zellversatz nach der Formel des Originals (create_unit
+    /// 0x4B38BA/0x4B38D1: dx = 18 − rand%37, dy = 7 − rand%15). UNSERE SETZUNG: der
+    /// Wurf kommt aus einem festen Hash (Karte ist eine Datei, kein Spielverlauf).</summary>
+    public static (sbyte dx, sbyte dy) Streuung(uint wurf)
+        => ((sbyte)(18 - (int)(wurf % 37)), (sbyte)(7 - (int)((wurf / 37) % 15)));
 
     /// <summary>bug-740: die Bauart zur Typnummer — der Generator nimmt seinen
     /// Reifen 161 von hier (Leben 50 gemessen, bis heute 100 als Vorgabe).</summary>

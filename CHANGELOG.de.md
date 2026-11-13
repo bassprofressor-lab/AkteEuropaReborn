@@ -182,6 +182,19 @@ bisher nur dort beschrieben.*
   vergleicht jetzt das gebackene Bild und die Bildpunkte in der bemalten Zelle selbst
   (kopflos zeigte die Textur das neue Bild nie, der alte Lauf maß also nichts).
   Gegenschalter `--editor-geroellbild-aus` und `--editor-kettenring-aus`.
+- **Fußvolk im Karteneditor, Blickrichtung für alle Einheiten** (D9): Unter »4 Einheiten«
+  stehen jetzt »Leichter Soldat« und »Schwerer Soldat«. Geschrieben wird nicht Feld für
+  Feld, sondern der ganze Kartensatz, wie er auf den 55 Originalkarten am häufigsten
+  vorkommt (Leichter 266 von 617 gleich, Schwerer 156 von 447): Leben 20 bzw. 35,
+  Angriff 2 bzw. 5, Fußvolksatz und Bild wie im Original. Jeder Soldat bekommt seinen
+  Versatz in der Zelle nach der Formel des Originals (bis 18 Bildpunkte seitlich, 7 in
+  der Höhe), damit Trupps nicht in einer starren Reihe stehen. **R** dreht die
+  Blickrichtung der nächsten Einheit (Umschalt+R zurück), die Liste zeigt die Bilder in
+  der gewählten Richtung. **Flugzeuge gibt es bewusst nicht:** auf keiner Originalkarte
+  steht ein einziger Flieger in der Einheitentafel — das Original führt sie in einer
+  eigenen Tafel, ein Editorflieger hieße ein Dateiformat erfinden. Prüflauf
+  `--map-edit-fussvolk-check` (Satz, lebende Einheit, gespeicherte Datei, mit
+  `--fussvolk-shot=<datei>` ein Fensterbild). Gegenschalter `--editor-fussvolk-aus`.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:

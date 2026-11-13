@@ -66,6 +66,8 @@ public partial class MapEditOverlay : Node2D
     private MapFactory.Ground _ground = MapFactory.Ground.Free;
     private int _propAt;
     private int _unitAt;
+    /// <summary>D9: Blickrichtung (+0x02/+0x03) der naechsten Einheit, 0..7.</summary>
+    private int _blick = 0;
     private readonly List<int> _types = new();
     private readonly List<int> _props = new();
     private Button? _spiegelKnopf;                                          // D6
@@ -115,6 +117,7 @@ public partial class MapEditOverlay : Node2D
         SpielenCheck();           // C9 (12.11.2026)
         WaldCheck();              // Wald brennt (12.11.2026)
         SofortCheck();            // D4 (12.11.2026)
+        FussvolkCheck();          // D9 (13.11.2026)
     }
 
     /// <summary>
@@ -290,8 +293,8 @@ public partial class MapEditOverlay : Node2D
         }
         // dieselbe Stelle, aber ein Schiff: das darf NICHT gehen
         _owner = 0;
-        for (int i2 = 0; i2 < MapEditUnits.All.Length; i2++)
-            if (MapEditUnits.All[i2].Art == 5) { _unitAt = i2; break; }
+        for (int i2 = 0; i2 < MapEditUnits.Liste.Length; i2++)
+            if (MapEditUnits.Liste[i2].Art == 5) { _unitAt = i2; break; }
         int shipRefused = 0, shipPut = 0;
         for (int r = 3; r < _map.Height - 6 && shipRefused + shipPut < 6; r++)
         {
@@ -841,6 +844,11 @@ public partial class MapEditOverlay : Node2D
             // weder als Fall noch gepollt.
             case Key.Period: _owner = Owners[(Array.IndexOf(Owners, _owner) + 1) % Owners.Length]; break;
             case Key.Comma: _owner = Owners[(Array.IndexOf(Owners, _owner) + Owners.Length - 1) % Owners.Length]; break;
+            // D9 (13.11.2026): R dreht die Blickrichtung der naechsten Einheit (8 Stufen).
+            // Im Betrachter schaltet R die Reichweitenkreise — im Einheitenpinsel hat der
+            // Editor Vorrang, sonst bleibt R beim Betrachter.
+            case Key.R when _brush == Brush.Einheit && !k.CtrlPressed:
+                _blick = (_blick + (k.ShiftPressed ? 7 : 1)) % 8; FillList(); SelectInList(); break;
             case Key.N: _owner = 11; break;
             case Key.K: _owner = 255; break;
             case Key.F5: SaveAndReload(); return;
@@ -871,7 +879,7 @@ public partial class MapEditOverlay : Node2D
                 _line = Math.Max(0, _line + d);
                 break;
             case Brush.Einheit:
-                _unitAt = (_unitAt + d + MapEditUnits.All.Length) % MapEditUnits.All.Length;
+                _unitAt = (_unitAt + d + MapEditUnits.Liste.Length) % MapEditUnits.Liste.Length;
                 break;
             case Brush.Gelaende:
                 _ground = (MapFactory.Ground)(((int)_ground + d + 4) % 4);
@@ -1009,7 +1017,7 @@ public partial class MapEditOverlay : Node2D
     /// </summary>
     private void PutUnit(Vector2I cell)
     {
-        var u = MapEditUnits.All[_unitAt];
+        var u = MapEditUnits.Liste[_unitAt];
         if (_owner is < 0 or > 7)
         { _say = $"eine Einheit braucht einen Spielerplatz 0..7, nicht {OwnerName(_owner)}"; return; }
 
@@ -1040,11 +1048,16 @@ public partial class MapEditOverlay : Node2D
         if (slot < 0) { _say = $"Spieler {_owner + 1} hat keinen freien Einheitenplatz mehr (1000)"; return; }
         // bug-740 (11.11.2026): Waffe 0 hier ist nur noch der Rueckfall — PutEntity
         // schreibt den gemessenen Kampfsatz der Bauart (MapEditUnits.SatzOf).
+        // D9 (13.11.2026): mit Blickrichtung (Taste R) und, beim Fussvolk, dem Zellversatz.
+        uint wurf = MapTerrain.Hash(cell.X, cell.Y, MapEditSession.Seed ^ (uint)slot ^ 0x5F17u);
         if (!MapFactory.PutEntity(_map, slot, cell.X, cell.Y, u.Type, u.Attack, 0,
-                                  u.Fuel, 0, u.Kind_, u.Art, u.Energy))
+                                  u.Fuel, _blick, u.Kind_, u.Art, u.Energy, wurf))
         { _say = "der Satz liess sich nicht schreiben"; return; }
 
-        _layer.EditorAddUnit(slot, u.Type, _owner, cell.X, cell.Y, u.Art, u.Energy, u.Fuel);
+        int inf = MapEditUnits.Fussvolksatz(u.Type);
+        var (sx, sy) = inf >= 0 ? MapEditUnits.Streuung(wurf) : ((sbyte)0, (sbyte)0);
+        _layer.EditorAddUnit(slot, u.Type, _owner, cell.X, cell.Y, u.Art, u.Energy, u.Fuel,
+                             _blick, inf, sx, sy);
         _mine.Add((cell.X, cell.Y, Brush.Einheit));
         _gone.Remove((cell.X, cell.Y));            // B10: das rote Kreuz der dort weggenommenen Einheit weg
         MapEditSession.Dirty = true;
@@ -1404,7 +1417,7 @@ public partial class MapEditOverlay : Node2D
     private static string UnitText(MapEditUnits.Kind u, bool zweizeilig = false)
     {
         string w = MapEditUnits.SatzOf(u.Type) is { } s ? MapEntityLayer.EditorWaffenName(s.Weapon) : "";
-        string t = w.Length > 0 ? $"{u.Name} · {w}" : u.Name;
+        string t = w.Length > 0 ? $"{u.Name} · {w}" : u.Art == 1 ? $"{u.Name} · Fußvolk" : u.Name;
         return u.Art is 4 or 5 ? $"{t}  (nur Wasser)" : t;
     }
 }

@@ -90,7 +90,7 @@ public partial class MapEditOverlay
         _brush = m.B; _owner = m.Owner; _line = m.Line; _ground = m.G;
         if (_types.Contains(m.Typ)) _typ = m.Typ;
         if (m.Prop < _props.Count) _propAt = m.Prop;
-        if (m.Unit < MapEditUnits.All.Length) _unitAt = m.Unit;
+        if (m.Unit < MapEditUnits.Liste.Length) _unitAt = m.Unit;
     }
 
     // ---- Aufbau --------------------------------------------------------------
@@ -460,7 +460,7 @@ public partial class MapEditOverlay
         Brush.Gebaeude => _types.Count > 0 ? $"»{KachelsatzInfo.GebaeudeName(_typ)}«" : "kein Gebäude im Kachelsatz",
         Brush.Gegenstand => _props.Count > 0 ? PropText(_props[_propAt]) : "diese Karte hat keine Objekte",
         Brush.Gleis => $"Zugstrecke {_line + 1}",
-        Brush.Einheit => $"»{UnitText(MapEditUnits.All[_unitAt])}«",
+        Brush.Einheit => $"»{UnitText(MapEditUnits.Liste[_unitAt])}«, Richtung {_blick + 1}/8 (R dreht)",
         Brush.Gelaende => $"»{GroundName(_ground)}«" + (MapEditSession.Tiles == null ? " ⚠ ohne Kacheltabelle" : ""),
         Brush.Hoehe => "Höhe ändern",
         Brush.Vorkommen => "Vorkommen",
@@ -503,9 +503,9 @@ public partial class MapEditOverlay
                 for (int i = 0; i < RailLines; i++) _pList.AddItem($"Zugstrecke {i + 1}");
                 break;
             case Brush.Einheit:
-                _pListHead.Text = "Einheit";
-                foreach (var u in MapEditUnits.All)
-                    _pList.AddItem(UnitText(u, true), MapEditIcons.Unit(u.Type));
+                _pListHead.Text = $"Einheit — Richtung {_blick + 1} von 8 (R dreht, Umschalt+R zurück)";
+                foreach (var u in MapEditUnits.Liste)
+                    _pList.AddItem(UnitText(u, true), MapEditIcons.Unit(u.Type, _blick));
                 break;
             case Brush.Gelaende:
                 _pListHead.Text = "Bodenart";
@@ -569,7 +569,7 @@ public partial class MapEditOverlay
             case Brush.Gebaeude when i < _types.Count: _typ = _types[i]; break;
             case Brush.Gegenstand when i < _props.Count: _propAt = i; break;
             case Brush.Gleis: _line = i; break;
-            case Brush.Einheit when i < MapEditUnits.All.Length: _unitAt = i; break;
+            case Brush.Einheit when i < MapEditUnits.Liste.Length: _unitAt = i; break;
             case Brush.Gelaende: _ground = (MapFactory.Ground)i; break;
         }
         _say = "";
@@ -702,15 +702,25 @@ public static class MapEditIcons
 
     /// <summary>Der Rumpf aus <c>user://data/Units/&lt;typ&gt;/f2.png</c> — ohne
     /// Aufsatz (die Waffe ist ein eigenes Bild).</summary>
-    public static Texture2D? Unit(int type)
+    public static Texture2D? Unit(int type, int facing = 2)
     {
-        string key = $"u{type}";
+        string key = $"u{type}_{facing}";
         if (_cache.TryGetValue(key, out var t)) return t;
         t = null;
-        string p = ProjectSettings.GlobalizePath(Core.Content.UserRoot) + $"Units/{type}/f2.png";
+        // D9 (13.11.2026): Fussvolk aus seiner eigenen Bilderbank (Satz +0x0B, Stehbild b11)
+        int inf = MapEditUnits.Fussvolksatz(type);
+        string p = ProjectSettings.GlobalizePath(Core.Content.UserRoot)
+                   + (inf >= 0 ? $"Units/infantry/{inf}/f{facing & 7}_b11.png" : $"Units/{type}/f{facing & 7}.png");
         if (System.IO.File.Exists(p))
         {
             var img = Image.LoadFromFile(p);
+            // D9: die Fussvolkfigur ist rund 12x15 px in einem 64x56-Bild — zuschneiden, dreifach
+            if (img != null && !img.IsEmpty() && inf >= 0)
+            {
+                var used = img.GetUsedRect();
+                if (used.Size.X > 0 && used.Size.Y > 0) img = img.GetRegion(used);
+                img.Resize(img.GetWidth() * 3, img.GetHeight() * 3, Image.Interpolation.Nearest);
+            }
             if (img != null && !img.IsEmpty()) t = ImageTexture.CreateFromImage(img);
         }
         _cache[key] = t;

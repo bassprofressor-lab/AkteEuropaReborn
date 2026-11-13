@@ -629,7 +629,7 @@ public static class MapFactory
 
     public static bool PutEntity(CwmFile m, int slot, int col, int row, int unitType,
                                  int attack, int weapon, int fuel, int facing = 0,
-                                 int kind = 0, int art = 0, int energy = 100)
+                                 int kind = 0, int art = 0, int energy = 100, uint streuWurf = 0)
     {
         var s = m.Sec(5);
         if (s == null) return false;
@@ -669,6 +669,18 @@ public static class MapFactory
             s[o + 0x39] = (byte)k.Ammo;            // UNSERE SETZUNG: voll
             s[o + 0x3a] = (byte)k.Ammo;
             s[o + 0x3d] = (byte)k.Reload;
+        }
+
+        // ⭐ 13.11.2026 D9: gibt es fuer die Bauart einen gemessenen GANZEN Satz
+        // (Fussvolk), dann gilt der — Byte fuer Byte, nur Lage, Richtung und der
+        // Zellversatz des Soldaten (+0x1D/+0x1E) sind je Einheit.
+        if (MapEditUnits.Vorlage(unitType) is { } v && v.Length <= CwmData.EntityStride)
+        {
+            Array.Copy(v, 0, s, o, v.Length);
+            s[o + 0x00] = (byte)col; s[o + 0x01] = (byte)row;
+            s[o + 0x02] = (byte)facing; s[o + 0x03] = (byte)facing;
+            var (dx, dy) = MapEditUnits.Streuung(streuWurf);
+            s[o + 0x1D] = (byte)dx; s[o + 0x1E] = (byte)dy;
         }
 
         var imap = m.Sec(6);

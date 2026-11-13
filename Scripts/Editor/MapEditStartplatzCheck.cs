@@ -229,7 +229,7 @@ public partial class MapEditOverlay
                         return new Vector2I(c, r);
             return null;
         }
-        int Index(int typ) { for (int i = 0; i < MapEditUnits.All.Length; i++) if (MapEditUnits.All[i].Type == typ) return i; return -1; }
+        int Index(int typ) { for (int i = 0; i < MapEditUnits.Liste.Length; i++) if (MapEditUnits.Liste[i].Type == typ) return i; return -1; }
         bool Setze(int typ, Vector2I? z)
         {
             if (z is not { } zz) return false;

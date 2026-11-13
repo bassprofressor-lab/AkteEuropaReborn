@@ -129,7 +129,8 @@ public partial class MapEntityLayer
     /// und genau dieser Fehler ist heute an anderer Stelle behoben worden.</para>
     /// </summary>
     public void EditorAddUnit(int slot, int unitType, int owner, int col, int row,
-                              int art, int energy, int fuel)
+                              int art, int energy, int fuel, int facing = 0,
+                              int infantry = -1, sbyte streuX = 0, sbyte streuY = 0)
     {
         int el = ElevOf(col, row);
         var e = new Entity
@@ -137,7 +138,10 @@ public partial class MapEntityLayer
             Slot = slot, Col = col, Row = row, Owner = owner, Team = owner,
             UnitType = unitType, GameUnitType = art, Attack = 0,
             Hp = energy, HpMax = energy, Fuel = fuel, FuelMax = fuel,
-            Elev = el, IsBuilding = false, IsProp = false, Infantry = -1,
+            Elev = el, IsBuilding = false, IsProp = false, Infantry = infantry,
+            // D9 (13.11.2026): Richtung und Zellversatz wie aus dem Kartensatz
+            Facing = facing & 7,
+            StreuX = streuX, StreuY = streuY, StreuGesetzt = infantry >= 0,
             Footprint = CellRect(_ox, _oy, col, row, el),
             // B6 (12.11.2026): Fahrwerk aus dem gemessenen Satz (Luftkissen/Laeufer)
             Move = Simulation.NavGrid.ClassOf(art, System.Array.IndexOf(Core.CommandLine.Args, "--editor-fahrwerk-alt") < 0
@@ -150,6 +154,15 @@ public partial class MapEntityLayer
         _nav?.SetHull(idx, Simulation.NavGrid.HullSide(art));
         _nav?.SetOccupant(col, row, idx);
         QueueRedraw();
+    }
+
+    /// <summary>D9 (13.11.2026), fuer den Pruefstand: Fussvolksatz, Richtung und
+    /// Zellversatz der lebenden Einheit auf diesem Kartenplatz.</summary>
+    public (int Infantry, int Facing, sbyte StreuX, sbyte StreuY)? EditorUnitInfo(int slot)
+    {
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.IsProp && e.Slot == slot) return (e.Infantry, e.Facing, e.StreuX, e.StreuY);
+        return null;
     }
 
     /// <summary>Der Gebaeudeplatz (sec3-Nummer) hinter einem Listenplatz —

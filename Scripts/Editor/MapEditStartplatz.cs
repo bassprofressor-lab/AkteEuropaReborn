@@ -27,7 +27,7 @@ public partial class MapEditOverlay
     {
         if (_owner is < 0 or > 7) { _say = "ein Startplatz gehört einem Spieler (Sp 1..8)"; return; }
         int p = _owner;
-        int ui = Array.FindIndex(MapEditUnits.All, u => u.Type == MapGenerator.TroopUnitType);
+        int ui = Array.FindIndex(MapEditUnits.Liste, u => u.Type == MapGenerator.TroopUnitType);
         if (ui < 0) ui = 0;
 
         // 1. den alten Startplatz dieses Spielers wegnehmen
