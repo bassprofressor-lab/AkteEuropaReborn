@@ -252,6 +252,12 @@ bisher nur dort beschrieben.*
   Gebäudenamen bietet der Editor bewusst nicht an — das Original überschreibt ihn beim
   Missionsstart mit der Platznummer. Prüflauf `--map-edit-lager-check`; Gegenschalter
   `--editor-lager-aus`.
+- **Laufzeit .NET 10 statt .NET 8**: .NET 8 hat am 10.11.2026 sein Support-Ende erreicht
+  und bekommt keine Sicherheitsupdates mehr. Das Spiel bringt jetzt .NET 10.0.15 mit
+  (Langzeitfassung, Support bis 14.11.2028). Spielerisch ändert sich nichts: die
+  NET07-Prüfsummen sind über 30 s Spielzeit Bild für Bild gleich wie mit .NET 8, Kampagne 1
+  läuft 3000 s durch, Spielstände laden deckungsgleich. Der Installer wird dadurch rund
+  1,7 MB größer. Gebaut wird der Installer jetzt mit Inno Setup 7.1.1.
 - **Karteneditor aufgeräumt** (Prüfpunkt F): Der Ordner für eigene Kachelsätze darf jetzt
   ein Komma enthalten — der Schirm reicht seine Einstellungen als Auftrag weiter statt als
   Befehlszeile, die am Komma zerlegt wurde (erzeugte Karten byte-gleich wie vorher). Der

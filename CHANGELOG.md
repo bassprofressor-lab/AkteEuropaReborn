@@ -234,6 +234,11 @@ your own copy of the 1997 game.
   "normal" as before. The editor deliberately offers no building name — the original
   overwrites it with the slot number at mission start. Check `--map-edit-lager-check`;
   opt-out `--editor-lager-aus`.
+- **Runtime .NET 10 instead of .NET 8**: .NET 8 reached end of support on 10 Nov 2026 and
+  gets no more security updates. The game now ships .NET 10.0.15 (long-term support until
+  14 Nov 2028). Nothing changes in play: the NET07 checksums over 30 s of game time are
+  identical frame by frame to .NET 8, campaign 1 runs 3000 s, saves load identically. The
+  installer grows by about 1.7 MB. The installer is now built with Inno Setup 7.1.1.
 - **Map editor tidied up** (check item F): the folder for own tilesets may now contain a
   comma — the screen passes its settings on as an order instead of a command line split at
   commas (generated maps byte-identical to before). The edit mode's test harness (500
