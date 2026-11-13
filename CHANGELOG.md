@@ -220,6 +220,10 @@ your own copy of the 1997 game.
   gewehr", Ketten → "Leichter Panzer"). In skirmish, editor units are now pulled onto their
   design like the units of the original maps (NET07: 24 of 24; an editor map 0 before,
   now 23). Check `--map-edit-satz-check`. Opt-out `--editor-satzfelder-alt`.
+- **Map editor tidied up** (check item F): the folder for own tilesets may now contain a
+  comma — the screen passes its settings on as an order instead of a command line split at
+  commas (generated maps byte-identical to before). The edit mode's test harness (500
+  lines) lives in its own file; two invisible, never-read labels are gone.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original

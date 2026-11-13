@@ -986,28 +986,23 @@ public partial class MapEditorScreen : Control
         if (File.Exists($"{maps}/{outName}.json"))
             lines.Add($"⚠ {outName} gab es schon — die Dateien werden ueberschrieben (bestaetigt).");
 
-        // ⚠ Der Ordner geht als »from=« mit, und der Trenner der Zeichenkette
-        // ist das Komma: ein Pfad MIT Komma darin kaeme falsch an. Das ist die
-        // eine Stelle, an der die Oberflaeche mehr weiss als der Schalter, also
-        // sagt sie es hier, statt es krumm ankommen zu lassen.
+        // ⭐ 13.11.2026 — F: der Auftrag geht als Parametersatz, nicht als Kommazeile — ein
+        // Ordner mit Komma ist damit kein Sonderfall mehr (vorher abgewiesen).
         string from = _from.Text.Trim();
-        if (from.Contains(','))
+        var auftrag = new MainMenu.MapNewAuftrag
         {
-            _status.Text = "Der Ordner darf kein Komma enthalten — daran trennt der Lauf seine Werte.";
-            return;
-        }
-
-        string arg = $"{name},{(int)_w.Value},{(int)_h.Value},{ts}"
-                   + $",spieler={_players}"                       // bug-800
-                   + (_flat.ButtonPressed ? ",flach" : "")
-                   + $",boden={(int)_pick.Value}"
-                   + (from.Length > 0 ? $",from={from}" : "")
-                   // P4/D1 (12.11.2026): Zufallszahl, Wasser, Neutrale
-                   + (uint.TryParse(_samen.Text.Trim(), out uint sm) && sm > 0 ? $",samen={sm}" : "")
-                   + $",wasser={_wasser.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
-                   + (_symmetrisch ? ",symmetrie" : "")
-                   + (_neutral <= 0 ? ",ohneneutral"
-                      : $",neutralfaktor={_neutral.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+            Name = name, W = (int)_w.Value, H = (int)_h.Value, Ts = ts,
+            Players = _players,                                       // bug-800
+            Flat = _flat.ButtonPressed,
+            Pick = (int)_pick.Value,
+            From = from.Length > 0 ? from : null,
+            // P4/D1 (12.11.2026): Zufallszahl, Wasser, Neutrale
+            Seed = uint.TryParse(_samen.Text.Trim(), out uint sm) && sm > 0 ? sm : 1,
+            WaterShare = _wasser > 1.0 ? _wasser / 100.0 : _wasser,
+            Sym = _symmetrisch,
+            Neutrals = _neutral <= 0 ? 0 : -1,
+            NeutralFaktor = _neutral <= 0 ? 1.0 : _neutral,
+        };
 
         _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = _play.Disabled = true;
         _status.Text = $"arbeitet … ({(int)_w.Value}x{(int)_h.Value}, {_players} Spieler, " +
@@ -1015,7 +1010,7 @@ public partial class MapEditorScreen : Control
         _log.Text = string.Join("\n", lines);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
-        int rc = MainMenu.MapNew(arg, s => lines.Add(s));
+        int rc = MainMenu.MapNew(auftrag, s => lines.Add(s));
         _create.Disabled = false;
         string ls = KachelsatzInfo.Of(ts).Name;
         Bericht(lines, rc == 0

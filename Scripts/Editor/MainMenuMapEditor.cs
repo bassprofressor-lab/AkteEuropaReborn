@@ -185,8 +185,40 @@ public partial class MainMenu
     /// gemessen wurde (Rueckgabe 0, danach <c>--map-check</c> ohne
     /// Beanstandung), gilt damit auch fuer den Knopf.</para>
     /// </summary>
+    /// <summary>
+    /// ⭐ 13.11.2026 — F (Fable-Pruefung): DER AUFTRAG ALS PARAMETERSATZ. Bis heute baute der
+    /// Schirm eine Befehlszeile (»name,breite,hoehe,satz,spieler=…«), und MapNew zerlegte sie
+    /// am Komma wieder — darum durfte der Ordner kein Komma enthalten. Jetzt reicht der Schirm
+    /// den Auftrag direkt; die Befehlszeile (--map-new=…) wird in denselben Auftrag zerlegt.
+    /// </summary>
+    internal sealed class MapNewAuftrag
+    {
+        public string Name = "";
+        public int W, H, Ts;
+        public bool Flat;
+        public string? From;
+        public int Pick;
+        public string? Source, Open;
+        public int Players = MapGenerator.PlayersDefault, Troop = MapGenerator.TroopDefault;
+        public double WaterShare = MapTerrain.WaterShareDefault;
+        public uint Seed = 1;
+        public bool UseModel = true, UseSeams = true;
+        public int SeamTries = TileSeams.TriesDefault;
+        public int Neutrals = -1;
+        public double NeutralFaktor = 1.0;
+        public bool Sym;
+    }
+
     internal static int MapNew(string arg, Action<string> say)
     {
+        var a = Zerlegen(arg, say, out int fehler);
+        return a == null ? fehler : MapNew(a, say);
+    }
+
+    /// <summary>Die Befehlszeile in einen Auftrag zerlegen; null mit Rueckgabewert bei Fehler.</summary>
+    internal static MapNewAuftrag? Zerlegen(string arg, Action<string> say, out int fehler)
+    {
+        fehler = 0;
         var p = arg.Split(',', StringSplitOptions.RemoveEmptyEntries);
         if (p.Length < 4)
         {
@@ -194,12 +226,12 @@ public partial class MainMenu
                 + "[,flach][,leer][,ohnetabelle][,ohnenaht][,boden=<n>][,from=<ordner>]"
                 + "[,quelle=<datei.CWM>][,oeffne=<kartenname>][,spieler=<n>][,truppe=<n>]"
                 + "[,wasser=<prozent>][,samen=<n>][,neutral=<n>][,ohneneutral]");
-            return 2;
+            { fehler = 2; return null; }
         }
         string name = p[0];
         if (!int.TryParse(p[1], out int w) || !int.TryParse(p[2], out int h) ||
             !int.TryParse(p[3], out int ts))
-        { say("Breite, Hoehe und Kachelsatz muessen Zahlen sein"); return 2; }
+        { say("Breite, Hoehe und Kachelsatz muessen Zahlen sein"); { fehler = 2; return null; } }
 
         bool flat = false;
         string? from = null;
@@ -254,6 +286,32 @@ public partial class MainMenu
                     waterShare = pc > 1.0 ? pc / 100.0 : pc;
             }
         }
+
+        return new MapNewAuftrag
+        {
+            Name = name, W = w, H = h, Ts = ts, Flat = flat, From = from, Pick = pick,
+            Source = source, Open = open, Players = players, Troop = troop, WaterShare = waterShare,
+            Seed = seed, UseModel = useModel, UseSeams = useSeams, SeamTries = seamTries,
+            Neutrals = neutrals, NeutralFaktor = neutralFaktor, Sym = sym,
+        };
+    }
+
+    /// <summary>Den Auftrag ausfuehren (Erzeugen, Oeffnen, Uebernehmen).</summary>
+    internal static int MapNew(MapNewAuftrag auftrag, Action<string> say)
+    {
+        string name = auftrag.Name;
+        int w = auftrag.W, h = auftrag.H, ts = auftrag.Ts;
+        bool flat = auftrag.Flat;
+        string? from = auftrag.From;
+        int pick = auftrag.Pick;
+        string? source = auftrag.Source, open = auftrag.Open;
+        int players = auftrag.Players, troop = auftrag.Troop;
+        double waterShare = auftrag.WaterShare;
+        uint seed = auftrag.Seed;
+        bool useModel = auftrag.UseModel, useSeams = auftrag.UseSeams;
+        int seamTries = auftrag.SeamTries, neutrals = auftrag.Neutrals;
+        double neutralFaktor = auftrag.NeutralFaktor;
+        bool sym = auftrag.Sym;
 
         // Eine Quelldatei sagt selbst, welchen Kachelsatz sie braucht — der
         // vierte Wert der Befehlszeile gilt dann nur noch als Rueckfallwert.

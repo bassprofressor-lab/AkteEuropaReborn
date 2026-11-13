@@ -237,6 +237,11 @@ bisher nur dort beschrieben.*
   Editoreinheiten werden wie die Einheiten der Originalkarten auf ihren Entwurf
   nachgezogen (NET07: 24 von 24; eine Editorkarte vorher 0, jetzt 23). Prüflauf
   `--map-edit-satz-check`. Gegenschalter `--editor-satzfelder-alt`.
+- **Karteneditor aufgeräumt** (Prüfpunkt F): Der Ordner für eigene Kachelsätze darf jetzt
+  ein Komma enthalten — der Schirm reicht seine Einstellungen als Auftrag weiter statt als
+  Befehlszeile, die am Komma zerlegt wurde (erzeugte Karten byte-gleich wie vorher). Der
+  Prüfstand des Bearbeitungsmodus (500 Zeilen) steht in einer eigenen Datei, zwei
+  unsichtbare, nie gelesene Anzeigen sind entfernt.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:
