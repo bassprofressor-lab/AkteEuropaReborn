@@ -202,6 +202,13 @@ your own copy of the 1997 game.
   measurement. The instant picture shows it at once (ramps are drawn live, before only
   after F5). Checks `--map-edit-rampe-check` (with `--rampe-shot=<file>` a window
   picture) and `--rampen-muster`. Opt-out `--editor-rampe-aus`.
+- **Removing bridges and ramps**: right-click with "0 Brücke/Rampe" or "7 Wegnehmen"
+  removes the structure under the mouse. Before, a bridge tile counted as an object when
+  removed — the picture went, the bridge record stayed behind, orphaned. Now the record is
+  cleared and every cell gets its old terrain type back: it is still in the map's corner
+  raster (measured: all four corners 0 means water, for 3747 of 3747 water cells; one
+  corner 0 means rough shore). Then the terrain brush retiles cleanly. In the check, 12 of
+  12 bridge cells got their old type back.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original
