@@ -1176,7 +1176,7 @@ public partial class MapEditOverlay : Node2D
                 TakeVorkommen(cell);
                 break;
             case Brush.Bruecke:                                         // D9 (13.11.2026)
-                _say = "Brücke oder Rampe nimmt Rückgängig (Strg+Z) zurück";
+                if (!BauwerkWegnehmen(cell)) _say = $"({cell.X},{cell.Y}): dort steht keine Brücke und keine Rampe";
                 break;
             case Brush.Startplatz:                                      // P6/D5
                 if (_owner is >= 0 and <= 7)
@@ -1291,6 +1291,9 @@ public partial class MapEditOverlay : Node2D
         // das Gebaeude statt der Einheit weg.
         if (UnitAt(cell)) _brush = Brush.Einheit;
         else if (_layer.EditorBuildingAt(cell) >= 0) _brush = Brush.Gebaeude;
+        // D9 (13.11.2026): Bruecke/Rampe VOR dem Gegenstand — ihre Kachel liegt im Objektband,
+        // und als Gegenstand weggenommen blieb der sec17-Satz verwaist stehen.
+        else if (MapBauwerkAbriss.ArtAn(_map, cell.X, cell.Y, out _) > 0) _brush = Brush.Bruecke;
         else if (MapFactory.HasRail(_map, cell.X, cell.Y)) _brush = Brush.Gleis;
         else if (_map.CodeAt(cell.X, cell.Y) >= CwpFile.ObjectCodeBase) _brush = Brush.Gegenstand;
         else

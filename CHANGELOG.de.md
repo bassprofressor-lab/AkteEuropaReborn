@@ -218,6 +218,13 @@ bisher nur dort beschrieben.*
   Messung. Das Sofortbild zeigt sie gleich (Rampen werden lebend gezeichnet, bisher erst
   nach F5). Prüfläufe `--map-edit-rampe-check` (mit `--rampe-shot=<datei>` ein Fensterbild)
   und `--rampen-muster`. Gegenschalter `--editor-rampe-aus`.
+- **Brücken und Rampen wieder wegnehmen**: Rechtsklick mit »0 Brücke/Rampe« oder
+  »7 Wegnehmen« nimmt das Bauwerk unter der Maus weg. Bisher galt eine Brückenkachel
+  beim Wegnehmen als Gegenstand — das Bild ging, der Brückensatz blieb verwaist in der
+  Karte. Jetzt wird der Satz geleert, und jede Zelle bekommt ihre alte Geländeart zurück:
+  die steht noch im Eckraster der Karte (gemessen: alle vier Ecken 0 heißt Wasser, bei 3747
+  von 3747 Wasserzellen; eine Ecke 0 heißt raues Ufer). Danach kachelt der Geländepinsel
+  sauber nach. Im Prüflauf bekamen 12 von 12 Brückenzellen ihre alte Art zurück.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:

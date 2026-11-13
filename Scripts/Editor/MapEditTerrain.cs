@@ -115,6 +115,9 @@ public static class MapEditTerrain
     /// <summary>Auf welcher Hoehe das Wasser dieser Karte liegt. Gesucht wird
     /// die Hoehe der naechsten vorhandenen Wasserzelle; gibt es gar keine, ist
     /// es 0 — der Wasserspiegel, den <see cref="MapTerrain"/> setzt.</summary>
+    /// <summary>D9 (13.11.2026): der Wasserspiegel der Umgebung, fuer den Bruecken-/Rampenabriss.</summary>
+    public static int WasserSpiegel(CwmFile m, int col, int row) => WaterLevel(m, col, row);
+
     private static int WaterLevel(CwmFile m, int col, int row)
     {
         for (int rad = 1; rad <= 24; rad++)

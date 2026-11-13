@@ -441,10 +441,10 @@ public partial class MapEditOverlay
             Brush.Bruecke => (_brueckeArt == 1
                                   ? "setzt auf die Uferzelle unter der Maus eine Landungsrampe — dort fahren Fahrzeuge auf Schiffe und wieder an Land (grün = geht)"
                                   : "baut von der Uferzelle unter der Maus eine Brücke über 1 bis 3 Wasserzellen (grün = so wird sie)",
-                              "— zurücknehmen mit Strg+Z"),
+                              "nimmt die Brücke oder Rampe unter der Maus wieder weg (Wasser und Ufer kommen zurück)"),
             Brush.Vorkommen => ($"setzt ein Terranium-Vorkommen ({MapDeposits.Amount}) — gelbe Raute, mind. 8 Zellen Abstand",
                                 "nimmt das nächste Vorkommen weg"),
-            _ => ("nimmt weg, was dort steht: Einheit, sonst Gebäude, sonst Gleis, sonst Objekt",
+            _ => ("nimmt weg, was dort steht: Einheit, sonst Gebäude, sonst Brücke/Rampe, sonst Gleis, sonst Objekt",
                   "ebenso"),
         };
         _pLeft.Text = "Linksklick: " + left;

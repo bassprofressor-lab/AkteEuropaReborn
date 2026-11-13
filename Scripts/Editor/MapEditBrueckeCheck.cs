@@ -58,6 +58,9 @@ public partial class MapEditOverlay
                     && MapEditTerrain.ClassAt(_map, c + 1, r) == 0) fern = new Vector2I(c, r);
         _brush = Brush.Bruecke; _pinsel = 1;
         ulong h0 = Abdruck();
+        var klassenVorher = new System.Collections.Generic.List<(int C, int R, int K)>();
+        foreach (var (c, r, _, _) in MapBridgeEdit.Planen(_map, z0.X, z0.Y, out _)!.Zellen)
+            klassenVorher.Add((c, r, MapEditTerrain.ClassAt(_map, c, r)));
         bool abgewiesen = true;
         if (fern is { } f0)
         {
@@ -86,6 +89,32 @@ public partial class MapEditOverlay
         bool wieder = Abdruck() == h1;
         GD.Print($"map-edit-bruecke-check: Rueckgaengig {(zurueck ? "bytegleich" : "ANDERS")}, Wiederholen {(wieder ? "bytegleich" : "ANDERS")}");
         ok &= zurueck && wieder;
+
+        // 4b. WEGNEHMEN (Werkzeug 7) — Satz leer, Lage 0, keine Objektkachel, jede Zelle wieder ihre alte Klasse
+        {
+            var keepB = _brush;
+            _brush = Brush.Wegnehmen;
+            StrichBeginnen(false); Anwenden(z0, false); StrichEnden();
+            string weg = _say;
+            var l20w = _map.Sec(20)!;
+            int lagen = 0, objekte = 0, klasseFalsch = 0;
+            foreach (var (c, r, k) in klassenVorher)
+            {
+                if (l20w[c * MapFactory.ImapStride + r] >= 100) lagen++;
+                // nur BAUWERKSkacheln zaehlen: der Pinsel pflanzt beim Nachkacheln selbst Bewuchs
+                int cd = _map.CodeAt(c, r);
+                if (cd is >= 10000 and < 10240 || cd is >= MapRampEdit.KachelBasis and < MapRampEdit.KachelBasis + 16) objekte++;
+                if (MapEditTerrain.ClassAt(_map, c, r) != k) klasseFalsch++;
+            }
+            bool wegOk = CwmExtra.Bridges(_map).Count == 0 && lagen == 0 && objekte == 0 && klasseFalsch == 0;
+            GD.Print($"map-edit-bruecke-check: Wegnehmen: {weg} — Saetze {CwmExtra.Bridges(_map).Count}, Lagen {lagen}, Bauwerkskacheln {objekte}, Klasse anders {klasseFalsch} von {klassenVorher.Count} — {(wegOk ? "ok" : "FALSCH")}");
+            ok &= wegOk;
+            Rueckgaengig();
+            bool wiederDa = Abdruck() == h1;
+            GD.Print($"map-edit-bruecke-check: Wegnehmen rueckgaengig: {(wiederDa ? "bytegleich" : "ANDERS")}");
+            ok &= wiederDa;
+            _brush = keepB;
+        }
 
         string? shot = Core.CommandLine.Args.FirstOrDefault(x => x.StartsWith("--bruecke-shot="))?["--bruecke-shot=".Length..];
         if (shot != null && br.Count > 0 && GetViewport().GetCamera2D() is { } cam)
