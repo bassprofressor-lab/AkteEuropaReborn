@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Network;
+﻿namespace AkteEuropaReborn.Network;
 
 using System;
 using System.Collections.Generic;
@@ -522,6 +522,9 @@ public sealed class NetLink
     /// berührt, ist die Entnahme aus den Fächern, und die geschieht am
     /// Taktanfang.
     /// </summary>
+    private bool _totGemeldet;
+    private static readonly bool PumpAlt = Array.IndexOf(Core.CommandLine.Args, "--netz-pump-alt") >= 0;
+
     public void Pump()
     {
         if (_relay != null)
@@ -537,6 +540,15 @@ public sealed class NetLink
             return;
         }
         if (_peer == null) return;
+        // ⭐ 13.11.2026 — Fable B11: nach einem Abriss rief Pump in JEDEM Bild Poll() auf der toten
+        // Leitung, und Godot schrieb jedes Mal »The multiplayer instance isn't currently active«
+        // samt Rueckverfolgung (gemessen 4548x, 7,9 MB in 40 s). Jetzt einmal melden, dann still.
+        // Gegenschalter --netz-pump-alt.
+        if (!PumpAlt && _peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Disconnected)
+        {
+            if (!_totGemeldet) { _totGemeldet = true; GD.PrintErr("netz: die Leitung ist getrennt — es wird nichts mehr empfangen"); }
+            return;
+        }
         _peer.Poll();
         while (_peer.GetAvailablePacketCount() > 0)
         {
