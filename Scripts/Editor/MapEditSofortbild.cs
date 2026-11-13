@@ -78,6 +78,7 @@ public partial class MapEditOverlay
         var cwp = MapEditSession.Cwp!; var pal = MapEditSession.Pal!;
         var t0 = DateTime.UtcNow;
         (Image Boden, Image? Objekte, string Meta)? fertig = null;
+        var rampen = CwmExtra.Ramps(kopie);          // D9: fuer die lebend gemalten Rampen
         string? fehler = null;
         await Task.Run(() =>
         {
@@ -95,7 +96,7 @@ public partial class MapEditOverlay
         double ms = (DateTime.UtcNow - t0).TotalMilliseconds;
         if (fertig is { } f)
         {
-            bool ok = _layer.EditorSofortbild(f.Boden, f.Objekte, f.Meta, out string warum);
+            bool ok = _layer.EditorSofortbild(f.Boden, f.Objekte, f.Meta, out string warum, rampen);
             if (ok) { _sofortStand = stand; SofortGetauscht++; SofortLetzterBoden = f.Boden; }
             SofortZeile = ok ? $"Bild aktualisiert ({ms / 1000:0.0} s)" : $"Bild: {warum} — F5 zeigt es";
             _say = SofortZeile;

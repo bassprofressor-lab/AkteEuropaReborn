@@ -179,7 +179,7 @@ public partial class MapEditOverlay
         ToolButton(zeile7, Brush.Wegnehmen, "7 Wegnehmen");
         ToolButton(zeile7, Brush.Vorkommen, "8 Vorkommen");
         ToolButton(zeile7, Brush.Startplatz, "9 Startplatz");
-        ToolButton(zeile7, Brush.Bruecke, "0 Brücke");                 // D9 (13.11.2026)
+        ToolButton(zeile7, Brush.Bruecke, "0 Brücke/Rampe");           // D9 (13.11.2026)
         var pinselZeile = new HBoxContainer();
         pinselZeile.AddThemeConstantOverride("separation", 4);
         v.AddChild(pinselZeile);
@@ -438,8 +438,10 @@ public partial class MapEditOverlay
                             "senkt die Zelle um eine Stufe"),
             Brush.Startplatz => ($"setzt den Startplatz für {OwnerName(_owner)}: Basis, Werk, Truppe — ein vorhandener wird verschoben",
                                  "nimmt den Startplatz dieses Spielers weg"),
-            Brush.Bruecke => ("baut von der Uferzelle unter der Maus eine Brücke über 1 bis 3 Wasserzellen (grün = so wird sie)",
-                              "— Brücke zurücknehmen mit Strg+Z"),
+            Brush.Bruecke => (_brueckeArt == 1
+                                  ? "setzt auf die Uferzelle unter der Maus eine Landungsrampe — dort fahren Fahrzeuge auf Schiffe und wieder an Land (grün = geht)"
+                                  : "baut von der Uferzelle unter der Maus eine Brücke über 1 bis 3 Wasserzellen (grün = so wird sie)",
+                              "— zurücknehmen mit Strg+Z"),
             Brush.Vorkommen => ($"setzt ein Terranium-Vorkommen ({MapDeposits.Amount}) — gelbe Raute, mind. 8 Zellen Abstand",
                                 "nimmt das nächste Vorkommen weg"),
             _ => ("nimmt weg, was dort steht: Einheit, sonst Gebäude, sonst Gleis, sonst Objekt",
@@ -468,7 +470,7 @@ public partial class MapEditOverlay
         Brush.Hoehe => "Höhe ändern",
         Brush.Vorkommen => "Vorkommen",
         Brush.Startplatz => "Startplatz",
-        Brush.Bruecke => "Brücke",
+        Brush.Bruecke => _brueckeArt == 1 ? "Landungsrampe" : "Brücke",
         _ => "Wegnehmen",
     };
 
@@ -511,6 +513,15 @@ public partial class MapEditOverlay
                 foreach (var u in MapEditUnits.Liste)
                     _pList.AddItem(UnitText(u, true), MapEditIcons.Unit(u.Type, _blick));
                 break;
+            case Brush.Bruecke:                                         // D9 (13.11.2026)
+                _pListHead.Text = "Bauwerk am Wasser";
+                {
+                    int a0 = _pList.AddItem("Brücke — über 1 bis 3 Wasserzellen, 3 breit");
+                    _pList.SetItemTooltip(a0, "wie die Brücken der Originalkarten: Fahrbahn in der Mitte, Geländer links und rechts");
+                    int a1 = _pList.AddItem("Landungsrampe — Fahrzeuge steigen hier auf Schiffe ein und aus");
+                    _pList.SetItemTooltip(a1, "eine Uferzelle auf Wasserhöhe; ohne Rampe kann ein Schiff keine Fahrzeuge an Land setzen");
+                }
+                break;
             case Brush.Gelaende:
                 _pListHead.Text = "Bodenart";
                 foreach (var gr in new[] { MapFactory.Ground.Free, MapFactory.Ground.Rough,
@@ -533,7 +544,6 @@ public partial class MapEditOverlay
                     Brush.Hoehe => "Höhe: links anheben, rechts absenken",
                     Brush.Vorkommen => "Vorkommen: gelbe Rauten auf der Karte",
                     Brush.Startplatz => SpielerZeile(),
-                    Brush.Bruecke => "Brücke: Uferzelle anklicken — wie die Brücken der Originalkarten (3 breit, Fahrbahn in der Mitte)",
                     _ => "Wegnehmen: keine Auswahl nötig",
                 };
                 _pList.Visible = false;
@@ -552,6 +562,7 @@ public partial class MapEditOverlay
         Brush.Gleis => Math.Min(_line, RailLines - 1),
         Brush.Einheit => _unitAt,
         Brush.Gelaende => (int)_ground,
+        Brush.Bruecke => _brueckeArt,
         _ => -1,
     };
 
@@ -576,6 +587,7 @@ public partial class MapEditOverlay
             case Brush.Gleis: _line = i; break;
             case Brush.Einheit when i < MapEditUnits.Liste.Length: _unitAt = i; break;
             case Brush.Gelaende: _ground = (MapFactory.Ground)i; break;
+            case Brush.Bruecke: _brueckeArt = i == 1 ? 1 : 0; break;
         }
         _say = "";
         Refresh();

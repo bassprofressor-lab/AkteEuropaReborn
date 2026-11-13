@@ -230,13 +230,23 @@ public partial class MapEntityLayer
 
     /// <summary>D4 (12.11.2026): Sofortbild des Editors — Bodenbild beim Betrachter tauschen,
     /// Objektebene aus dem frischen Meta neu aufbauen.</summary>
-    public bool EditorSofortbild(Image boden, Image? objekte, string metaJson, out string warum)
+    public bool EditorSofortbild(Image boden, Image? objekte, string metaJson, out string warum,
+                                 System.Collections.Generic.List<Import.CwmExtra.Ramp>? rampen = null)
     {
         warum = "";
         if (GetParent() is not MapViewer v) { warum = "kein Kartenbetrachter"; return false; }
         if (!v.EditorBodenTauschen(boden, out warum)) return false;
         var meta = Core.JsonMeta.Parse(metaJson);
         EditorObjektebene(meta, objekte != null ? ImageTexture.CreateFromImage(objekte) : null);
+        // D9 (13.11.2026): Kartenrampen werden LEBEND gemalt (bug-685, der Backofen laesst sie
+        // weg) — ohne die frischen sec21-Saetze stuende eine neue Rampe erst nach F5 im Bild.
+        if (rampen != null && !Editor.MapRampEdit.Aus)
+        {
+            _moleSaetze.RemoveAll(r => r.Karte);
+            foreach (var r in rampen)
+                _moleSaetze.Add(new Rampe { Karte = true, Slot = r.Slot, Col = r.Col, Row = r.Row, Bild = r.Mark, Tp = r.Count });
+            KartenRampenAnlegen();
+        }
         QueueRedraw();
         return true;
     }

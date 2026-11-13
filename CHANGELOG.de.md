@@ -207,6 +207,17 @@ bisher nur dort beschrieben.*
   Strg+Z. Prüfläufe `--map-edit-bruecke-check` (mit `--bruecke-shot=<datei>` ein
   Fensterbild) und `--bruecken-muster` (die Messung an den Originalen). Gegenschalter
   `--editor-bruecke-aus`.
+- **Landungsrampen im Karteneditor** (Werkzeug »0 Brücke/Rampe«, in der Liste
+  »Landungsrampe«): Ein Klick auf eine Uferzelle setzt eine Rampe — nur dort fahren
+  Fahrzeuge auf Schiffe und wieder an Land. Geschrieben wird, was der Molenbau des
+  Originals schreibt: eine Zelle, Rampensatz mit 200 Trefferpunkten, Rampenkachel in
+  Richtung des Wassers, befahrbar, Lage 200 + Platz. Gemessen an den Originalkarten: von 45
+  Rampensätzen tragen 24 eine Rampenkachel, und an diesen 24 gilt jede Regel ohne Ausnahme
+  (genau ein Wassernachbar, Richtung = Wasserseite, Rampe auf Wasserhöhe); die übrigen 21
+  sind Restsätze ohne Bild (Karten 8, 9 und NET07). Die Editorrampe erfüllt dieselbe
+  Messung. Das Sofortbild zeigt sie gleich (Rampen werden lebend gezeichnet, bisher erst
+  nach F5). Prüfläufe `--map-edit-rampe-check` (mit `--rampe-shot=<datei>` ein Fensterbild)
+  und `--rampen-muster`. Gegenschalter `--editor-rampe-aus`.
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:

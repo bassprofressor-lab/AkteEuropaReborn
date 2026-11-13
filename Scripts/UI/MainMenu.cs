@@ -1325,6 +1325,11 @@ public partial class MainMenu : Control
                 GetTree().Quit(MapNew(a["--map-new=".Length..]));
                 return;
             }
+            else if (a == "--rampen-muster" || a.StartsWith("--rampen-muster="))
+            {
+                GetTree().Quit(Editor.RampenMuster.Run(a.Contains('=') ? a[(a.IndexOf('=') + 1)..] : "", Say));
+                return;
+            }
             else if (a == "--bruecken-muster" || a.StartsWith("--bruecken-muster="))
             {
                 GetTree().Quit(Editor.BrueckenMuster.Run(a.Contains('=') ? a[(a.IndexOf('=') + 1)..] : "", Say));

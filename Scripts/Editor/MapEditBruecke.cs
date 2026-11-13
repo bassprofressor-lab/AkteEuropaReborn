@@ -162,6 +162,12 @@ public partial class MapEditOverlay
     private void BrueckeVorschauZeichnen()
     {
         if (_brush != Brush.Bruecke || _hover is not { } h) return;
+        if (_brueckeArt == 1)
+        {
+            if (MapRampEdit.Planen(_map, MapEditSession.Cwp, h.X, h.Y, MapEditSession.Seed, out _, out _) < 0) return;
+            DrawRect(new Rect2(_layer.EditorCellTopLeft(h.X, h.Y), MapBaker.TileW, MapBaker.TileH), new Color(0.4f, 1f, 0.5f, 0.4f));
+            return;
+        }
         var plan = MapBridgeEdit.Planen(_map, h.X, h.Y, out _);
         if (plan == null) return;
         var col = new Color(0.4f, 1f, 0.5f, 0.95f);

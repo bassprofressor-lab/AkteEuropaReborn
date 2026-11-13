@@ -191,6 +191,17 @@ your own copy of the 1997 game.
   heights, something in the way. Ctrl+Z takes it back. Checks `--map-edit-bruecke-check`
   (with `--bruecke-shot=<file>` a window picture) and `--bruecken-muster` (the measurement
   on the originals). Opt-out `--editor-bruecke-aus`.
+- **Landing ramps in the map editor** (tool "0 Brücke/Rampe", list entry
+  "Landungsrampe"): a click on a shore cell places a ramp — the only place where vehicles
+  board ships and come back ashore. The editor writes what the original's pier builder
+  writes: one cell, a ramp record with 200 hit points, the ramp tile facing the water,
+  passable, layer 200 + slot. Measured on the original maps: of 45 ramp records 24 carry a
+  ramp tile, and every rule holds for these 24 without exception (exactly one water
+  neighbour, direction = water side, ramp at water level); the other 21 are leftover
+  records without a picture (maps 8, 9 and NET07). The editor ramp passes the same
+  measurement. The instant picture shows it at once (ramps are drawn live, before only
+  after F5). Checks `--map-edit-rampe-check` (with `--rampe-shot=<file>` a window
+  picture) and `--rampen-muster`. Opt-out `--editor-rampe-aus`.
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original

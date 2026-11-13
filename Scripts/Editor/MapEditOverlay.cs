@@ -119,6 +119,7 @@ public partial class MapEditOverlay : Node2D
         SofortCheck();            // D4 (12.11.2026)
         FussvolkCheck();          // D9 (13.11.2026)
         BrueckeCheck();           // D9 (13.11.2026)
+        RampeCheck();             // D9 (13.11.2026)
     }
 
     /// <summary>
@@ -906,7 +907,7 @@ public partial class MapEditOverlay : Node2D
             case Brush.Wegnehmen: TakeAny(cell); return;              // bug-802
             case Brush.Vorkommen: PutVorkommen(cell); break;          // P5/D7
             case Brush.Startplatz: PutStartplatz(cell); break;        // P6/D5
-            case Brush.Bruecke: PutBruecke(cell); break;              // D9 (13.11.2026)
+            case Brush.Bruecke: if (_brueckeArt == 1) PutRampe(cell); else PutBruecke(cell); break;   // D9 (13.11.2026)
         }
         Refresh();
         QueueRedraw();
@@ -1175,7 +1176,7 @@ public partial class MapEditOverlay : Node2D
                 TakeVorkommen(cell);
                 break;
             case Brush.Bruecke:                                         // D9 (13.11.2026)
-                _say = "eine Brücke nimmt Rückgängig (Strg+Z) zurück";
+                _say = "Brücke oder Rampe nimmt Rückgängig (Strg+Z) zurück";
                 break;
             case Brush.Startplatz:                                      // P6/D5
                 if (_owner is >= 0 and <= 7)
