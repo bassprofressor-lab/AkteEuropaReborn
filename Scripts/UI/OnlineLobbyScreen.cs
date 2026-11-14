@@ -413,8 +413,7 @@ public partial class OnlineLobbyScreen : Control
         return sel.Length > 0 && sel[0] < _roomIds.Count ? _roomIds[sel[0]] : "";
     }
 
-    private static string KartenName(string map)
-        => map.StartsWith("map_", StringComparison.OrdinalIgnoreCase) ? map[4..] : map;
+    private static string KartenName(string map) => MainMenu.KartenTitel(map);   // Fable C14
 
     private static Label Head(string t)
     {

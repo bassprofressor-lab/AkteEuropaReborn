@@ -362,8 +362,8 @@ public sealed class NetOffer
     /// </summary>
     public string ListLine()
     {
-        string m = Map.StartsWith("map_") ? Map["map_".Length..] : Map;
-        return $"{Target}  ·  {(m.Length > 0 ? m : "?")}  ·  " +
+        string m = UI.MainMenu.KartenTitel(Map);   // Fable C14
+        return $"{Target}  ·  {m}  ·  " +
                (Running ? "läuft schon" : $"{Here}/{Players}, {Free} frei");
     }
 

@@ -263,6 +263,11 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Multiplayer: map titles instead of file names** (Fable review C14): the online room list, the
+  room header and the LAN list named maps by their file name ("NET07", "eigen01"). Now they show
+  the title from the skirmish menu ("Gefechtsfeld (NET07)"), for own maps the title given in the
+  editor ("Eigene Karte: …"); the skirmish map list now uses that title for own maps too.
+  Opt-out `--kartentitel-alt`.
 - **Multiplayer: a player missing the map does not start** (Fable review B12): if the host's map
   did not reach a player (a shipped map not imported, or an own map without an image that was
   therefore not sent), they started anyway — on whatever map stood in their own menu, and the

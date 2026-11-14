@@ -359,6 +359,7 @@ public partial class MainMenu
             {
                 _netShown.Add(o);
                 _netList.AddItem(o.ListLine());
+                GD.Print($"netz: Listenzeile »{o.ListLine()}«");
                 int row = _netList.ItemCount - 1;
                 // Die lange Form als Tooltip: die Liste ist gekürzt, damit die
                 // freien Plätze ins Bild passen (siehe NetOffer.ListLine), und

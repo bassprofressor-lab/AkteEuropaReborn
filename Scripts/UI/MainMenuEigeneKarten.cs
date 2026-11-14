@@ -1,6 +1,7 @@
 ﻿#nullable enable
 namespace AkteEuropaReborn.UI;
 
+using System;
 using Godot;
 
 /// <summary>
@@ -44,9 +45,38 @@ public partial class MainMenu
     }
 
     private static string EigenerTitel(string map)
-        => map.StartsWith("map_netz_")
-            ? $"Empfangene Karte ({map[9..17]})"
-            : $"Eigene Karte: {map[4..]}";
+    {
+        if (map.StartsWith("map_netz_")) return $"Empfangene Karte ({map[9..Math.Min(17, map.Length)]})";
+        // ⭐ 14.11.2026 — Fable C14: der Titel, den der Editor vergeben hat (D8), statt des Dateinamens
+        string t = TitelAlt ? "" : Editor.MapVerwaltung.Titel(map);
+        return t.Length > 0 ? $"Eigene Karte: {t}" : $"Eigene Karte: {(map.StartsWith("map_") ? map[4..] : map)}";
+    }
+
+    private static bool TitelAlt => Array.IndexOf(Core.CommandLine.Args, "--kartentitel-alt") >= 0;
+
+    /// <summary>
+    /// ⭐ 14.11.2026 — Fable C14: DER NAME EINER KARTE FUER LISTEN (Online-Raumliste, Raumkopf,
+    /// LAN-Liste). Dort stand der Dateiname (»NET07«, »eigen01«, »netz_998C2DB8…«). Jetzt der
+    /// Titel des Gefechtsmenues, bei eigenen Karten der Editortitel; was dieser Rechner nicht
+    /// kennt, kurz ohne »map_«. Gegenschalter --kartentitel-alt.
+    /// </summary>
+    public static string KartenTitel(string map)
+    {
+        if (map.Length == 0) return "?";
+        string kurz = map.StartsWith("map_", StringComparison.OrdinalIgnoreCase) ? map[4..] : map;
+        if (TitelAlt) return kurz;
+        int i = Maps.FindIndex(m => string.Equals(m.File, map, StringComparison.OrdinalIgnoreCase));
+        if (i >= 0) return Maps[i].Title;
+        if (map.StartsWith("map_netz_")) return EigenerTitel(map);
+        // die Raumliste baut sich jedes Bild neu — die Datei nur alle 5 s lesen
+        ulong jetzt = Time.GetTicksMsec();
+        if (_titelZwischen.TryGetValue(map, out var z) && jetzt - z.Zeit < 5000) return z.Titel;
+        string t = Editor.MapVerwaltung.Titel(map);
+        string r = t.Length > 0 ? $"Eigene Karte: {t}" : kurz;
+        _titelZwischen[map] = (r, jetzt);
+        return r;
+    }
+    private static readonly System.Collections.Generic.Dictionary<string, (string Titel, ulong Zeit)> _titelZwischen = new();
 
     /// <summary>Eine Karte, die das Netz gebracht hat, auswählbar machen.</summary>
     private int KarteAufnehmen(string map)

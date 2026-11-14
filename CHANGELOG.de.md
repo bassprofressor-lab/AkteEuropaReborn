@@ -284,6 +284,11 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Mehrspieler: Kartentitel statt Dateinamen** (Fable-Prüfung C14): Die Online-Raumliste, der
+  Raumkopf und die LAN-Liste nannten Karten nach ihrem Dateinamen (»NET07«, »eigen01«). Jetzt
+  steht dort der Titel aus dem Gefechtsmenü (»Gefechtsfeld (NET07)«), bei eigenen Karten der im
+  Editor vergebene Titel (»Eigene Karte: …«); auch die Kartenliste im Gefechtsmenü nimmt für
+  eigene Karten jetzt diesen Titel. Gegenschalter `--kartentitel-alt`.
 - **Mehrspieler: fehlt einem Mitspieler die Karte, startet er nicht** (Fable-Prüfung B12): Kam die
   Karte des Gastgebers bei einem Mitspieler nicht an (eine gelieferte Karte nicht eingelesen,
   oder eine eigene Karte ohne Bild, die darum nicht verschickt wurde), startete er trotzdem — auf
