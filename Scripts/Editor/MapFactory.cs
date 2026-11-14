@@ -166,6 +166,9 @@ public static class MapFactory
     /// <summary>Gegenschalter zu bug-818: Zone 3 beim Wegnehmen wieder als gesperrt lesen.</summary>
     public static bool Zone3Alt => Array.IndexOf(Core.CommandLine.Args, "--editor-zone3-alt") >= 0;
 
+    private const int HafenTypNr = 11;
+    private static bool HafenWasserAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-hafen-pinsel-alt") >= 0;
+
     public static bool ClearBuilding(CwmFile m, int slot)
     {
         var s = m.Sec(3);
@@ -207,6 +210,11 @@ public static class MapFactory
                         ZoneLand => ImapFree,
                         > ZoneLand when !Zone3Alt => ImapFree,
                         ZoneShore => ImapRough,
+                        // ⭐ 14.11.2026 bug-832: unter einem HAFEN ist Zone 0 Wasser — er steht nur
+                        // dort (MapEditHafen/MapNeutrals). Bis heute wurde daraus »gesperrt«, und nach
+                        // dem Wegnehmen fuhr kein Schiff mehr durch die Stelle. Gegenschalter
+                        // --editor-hafen-pinsel-alt.
+                        _ when s[o + 0x04] == HafenTypNr && !HafenWasserAlt => ImapWater,
                         _ => ImapBlocked,          // Zone 0: Wasser ODER gesperrt
                     };
                     imap[i] = (byte)(v & 0xFF); imap[i + 1] = (byte)(v >> 8);

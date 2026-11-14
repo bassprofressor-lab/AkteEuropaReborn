@@ -253,8 +253,16 @@ your own copy of the 1997 game.
   the water, the shipyard that pays for its ships fully on land at the shore, both as a pair 6
   to 15 cells apart. The generator now places exactly such a pair and links the harbour to its
   shipyard; on the test maps every harbour stood fully in water and pointed at its shipyard.
-  Opt-out `--editor-hafen-paar-alt`. Still open: placing a harbour into water by hand with the
-  building brush.
+  Opt-out `--editor-hafen-paar-alt`.
+- **Map editor: placing a harbour by hand.** The building brush now also places a harbour only
+  fully in water (every cell of its footprint must be free water, otherwise the status line says
+  why) and links it to the nearest shipyard that has no harbour yet and stands at most 15 cells
+  away. If there is none, the harbour is refused: "place a shipyard on land at the shore first".
+  The harbour takes its shipyard's owner, just as the original hands it over together with the
+  shipyard on capture. Removing a shipyard removes its harbour too (Ctrl+Z brings both back);
+  a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
+  it became blocked ground and no ship could pass there any more — they are water again. Test
+  bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
 - **Multiplayer details** (Fable review): own editor maps are back in the map list of skirmish
   and multiplayer (they were missing entirely); "Zurück zum Menü" while waiting for a network
   match closes the connection (before, a later campaign start ended with an error); a running

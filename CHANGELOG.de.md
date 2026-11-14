@@ -273,8 +273,17 @@ bisher nur dort beschrieben.*
   Wasser, die Werft, die seine Schiffe bezahlt, ganz an Land am Ufer, beide als Paar 6 bis 15
   Felder auseinander. Jetzt setzt der Generator genau so ein Paar und verknüpft den Hafen mit
   seiner Werft; auf den Probekarten stand jeder Hafen vollständig im Wasser und verwies auf
-  seine Werft. Gegenschalter `--editor-hafen-paar-alt`. ⚠ Noch offen: den Hafen von Hand mit
-  dem Gebäudepinsel ins Wasser setzen.
+  seine Werft. Gegenschalter `--editor-hafen-paar-alt`.
+- **Karteneditor: den Hafen von Hand setzen.** Auch der Gebäudepinsel setzt den Hafen jetzt nur
+  noch ganz ins Wasser (jede Zelle seiner Grundfläche muss freies Wasser sein, sonst sagt die
+  Statuszeile, warum nicht) und verknüpft ihn mit der nächsten Werft, die noch keinen Hafen hat
+  und höchstens 15 Felder entfernt steht. Gibt es keine, wird der Hafen abgewiesen: »erst eine
+  Werft an Land ans Ufer setzen«. Der Hafen bekommt den Eigner seiner Werft, so wie das Original
+  ihn bei der Einnahme mit der Werft weiterreicht. Wer eine Werft wegnimmt, nimmt ihren Hafen
+  mit (Strg+Z holt beide zurück); ein weggenommener Hafen gibt seine Verknüpfung frei. Dabei
+  behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
+  und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
+  `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
 - **Mehrspieler-Kleinigkeiten** (Fable-Prüfung): Eigene Editorkarten stehen wieder in der
   Kartenliste von Gefecht und Mehrspieler (sie fehlten ganz); »Zurück zum Menü« beim Warten auf
   eine Netzpartie bricht die Verbindung ab (vorher endete ein späterer Kampagnenstart mit einem

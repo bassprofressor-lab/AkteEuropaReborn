@@ -122,6 +122,7 @@ public partial class MapEditOverlay : Node2D
         RampeCheck();             // D9 (13.11.2026)
         SatzCheck();              // B3 (13.11.2026)
         LagerCheck();             // D9 (13.11.2026)
+        HafenCheck();             // bug-832 (14.11.2026)
     }
 
 
@@ -473,6 +474,9 @@ public partial class MapEditOverlay : Node2D
         if (cell.X + fw > _map.Width || cell.Y + fh > _map.Height)
         { _say = "das Gebäude ragt über den Kartenrand"; return; }
 
+        // ⭐ 14.11.2026 bug-832: der Hafen steht im Wasser und gehoert zu einer Werft (MapEditHafen.cs)
+        if (_typ == MapNeutrals.HafenTyp && !HafenPinselAlt) { HafenSetzen(cell, cwp, foot, fw, fh); return; }
+
         // can_build_here @0x4203C0, Zelle fuer Zelle — dieselbe Pruefung wie bei
         // den Vorkommen und den neutralen Gebaeuden, von dort geholt.
         var imap = _map.Sec(6);
@@ -696,6 +700,7 @@ public partial class MapEditOverlay : Node2D
                 int i = _layer.EditorBuildingAt(cell);
                 if (i < 0) { _say = "dort steht kein Gebäude"; break; }
                 int slot = _layer.EditorSlotOf(i);
+                string paar = HafenPaarLoesen(slot);   // bug-832: Hafen/Werft-Paar (MapEditHafen.cs)
                 // Erst die Karte, dann das Bild: schlaegt das Leeren des Satzes
                 // fehl, soll das Gebaeude sichtbar bleiben, statt aus der
                 // Anzeige zu verschwinden und in der Datei stehenzubleiben.
@@ -704,7 +709,7 @@ public partial class MapEditOverlay : Node2D
                 _layer.EditorRemoveBuilding(slot);
                 _mine.RemoveAll(x => x.What == Brush.Gebaeude && x.Col == cell.X && x.Row == cell.Y);
                 MapEditSession.Dirty = true;
-                _say = $"Gebäude auf Platz {slot} weg — Grundfläche wieder frei";
+                _say = $"Gebäude auf Platz {slot} weg{paar} — Grundfläche wieder frei";
                 break;
             case Brush.Gleis:
                 if (MapFactory.PutRail(_map, cell.X, cell.Y, -1, _line) < 0)
