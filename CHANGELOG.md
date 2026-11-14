@@ -263,6 +263,23 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Online: reconnecting after a dropped connection** (Fable review D9):
+  - If the connection to the lobby server drops in the middle of a match (Wi-Fi, router), the game now
+    reconnects every 3 seconds and signs in with its resume key. The server holds the seat for 60
+    seconds; the game fetches all game frames since the last number and carries on. The message line
+    says "connection to the server interrupted — reconnecting …" and then "connection is back"; the
+    others see "Waiting for …" in the meantime.
+  - Own game frames are no longer lost meanwhile: they stay queued and go out after reconnecting.
+    Whatever the server did not receive before the drop (no echo) is sent again. So far they were
+    discarded, and the others waited forever for our ticks until they dropped us.
+  - If the connection does not come back within 60 seconds, the match ends for that player with a clear
+    message.
+  - ⚠ Not covered: restarting the game after a crash (the whole match would have to be recomputed from
+    the first tick) and LAN (everything runs through the host's machine there).
+  Measured against the lobby server: the other player cuts the line hard at tick 150, once immediately
+  and once with an artificial 10 s outage — reconnected after 0.1 and 10.2 s, the match continues, both
+  machines green. Test switches `--net-abriss-bei=N`, `--net-abriss-dauer=ms`; opt-out
+  `--wiederverbinden-alt`.
 - **Map editor tidied up** (Fable editor review, remainder of F; no visible change for players): the five
   separate loops over a building's footprint pattern are one (`FussZellen`), the duplicated "is there a
   unit here" check is one (`MapFactory.EinheitAuf`), the duplicated skirmish start from the editor is one

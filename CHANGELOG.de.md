@@ -284,6 +284,23 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Online: Wiederverbinden nach einem Verbindungsabriss** (Fable-Prüfung D9):
+  - Reißt die Leitung zum Lobby-Server mitten in der Partie ab (WLAN, Router), verbindet das Spiel jetzt
+    alle 3 Sekunden neu und meldet sich mit seinem Wiederaufnahme-Schlüssel an. Der Server hält den
+    Platz 60 Sekunden; das Spiel holt alle Spielrahmen ab der letzten Nummer nach und läuft weiter. Die
+    Meldungszeile sagt »Verbindung zum Server unterbrochen — verbinde neu …« und danach »Verbindung
+    wieder da«; die anderen sehen so lange »Warten auf …«.
+  - Eigene Spielrahmen gehen in der Zeit nicht mehr verloren: Sie bleiben in der Schlange und gehen nach
+    dem Wiederverbinden hinaus. Was der Server vor dem Abriss nicht mehr bekommen hat (kein Echo), wird
+    noch einmal geschickt. Bisher wurden sie verworfen, und die anderen warteten für immer auf unsere
+    Takte, bis sie uns ausschalteten.
+  - Kommt die Verbindung in 60 Sekunden nicht wieder, endet die Partie für den Betroffenen mit einer
+    klaren Meldung.
+  - ⚠ Nicht abgedeckt: ein Neustart des Spiels nach einem Absturz (dann müsste die ganze Partie ab dem
+    ersten Takt nachgerechnet werden) und das LAN (dort läuft alles über den Rechner des Gastgebers).
+  Gemessen gegen den Lobby-Server: Mitspieler trennt in Takt 150 hart, einmal sofort und einmal mit 10 s
+  künstlichem Ausfall — wieder verbunden nach 0,1 bzw. 10,2 s, Partie läuft weiter, beide Rechner grün.
+  Prüfschalter `--net-abriss-bei=N`, `--net-abriss-dauer=ms`; Gegenschalter `--wiederverbinden-alt`.
 - **Karteneditor aufgeräumt** (Fable-Prüfung des Editors, Rest von F; für Spieler ohne sichtbare Änderung):
   die fünf eigenen Schleifen über das Grundmuster eines Gebäudes sind eine (`FussZellen`), die doppelte
   Frage »steht hier eine Einheit« ist eine (`MapFactory.EinheitAuf`), der doppelte Gefechtsstart aus dem
