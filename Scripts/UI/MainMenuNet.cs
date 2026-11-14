@@ -544,6 +544,8 @@ public partial class MainMenu
     /// blockieren — ein blockierendes Warten würde die Steckdose nicht mehr
     /// abfragen, und dann käme die Partie nie an.</para>
     /// </summary>
+    private string _letzteKartenZeile = "";
+
     private async void StartWhenNetIsReady()
     {
         // ⚠ Ein zweiter Druck während des Wartens legte eine ZWEITE
@@ -661,8 +663,11 @@ public partial class MainMenu
             // nicht sieht, ist von einem Absturz nicht zu unterscheiden. Das
             // Original schreibt dafür »Warte auf Server« (0x4FA570) auf den
             // Schirm, und es tut das nach 5000 ms.
+            string zeile = NetworkManager.StatusLine();
+            if (zeile.StartsWith("Karte des Gastgebers") && zeile != _letzteKartenZeile)
+            { _letzteKartenZeile = zeile; GD.Print("netz: " + zeile); }   // Fable D4, fuers Protokoll
             if (_netStatus != null)
-                _netStatus.Text = $"{NetworkManager.StatusLine()}  ({waited / 1000} s)" +
+                _netStatus.Text = $"{zeile}  ({waited / 1000} s)" +
                                   (joining && waited >= 5000 ? "  —  »Warte auf Server«" : "");
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }

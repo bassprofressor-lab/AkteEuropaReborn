@@ -284,6 +284,12 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Mehrspieler: Fortschritt der Kartenübertragung** (Fable-Prüfung D4): Spielt der Gastgeber
+  eine eigene Karte, reist sie zu den Mitspielern — online in gut 160 Teilen, das dauert einige
+  Sekunden. Bisher stand dabei nur »warte auf die Partie des Gastgebers«, von einem Hänger nicht
+  zu unterscheiden. Jetzt zeigt der Netzkasten »Karte des Gastgebers wird übertragen: 37 % (60
+  von 162 Teilen)« und danach »… sie wird vorbereitet«. Gemessen im Online-Paar auf einer eigenen
+  Karte (0 bis 99 %, danach grün). Gegenschalter `--kartenreise-anzeige-alt`.
 - **Mehrspieler: Kartentitel statt Dateinamen** (Fable-Prüfung C14): Die Online-Raumliste, der
   Raumkopf und die LAN-Liste nannten Karten nach ihrem Dateinamen (»NET07«, »eigen01«). Jetzt
   steht dort der Titel aus dem Gefechtsmenü (»Gefechtsfeld (NET07)«), bei eigenen Karten der im

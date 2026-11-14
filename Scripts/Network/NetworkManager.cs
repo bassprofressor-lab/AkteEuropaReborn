@@ -356,6 +356,18 @@ public partial class NetworkManager : Node
                                 : $"Online angemeldet als »{Lobby.MyName}«")
                 : $"Verbinde mit {Lobby.Url} …";
         if (Link == null) return "Netzwerk aus";
+        // ⭐ 14.11.2026 — Fable D4: eine eigene Karte des Gastgebers reist mit (bis ~100 Rahmen online,
+        // dann wird sie gebacken) — bisher stand dabei nur »warte auf die Partie«, von einem Haenger
+        // nicht zu unterscheiden. Gegenschalter --kartenreise-anzeige-alt.
+        if (!Link.IsHost && Link.Session == null && !HatSchalter("--kartenreise-anzeige-alt")
+            && (Link.WartendeSitzung != null || NetzKarte.Laufend() != null))
+        {
+            var (da, von) = Link.WartendeSitzung is { } ws ? NetzKarte.Fortschritt(ws.KartenSumme)
+                                                           : NetzKarte.Laufend()!.Value;
+            return von == 0 ? "Die Karte des Gastgebers wird angefordert …"
+                 : da < von ? $"Karte des Gastgebers wird übertragen: {da * 100 / von} % ({da} von {von} Teilen)"
+                 : "Karte des Gastgebers ist da — sie wird vorbereitet …";
+        }
         if (Link.Session is { } s)
             return $"Partie steht: {s.Map}, Keim {s.Seed}, mein Platz {s.MySlot} " +
                    $"von {s.Players} Menschen";

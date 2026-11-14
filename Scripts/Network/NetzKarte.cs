@@ -109,6 +109,19 @@ public static class NetzKarte
         return (da, a.Length);
     }
 
+    /// <summary>Fable D4: ein Empfang, der gerade laeuft (Teile da, aber nicht alle) — die Karte
+    /// reist VOR dem Sitzungspaket, also gibt es dabei meist noch keine wartende Sitzung.</summary>
+    public static (int Da, int Von)? Laufend()
+    {
+        foreach (var (h, a) in _teile)
+        {
+            if (_fertig.Contains(h) || _komplett.ContainsKey(h)) continue;
+            int da = 0; foreach (var x in a) if (x != null) da++;
+            if (da < a.Length) return (da, a.Length);
+        }
+        return null;
+    }
+
     public static bool Fertig(ulong hash) => _fertig.Contains(hash) || NetzVorhanden(LokalerName(hash));
 
     /// <summary>Ein Kartenpaket aufnehmen (Leser steht hinter der Paketart).</summary>
