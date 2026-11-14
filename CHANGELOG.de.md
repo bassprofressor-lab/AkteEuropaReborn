@@ -284,6 +284,10 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Discord in der Online-Lobby** (Fable-Prüfung D10): Neben »BEITRETEN« steht **»MITSPIELER FINDEN
+  (Discord)«**, im Raum neben »RAUM VERLASSEN« **»EINLADEN (Discord)«**. Beide öffnen den Discord-Server
+  des Spiels, wie der Knopf im Hauptmenü — dort, wo man auf Mitspieler wartet. Gegenschalter
+  `--lobby-discord-alt`.
 - **Endbild im Gefecht und im Netz: wer gewonnen hat** (Fable-Prüfung D5):
   - Das Abschlussfenster ist das der Kampagne, nach dem Original. Im Gefecht sagte es nicht, wer
     gewonnen hat, alle Mitspieler hießen »CPU«, und »Missionsbezahlung $0« stand da. Jetzt:

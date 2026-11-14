@@ -115,7 +115,18 @@ public partial class OnlineLobbyScreen : Control
         _rooms.AddChild(_password);
         _join = new Button { Text = "BEITRETEN", Disabled = true };
         _join.Pressed += JoinSelected;
-        _rooms.AddChild(_join);
+        if (DiscordAlt) _rooms.AddChild(_join);
+        else
+        {
+            // ⭐ Fable D10: »Mitspieler finden« — der Discord-Knopf des Hauptmenues auch hier, wo man
+            // auf Mitspieler wartet (dieselbe Einladung, MainMenu.DiscordEinladung)
+            var jz = new HBoxContainer();
+            jz.AddThemeConstantOverride("separation", 6);
+            _join.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            jz.AddChild(_join);
+            jz.AddChild(DiscordKnopf("MITSPIELER FINDEN (Discord)"));
+            _rooms.AddChild(jz);
+        }
         _rooms.AddChild(new HSeparator());
         _rooms.AddChild(Sub("Eigenes Spiel eröffnen"));
         _roomName = new LineEdit { MaxLength = 40 };
@@ -164,6 +175,7 @@ public partial class OnlineLobbyScreen : Control
         leave.Pressed += () => { NetworkManager.Lobby?.LeaveRoom(); NetworkManager.Lobby?.ListRooms(); };
         rb.AddChild(_start);
         rb.AddChild(leave);
+        if (!DiscordAlt) rb.AddChild(DiscordKnopf("EINLADEN (Discord)"));
         _room.AddChild(rb);
         box.AddChild(_room);
 
@@ -952,6 +964,21 @@ public partial class OnlineLobbyScreen : Control
     }
 
     // ---- ⭐ 14.11.2026 — Fable P4 (B7, B8, B9, C8, C11) — Gegenschalter --lobby-alt -----------
+    // ⭐ Fable D10: Discord in der Lobby — Gegenschalter --lobby-discord-alt
+    private static bool DiscordAlt => Array.IndexOf(Core.CommandLine.Args, "--lobby-discord-alt") >= 0;
+
+    private static Button DiscordKnopf(string text)
+    {
+        var b = new Button
+        {
+            Text = text,
+            TooltipText = "Öffnet den Discord-Server von Akte Europa Reborn im Browser — dort findest du Mitspieler " +
+                          "und kannst sie in deinen Raum einladen (Raumname nennen).",
+        };
+        b.Pressed += () => OS.ShellOpen(MainMenu.DiscordEinladung);
+        return b;
+    }
+
     private static bool LobbyAlt => Array.IndexOf(Core.CommandLine.Args, "--lobby-alt") >= 0;
     private static bool B7Alt => LobbyAlt;
     private static bool B8Alt => LobbyAlt;

@@ -263,6 +263,10 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Discord in the online lobby** (Fable review D10): next to "JOIN" there is **"FIND PLAYERS
+  (Discord)"**, and in the room next to "LEAVE ROOM" **"INVITE (Discord)"**. Both open the game's
+  Discord server, like the button in the main menu — right where you wait for other players. Opt-out
+  `--lobby-discord-alt`.
 - **End screen in skirmish and network play: who won** (Fable review D5):
   - The end window is the campaign's, after the original. In skirmish it did not say who won, every
     other player was called "CPU", and "mission pay $0" was shown. Now:
