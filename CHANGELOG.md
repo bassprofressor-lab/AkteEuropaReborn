@@ -263,6 +263,11 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Online room: choose your own start position** (Fable review D2 remainder, F): click a free position
+  and **"MOVE HERE"** — you take that position and start at that start position on the map. So far a
+  player could not choose their position (the `move_slot` call was written and unused; now every lobby
+  call is in use). Checked online: the other player moves to position 4 and starts at start position 4,
+  green. Test switch `--net-platz=N`.
 - **Game speed as a setting** (Fable review D10): the skirmish screen, the multiplayer screen and the
   online room have a **"Game speed"** row (normal / fast ×2 / very fast ×3). "normal" is the original's
   speed and the default; in network play every machine starts with the host's speed (it travels in the

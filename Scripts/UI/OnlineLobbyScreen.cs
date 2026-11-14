@@ -785,6 +785,15 @@ public partial class OnlineLobbyScreen : Control
                                TooltipText = "Wirft den gewählten Mitspieler aus dem Raum." };
         _hinaus.Pressed += Hinauswerfen;
         h.AddChild(_kiDazu); h.AddChild(_platzFrei); h.AddChild(_hinaus);
+        // ⭐ Fable D2/F: den eigenen Platz (= Startplatz) waehlen — move_slot war geschrieben und ungenutzt
+        _wechseln = new Button { Text = "HIERHIN WECHSELN", SizeFlagsHorizontal = SizeFlags.ExpandFill, Visible = false,
+                                 TooltipText = "Setzt dich auf den gewählten freien Platz — damit wählst du deinen Startplatz auf der Karte." };
+        _wechseln.Pressed += () =>
+        {
+            if (NetworkManager.Lobby is { } lb && GewaehlterPlatz() is { Art: 'F' } f)
+            { lb.MoveSlot(f.Slot); GD.Print($"lobby: wechsle auf Platz {f.Slot + 1}"); }
+        };
+        if (!P7Alt) h.AddChild(_wechseln);
         into.AddChild(h);
         // ⭐ P7 Teil 2: Staerke und Team des gewaehlten Platzes
         if (!P7Alt)
@@ -830,6 +839,7 @@ public partial class OnlineLobbyScreen : Control
         _kiDazu.Disabled = p is not { Art: 'F' };
         _platzFrei.Disabled = p is not { Art: 'K' };
         _hinaus.Disabled = p is not { Art: 'M' };
+        if (!P7Alt) { _wechseln.Visible = true; _wechseln.Disabled = p is not { Art: 'F' }; }
         if (P7Alt)
         {
             _platzHinweis.Text = host
@@ -849,7 +859,7 @@ public partial class OnlineLobbyScreen : Control
         _platzHinweis.Text = (host
             ? "Eintrag anklicken: Computergegner setzen (mit Stärke), Teams festlegen, Mitspieler hinauswerfen. "
             : "Dein Team stellst du selbst ein (deinen Eintrag anklicken); den Rest bestimmt der Gastgeber. ") +
-            "Der Platz in der Liste ist der Startplatz auf der Karte.";
+            "Der Platz in der Liste ist der Startplatz auf der Karte — »HIERHIN WECHSELN« setzt dich auf einen freien.";
     }
 
     private void PlatzSetzen(bool ki)
@@ -863,6 +873,7 @@ public partial class OnlineLobbyScreen : Control
     // ---- ⭐ P7 Teil 2 (14.11.2026): Staerke und Team je Platz — Gegenschalter --gefecht-plaetze-alt
     private static bool P7Alt => SkirmishSetup.PlaetzeAlt || LobbyAlt;
     private OptionButton _kiStaerke = null!, _teamWahl = null!;
+    private Button _wechseln = null!;
     private readonly Dictionary<int, int> _platzTeam = new();
     private readonly Dictionary<int, string> _platzKi = new();
     private bool _plWaehlen;

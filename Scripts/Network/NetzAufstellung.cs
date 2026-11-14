@@ -118,6 +118,12 @@ public partial class NetworkManager
                 l.SetSlot(t, 0);
                 GD.Print($"netz: im Raum Team {t} gesetzt");
             }
+            else if (a.StartsWith("--net-platz=") && int.TryParse(a["--net-platz=".Length..], out int pz))
+            {
+                _teamGesetzt = true;
+                l.MoveSlot(pz - 1);
+                GD.Print($"netz: im Raum auf Platz {pz} gewechselt");
+            }
     }
 
     private static bool AufstellungFertig(NetSession s)

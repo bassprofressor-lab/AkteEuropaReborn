@@ -284,6 +284,11 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Online-Raum: den eigenen Startplatz wählen** (Fable-Prüfung D2-Rest, F): Einen freien Platz anklicken
+  und **»HIERHIN WECHSELN«** — man setzt sich dorthin und startet damit an diesem Startplatz der Karte.
+  Bisher konnte ein Mitspieler seinen Platz nicht wählen (der Aufruf `move_slot` war geschrieben und
+  ungenutzt; damit ist jetzt jeder Lobby-Aufruf in Gebrauch). Geprüft online: Mitspieler wechselt auf
+  Platz 4 und startet auf Startplatz 4, grün. Prüfschalter `--net-platz=N`.
 - **Spieltempo als Einstellung** (Fable-Prüfung D10): Gefechtsschirm, Mehrspielerschirm und Online-Raum
   haben die Zeile **»Spieltempo«** (normal / schnell ×2 / sehr schnell ×3). »normal« ist das Tempo des
   Originals und die Vorgabe; im Netz beginnen alle Rechner mit dem Tempo des Gastgebers (es reist im
