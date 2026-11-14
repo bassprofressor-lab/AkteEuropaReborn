@@ -284,6 +284,14 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Mehrspieler: nach dem Ende einer Partie zurück in die Lobby** (Fable-Prüfung B4): Nach Sieg
+  oder Niederlage führte »Weiter« im Abschlussfenster zwar ins Menü, aber die Netzpartie war dort
+  noch nicht abgemeldet — der Netzkasten war gesperrt (»von der Befehlszeile geöffnet«), die
+  Online-Lobby ging nicht auf, und sie öffnete sich stattdessen irgendwann nach einer späteren
+  Partie, auch nach einem Gefecht oder einer Kampagnenmission. Jetzt meldet »Weiter« (und »Spiel
+  beenden«) die Netzpartie zuerst ab: online geht es gleich zurück in die Lobby, im LAN in den
+  Netzkasten mit der Meldung »Partie beendet.«. Gemessen im LAN- und im Online-Paar mit dem neuen
+  Prüfschalter `--netz-ende-probe=<Takte>`; Gegenschalter `--netz-ende-alt`.
 - **Mehrspieler-Kleinigkeiten** (Fable-Prüfung): Eigene Editorkarten stehen wieder in der
   Kartenliste von Gefecht und Mehrspieler (sie fehlten ganz); »Zurück zum Menü« beim Warten auf
   eine Netzpartie bricht die Verbindung ab (vorher endete ein späterer Kampagnenstart mit einem

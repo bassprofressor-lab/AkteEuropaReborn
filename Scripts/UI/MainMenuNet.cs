@@ -275,6 +275,7 @@ public partial class MainMenu
         // hinter ApplyNetEntry liegt.
         CallDeferred(nameof(NetProbeArm));
         CallDeferred(nameof(NachDerPartie));
+        CallDeferred(nameof(NetzEndeProbe));
 
         // ⚠ Der Kasten selbst bleibt sichtbar — ein- und ausgeblendet wird sein
         // RAHMEN (_netFrame, gesetzt beim Aufbau des Schirms), damit im Gefecht
@@ -472,6 +473,7 @@ public partial class MainMenu
         bool online = NetworkManager.ZurueckZurLobby;
         if (!online && msg.Length == 0) return;
         NetworkManager.ZurueckZurLobby = false;
+        if (Rendering.NetGameRunner.EndeProbeGefeuert) GD.Print($"netz-ende-probe: NachDerPartie — {(online ? "zurueck in die Lobby" : "in den Netzkasten")}, Meldung »{msg}«");
         if (!online) { if (_netStatus != null) _netStatus.Text = msg; return; }
         for (int i = 0; i < 10; i++) { if (!IsInsideTree()) return; await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
         ShowSetup(net: true);
@@ -481,6 +483,25 @@ public partial class MainMenu
         if (_netStatus != null) _netStatus.Text = msg;
         ApplyNetSearchVisible();
         OpenOnlineLobby(autoConnect: true, meldung: msg);
+    }
+
+    /// <summary>Fable B4, --netz-ende-probe: beim Menueaufbau den Netzzustand drucken
+    /// und beenden. Soll: keine offene Leitung, Netzkasten frei, Meldung in der Statuszeile (LAN)
+    /// bzw. die Lobby offen (online).</summary>
+    private async void NetzEndeProbe()
+    {
+        if (!Rendering.NetGameRunner.EndeProbeGefeuert) return;
+        // gleich beim Menueaufbau (dort hat Fable gemessen) — 60 Bilder spaeter hat die Befehlszeile
+        // (--skirmish) schon das naechste Gefecht gestartet
+        await System.Threading.Tasks.Task.CompletedTask;
+        bool lobby = false;
+        foreach (var k in GetChildren()) if (k is OnlineLobbyScreen) lobby = true;
+        bool runner = false;
+        foreach (var k in GetTree().Root.GetChildren()) if (k is Rendering.NetGameRunner) runner = true;
+        GD.Print($"netz-ende-probe: Active={NetworkManager.Active} Taktgeber={(runner ? "HAENGT NOCH" : "weg")} " +
+                 $"Netzkasten={(_netMode?.Disabled == true ? "GESPERRT" : "frei")} Lobby={(lobby ? "offen" : "zu")} " +
+                 $"ZurueckZurLobby={NetworkManager.ZurueckZurLobby} Status=»{_netStatus?.Text}«");
+        GetTree().Quit(0);
     }
 
     /// <summary>Das Online-Lobbyfenster über den Gefechtsschirm legen.</summary>

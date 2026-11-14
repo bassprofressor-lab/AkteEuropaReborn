@@ -360,6 +360,7 @@ public partial class MapViewer : Node2D
     {
         UI.SkirmishSetup.Active = false;
         Audio.MidiMusic.Stop();
+        if (NetGameRunner.InsMenueImNetz("Du hast die Partie verlassen.")) return;   // Fable B4
         GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
     }
 
@@ -8991,9 +8992,13 @@ _mausProbePunkt = karte;
         _graceWindow.SetRest(rest);
     }
 
+    /// <summary>Fable B4, nur fuer --netz-ende-probe: derselbe Weg wie »Weiter« ohne Folgemission.</summary>
+    internal void ProbeWeiter() => ToMenu();
+
     private void ToMenu()
     {
         UI.SkirmishSetup.Active = false;
+        if (NetGameRunner.InsMenueImNetz("Partie beendet.")) return;   // Fable B4
         GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
     }
 

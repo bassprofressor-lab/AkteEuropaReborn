@@ -92,6 +92,22 @@ public sealed partial class NetGameRunner : Node
     /// (Ausschalten, Paket 10 — die anderen schneiden diesen Platz ab und spielen weiter).</summary>
     public static System.Action? VerlassenImNetz;
 
+    /// <summary>⭐ 14.11.2026 — Fable B4: das normale Ende (»Weiter« im Abschlussfenster, Sieg oder
+    /// Niederlage) wechselte die Szene, ohne dem Taktgeber Bescheid zu sagen. Er merkte es erst ein
+    /// Bild spaeter; bis dahin war das Menue schon mit offener Leitung aufgebaut (Netzkasten gesperrt,
+    /// keine Lobby, und die Lobby ging erst nach irgendeiner spaeteren Partie auf). Jetzt meldet der
+    /// Rueckweg ins Menue erst hier ab; der Abschied wechselt dann selbst die Szene. Gesetzt solange
+    /// eine gespielte Netzpartie laeuft. Gegenschalter --netz-ende-alt.</summary>
+    public static System.Action<string>? AbschiedImNetz;
+
+    /// <summary>Im Netz erst abmelden, dann ins Menue. false: kein Netzspiel, der Aufrufer wechselt selbst.</summary>
+    public static bool InsMenueImNetz(string meldung)
+    {
+        if (AbschiedImNetz is not { } a || System.Array.IndexOf(Core.CommandLine.Args, "--netz-ende-alt") >= 0) return false;
+        a(meldung);
+        return true;
+    }
+
     private MapEntityLayer _sim = null!;
     private NetLink _link = null!;
     private NetSession _s = null!;
@@ -129,6 +145,8 @@ public sealed partial class NetGameRunner : Node
     private bool _ausklangOk;
     private int _ausklangTick;
 
+    private int _endeProbe;   // Fable B4, --netz-ende-probe=N
+    internal static bool EndeProbeGefeuert;
     private int _tick, _start, _limit, _every = 60, _order = 60, _swallow = -1;
     private int _fristMs = 15000;
     /// <summary><c>--wurf-spur=von-bis</c>: in diesen Takten jeden Wurf mit
@@ -181,6 +199,7 @@ public sealed partial class NetGameRunner : Node
             if (a == "--net-tafelpruefung-aus") TafelpruefungAus = true;
             else if (a == "--net-tafelpruefung-falsch") TafelpruefungFalsch = true;
             else if (a.StartsWith("--net-check=")) int.TryParse(a["--net-check=".Length..], out r._limit);
+            else if (a.StartsWith("--netz-ende-probe=")) int.TryParse(a["--netz-ende-probe=".Length..], out r._endeProbe);
             else if (a.StartsWith("--net-abdruck=")) int.TryParse(a["--net-abdruck=".Length..], out r._every);
             else if (a.StartsWith("--net-befehl=")) int.TryParse(a["--net-befehl=".Length..], out r._order);
             else if (a.StartsWith("--net-schluck=")) int.TryParse(a["--net-schluck=".Length..], out r._swallow);
@@ -256,6 +275,7 @@ public sealed partial class NetGameRunner : Node
             };
             AddChild(_ui);
             VerlassenImNetz = () => Abschied("Du hast die Partie verlassen.");
+            AbschiedImNetz = m => Abschied(m);   // Fable B4
             _chatSeen = NetworkManager.Lobby?.Chat.Count ?? 0;
         }
 
@@ -525,6 +545,15 @@ public sealed partial class NetGameRunner : Node
 
             // 4b) Paket N: Neustart- und Pausenfenster-Prüfstand
             PaketNTakt();
+
+            // 4c) Fable B4: --netz-ende-probe=N drueckt nach N Takten »Weiter« wie das Abschlussfenster
+            if (_endeProbe > 0 && _tick - _start >= _endeProbe)
+            {
+                _endeProbe = 0;
+                EndeProbeGefeuert = true;
+                Say("netz-ende-probe: »Weiter« wie nach dem Abschlussfenster");
+                if (GetTree().CurrentScene is MapViewer mv) { mv.ProbeWeiter(); return; }
+            }
 
             // 5) Der Prüfstand setzt selbst Befehle ab — sonst reist nichts.
             if (_order > 0 && ++_ticksSinceOrder >= _order) { _ticksSinceOrder = 0; OrderSomething(); }
@@ -1031,6 +1060,7 @@ public sealed partial class NetGameRunner : Node
         if (_phase == Phase.Ende) return;
         _phase = Phase.Ende;
         VerlassenImNetz = null;
+        AbschiedImNetz = null;
         Say("netz: Abschied — " + meldung);
         if (!_link.Cut.ContainsKey(_s.Me)) _link.SendAusschalten(_s.Me, _s.Me);
         _link.FlushNow();

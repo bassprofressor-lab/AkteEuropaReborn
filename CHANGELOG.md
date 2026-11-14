@@ -263,6 +263,14 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Multiplayer: back to the lobby after a match** (Fable review B4): after victory or defeat
+  "Weiter" in the end window did lead to the menu, but the network match was not yet signed off
+  there — the network box was locked ("opened from the command line"), the online lobby did not
+  open, and instead it opened at some later point after another match, even after a skirmish or a
+  campaign mission. Now "Weiter" (and "Spiel beenden") sign off the network match first: online
+  you go straight back to the lobby, on LAN to the network box with the message "Partie
+  beendet.". Measured in a LAN and an online pair with the new probe `--netz-ende-probe=<ticks>`;
+  opt-out `--netz-ende-alt`.
 - **Multiplayer details** (Fable review): own editor maps are back in the map list of skirmish
   and multiplayer (they were missing entirely); "Zurück zum Menü" while waiting for a network
   match closes the connection (before, a later campaign start ended with an error); a running
