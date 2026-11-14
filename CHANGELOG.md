@@ -263,6 +263,24 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Online lobby: the room like in classic real-time strategy games** (Fable review P6: C9/D3, D2,
+  D4, B12):
+  - **Settings in the room** (C9/D3): the room shows map (with picture, start places and size),
+    difficulty, resources, money, tech standard and "all units" to everyone. The host changes them
+    right there, the map included — before, he had to leave the room and change the multiplayer
+    screen, and the others only saw the map's name. The values stay stored in the multiplayer screen.
+  - **Computer opponents as places** (D2): the host puts computer opponents on free places; their
+    number is the number of opponents in the match, and the start button names it. Without an AI
+    place only the humans play. All computer opponents play at the room's difficulty — a strength
+    per opponent and teams need the simulation and come later.
+  - **Kick** (D4): the host can remove players from the room; the kicked player sees it and is back
+    in the room list.
+  - **Host change** (B12): if the host leaves, the new one takes over the room's settings instead of
+    silently playing the map from his own screen.
+  Checked against the lobby server: map switched to NET02 in the room and one computer opponent
+  added — both machines play NET02 against exactly one AI, green; kicking confirmed. Probes
+  `--lobby-probe-plaetze=`, `--lobby-probe-karte=`, `--lobby-probe-ki=`, `--lobby-probe-hinaus`;
+  opt-out `--lobby-alt`.
 - **Skirmish and multiplayer screen reworked** (Fable review P5):
   - **Fixed choices instead of counting up** (C2): opponents ("3 Computergegner", at most as many
     as the map has places), money ("$ 0" to "$ 10000" in the original's thousand steps), tech

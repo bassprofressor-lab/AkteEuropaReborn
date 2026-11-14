@@ -943,8 +943,9 @@ public partial class MainMenu : Control
         // Platzzahl der Karte (PlaetzeAusKarte), Konto und Techstandard als Liste.
         right.AddChild(Row("Gegner", _ai = new ZahlWahl
         {
-            MinValue = 1, MaxValue = 7, Value = 3,
-            Beschriftung = v => v == 1 ? "1 Computergegner" : $"{v} Computergegner",
+            // P6 (14.11.2026): ab 0 — online ohne KI-Platz im Raum spielen nur Menschen
+            MinValue = 0, MaxValue = 7, Value = 3,
+            Beschriftung = v => v == 0 ? "keine Computergegner" : v == 1 ? "1 Computergegner" : $"{v} Computergegner",
         }));
 
         // Which of the map's eight slots the human takes. The slots are the
@@ -2281,6 +2282,48 @@ public partial class MainMenu : Control
             if (zustand == "focus") sb.DrawCenter = false;
             b.AddThemeStyleboxOverride(zustand, sb);
         }
+    }
+
+    // ---- ⭐ 14.11.2026 — Fable P6 (C9/D3): die Einstellungen als Raumeinstellungen -------
+    // Die Online-Lobby zeigt die Partie-Einstellungen im Raum, und der Gastgeber aendert sie dort.
+    // Gespeichert bleiben sie in DIESEM Schirm (ein Ort fuer dieselben Werte, siehe BuildNetRow):
+    // die Lobby liest sie als JSON und schreibt sie hierher zurueck.
+
+    /// <summary>Die Karten, die der Schirm anbietet (Datei, Titel) — fuer die Kartenwahl im Raum.</summary>
+    public static List<(string File, string Title)> KartenAuswahl() => new(Maps);
+
+    /// <summary>Die Einstellungen des Schirms als Raumeinstellungen.</summary>
+    public System.Text.Json.Nodes.JsonObject RaumEinstellungenLesen()
+    {
+        ApplySetupFields();
+        return new System.Text.Json.Nodes.JsonObject
+        {
+            ["map"] = SkirmishSetup.Map,
+            ["ai"] = SkirmishSetup.AiCount,
+            ["level"] = _level.Selected,
+            ["res"] = _res?.Selected ?? SkirmishSetup.Resources,
+            ["money"] = SkirmishSetup.StartMoney,
+            ["tech"] = SkirmishSetup.Techstandard,
+            ["all"] = SkirmishSetup.AllUnits,
+        };
+    }
+
+    /// <summary>Raumeinstellungen in den Schirm schreiben (Gastgeber aendert sie in der Lobby, oder
+    /// ein neuer Gastgeber uebernimmt den Raum). Fehlende Felder bleiben, wie sie sind.</summary>
+    public void RaumEinstellungenSetzen(System.Text.Json.Nodes.JsonObject s)
+    {
+        if ((string?)s["map"] is { Length: > 0 } map)
+        {
+            int mi = Maps.FindIndex(m => m.File == map);
+            if (mi >= 0 && mi != _mapIndex) { SelectMap(mi); ShowPreview(); }
+        }
+        if ((int?)s["ai"] is int ai) _ai.Value = ai;
+        if ((int?)s["level"] is int lv) _level.Selected = Mathf.Clamp(lv, 0, 2);
+        if ((int?)s["res"] is int rs && _res != null && rs >= 0 && rs < _res.ItemCount) _res.Selected = rs;
+        if ((int?)s["money"] is int mo && _konto != null) _konto.Value = mo;
+        if ((int?)s["tech"] is int te && _tech != null) _tech.Value = te;
+        if ((bool?)s["all"] is bool al && _allUnits != null) _allUnits.ButtonPressed = al;
+        ApplySetupFields();
     }
 
     // ---- ⭐ 14.11.2026 — Fable D6: die Einstellungen merken ------------------------------

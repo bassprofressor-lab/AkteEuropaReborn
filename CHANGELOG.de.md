@@ -284,6 +284,26 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Online-Lobby: der Raum wie in klassischen Echtzeitstrategiespielen** (Fable-Prüfung P6: C9/D3,
+  D2, D4, B12):
+  - **Einstellungen im Raum** (C9/D3): Der Raum zeigt Karte (mit Kartenbild, Startplätzen und
+    Größe), Schwierigkeit, Rohstoffe, Konto, Techstandard und »Alle Einheiten kaufbar« für alle
+    sichtbar. Der Gastgeber ändert sie dort direkt, auch die Karte — bisher musste er dafür den
+    Raum verlassen und im Mehrspielerschirm umstellen, und die Mitspieler sahen nur den
+    Kartennamen. Die Werte bleiben im Mehrspielerschirm gespeichert.
+  - **Computergegner als Plätze** (D2): Auf freie Plätze setzt der Gastgeber Computergegner
+    (»COMPUTERGEGNER HIER«, »PLATZ FREIGEBEN«); ihre Zahl ist die Zahl der Gegner in der Partie,
+    der Startknopf nennt sie (»START (2 Menschen, 1 Computergegner)«). Ohne KI-Platz spielen nur
+    die Menschen. Die Stärke aller Computergegner ist die Schwierigkeit des Raums — eine eigene je
+    Gegner und Teams brauchen die Simulation und kommen später.
+  - **Hinauswerfen** (D4): Der Gastgeber kann Mitspieler aus dem Raum nehmen; der Hinausgeworfene
+    sieht es und landet wieder in der Raumliste.
+  - **Gastgeberwechsel** (B12): Geht der Gastgeber, übernimmt der neue die Einstellungen des
+    Raums, statt still die Karte aus seinem eigenen Schirm zu spielen.
+  Gegen den Lobby-Server geprüft: Karte im Raum auf NET02 umgestellt und einen Computergegner
+  gesetzt — beide Rechner spielen NET02 gegen genau eine KI, grün; Hinauswerfen bestätigt.
+  Prüfschalter `--lobby-probe-plaetze=`, `--lobby-probe-karte=`, `--lobby-probe-ki=`,
+  `--lobby-probe-hinaus`; Gegenschalter `--lobby-alt`.
 - **Gefechts- und Mehrspielerschirm überarbeitet** (Fable-Prüfung P5):
   - **Feste Auswahlen statt Hochzählen** (C2): Gegner (»3 Computergegner«, höchstens so viele,
     wie die Karte Plätze hat), Konto (»$ 0« bis »$ 10000« in den Tausenderstufen des Originals),

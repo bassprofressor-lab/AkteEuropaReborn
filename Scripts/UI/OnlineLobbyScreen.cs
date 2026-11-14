@@ -31,6 +31,11 @@ public partial class OnlineLobbyScreen : Control
     public Action? OnMatchStart { get; init; }
     /// <summary>Die Karte, die der Gefechtsschirm gerade gewählt hat (für Raumliste/Einstellungen).</summary>
     public Func<string>? CurrentMap { get; init; }
+    /// <summary>Fable P6: die Einstellungen des Mehrspielerschirms als Raumeinstellungen lesen …</summary>
+    public Func<JsonObject>? EinstellungenLesen { get; init; }
+    /// <summary>… und dorthin zurueckschreiben (Gastgeber aendert im Raum, neuer Gastgeber uebernimmt).</summary>
+    public Action<JsonObject>? EinstellungenSetzen { get; init; }
+
     /// <summary>Höchstzahl Menschen für einen neuen Raum (Feld »Menschen« im Netzkasten).</summary>
     public int MaxHumans { get; init; } = 4;
     /// <summary>Nach einer Partie: gleich mit dem gespeicherten Namen anmelden.</summary>
@@ -147,8 +152,10 @@ public partial class OnlineLobbyScreen : Control
         _room.AddThemeConstantOverride("separation", 6);
         _roomHead = Sub("");
         _room.AddChild(_roomHead);
+        if (!LobbyAlt) RaumEinstellungenBauen(_room);   // Fable P6 (C9/D3)
         _members = new ItemList { CustomMinimumSize = new Vector2(0, 130) };
         _room.AddChild(_members);
+        if (!LobbyAlt) PlatzKnoepfeBauen(_room);         // Fable P6 (D2/D4)
         var rb = new HBoxContainer();
         _start = new Button { Text = "START", SizeFlagsHorizontal = SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(0, 36) };
         _start.Pressed += () => NetworkManager.Lobby?.Start();
@@ -216,6 +223,10 @@ public partial class OnlineLobbyScreen : Control
         {
             if (a.StartsWith("--lobby-probe-pass=")) _newPassword.Text = a["--lobby-probe-pass=".Length..];
             if (a.StartsWith("--lobby-probe-beitritt=")) _probeBeitritt = a["--lobby-probe-beitritt=".Length..];
+            if (a.StartsWith("--lobby-probe-plaetze=")) _raumGroesse.Value = int.Parse(a["--lobby-probe-plaetze=".Length..]);
+            if (a.StartsWith("--lobby-probe-ki=")) _probeKi = int.Parse(a["--lobby-probe-ki=".Length..]);
+            if (a == "--lobby-probe-hinaus") { _hinausSchritt = 0; _probeKi = 0; _probeSchritt = 3; }
+            if (a.StartsWith("--lobby-probe-karte=")) _probeKarte = a["--lobby-probe-karte=".Length..];
         }
         foreach (string a in Core.CommandLine.Args)
             if (a.StartsWith("--lobby-probe-name="))
@@ -251,7 +262,7 @@ public partial class OnlineLobbyScreen : Control
                 CreateRoom();
                 _probeStep = 2;
                 break;
-            case 2 when l.InRoom && l.HumanRoomSlots().Count >= 2:
+            case 2 when l.InRoom && l.HumanRoomSlots().Count >= 2 && (_probeSchritt >= 3 || (_probeKi < 0 && _probeKarte.Length == 0)):
                 _probeT = Time.GetTicksMsec();
                 l.SendChat("Probe: gleich gehts los");
                 _probeStep = 3;
@@ -262,6 +273,58 @@ public partial class OnlineLobbyScreen : Control
                 l.Start();
                 _probeStep = 4;
                 break;
+        }
+    }
+
+    // P6-Pruefschalter: --lobby-probe-plaetze=N, --lobby-probe-karte=<datei>, --lobby-probe-ki=N
+    private int _probeKi = -1, _probeSchritt;
+    private string _probeKarte = "";
+    private ulong _probeRaumT;
+
+    private int _hinausSchritt = -1;
+    private ulong _hinausT;
+
+    private void ProbeHinaus(LobbyClient l)
+    {
+        if (_hinausSchritt < 0 || !l.InRoom || !l.IAmHost) return;
+        if (_hinausSchritt == 0 && l.HumanRoomSlots().Count >= 2)
+        {
+            for (int i = 0; i < _platzInfo.Count; i++)
+                if (_platzInfo[i].Art == 'M') { _members.Select(i); Hinauswerfen(); break; }
+            _hinausSchritt = 1; _hinausT = Time.GetTicksMsec();
+        }
+        else if (_hinausSchritt == 1 && Time.GetTicksMsec() - _hinausT > 2000)
+        {
+            GD.Print($"lobby-probe: nach dem Hinauswerfen {l.HumanRoomSlots().Count} Menschen im Raum");
+            _hinausSchritt = 2;
+            GetTree().Quit(0);
+        }
+    }
+
+    private void ProbeRaum(LobbyClient l)
+    {
+        ProbeHinaus(l);
+        if (_probeSchritt >= 3 || !l.InRoom || !l.IAmHost || (_probeKi < 0 && _probeKarte.Length == 0)) return;
+        if (_probeSchritt == 0)
+        {
+            int mi = _karten.FindIndex(k => k.File == _probeKarte);
+            if (mi >= 0) { _raumKarte.Select(mi); Geaendert(); GD.Print($"lobby-probe: Karte im Raum -> {_probeKarte}"); }
+            _probeSchritt = 1; _probeRaumT = Time.GetTicksMsec();
+            return;
+        }
+        if (_probeSchritt == 1 && Time.GetTicksMsec() - _probeRaumT > 800)
+        {
+            int n = 0;
+            for (int i = 0; i < _platzInfo.Count && n < Math.Max(0, _probeKi); i++)
+                if (_platzInfo[i].Art == 'F') { _members.Select(i); PlatzSetzen(true); n++; }
+            _probeSchritt = 2; _probeRaumT = Time.GetTicksMsec();
+            return;
+        }
+        if (_probeSchritt == 2 && Time.GetTicksMsec() - _probeRaumT > 1500)
+        {
+            var s = l.Room?["settings"] as JsonObject;
+            GD.Print($"lobby-probe: Raum jetzt {s?.ToJsonString()}, Plätze {string.Join(" ", _platzInfo.ConvertAll(p => $"{p.Slot + 1}{p.Art}"))}");
+            _probeSchritt = 3;
         }
     }
 
@@ -332,7 +395,10 @@ public partial class OnlineLobbyScreen : Control
         if (l is not { Open: true }) return;
         string name = _roomName.Text.Trim();
         if (name.Length == 0) name = $"Akte Europa {l.MyName}s Spiel";
-        var settings = new JsonObject { ["map"] = CurrentMap?.Invoke() ?? SkirmishSetup.Map };
+        var settings = !LobbyAlt && EinstellungenLesen != null
+            ? EinstellungenLesen()
+            : new JsonObject { ["map"] = CurrentMap?.Invoke() ?? SkirmishSetup.Map };
+        if (!LobbyAlt) settings["ai"] = 0;   // P6: Computergegner kommen ueber KI-Plaetze im Raum
         if (B8Alt) l.UnlistRooms();   // Fable B8: erst abbestellen, wenn der Raum da ist (Refresh)
         int groesse = LobbyAlt ? Math.Clamp(MaxHumans, 2, 8) : (int)_raumGroesse.Value;
         l.CreateRoom(name, groesse, B7Alt ? _password.Text : _newPassword.Text, settings);
@@ -391,6 +457,7 @@ public partial class OnlineLobbyScreen : Control
             { _probeRaeume = l.Rooms.Count; GD.Print($"lobby-probe: Räume in der Liste {_probeRaeume}"); }
         }
         Status();
+        ProbeRaum(l);
         ProbeTick(l);
         BeitrittProbe(l);
         if (AutoConnect && _shotPrefix != null && l.Open && !_zurueckBild)
@@ -462,8 +529,10 @@ public partial class OnlineLobbyScreen : Control
         {
             var settings = room["settings"] as JsonObject;
             _roomHead.Text = $"{(string?)room["name"]}  ·  Karte {KartenName((string?)settings?["map"] ?? "?")}";
+            int keepSel = _members.GetSelectedItems() is { Length: > 0 } ms ? ms[0] : -1;
             _members.Clear();
-            int humans = 0;
+            _platzInfo.Clear();
+            int humans = 0, kis = 0;
             if (room["slots"] is JsonArray slots)
                 foreach (var s in slots)
                 {
@@ -473,15 +542,26 @@ public partial class OnlineLobbyScreen : Control
                     {
                         humans++;
                         bool host = (string?)o["player"] == (string?)room["host"];
+                        bool ich = (string?)o["player"] == l.MyId;
                         int ping = (int?)o["ping_ms"] ?? -1;
-                        _members.AddItem($"Platz {sl + 1}:  {(string?)o["name"]}" + (host ? "  (Gastgeber)" : "") +
-                                         (ping >= 0 ? $"  ·  {ping} ms" : ""));
+                        _members.AddItem($"{(LobbyAlt ? "Platz " : "")}{sl + 1}.  {(string?)o["name"]}" + (host ? "  (Gastgeber)" : "") +
+                                         (ich ? "  — du" : "") + (ping >= 0 ? $"  ·  {ping} ms" : ""));
+                        _platzInfo.Add((sl, ich ? 'I' : 'M', (string?)o["player"] ?? ""));
                     }
-                    else _members.AddItem($"Platz {sl + 1}:  frei");
+                    else if (!LobbyAlt && (string?)o["ai"] is { Length: > 0 } ai)
+                    {
+                        kis++;
+                        _members.AddItem($"{sl + 1}.  Computergegner ({ai})");
+                        _platzInfo.Add((sl, 'K', ""));
+                    }
+                    else { _members.AddItem(LobbyAlt ? $"Platz {sl + 1}:  frei" : $"{sl + 1}.  frei"); _platzInfo.Add((sl, 'F', "")); }
                 }
+            if (keepSel >= 0 && keepSel < _members.ItemCount) _members.Select(keepSel);
             _start.Visible = l.IAmHost;
             _start.Disabled = humans < 2;
-            _start.Text = humans < 2 ? "START (wartet auf Mitspieler)" : $"START ({humans} Menschen)";
+            _start.Text = humans < 2 ? "START (wartet auf Mitspieler)"
+                        : kis > 0 ? $"START ({humans} Menschen, {kis} Computergegner)" : $"START ({humans} Menschen)";
+            if (!LobbyAlt) { RaumEinstellungenZeigen(l, room, settings, kis); PlatzKnoepfeZeigen(l); }
         }
 
         // Chat und Ereignisse
@@ -496,6 +576,214 @@ public partial class OnlineLobbyScreen : Control
     }
 
     private bool _listing;
+
+    // ---- ⭐ 14.11.2026 — Fable P6 (C9/D3, D2, D4, B12): DER RAUM WIE IN KLASSISCHEN RTS --------
+    // Die Einstellungen der Partie stehen im Raum, mit Kartenbild, fuer alle sichtbar; aendern kann
+    // sie nur der Gastgeber (set_settings, der Server reicht das JSON weiter). Die Platzliste zeigt
+    // Menschen, Computergegner und freie Plaetze; der Gastgeber setzt Computergegner auf freie Plaetze
+    // (set_ai) und kann Mitspieler hinauswerfen (kick). Die Zahl der KI-Plaetze IST die Zahl der
+    // Computergegner. UNSERE SETZUNG: eine Staerke fuer alle KI (die Schwierigkeit des Raums) —
+    // eine eigene je KI und Teams brauchen die Simulation (P7). Gegenschalter --lobby-alt.
+
+    private TextureRect _raumBild = null!;
+    private Label _raumKarteText = null!;
+    private OptionButton _raumKarte = null!, _raumLevel = null!, _raumRes = null!;
+    private ZahlWahl _raumKonto = null!, _raumTech = null!;
+    private CheckBox _raumAlle = null!;
+    private Button _kiDazu = null!, _platzFrei = null!, _hinaus = null!;
+    private Label _platzHinweis = null!;
+    private readonly List<(int Slot, char Art, string Player)> _platzInfo = new();
+    private List<(string File, string Title)> _karten = new();
+    private bool _fuelle, _warHost;
+    private string _zuletztGesetzt = "";
+
+    private static readonly string[] Stufen = { "leicht", "normal", "schwer" };
+
+    private void RaumEinstellungenBauen(VBoxContainer into)
+    {
+        _karten = MainMenu.KartenAuswahl();
+        var zeile = new HBoxContainer();
+        zeile.AddThemeConstantOverride("separation", 12);
+        into.AddChild(zeile);
+        var bildSpalte = new VBoxContainer { CustomMinimumSize = new Vector2(220, 0) };
+        _raumBild = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(220, 110),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            TextureFilter = TextureFilterEnum.Nearest,
+        };
+        bildSpalte.AddChild(_raumBild);
+        _raumKarteText = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart, HorizontalAlignment = HorizontalAlignment.Center,
+            Modulate = new Color(0.7f, 0.75f, 0.8f),
+        };
+        _raumKarteText.AddThemeFontSizeOverride("font_size", 13);
+        bildSpalte.AddChild(_raumKarteText);
+        zeile.AddChild(bildSpalte);
+
+        var grid = new GridContainer { Columns = 2, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        grid.AddThemeConstantOverride("h_separation", 8);
+        grid.AddThemeConstantOverride("v_separation", 4);
+        zeile.AddChild(grid);
+        void Feld(string name, Control c) { grid.AddChild(new Label { Text = name }); c.SizeFlagsHorizontal = SizeFlags.ExpandFill; grid.AddChild(c); }
+
+        _raumKarte = new OptionButton { ClipText = true };
+        foreach (var (_, title) in _karten) _raumKarte.AddItem(title);
+        _raumKarte.ItemSelected += _ => Geaendert();
+        Feld("Karte", _raumKarte);
+        _raumLevel = new OptionButton();
+        foreach (string s in new[] { "Leicht", "Normal", "Schwer" }) _raumLevel.AddItem(s);
+        _raumLevel.ItemSelected += _ => Geaendert();
+        Feld("Schwierigkeit", _raumLevel);
+        _raumRes = new OptionButton();
+        foreach (string n in Rendering.MapEntityLayer.ResourceLevelNames()) _raumRes.AddItem(n);
+        _raumRes.ItemSelected += _ => Geaendert();
+        Feld("Rohstoffe", _raumRes);
+        _raumKonto = new ZahlWahl
+        {
+            Werte = new[] { 0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000 },
+            Beschriftung = v => $"$ {v}",
+        };
+        _raumKonto.ValueChanged += _ => Geaendert();
+        Feld("Konto", _raumKonto);
+        _raumTech = new ZahlWahl { MinValue = 1, MaxValue = 8, Beschriftung = v => $"Stufe {v} von 8" };
+        _raumTech.ValueChanged += _ => Geaendert();
+        Feld("Techstandard", _raumTech);
+        _raumAlle = new CheckBox { Text = "Alle Einheiten kaufbar" };
+        _raumAlle.Toggled += _ => Geaendert();
+        Feld("", _raumAlle);
+    }
+
+    private void PlatzKnoepfeBauen(VBoxContainer into)
+    {
+        var h = new HBoxContainer();
+        h.AddThemeConstantOverride("separation", 6);
+        _kiDazu = new Button { Text = "COMPUTERGEGNER HIER", SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                               TooltipText = "Setzt auf den gewählten freien Platz einen Computergegner (Stärke = Schwierigkeit)." };
+        _kiDazu.Pressed += () => PlatzSetzen(true);
+        _platzFrei = new Button { Text = "PLATZ FREIGEBEN", SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                                  TooltipText = "Nimmt den Computergegner vom gewählten Platz — dort kann wieder ein Mensch beitreten." };
+        _platzFrei.Pressed += () => PlatzSetzen(false);
+        _hinaus = new Button { Text = "HINAUSWERFEN", SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                               TooltipText = "Wirft den gewählten Mitspieler aus dem Raum." };
+        _hinaus.Pressed += Hinauswerfen;
+        h.AddChild(_kiDazu); h.AddChild(_platzFrei); h.AddChild(_hinaus);
+        into.AddChild(h);
+        _platzHinweis = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(0.6f, 0.64f, 0.7f) };
+        _platzHinweis.AddThemeFontSizeOverride("font_size", 13);
+        into.AddChild(_platzHinweis);
+        _members.ItemSelected += _ => { if (NetworkManager.Lobby is { } l) PlatzKnoepfeZeigen(l); };
+    }
+
+    private (int Slot, char Art, string Player)? GewaehlterPlatz()
+    {
+        var sel = _members.GetSelectedItems();
+        return sel.Length > 0 && sel[0] < _platzInfo.Count ? _platzInfo[sel[0]] : null;
+    }
+
+    private void PlatzKnoepfeZeigen(LobbyClient l)
+    {
+        bool host = l.IAmHost;
+        _kiDazu.Visible = _platzFrei.Visible = _hinaus.Visible = host;
+        var p = GewaehlterPlatz();
+        _kiDazu.Disabled = p is not { Art: 'F' };
+        _platzFrei.Disabled = p is not { Art: 'K' };
+        _hinaus.Disabled = p is not { Art: 'M' };
+        _platzHinweis.Text = host
+            ? "Eintrag anklicken: auf freie Plätze Computergegner setzen, Mitspieler hinauswerfen. Die Startplätze auf der Karte verteilt das Spiel beim Start."
+            : "Die Einstellungen und Plätze bestimmt der Gastgeber. Die Startplätze auf der Karte verteilt das Spiel beim Start.";
+    }
+
+    private void PlatzSetzen(bool ki)
+    {
+        if (NetworkManager.Lobby is not { IAmHost: true } l || GewaehlterPlatz() is not { } p) return;
+        string staerke = Stufen[Math.Clamp(_raumLevel.Selected, 0, 2)];
+        l.SetAi(p.Slot, ki ? staerke : null, 0, p.Slot);
+        GD.Print($"lobby: Platz {p.Slot + 1} {(ki ? "Computergegner (" + staerke + ")" : "frei")}");
+    }
+
+    private void Hinauswerfen()
+    {
+        if (NetworkManager.Lobby is not { IAmHost: true } l || GewaehlterPlatz() is not { Art: 'M' } p) return;
+        l.Kick(p.Player);
+        GD.Print($"lobby: Platz {p.Slot + 1} hinausgeworfen");
+    }
+
+    /// <summary>Raumeinstellungen in die Felder; der Gastgeber darf aendern, die anderen sehen nur.</summary>
+    private void RaumEinstellungenZeigen(LobbyClient l, JsonObject room, JsonObject? s, int kis)
+    {
+        bool host = l.IAmHost;
+        // B12: wird man Gastgeber (der alte ist gegangen), uebernimmt man die Einstellungen des RAUMS —
+        // sonst spielte man die Karte, die im eigenen Schirm stand, waehrend der Raumkopf eine andere zeigte.
+        if (host && !_warHost && s != null && EinstellungenSetzen != null)
+        {
+            var kopie = (JsonObject)s.DeepClone();
+            kopie["ai"] = kis;
+            EinstellungenSetzen(kopie);
+            GD.Print("lobby: du bist Gastgeber — Raumeinstellungen übernommen");
+        }
+        _warHost = host;
+        _fuelle = true;
+        if (s != null)
+        {
+            string map = (string?)s["map"] ?? "";
+            int mi = _karten.FindIndex(k => k.File == map);
+            if (mi >= 0) _raumKarte.Select(mi);
+            _raumBild.Texture = MapPreview.Of(map);
+            var pl = MapPreview.Startplaetze(map);
+            var (w, h) = MapPreview.Groesse(map);
+            _raumKarteText.Text = (mi >= 0 ? "" : KartenName(map) + "\n") +
+                                  (pl.Count > 0 ? $"{pl.Count} Startplätze" : "") + (w > 0 ? $" · {w}×{h}" : "");
+            if ((int?)s["level"] is int lv) _raumLevel.Select(Math.Clamp(lv, 0, 2));
+            if ((int?)s["res"] is int rs && rs >= 0 && rs < _raumRes.ItemCount) _raumRes.Select(rs);
+            if ((int?)s["money"] is int mo) _raumKonto.Value = mo;
+            if ((int?)s["tech"] is int te) _raumTech.Value = te;
+            if ((bool?)s["all"] is bool al) _raumAlle.ButtonPressed = al;
+        }
+        foreach (var c in new Control[] { _raumKarte, _raumLevel, _raumRes, _raumKonto, _raumTech })
+            if (c is BaseButton b) b.Disabled = !host;
+        _raumAlle.Disabled = !host;
+        _fuelle = false;
+        // die Zahl der Computergegner folgt den KI-Plaetzen — beim Gastgeber in den Schirm
+        if (host && EinstellungenSetzen != null && s != null && (int?)s["ai"] != kis)
+        {
+            var neu = (JsonObject)s.DeepClone();
+            neu["ai"] = kis;
+            Senden(l, neu);
+        }
+    }
+
+    /// <summary>Ein Feld im Raum hat sich geaendert (nur Gastgeber): in den Schirm und an alle.</summary>
+    private void Geaendert()
+    {
+        if (_fuelle || NetworkManager.Lobby is not { IAmHost: true } l) return;
+        int mi = _raumKarte.Selected;
+        int kis = 0;
+        foreach (var p in _platzInfo) if (p.Art == 'K') kis++;
+        var s = new JsonObject
+        {
+            ["map"] = mi >= 0 && mi < _karten.Count ? _karten[mi].File : SkirmishSetup.Map,
+            ["ai"] = kis,
+            ["level"] = _raumLevel.Selected,
+            ["res"] = _raumRes.Selected,
+            ["money"] = (int)_raumKonto.Value,
+            ["tech"] = (int)_raumTech.Value,
+            ["all"] = _raumAlle.ButtonPressed,
+        };
+        Senden(l, s);
+    }
+
+    private void Senden(LobbyClient l, JsonObject s)
+    {
+        string text = s.ToJsonString();
+        if (text == _zuletztGesetzt) return;
+        _zuletztGesetzt = text;
+        EinstellungenSetzen?.Invoke((JsonObject)s.DeepClone());
+        l.SetSettings(s);
+        GD.Print("lobby: Raumeinstellungen gesetzt " + text);
+    }
 
     // ---- ⭐ 14.11.2026 — Fable P4 (B7, B8, B9, C8, C11) — Gegenschalter --lobby-alt -----------
     private static bool LobbyAlt => Array.IndexOf(Core.CommandLine.Args, "--lobby-alt") >= 0;
@@ -533,6 +821,13 @@ public partial class OnlineLobbyScreen : Control
                 case "name":
                     ZurAnmeldung($"Der Server nimmt den Namen »{_name.Text.Trim()}« nicht an — {l.LastErrorText}");
                     return true;
+                case "kicked":
+                    l.LeaveRoom();
+                    _listing = false;
+                    Refresh();
+                    _fehlerZeile = "Der Gastgeber hat dich aus dem Raum genommen.";
+                    _fehlerBis = Time.GetTicksMsec() + 8000;
+                    return false;
                 case "proto":
                     ZurAnmeldung("Der Server spricht ein anderes Protokoll — bitte die neueste Fassung des Spiels holen. " + l.LastErrorText);
                     return true;

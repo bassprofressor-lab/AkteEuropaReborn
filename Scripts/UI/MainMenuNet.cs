@@ -528,6 +528,8 @@ public partial class MainMenu
         {
             OnMatchStart = StartWhenNetIsReady,
             CurrentMap = () => { ApplySetupFields(); return SkirmishSetup.Map; },
+            EinstellungenLesen = RaumEinstellungenLesen,     // Fable P6 (C9/D3)
+            EinstellungenSetzen = RaumEinstellungenSetzen,
             MaxHumans = (int)(_netPlayers?.Value ?? 2),
             AutoConnect = autoConnect && Settings.OnlineName.Length > 0,
             Meldung = meldung,
