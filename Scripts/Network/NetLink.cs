@@ -335,6 +335,24 @@ public sealed class NetLink
         return true;
     }
 
+    /// <summary>
+    /// ⭐ 14.11.2026 — SANFT TRENNEN (Mitspieler). <c>Close()</c> trennt sofort; laedt der Vermittler
+    /// gerade die Karte (Hauptfaden mehrere Sekunden still), kommen Paket und Trennung bei ihm
+    /// ZUSAMMEN an, und ENet meldet dann zuerst die Trennung und verwirft das Paket (Zombie-Zweig
+    /// von dispatch_incoming_commands — gemessen: das Ausschalten eines Mitspielers ohne Karte kam
+    /// nie an). <c>PeerDisconnectLater</c> trennt erst, wenn alles Zuverlaessige bestaetigt ist.
+    /// Rueckgabe: true, sobald getrennt (oder nichts zu trennen ist) — so lange weiter rufen.
+    /// </summary>
+    public bool SanftTrennen()
+    {
+        if (_relay != null || _peer == null || IsHost) return true;
+        if (_peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Disconnected) return true;
+        if (!_sanftAngestossen) { _sanftAngestossen = true; _peer.GetPeer(1)?.PeerDisconnectLater(); }
+        _peer.Poll();
+        return _peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Disconnected;
+    }
+    private bool _sanftAngestossen;
+
     public void Close()
     {
         _relay = null;              // ⚠ der Lobby-Draht gehört dem NetworkManager, nicht der Partie
@@ -796,11 +814,17 @@ public sealed class NetLink
         foreach (int k in old) _turns.Remove(k);
     }
 
+    public static bool KarteFehltAlt => Array.IndexOf(Core.CommandLine.Args, "--netz-karte-fehlt-alt") >= 0;
+
     public bool AllHeadStarts(int players, out int max)
     {
         max = 0;
         for (int p = 0; p < players; p++)
         {
+            // ⭐ 14.11.2026 (Fable B12): wer sich VOR dem Anfang ausgeschaltet hat (Karte fehlt), schickt
+            // nie einen Vorlauf — ohne diese Zeile warteten alle anderen auf ihn. Der Schnitt steht
+            // bei Takt 0 auf jeder Maschine, also dieselbe Entscheidung ueberall. --netz-karte-fehlt-alt.
+            if (Cut.ContainsKey(p) && !KarteFehltAlt) continue;
             if (!_headStart.TryGetValue(p, out int n)) return false;
             if (n > max) max = n;
         }
@@ -811,7 +835,7 @@ public sealed class NetLink
     {
         var parts = new List<string>();
         for (int p = 0; p < players; p++)
-            parts.Add(_headStart.TryGetValue(p, out int n) ? $"{p}:{n}" : $"{p}:—");
+            parts.Add(_headStart.TryGetValue(p, out int n) ? $"{p}:{n}" : Cut.ContainsKey(p) ? $"{p}:aus" : $"{p}:—");
         return string.Join(" ", parts);
     }
 

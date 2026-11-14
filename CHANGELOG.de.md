@@ -284,6 +284,17 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Mehrspieler: fehlt einem Mitspieler die Karte, startet er nicht** (Fable-Prüfung B12): Kam die
+  Karte des Gastgebers bei einem Mitspieler nicht an (eine gelieferte Karte nicht eingelesen,
+  oder eine eigene Karte ohne Bild, die darum nicht verschickt wurde), startete er trotzdem — auf
+  der Karte, die bei ihm im Menü stand, und die Partie lief sofort auseinander; gesagt wurde das
+  nur im Protokoll. Jetzt startet er nicht, schaltet sich selbst aus und sieht im Netzkasten, was
+  fehlt; die anderen spielen ohne ihn weiter. Dabei zwei Fehler behoben, die das erst möglich
+  machen: Der Vorlauf wartete auch auf einen Spieler, der sich vor dem Anfang abgemeldet hatte
+  (alle standen), und im LAN ging das Abmeldepaket verloren, wenn der Gastgeber gerade die Karte
+  lud — die Leitung wird jetzt erst getrennt, wenn er es bestätigt hat. Gemessen im LAN zu dritt
+  und im Online-Paar (die Verbliebenen laufen grün durch); Prüfschalter
+  `--netz-probe-karte-fehlt`, Gegenschalter `--netz-karte-fehlt-alt`.
 - **Mehrspieler im LAN: geht der Gastgeber, gibt es eine klare Meldung** (Fable-Prüfung B10): Im
   LAN läuft alles über den Rechner des Gastgebers. Verließ er eine Partie zu dritt oder mehr,
   spielten die anderen noch ein paar Sekunden weiter und warteten dann für immer aufeinander

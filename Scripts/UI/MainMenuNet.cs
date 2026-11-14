@@ -673,7 +673,33 @@ public partial class MainMenu
         // Sonst spielte der Mitspieler die Karte, die BEI IHM im Menü stand.
         var s = NetworkManager.Link!.Session!;
         int mi = KarteAufnehmen(s.Map);   // ⭐ 11.11.2026: auch eine empfangene eigene Karte
+        // Pruefschalter (Fable B12): so tun, als fehle die Karte hier
+        if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-probe-karte-fehlt") >= 0) mi = -1;
         if (mi >= 0) SelectMap(mi);
+        else if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-karte-fehlt-alt") < 0)
+        {
+            // ⭐ 14.11.2026 — Fable B12: fehlt die Karte, startete der Mitspieler trotzdem — auf der
+            // Karte, die BEI IHM im Menue stand, und lief sofort auseinander; gesagt wurde es nur im
+            // Protokoll. Jetzt: nicht starten, sich selbst ausschalten (die anderen spielen ohne
+            // diesen Platz weiter, ab Takt 0), kurz warten, damit das Paket hinausgeht, dann die
+            // Leitung schliessen und es im Schirm sagen. Gegenschalter --netz-karte-fehlt-alt.
+            GD.PrintErr($"netz: die Karte »{s.Map}« des Gastgebers gibt es hier nicht — nicht gestartet, ausgeschaltet");
+            NetworkManager.Link!.SendAusschalten(s.Me, s.Me);
+            NetworkManager.Link.FlushNow();
+            // sanft trennen: erst wenn der Gastgeber das Ausschalten bestaetigt hat (er laedt gerade
+            // die Karte und hoert ein paar Sekunden nicht zu). Hoechstens 20 s, nach Zeit gemessen.
+            ulong ab = Time.GetTicksMsec();
+            bool getrennt = false;
+            while (Time.GetTicksMsec() - ab < 20000 && IsInsideTree() && !(getrennt = NetworkManager.Link?.SanftTrennen() ?? true))
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GD.Print($"netz: {(getrennt ? "sanft getrennt" : "NICHT sanft getrennt")} nach {Time.GetTicksMsec() - ab} ms");
+            if (!IsInsideTree()) return;
+            string titel = s.EigeneKarte ? "eine eigene Karte des Gastgebers" : $"die Karte »{s.Map}«";
+            BackToLobby($"Nicht gestartet: {titel} fehlt auf diesem Rechner, und sie kam nicht an. " +
+                        "Die anderen spielen ohne dich weiter. Bitte die Karte beim Gastgeber erneut speichern " +
+                        "oder die gleiche Fassung des Spiels verwenden.");
+            return;
+        }
         else GD.PrintErr($"netz: die Karte »{s.Map}« des Gastgebers gibt es hier nicht — " +
                          "der Lauf wird auseinanderlaufen, und zwar sofort");
 

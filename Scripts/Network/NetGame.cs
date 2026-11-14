@@ -404,10 +404,12 @@ public sealed partial class NetGameRunner : Node
             var z = new List<string>();
             bool gleich = true;
             ulong erste = 0;
+            bool hatErste = false;
             for (int p = 0; p < _s.Players; p++)
             {
+                if (_link.Cut.ContainsKey(p) && !NetLink.KarteFehltAlt) { z.Add($"{p}:aus"); continue; }   // Fable B12
                 ulong v = _link.TafelPruefzahl.GetValueOrDefault(p);
-                if (p == 0) erste = v; else if (v != erste) gleich = false;
+                if (!hatErste) { erste = v; hatErste = true; } else if (v != erste) gleich = false;
                 z.Add($"{p}:{v:X16}");
             }
             if (!gleich)

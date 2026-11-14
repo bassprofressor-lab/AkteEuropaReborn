@@ -263,6 +263,16 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Multiplayer: a player missing the map does not start** (Fable review B12): if the host's map
+  did not reach a player (a shipped map not imported, or an own map without an image that was
+  therefore not sent), they started anyway — on whatever map stood in their own menu, and the
+  match ran apart at once; this was only said in the log. Now they do not start, switch
+  themselves off and see in the network box what is missing; the others play on without them.
+  Two bugs fixed along the way that make this possible: the lead-in also waited for a player who
+  had signed off before the start (everyone stood still), and on LAN the sign-off packet was lost
+  while the host was loading the map — the connection is now closed only after the host has
+  acknowledged it. Measured on LAN with three players and in an online pair (the remaining
+  players run green); probe `--netz-probe-karte-fehlt`, opt-out `--netz-karte-fehlt-alt`.
 - **LAN multiplayer: a clear message when the host leaves** (Fable review B10): on LAN everything
   runs through the host's computer. When the host left a match of three or more, the others
   played on for a few seconds and then waited for each other forever ("Takt 347 ist nicht frei —
