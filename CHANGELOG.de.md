@@ -284,6 +284,20 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Gefecht und Mehrspieler: nur die Startplätze, die die Karte hat** (Fable-Prüfung B2, C3, B5):
+  Das Menü bot auf jeder Karte »Spieler 1–8« und bis zu 7 Gegner an. Was die Karte nicht hatte,
+  fiel still um: im Gefecht startete man auf NET02 mit »Spieler 8« als Spieler 1 und bekam »5
+  statt 7 Gegner« (nur im Protokoll); im Netz bekamen die Mitspieler einfach die Plätze 1, 2, 3 …
+  ohne die Karte zu fragen — auf NET02 mit »Spieler 8« führten so BEIDE Menschen dieselbe Armee,
+  und auf NET08 (Plätze 1, 2, 4, 5) bekam der dritte Mensch den leeren Platz 3. Jetzt bietet die
+  Startplatz-Auswahl nur die Plätze der gewählten Karte an (»Automatisch« = der erste davon, im
+  Gefecht wie im Netz), »Gegner« und »Menschen« gehen höchstens so hoch, wie die Karte Plätze
+  hat, und der Gastgeber verteilt nur echte Startplätze (NET02 → Plätze 1 und 2, NET08 zu dritt →
+  1, 2 und 4); sind mehr Menschen da als Plätze, wird nicht gestartet, sondern gesagt warum. Die
+  Vorschau widerspricht sich nicht mehr (»3 bebaute Startplätze, aber KEINE Fabrik — hier wird
+  nicht gebaut« neben »wer keine Basis hat, bekommt beim Start Basis und Fabrik«); sie nennt jetzt
+  die Startplätze der Karte. Gemessen im LAN-Paar NET02, zu dritt NET08 (alle grün) und im
+  Einzelgefecht; Bild des Gefechtsschirms geprüft. Gegenschalter `--startplatz-alt`.
 - **Mehrspieler: Fortschritt der Kartenübertragung** (Fable-Prüfung D4): Spielt der Gastgeber
   eine eigene Karte, reist sie zu den Mitspielern — online in gut 160 Teilen, das dauert einige
   Sekunden. Bisher stand dabei nur »warte auf die Partie des Gastgebers«, von einem Hänger nicht

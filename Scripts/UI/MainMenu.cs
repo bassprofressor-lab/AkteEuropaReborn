@@ -940,8 +940,11 @@ public partial class MainMenu : Control
         // chosen slot that the map leaves empty falls back to the same.
         right.AddChild(Row("Startplatz", _slot = new OptionButton()));
         _slot.AddItem("Automatisch");
-        for (int p = 0; p < 8; p++) _slot.AddItem($"Spieler {p + 1}");
+        _slot.SetItemMetadata(0, -1);
+        for (int p = 0; p < 8; p++) { _slot.AddItem($"Spieler {p + 1}"); _slot.SetItemMetadata(p + 1, p); }
         _slot.Selected = 0;
+        _slot.TooltipText = "Wo du auf der Karte beginnst. Angeboten werden nur die Startplätze, die " +
+                            "die gewählte Karte hat; »Automatisch« nimmt den ersten davon.";
 
         right.AddChild(Row("Schwierigkeit", _level = new OptionButton()));
         _level.AddItem("Leicht");
@@ -1159,6 +1162,16 @@ public partial class MainMenu : Control
             if (a == "--setup" || a.StartsWith("--setup="))
             {
                 ShowSetup(net: a.EndsWith("=net"));
+                // Pruefschalter fuer Bilder (Fable B2/C3): --setup-karte=<datei>, --setup-startplatz-offen
+                foreach (string b in OS.GetCmdlineUserArgs())
+                {
+                    if (b.StartsWith("--setup-karte="))
+                    {
+                        int mi = Maps.FindIndex(m => m.File == b["--setup-karte=".Length..]);
+                        if (mi >= 0) { SelectMap(mi); ShowPreview(); }
+                    }
+                    if (b == "--setup-startplatz-offen") GetTree().CreateTimer(1.0).Timeout += () => _slot.ShowPopup();
+                }
                 break;
             }
 
@@ -2135,7 +2148,18 @@ public partial class MainMenu : Control
                 };
             // fourth field: the start slot, 1..8, for the harness
             if (parts.Length > 3 && int.TryParse(parts[3], out int sl))
-                _slot.Selected = Mathf.Clamp(sl, 0, 8);
+            {
+                if (MapPreview.StartplatzAlt) _slot.Selected = Mathf.Clamp(sl, 0, 8);
+                else
+                {
+                    // B2/C3: der Platz der Karte, nicht die Zeile der Liste
+                    int z = -1;
+                    for (int i = 0; i < _slot.ItemCount; i++) if (_slot.GetItemMetadata(i).AsInt32() == sl - 1) z = i;
+                    if (z < 0 && sl > 0)
+                        GD.PrintErr($"skirmish: Startplatz {sl} hat diese Karte nicht — automatisch");
+                    _slot.Selected = sl <= 0 || z < 0 ? 0 : z;
+                }
+            }
             // fifth: "Rohstoffe", by the game's own word or by its number
             if (parts.Length > 4)
             {
@@ -2169,7 +2193,47 @@ public partial class MainMenu : Control
         string file = Maps[Mathf.Clamp(_mapIndex, 0, Maps.Count - 1)].File;
         _preview.Texture = MapPreview.Of(file);
         _previewText.Text = MapPreview.Caption(file);
+        PlaetzeAusKarte(file);
     }
+
+    /// <summary>
+    /// ⭐ 14.11.2026 — Fable B2/C3: Startplatz, Gegnerzahl und Menschenzahl aus der KARTE. Bisher
+    /// »Spieler 1–8« und »Gegner 1–7« auf jeder Karte; was die Karte nicht hatte, fiel still um
+    /// (Gefecht: Platz 1 statt 8, »5 statt 7 Gegner« nur im Protokoll; Netz: zwei Menschen, eine
+    /// Armee). Die Wahl bleibt erhalten, wenn die neue Karte den Platz auch hat.
+    /// Gegenschalter --startplatz-alt.
+    /// </summary>
+    private void PlaetzeAusKarte(string file)
+    {
+        if (_slot == null || MapPreview.StartplatzAlt) return;
+        var pl = MapPreview.Startplaetze(file);
+        if (pl.Count == 0) return;
+        int war = _slot.Selected >= 0 ? _slot.GetItemMetadata(_slot.Selected).AsInt32() : -1;
+        _slot.Clear();
+        _slot.AddItem("Automatisch"); _slot.SetItemMetadata(0, -1);
+        foreach (int p in pl) { _slot.AddItem($"Spieler {p + 1}"); _slot.SetItemMetadata(_slot.ItemCount - 1, p); }
+        int idx = pl.IndexOf(war);
+        if (war >= 0 && idx < 0)
+            GD.Print($"gefecht: Startplatz {war + 1} hat die Karte {file} nicht (sie hat {string.Join(",", pl.ConvertAll(x => x + 1))}) — automatisch");
+        _slot.Selected = idx >= 0 ? idx + 1 : 0;
+        if (_ai != null)
+        {
+            _ai.MaxValue = Mathf.Max(1, pl.Count - 1);
+            _ai.TooltipText = $"Computergegner — diese Karte hat {pl.Count} Startplätze, also höchstens {pl.Count - 1} Gegner " +
+                              "(im Netz weniger, je Mitspieler einer).";
+        }
+        if (_netPlayers != null)
+        {
+            _netPlayers.MaxValue = Mathf.Max(2, pl.Count);
+            _netPlayers.TooltipText = $"Wie viele Menschen mitspielen — diese Karte hat {pl.Count} Startplätze.";
+        }
+    }
+
+    /// <summary>Der gewaehlte Startplatz als Kartenplatz 0..7, -1 = automatisch.</summary>
+    private int GewaehlterPlatz()
+        => _slot.Selected <= 0 ? -1
+         : MapPreview.StartplatzAlt ? _slot.Selected - 1
+         : _slot.GetItemMetadata(_slot.Selected).AsInt32();
 
     // ---- Modus und Kartenliste ----------------------------------------------
 
@@ -2359,7 +2423,7 @@ public partial class MainMenu : Control
     private void ApplySetupFields()
     {
         SkirmishSetup.Map = Maps[Mathf.Clamp(_mapIndex, 0, Maps.Count - 1)].File;
-        SkirmishSetup.Human = _slot.Selected - 1;   // -1 = automatisch
+        SkirmishSetup.Human = GewaehlterPlatz();   // -1 = automatisch (B2/C3: aus der Karte)
         SkirmishSetup.AiCount = (int)_ai.Value;
         SkirmishSetup.Level = _level.Selected switch
         {

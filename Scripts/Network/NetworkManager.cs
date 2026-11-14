@@ -763,15 +763,37 @@ public partial class NetworkManager : Node
         s.Seed = seed;
 
         int mine = UI.SkirmishSetup.Human;
-        if (mine < 0) mine = 0;
         int n = 1 + Link!.ClientCount;
         var slots = new int[n];
-        slots[0] = mine;
-        int next = 0;
-        for (int i = 1; i < n; i++)
+        // ⭐ 14.11.2026 — Fable B2: nur die Startplaetze, die die KARTE hat. Bisher Gastgeber = seine
+        // Wahl, die anderen aufsteigend 0..7 ohne die Karte zu fragen: NET02 mit »Spieler 8« gab
+        // [7,0], und weil Platz 7 dort leer ist, fuhren BEIDE Menschen Platz 0. Ebenso mehr Menschen
+        // als Plaetze, oder Karten mit Luecken (NET08: 0,1,3,4). »Automatisch« = erster Platz der
+        // Karte, wie im Gefecht. Gegenschalter --startplatz-alt.
+        var pl = UI.MapPreview.Startplaetze(s.Map);
+        if (!UI.MapPreview.StartplatzAlt && pl.Count > 0)
         {
-            while (next == mine) next++;
-            slots[i] = next++;
+            if (n > pl.Count)
+            {
+                Cancel($"Die Karte hat nur {pl.Count} Startplätze, aber {n} Menschen sind da — " +
+                       "bitte eine größere Karte wählen oder weniger Mitspieler einladen.");
+                return;
+            }
+            if (!pl.Contains(mine)) mine = pl[0];
+            slots[0] = mine;
+            int k = 1;
+            foreach (int p in pl) if (p != mine && k < n) slots[k++] = p;
+        }
+        else
+        {
+            if (mine < 0) mine = 0;
+            slots[0] = mine;
+            int next = 0;
+            for (int i = 1; i < n; i++)
+            {
+                while (next == mine) next++;
+                slots[i] = next++;
+            }
         }
         s.Slot = slots;
 

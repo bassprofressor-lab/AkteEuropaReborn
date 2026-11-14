@@ -94,7 +94,15 @@ public static class MapPreview
         int h = d.TryGetValue("height", out var hv) ? hv.AsInt32() : 0;
         string size = w > 0 ? $"{w} x {h} Felder" : "";
         string head = mission.Length > 0 ? $"„{mission}“  —  {size}" : size;
-        string slots = Slots(name);
+        // ⭐ 14.11.2026 — Fable B5: seit bug-733 (Startbasis fuer jeden) widersprach die Zeile
+        // »3 bebaute Startplaetze, aber KEINE Fabrik — hier wird nicht gebaut« der Zeile darunter.
+        // Ohne --gefecht-startbasis-aus jetzt nur noch die Plaetze, die das Spiel wirklich vergibt.
+        bool startbasis = System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-startbasis-aus") < 0;
+        var pl = Startplaetze(name);
+        string slots = startbasis && !StartplatzAlt
+            ? (pl.Count > 0 ? $"{pl.Count} Startplätze (Spieler {string.Join(", ", pl.ConvertAll(x => x + 1))}) — " +
+                              "bis zu " + pl.Count + " Spieler, Menschen und Computer zusammen" : "")
+            : Slots(name);
         string bases = BaseNote(name);
         string txt = slots.Length > 0 ? head + "\n" + slots : head;
         return bases.Length > 0 ? txt + "\n" + bases : txt;
@@ -292,6 +300,54 @@ public static class MapPreview
         return $"⚠ nur {bases} Basen für {slots.Count} Startplätze — wer keine " +
                "bekommt, kann NICHTS bauen und sieht zu";
     }
+
+    /// <summary>
+    /// ⭐ 14.11.2026 — Fable B2/C3: DIE STARTPLAETZE EINER KARTE, wie das Spiel sie beim Start
+    /// bestimmt (<c>SkirmishAi.StartSkirmish</c>): gibt es Plaetze mit Fabrik und nichts Neutrales
+    /// zu erobern (neutraler Bau mit Tuer), sind es die Fabrikplaetze; sonst jeder Platz 0..7, dem
+    /// eine Einheit oder ein Gebaeude gehoert. Bisher bot das Menue auf jeder Karte »Spieler 1–8«
+    /// an, und was die Karte nicht hatte, fiel still auf den ersten Platz — im Netz fuehrten dann
+    /// zwei Menschen dieselbe Armee. Leer, wenn die Karte nicht lesbar ist (dann gilt der alte Weg).
+    /// </summary>
+    public static List<int> Startplaetze(string name)
+    {
+        string p = Core.Content.Path("Maps/" + name + ".entities.json");
+        ulong stand = FileAccess.FileExists(p) ? FileAccess.GetModifiedTime(p) : 0;
+        if (_plaetze.TryGetValue(name, out var schon) && schon.Stand == stand) return schon.Liste;
+        var live = new SortedSet<int>();
+        var fabrik = new SortedSet<int>();
+        bool erobern = false;
+        if (FileAccess.FileExists(p))
+        {
+            using var f = FileAccess.Open(p, FileAccess.ModeFlags.Read);
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(f!.GetAsText());
+                static int I(System.Text.Json.JsonElement e, string k)
+                    => e.TryGetProperty(k, out var v) && v.TryGetInt32(out int n) ? n : -1;
+                if (doc.RootElement.TryGetProperty("entities", out var ents) &&
+                    ents.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    foreach (var e in ents.EnumerateArray())
+                        if (I(e, "owner") is int o and >= 0 and < 8) live.Add(o);
+                if (doc.RootElement.TryGetProperty("buildings", out var arr) &&
+                    arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    foreach (var b in arr.EnumerateArray())
+                    {
+                        int o = I(b, "owner"), t = I(b, "type");
+                        if (o is >= 0 and < 8) { live.Add(o); if (t is 2 or 3 or 4) fabrik.Add(o); }
+                        else if (o == 11 && I(b, "doors") > 0) erobern = true;
+                    }
+            }
+            catch (System.Exception e) { GD.PrintErr("Startplaetze: " + e.Message); }
+        }
+        var l = new List<int>(fabrik.Count > 0 && !erobern ? fabrik : live);
+        _plaetze[name] = (l, stand);
+        return l;
+    }
+    private static readonly Dictionary<string, (List<int> Liste, ulong Stand)> _plaetze = new();
+
+    /// <summary>Gegenschalter fuer B2/B5/C3: --startplatz-alt (Spieler 1–8 auf jeder Karte).</summary>
+    public static bool StartplatzAlt => System.Array.IndexOf(Core.CommandLine.Args, "--startplatz-alt") >= 0;
 
     public static string Slots(string name)
     {

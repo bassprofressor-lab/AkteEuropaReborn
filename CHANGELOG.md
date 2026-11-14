@@ -263,6 +263,20 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Skirmish and multiplayer: only the start places the map has** (Fable review B2, C3, B5): the
+  menu offered "Spieler 1–8" and up to 7 opponents on every map. What the map lacked fell back
+  silently: in skirmish, NET02 with "Spieler 8" started as player 1 with "5 instead of 7
+  opponents" (log only); on the network the other players simply got places 1, 2, 3 … without
+  asking the map — on NET02 with "Spieler 8" BOTH humans thus led the same army, and on NET08
+  (places 1, 2, 4, 5) the third human got the empty place 3. Now the start place choice offers
+  only the places of the chosen map ("Automatisch" = the first of them, in skirmish and online
+  alike), "Gegner" and "Menschen" go only as high as the map has places, and the host hands out
+  only real start places (NET02 → places 1 and 2, NET08 with three → 1, 2 and 4); with more humans
+  than places the match does not start and says why. The preview no longer contradicts itself
+  ("3 bebaute Startplätze, aber KEINE Fabrik — hier wird nicht gebaut" next to "whoever has no
+  base gets base and factory at the start"); it now names the map's start places. Measured in a
+  LAN pair on NET02, with three on NET08 (all green) and in a single skirmish; skirmish screen
+  checked in a picture. Opt-out `--startplatz-alt`.
 - **Multiplayer: progress of the map transfer** (Fable review D4): when the host plays an own map,
   it travels to the other players — online in some 160 parts, which takes a few seconds. So far
   only "warte auf die Partie des Gastgebers" was shown, indistinguishable from a hang. Now the

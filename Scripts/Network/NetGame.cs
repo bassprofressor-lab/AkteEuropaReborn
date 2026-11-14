@@ -1023,7 +1023,8 @@ public sealed partial class NetGameRunner : Node
     /// </summary>
     private bool GastgeberWeg()
     {
-        if (_link.IsHost || _link.IsRelay || _s.Me == 0 || _phase == Phase.Ende) return false;
+        // nur waehrend der Partie — im Ausklang nach einem regulaeren Ende ist »Gastgeber weg« normal
+        if (_link.IsHost || _link.IsRelay || _s.Me == 0 || _phase is not (Phase.Vorlauf or Phase.Laufen)) return false;
         if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-gastgeber-alt") >= 0) return false;
         bool gerissen = _link.Status == MultiplayerPeer.ConnectionStatus.Disconnected;
         bool draussen = _link.Cut.ContainsKey(0);
