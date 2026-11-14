@@ -293,6 +293,7 @@ public partial class NetworkManager : Node
                     l.CreateRoom(_roomName, System.Math.Clamp(_players, 2, 8), "",
                         new System.Text.Json.Nodes.JsonObject { ["map"] = UI.SkirmishSetup.Map });
                 }
+                NetzTeamSetzen(l);
                 if (l.InRoom && _announced && !_startAsked && l.HumanRoomSlots().Count >= _players)
                 {
                     _startAsked = true;
@@ -301,6 +302,7 @@ public partial class NetworkManager : Node
             }
             else
             {
+                NetzTeamSetzen(l);
                 if (!_listAsked) { _listAsked = true; l.ListRooms(); }
                 if (!_joinAsked)
                     foreach (var r in l.Rooms.Values)
@@ -598,6 +600,9 @@ public partial class NetworkManager : Node
         if (_wantHost && _announced && !_offered && Link.ClientCount + 1 >= _players
             && (!Link.IsRelay || Lobby is { Go: true }))     // online: erst nach »go« dürfen Rahmen fliessen
             OfferSession();
+        // P7: OfferSession kann abbrechen (Cancel: Link = null) — dann hier nichts mehr anfassen.
+        // Vorher NullReferenceException in der naechsten Zeile (seit Fable B2 moeglich).
+        if (Link == null) return;
 
         int frist = Frist;
         // ⭐ 12.11.2026 — bug-810: die Frist zaehlt ab dem LETZTEN Lebenszeichen, nicht
@@ -836,6 +841,8 @@ public partial class NetworkManager : Node
             }
         }
         s.Slot = slots;
+        // ⭐ P7 (14.11.2026): Staerke und Team je Kartenplatz — Simulation/NetzAufstellung.cs
+        if (!AufstellungVerteilen(s, pl)) return;
 
         // ⭐ 11.11.2026: eine eigene Karte reist mit — ihre Pakete VOR dem Sitzungspaket.
         if (!HatSchalter("--netzkarte-aus") && !NetzKarte.IstMitgeliefert(s.Map) && NetzKarte.Vorhanden(s.Map))
@@ -921,6 +928,14 @@ public partial class NetworkManager : Node
         }
         UI.SkirmishSetup.Human = s.MySlot;
         UI.SkirmishSetup.CampaignMission = 0;   // Netz ist immer Gefecht
+        // ⭐ P7: die Aufstellung der Partie (oder keine — dann der alte Weg, auch wenn der eigene
+        // Schirm eine Platzliste hatte)
+        UI.SkirmishSetup.PlatzListe = s.Aufstellung && !UI.SkirmishSetup.PlaetzeAlt;
+        if (UI.SkirmishSetup.PlatzListe)
+        {
+            System.Array.Copy(s.Art, UI.SkirmishSetup.PlatzArt, 8);
+            System.Array.Copy(s.Team, UI.SkirmishSetup.PlatzTeam, 8);
+        }
 
         GD.Print($"netz: Partie {(again ? "noch einmal " : "")}angenommen, " +
                  $"Keim {s.Seed} erzwungen, Karte {s.Map}, mein Platz {s.MySlot}");

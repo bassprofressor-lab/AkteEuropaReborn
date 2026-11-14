@@ -240,6 +240,9 @@ public static class SkirmishSetup
     // Gegenschalter --gefecht-plaetze-alt.
 
     public const int ArtLeer = 0, ArtMensch = 1, ArtLeicht = 2, ArtNormal = 3, ArtSchwer = 4;
+    /// <summary>Nur im Mehrspielerschirm (LAN-Gastgeber): hier startet ein Mitspieler. In der
+    /// Sitzung wird daraus <see cref="ArtMensch"/> (besetzt) oder <see cref="ArtLeer"/>.</summary>
+    public const int ArtMitspieler = 5;
 
     /// <summary>true: <see cref="PlatzArt"/>/<see cref="PlatzTeam"/> bestimmen Gegner, Stufen
     /// und Bündnisse; <see cref="AiCount"/>/<see cref="Level"/> sind dann nur noch Anzeige.</summary>
@@ -288,7 +291,7 @@ public static class SkirmishSetup
         {
             var at = teile[p].Split(':');
             if (at.Length != 2 || !int.TryParse(at[0], out a[p]) || !int.TryParse(at[1], out t[p])) return false;
-            if (a[p] is < ArtLeer or > ArtSchwer || t[p] is < 0 or > 4) return false;
+            if (a[p] is < ArtLeer or > ArtMitspieler || t[p] is < 0 or > 8) return false;
         }
         System.Array.Copy(a, art, 8); System.Array.Copy(t, team, 8);
         return true;

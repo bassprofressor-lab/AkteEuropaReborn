@@ -168,6 +168,7 @@ public partial class MainMenu
         if (_netSearch != null) _netSearch.Visible = join;
         EinstellungenSperren(join);
         if (_netList != null && !join) _netList.Visible = false;
+        PlaetzeSichtbar();   // P7: Platzliste beim LAN-Gastgeber, sonst die alten Zeilen
     }
 
     /// <summary>

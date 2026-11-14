@@ -3,6 +3,7 @@ namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Nodes;
 using Godot;
 using AkteEuropaReborn.Network;
@@ -227,6 +228,10 @@ public partial class OnlineLobbyScreen : Control
             if (a.StartsWith("--lobby-probe-ki=")) _probeKi = int.Parse(a["--lobby-probe-ki=".Length..]);
             if (a == "--lobby-probe-hinaus") { _hinausSchritt = 0; _probeKi = 0; _probeSchritt = 3; }
             if (a.StartsWith("--lobby-probe-karte=")) _probeKarte = a["--lobby-probe-karte=".Length..];
+            // P7 Teil 2: --lobby-probe-staerke=leicht|normal|schwer (fuer die gesetzten KI),
+            // --lobby-probe-team=<eigenes Team>,<Team der KI>
+            if (a.StartsWith("--lobby-probe-staerke=")) _probeStaerke = Array.IndexOf(Stufen, a["--lobby-probe-staerke=".Length..]);
+            if (a.StartsWith("--lobby-probe-team=")) _probeTeam = a["--lobby-probe-team=".Length..].Split(',');
         }
         foreach (string a in Core.CommandLine.Args)
             if (a.StartsWith("--lobby-probe-name="))
@@ -278,6 +283,9 @@ public partial class OnlineLobbyScreen : Control
 
     // P6-Pruefschalter: --lobby-probe-plaetze=N, --lobby-probe-karte=<datei>, --lobby-probe-ki=N
     private int _probeKi = -1, _probeSchritt;
+    private int _probeStaerke = -1;
+    private string[]? _probeTeam;
+    private bool _probeTeamGesetzt;
     private string _probeKarte = "";
     private ulong _probeRaumT;
 
@@ -352,15 +360,30 @@ public partial class OnlineLobbyScreen : Control
         if (_probeSchritt == 1 && Time.GetTicksMsec() - _probeRaumT > 800)
         {
             int n = 0;
+            if (_probeStaerke >= 0 && !P7Alt) _kiStaerke.Select(_probeStaerke);
             for (int i = 0; i < _platzInfo.Count && n < Math.Max(0, _probeKi); i++)
                 if (_platzInfo[i].Art == 'F') { _members.Select(i); PlatzSetzen(true); n++; }
             _probeSchritt = 2; _probeRaumT = Time.GetTicksMsec();
+            return;
+        }
+        if (_probeSchritt == 2 && Time.GetTicksMsec() - _probeRaumT > 1500 && _probeTeam != null && !_probeTeamGesetzt && !P7Alt)
+        {
+            _probeTeamGesetzt = true;
+            for (int i = 0; i < _platzInfo.Count; i++)
+            {
+                int idx = _platzInfo[i].Art == 'I' ? 0 : _platzInfo[i].Art == 'K' ? 1 : -1;
+                if (idx < 0 || idx >= _probeTeam.Length || !int.TryParse(_probeTeam[idx], out int t)) continue;
+                _members.Select(i); PlatzKnoepfeZeigen(l);
+                _teamWahl.Select(Math.Clamp(t, 0, 4)); TeamGewaehlt();
+            }
+            _probeRaumT = Time.GetTicksMsec();
             return;
         }
         if (_probeSchritt == 2 && Time.GetTicksMsec() - _probeRaumT > 1500)
         {
             var s = l.Room?["settings"] as JsonObject;
             GD.Print($"lobby-probe: Raum jetzt {s?.ToJsonString()}, Plätze {string.Join(" ", _platzInfo.ConvertAll(p => $"{p.Slot + 1}{p.Art}"))}");
+            if (!P7Alt) for (int i = 0; i < _members.ItemCount; i++) GD.Print($"lobby-probe: Liste {_members.GetItemText(i)}");
             _probeSchritt = 3;
         }
     }
@@ -570,12 +593,20 @@ public partial class OnlineLobbyScreen : Control
             int keepSel = _members.GetSelectedItems() is { Length: > 0 } ms ? ms[0] : -1;
             _members.Clear();
             _platzInfo.Clear();
+            _platzTeam.Clear(); _platzKi.Clear();
             int humans = 0, kis = 0;
+            // ⭐ P7 Teil 2: Raumplatz n = Startplatz n der Karte (Network/NetzAufstellung.cs)
+            var plRaum = MapPreview.Startplaetze((string?)settings?["map"] ?? "");
+            string Zusatz(int sl, int team) => P7Alt ? "" :
+                (sl < plRaum.Count ? $"  ·  Startplatz {plRaum[sl] + 1}" : "  ·  ⚠ kein Startplatz auf dieser Karte") +
+                (team > 0 ? $"  ·  Team {team}" : "");
             if (room["slots"] is JsonArray slots)
                 foreach (var s in slots)
                 {
                     if (s is not JsonObject o) continue;
                     int sl = (int?)o["slot"] ?? 0;
+                    int team = (int?)o["team"] ?? 0;
+                    _platzTeam[sl] = team;
                     if (o["player"] != null)
                     {
                         humans++;
@@ -583,14 +614,15 @@ public partial class OnlineLobbyScreen : Control
                         bool ich = (string?)o["player"] == l.MyId;
                         int ping = (int?)o["ping_ms"] ?? -1;
                         _members.AddItem($"{(LobbyAlt ? "Platz " : "")}{sl + 1}.  {(string?)o["name"]}" + (host ? "  (Gastgeber)" : "") +
-                                         (ich ? "  — du" : "") + (ping >= 0 ? $"  ·  {ping} ms" : ""));
+                                         (ich ? "  — du" : "") + Zusatz(sl, team) + (ping >= 0 ? $"  ·  {ping} ms" : ""));
                         _platzInfo.Add((sl, ich ? 'I' : 'M', (string?)o["player"] ?? ""));
                     }
                     else if (!LobbyAlt && (string?)o["ai"] is { Length: > 0 } ai)
                     {
                         kis++;
-                        _members.AddItem($"{sl + 1}.  Computergegner ({ai})");
+                        _members.AddItem($"{sl + 1}.  Computergegner ({ai})" + Zusatz(sl, team));
                         _platzInfo.Add((sl, 'K', ""));
+                        _platzKi[sl] = ai;
                     }
                     else { _members.AddItem(LobbyAlt ? $"Platz {sl + 1}:  frei" : $"{sl + 1}.  frei"); _platzInfo.Add((sl, 'F', "")); }
                 }
@@ -607,6 +639,16 @@ public partial class OnlineLobbyScreen : Control
             else
             _start.Text = humans < 2 ? "START (wartet auf Mitspieler)"
                         : kis > 0 ? $"START ({humans} Menschen, {kis} Computergegner)" : $"START ({humans} Menschen)";
+            // P7: ohne Startplatz oder ohne Gegner kein Start — mit Grund auf dem Knopf
+            if (!P7Alt && (string?)room["state"] != "in_game" && humans >= 2)
+            {
+                var besetzt = _platzInfo.Where(p => p.Art != 'F').ToList();
+                int ohne = besetzt.Where(p => plRaum.Count > 0 && p.Slot >= plRaum.Count).Select(p => p.Slot).DefaultIfEmpty(-1).First();
+                bool feind = besetzt.Any(a => besetzt.Any(b => a.Slot != b.Slot &&
+                                 !(_platzTeam.GetValueOrDefault(a.Slot) > 0 && _platzTeam.GetValueOrDefault(a.Slot) == _platzTeam.GetValueOrDefault(b.Slot))));
+                if (ohne >= 0) { _start.Disabled = true; _start.Text = $"START — Platz {ohne + 1} hat auf dieser Karte keinen Startplatz"; }
+                else if (!feind) { _start.Disabled = true; _start.Text = "START — alle im selben Team, kein Gegner"; }
+            }
             if (!LobbyAlt) { RaumEinstellungenZeigen(l, room, settings, kis); PlatzKnoepfeZeigen(l); }
         }
 
@@ -683,6 +725,9 @@ public partial class OnlineLobbyScreen : Control
         foreach (string s in new[] { "Leicht", "Normal", "Schwer" }) _raumLevel.AddItem(s);
         _raumLevel.ItemSelected += _ => Geaendert();
         Feld("Schwierigkeit", _raumLevel);
+        // P7 Teil 2: die Staerke gilt je Platz (Feld »Stärke« unter der Liste) — die eine
+        // Schwierigkeit des Raums hat keine Wirkung mehr und verschwindet
+        if (!P7Alt) { _raumLevel.Visible = false; grid.GetChild<Control>(grid.GetChildCount() - 2).Visible = false; }
         _raumRes = new OptionButton();
         foreach (string n in Rendering.MapEntityLayer.ResourceLevelNames()) _raumRes.AddItem(n);
         _raumRes.ItemSelected += _ => Geaendert();
@@ -717,6 +762,30 @@ public partial class OnlineLobbyScreen : Control
         _hinaus.Pressed += Hinauswerfen;
         h.AddChild(_kiDazu); h.AddChild(_platzFrei); h.AddChild(_hinaus);
         into.AddChild(h);
+        // ⭐ P7 Teil 2: Staerke und Team des gewaehlten Platzes
+        if (!P7Alt)
+        {
+            var h2 = new HBoxContainer();
+            h2.AddThemeConstantOverride("separation", 6);
+            h2.AddChild(new Label { Text = "Stärke" });
+            _kiStaerke = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                TooltipText = "Wie stark der Computergegner auf dem gewählten Platz spielt (nur Gastgeber). " +
+                              "Gilt auch für »COMPUTERGEGNER HIER«." };
+            foreach (string s in new[] { "Computer leicht", "Computer normal", "Computer schwer" }) _kiStaerke.AddItem(s);
+            _kiStaerke.Select(1);
+            _kiStaerke.ItemSelected += _ => StaerkeGewaehlt();
+            h2.AddChild(_kiStaerke);
+            h2.AddChild(new Label { Text = "Team" });
+            _teamWahl = new OptionButton { CustomMinimumSize = new Vector2(120, 0),
+                TooltipText = "Gleiches Team = verbündet: greifen sich nicht an und sehen, was der andere sieht. " +
+                              "»–« = jeder gegen jeden. Dein eigenes Team stellst du selbst ein, das der " +
+                              "Computergegner der Gastgeber." };
+            _teamWahl.AddItem("–");
+            for (int t = 1; t <= 4; t++) _teamWahl.AddItem($"Team {t}");
+            _teamWahl.ItemSelected += _ => TeamGewaehlt();
+            h2.AddChild(_teamWahl);
+            into.AddChild(h2);
+        }
         _platzHinweis = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(0.6f, 0.64f, 0.7f) };
         _platzHinweis.AddThemeFontSizeOverride("font_size", 13);
         into.AddChild(_platzHinweis);
@@ -737,17 +806,59 @@ public partial class OnlineLobbyScreen : Control
         _kiDazu.Disabled = p is not { Art: 'F' };
         _platzFrei.Disabled = p is not { Art: 'K' };
         _hinaus.Disabled = p is not { Art: 'M' };
-        _platzHinweis.Text = host
-            ? "Eintrag anklicken: auf freie Plätze Computergegner setzen, Mitspieler hinauswerfen. Die Startplätze auf der Karte verteilt das Spiel beim Start."
-            : "Die Einstellungen und Plätze bestimmt der Gastgeber. Die Startplätze auf der Karte verteilt das Spiel beim Start.";
+        if (P7Alt)
+        {
+            _platzHinweis.Text = host
+                ? "Eintrag anklicken: auf freie Plätze Computergegner setzen, Mitspieler hinauswerfen. Die Startplätze auf der Karte verteilt das Spiel beim Start."
+                : "Die Einstellungen und Plätze bestimmt der Gastgeber. Die Startplätze auf der Karte verteilt das Spiel beim Start.";
+            return;
+        }
+        _plWaehlen = true;
+        if (p is { } q)
+        {
+            if (_platzKi.TryGetValue(q.Slot, out var ai)) _kiStaerke.Select(Math.Max(0, Array.IndexOf(Stufen, ai)));
+            _teamWahl.Select(Math.Clamp(_platzTeam.GetValueOrDefault(q.Slot), 0, 4));
+        }
+        _plWaehlen = false;
+        _kiStaerke.Disabled = !host || p is not { Art: 'K' or 'F' };
+        _teamWahl.Disabled = p is not { Art: 'I' } && !(host && p is { Art: 'K' });
+        _platzHinweis.Text = (host
+            ? "Eintrag anklicken: Computergegner setzen (mit Stärke), Teams festlegen, Mitspieler hinauswerfen. "
+            : "Dein Team stellst du selbst ein (deinen Eintrag anklicken); den Rest bestimmt der Gastgeber. ") +
+            "Der Platz in der Liste ist der Startplatz auf der Karte.";
     }
 
     private void PlatzSetzen(bool ki)
     {
         if (NetworkManager.Lobby is not { IAmHost: true } l || GewaehlterPlatz() is not { } p) return;
-        string staerke = Stufen[Math.Clamp(_raumLevel.Selected, 0, 2)];
-        l.SetAi(p.Slot, ki ? staerke : null, 0, p.Slot);
+        string staerke = Stufen[Math.Clamp(P7Alt ? _raumLevel.Selected : _kiStaerke.Selected, 0, 2)];
+        l.SetAi(p.Slot, ki ? staerke : null, P7Alt || !ki ? 0 : _platzTeam.GetValueOrDefault(p.Slot), p.Slot);
         GD.Print($"lobby: Platz {p.Slot + 1} {(ki ? "Computergegner (" + staerke + ")" : "frei")}");
+    }
+
+    // ---- ⭐ P7 Teil 2 (14.11.2026): Staerke und Team je Platz — Gegenschalter --gefecht-plaetze-alt
+    private static bool P7Alt => SkirmishSetup.PlaetzeAlt || LobbyAlt;
+    private OptionButton _kiStaerke = null!, _teamWahl = null!;
+    private readonly Dictionary<int, int> _platzTeam = new();
+    private readonly Dictionary<int, string> _platzKi = new();
+    private bool _plWaehlen;
+
+    private void StaerkeGewaehlt()
+    {
+        if (_plWaehlen || NetworkManager.Lobby is not { IAmHost: true } l || GewaehlterPlatz() is not { Art: 'K' } p) return;
+        string staerke = Stufen[Math.Clamp(_kiStaerke.Selected, 0, 2)];
+        l.SetAi(p.Slot, staerke, _platzTeam.GetValueOrDefault(p.Slot), p.Slot);
+        GD.Print($"lobby: Platz {p.Slot + 1} Computergegner {staerke}");
+    }
+
+    private void TeamGewaehlt()
+    {
+        if (_plWaehlen || NetworkManager.Lobby is not { } l || GewaehlterPlatz() is not { } p) return;
+        int team = _teamWahl.Selected;
+        if (p.Art == 'I') l.SetSlot(team, p.Slot);
+        else if (p.Art == 'K' && l.IAmHost && _platzKi.TryGetValue(p.Slot, out var ai)) l.SetAi(p.Slot, ai, team, p.Slot);
+        else return;
+        GD.Print($"lobby: Platz {p.Slot + 1} Team {team}");
     }
 
     private void Hinauswerfen()

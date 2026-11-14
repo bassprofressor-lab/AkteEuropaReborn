@@ -26,13 +26,23 @@ using Godot;
 /// </summary>
 public partial class MainMenu
 {
-    private static readonly string[] ArtNamen = { "leer", "Du", "Computer leicht", "Computer normal", "Computer schwer" };
+    private static readonly string[] ArtNamen = { "leer", "Du", "Computer leicht", "Computer normal", "Computer schwer", "Mitspieler" };
     /// <summary>Reihenfolge im Auswahlfeld (Art-Werte aus SkirmishSetup).</summary>
-    private static readonly int[] ArtReihe =
+    private static readonly int[] ArtReiheGefecht =
     {
         SkirmishSetup.ArtMensch, SkirmishSetup.ArtLeicht, SkirmishSetup.ArtNormal,
         SkirmishSetup.ArtSchwer, SkirmishSetup.ArtLeer,
     };
+    /// <summary>P7 Teil 2: der LAN-Gastgeber setzt zusaetzlich »Mitspieler« — dort starten die
+    /// Menschen, die sich verbinden (Network/NetzAufstellung.cs).</summary>
+    private static readonly int[] ArtReiheLan =
+    {
+        SkirmishSetup.ArtMensch, SkirmishSetup.ArtMitspieler, SkirmishSetup.ArtLeicht,
+        SkirmishSetup.ArtNormal, SkirmishSetup.ArtSchwer, SkirmishSetup.ArtLeer,
+    };
+    private int[] ArtReihe => LanGastgeber ? ArtReiheLan : ArtReiheGefecht;
+    private bool LanGastgeber => _netMode is { Selected: 1 };   // im Gefecht steht der Modus zwingend auf 0 (ApplyNetEntry)
+    private bool _zeilenLan;
 
     private PanelContainer? _plaetzeRahmen;
     private VBoxContainer? _plaetzeZeilen;
@@ -45,7 +55,7 @@ public partial class MainMenu
     /// <summary>--skirmish ohne --gefecht-plaetze: der alte Weg (aiCount/Stufe/Platz).</summary>
     private bool _plaetzeBefehlszeileAlt;
 
-    private bool PlaetzeAn => !SkirmishSetup.PlaetzeAlt && !_netEntry && !_plaetzeBefehlszeileAlt;
+    private bool PlaetzeAn => !SkirmishSetup.PlaetzeAlt && (!_netEntry || LanGastgeber) && !_plaetzeBefehlszeileAlt;
 
     /// <summary>Den Rahmen bauen (einmal, im Einstellungsblock unter »Schwierigkeit«).</summary>
     private void PlaetzeBauen(VBoxContainer right)
@@ -77,7 +87,38 @@ public partial class MainMenu
         foreach (Control? c in new Control?[] { _ai, _slot, _level })
             if (c?.GetParent() is Control zeile) zeile.Visible = !an;
         if (!an && _startButton != null && !_netWaiting) _startButton.Disabled = false;
-        if (an) PlaetzePruefen();
+        // im LAN ergibt sich die Zahl der Menschen aus der Liste
+        if (_netPlayers != null && !SkirmishSetup.PlaetzeAlt)
+        {
+            _netPlayers.Disabled = an && LanGastgeber;
+            _netPlayers.TooltipText = an && LanGastgeber ? "Ergibt sich aus der Platzliste: du + die Plätze »Mitspieler«." : "";
+        }
+        if (an && _zeilenLan != LanGastgeber) PlaetzeFuellen(_plaetzeKarte);
+        else if (an) PlaetzePruefen();
+    }
+
+    /// <summary>Zurueck und Start fest unten: mit der Platzliste (8 Zeilen) und dem Netzkasten wurde
+    /// der Schirm beim LAN-Gastgeber hoeher als 1080 px, und der Startknopf lag unter dem Rand (am
+    /// Bild gesehen). Der Rest rollt; die zwei Knoepfe stehen immer da, wie in klassischen Spielen.</summary>
+    private void KnopfLeisteUnten(ScrollContainer scroll, Control box, HBoxContainer zeile)
+    {
+        const int Hoehe = 66;
+        box.RemoveChild(zeile);
+        var leiste = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Stop };
+        var grund = new StyleBoxFlat { BgColor = new Color(0.04f, 0.05f, 0.07f, 0.97f), ContentMarginTop = 8, ContentMarginBottom = 12 };
+        grund.BorderColor = new Color(0.24f, 0.27f, 0.31f);
+        grund.BorderWidthTop = 1;
+        leiste.AddThemeStyleboxOverride("panel", grund);
+        leiste.SetAnchorsAndOffsetsPreset(LayoutPreset.BottomWide);
+        leiste.OffsetTop = -Hoehe;
+        var mitte = new CenterContainer();
+        leiste.AddChild(mitte);
+        mitte.AddChild(zeile);
+        box.Resized += () => zeile.CustomMinimumSize = new Vector2(box.Size.X, 0);
+        scroll.OffsetBottom = -Hoehe;
+        AddChild(leiste);
+        leiste.Visible = scroll.Visible;
+        scroll.VisibilityChanged += () => leiste.Visible = scroll.Visible;
     }
 
     /// <summary>Die alten drei Felder als Aufstellung: Du auf dem gewählten (sonst ersten) Platz,
@@ -106,6 +147,16 @@ public partial class MainMenu
         // noch nie etwas gesetzt: aus den alten Feldern (Gegnerzahl und Stufe von früher)
         if (pl.All(p => _art[p] < 0)) PlaetzeAusAltenFeldern(pl);
         foreach (int p in pl) if (_art[p] < 0) _art[p] = SkirmishSetup.ArtLeer;
+        _zeilenLan = LanGastgeber;
+        // »Mitspieler« bleibt gespeichert und erscheint im Gefecht als »leer« (Sicht) — sonst ginge die
+        // Wahl beim Umschalten verloren (und die Befehlszeile kommt, bevor der Netzmodus steht).
+        if (_zeilenLan && !pl.Any(p => _art[p] == SkirmishSetup.ArtMitspieler))
+        {
+            // LAN ohne Mitspieler-Zeile: so viele, wie »Menschen« sagt — zuerst freie, dann KI-Plaetze von hinten
+            int fehlt = Mathf.Max(1, (int)(_netPlayers?.Value ?? 2) - 1);
+            foreach (int p in pl.Where(p => _art[p] == SkirmishSetup.ArtLeer).Concat(pl.Where(p => SkirmishSetup.IstKi(_art[p])).Reverse()).ToList())
+                if (fehlt-- > 0) _art[p] = SkirmishSetup.ArtMitspieler;
+        }
         // genau ein »Du« auf dieser Karte
         var du = pl.Where(p => _art[p] == SkirmishSetup.ArtMensch).ToList();
         if (du.Count == 0) _art[pl[0]] = SkirmishSetup.ArtMensch;
@@ -121,7 +172,7 @@ public partial class MainMenu
             h.AddChild(new Label { Text = $"Platz {p + 1}", CustomMinimumSize = new Vector2(84, 0) });
             var art = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
             foreach (int a in ArtReihe) art.AddItem(ArtNamen[a]);
-            art.Select(System.Array.IndexOf(ArtReihe, _art[p]));
+            art.Select(System.Array.IndexOf(ArtReihe, Sicht(p)));
             art.TooltipText = "Wer auf diesem Startplatz spielt. »Du« ziehst du um, indem du eine andere " +
                               "Zeile auf »Du« stellst. »leer«: der Platz bleibt frei, seine Truppen verschwinden.";
             var team = new OptionButton { CustomMinimumSize = new Vector2(110, 0) };
@@ -142,11 +193,14 @@ public partial class MainMenu
         PlaetzePruefen();
     }
 
+    /// <summary>Was die Zeile zeigt: »Mitspieler« gibt es nur beim LAN-Gastgeber.</summary>
+    private int Sicht(int p) => !LanGastgeber && _art[p] == SkirmishSetup.ArtMitspieler ? SkirmishSetup.ArtLeer : _art[p];
+
     private void ArtGewaehlt(int platz, int zeile)
     {
         if (_plaetzeStill) return;
         int neu = ArtReihe[Mathf.Clamp(zeile, 0, ArtReihe.Length - 1)];
-        int alt = _art[platz];
+        int alt = Sicht(platz);
         if (alt == SkirmishSetup.ArtMensch && neu != SkirmishSetup.ArtMensch)
         {
             // ohne »Du« keine Partie: zurück, mit Hinweis
@@ -165,7 +219,7 @@ public partial class MainMenu
     {
         _plaetzeStill = true;
         foreach (var z in _zeilen)
-            if (z.Platz == platz) z.Art.Select(System.Array.IndexOf(ArtReihe, _art[platz]));
+            if (z.Platz == platz) z.Art.Select(System.Array.IndexOf(ArtReihe, Sicht(platz)));
         _plaetzeStill = false;
     }
 
@@ -173,9 +227,11 @@ public partial class MainMenu
     private void PlaetzePruefen()
     {
         if (_plaetzeInfo == null || !PlaetzeAn) return;
-        var dabei = _plaetzeKarte.Where(p => _art[p] is > SkirmishSetup.ArtLeer).ToList();
+        var dabei = _plaetzeKarte.Where(p => Sicht(p) is > SkirmishSetup.ArtLeer).ToList();
         int du = dabei.FirstOrDefault(p => _art[p] == SkirmishSetup.ArtMensch, -1);
         string Name(int p) => _art[p] == SkirmishSetup.ArtMensch ? "Du" : ArtNamen[_art[p]].Replace("Computer ", "");
+        if (LanGastgeber && _netPlayers != null)
+            _netPlayers.Value = 1 + _plaetzeKarte.Count(p => _art[p] == SkirmishSetup.ArtMitspieler);
         // Seiten: ein Team ist eine Seite, jeder ohne Team ist seine eigene
         var seiten = dabei.GroupBy(p => _team[p] > 0 ? _team[p] : 10 + p).ToList();
         bool feind = du >= 0 && dabei.Any(p => p != du && !(_team[du] > 0 && _team[p] == _team[du]));
@@ -202,7 +258,7 @@ public partial class MainMenu
         for (int p = 0; p < 8; p++)
         {
             bool aufKarte = _plaetzeKarte.Contains(p);
-            SkirmishSetup.PlatzArt[p] = aufKarte ? Mathf.Max(0, _art[p]) : SkirmishSetup.ArtLeer;
+            SkirmishSetup.PlatzArt[p] = aufKarte ? Mathf.Max(0, Sicht(p)) : SkirmishSetup.ArtLeer;
             SkirmishSetup.PlatzTeam[p] = aufKarte ? _team[p] : 0;
         }
         int du = _plaetzeKarte.FirstOrDefault(p => _art[p] == SkirmishSetup.ArtMensch, _plaetzeKarte[0]);
@@ -245,6 +301,7 @@ public partial class MainMenu
             _art[p] = at[0].Trim().ToLower() switch
             {
                 "du" or "mensch" => SkirmishSetup.ArtMensch,
+                "mitspieler" => SkirmishSetup.ArtMitspieler,
                 "leicht" or "easy" => SkirmishSetup.ArtLeicht,
                 "normal" => SkirmishSetup.ArtNormal,
                 "schwer" or "hard" => SkirmishSetup.ArtSchwer,

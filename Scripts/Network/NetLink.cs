@@ -494,6 +494,8 @@ public sealed class NetLink
             .U64(s.KartenSumme)
             .U8((byte)s.Slot.Length)
             .Also(w => { foreach (int sl in s.Slot) w.U8((byte)sl); })
+            .Bool(s.Aufstellung)              // Protokoll 5 (P7): Art + Team je Kartenplatz
+            .Also(w => { for (int p = 0; p < 8; p++) w.U8((byte)s.Art[p]).U8((byte)s.Team[p]); })
             .Done();
 
     // ================= Der Takt =============================================
@@ -720,6 +722,11 @@ public sealed class NetLink
         var slots = new int[n];
         for (int i = 0; i < n; i++) slots[i] = r.U8();
         s.Slot = slots;
+        if (proto >= 5)
+        {
+            s.Aufstellung = r.Bool();
+            for (int p = 0; p < 8; p++) { s.Art[p] = r.U8(); s.Team[p] = r.U8(); }
+        }
         if (r.Bad) { Dropped++; return; }
         if (ExpectMe >= 0 && s.Me != ExpectMe) return;   // online: das Sitzungspaket eines anderen
         if (proto != NetSession.Protokoll)

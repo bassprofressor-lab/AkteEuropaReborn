@@ -2,6 +2,7 @@ namespace AkteEuropaReborn.Network;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using AkteEuropaReborn.Simulation.Commands;
 
@@ -148,9 +149,10 @@ public sealed class NetSession
     /// mit verschiedener Nummer spielen NICHT zusammen — sie würden
     /// auseinanderlaufen, und ein Auseinanderlaufen aus diesem Grund ist der
     /// teuerste, weil er wie ein Rechenfehler aussieht.</summary>
-    public const int Protokoll = 4;   // 2: Paket W4, Vorlauf traegt die Tafel-Pruefzahl
+    public const int Protokoll = 5;   // 2: Paket W4, Vorlauf traegt die Tafel-Pruefzahl
                                       // 3: bug-733/734, Sitzung traegt Konto, B8 und Startbasis
                                       // 4: 0.7.0 Online 2b, Pakete 10 Ausschalten (Ctrl-K) und 11 Chat
+                                      // 5: P7 (14.11.2026), Aufstellung je Kartenplatz (Art + Team)
 
     public string Map = "";
 
@@ -183,6 +185,14 @@ public sealed class NetSession
     /// <summary>bug-733/734 — <c>--gefecht-startbasis-aus</c>, aus demselben Grund.</summary>
     public bool StartbasisAus;
 
+    /// <summary>⭐ P7 (14.11.2026, Protokoll 5): die Aufstellung je KARTENPLATZ 0..7 — wer dort
+    /// spielt (SkirmishSetup.ArtLeer/ArtMensch/ArtLeicht/ArtNormal/ArtSchwer) und in welchem Team
+    /// (0 = keins). Ohne sie (Aufstellung falsch) gilt der alte Weg: AiCount Gegner mit Level.
+    /// Die Teams bauen auf JEDER Maschine dieselbe Buendnistafel — sie muessen also mit.</summary>
+    public bool Aufstellung;
+    public int[] Art = new int[8];
+    public int[] Team = new int[8];
+
     public int MySlot => Me >= 0 && Me < Slot.Length ? Slot[Me] : 0;
 
     public override string ToString()
@@ -191,7 +201,8 @@ public sealed class NetSession
            $"Vorlauf {Lead} Takte, KI {AiCount}, Stufe {Level}, " +
            $"Techstandard {Techstandard}, Rohstoffe {Resources}, " +
            $"alle Einheiten {(AllUnits ? "ja" : "nein")}, Konto ${StartMoney}, " +
-           $"B8 {(NoStartBase ? "aus" : "an")}, Startbasis {(StartbasisAus ? "aus" : "an")}";
+           $"B8 {(NoStartBase ? "aus" : "an")}, Startbasis {(StartbasisAus ? "aus" : "an")}" +
+           (Aufstellung ? $", Aufstellung [{string.Join(",", System.Linq.Enumerable.Range(0, 8).Select(p => $"{Art[p]}:{Team[p]}"))}]" : "");
 }
 
 /// <summary>Bytes schreiben. Klein und ohne Abhängigkeiten — ein Paket ist bei

@@ -18118,6 +18118,11 @@ public partial class MapEntityLayer : Node2D
             if (AssetsOf(meS) == 0) return "MISSION GESCHEITERT";
             foreach (var a in _ai)
                 if (!Allied(meS, a.Player) && AssetsOf(a.Player) > 0) return "";
+            // ⭐ P7 (14.11.2026): im Netz zaehlen auch die feindlichen MENSCHEN — bisher war gewonnen,
+            // sobald die Computergegner fielen, auch wenn der gegnerische Mensch noch stand.
+            if (!UI.SkirmishSetup.PlaetzeAlt)
+                foreach (int h in Network.NetworkManager.HumanSlots())
+                    if (h != meS && !Allied(meS, h) && AssetsOf(h) > 0) return "";
             return "MISSION ERFUELLT";
         }
         if (_players.Count == 0)
@@ -18133,7 +18138,11 @@ public partial class MapEntityLayer : Node2D
             int meC = ViewPlayer;
             if (AssetsOf(meC) == 0) return "MISSION GESCHEITERT";
             for (int p = 0; p < 8; p++)
+            {
+                // P7: im Gefecht mit Teams (Netzpartie nur aus Menschen) ist ein Verbuendeter kein Gegner
+                if (UI.SkirmishSetup.PlatzListe && UI.SkirmishSetup.CampaignMission == 0 && Allied(meC, p)) continue;
                 if (p != meC && p != NeutralSlot && AssetsOf(p) > 0) return "";
+            }
             return "MISSION ERFUELLT";
         }
         int me = ViewPlayer;

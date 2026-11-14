@@ -1172,6 +1172,8 @@ public partial class MainMenu : Control
         // auf dem deckenden Grund waren die Knoepfe ohne eigenen Rahmen nicht mehr als Knoepfe zu sehen
         KnopfStil(back, new Color(0.14f, 0.15f, 0.18f), new Color(0.40f, 0.45f, 0.52f));
         KnopfStil(start, new Color(0.17f, 0.27f, 0.39f), new Color(0.55f, 0.72f, 0.90f));
+        // ⭐ P7: Zurueck und Start stehen fest unten, ausserhalb des Rollbereichs (MainMenuPlaetze.cs)
+        if (!SkirmishSetup.PlaetzeAlt) KnopfLeisteUnten(scroll, box, knopfZeile);
 
         _hint = new Label
         {

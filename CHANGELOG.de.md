@@ -284,6 +284,38 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Mehrspieler: Stärke und Team je Platz, feste Startplätze** (Fortsetzung des Gefechts-Wunsches,
+  jetzt im LAN und online; z. B. zwei Menschen gegen zwei Computergegner):
+  - **LAN-Gastgeber:** Der Mehrspielerschirm zeigt dieselbe Platzliste wie das Gefecht, mit der
+    zusätzlichen Wahl **»Mitspieler«**. Damit bestimmt der Gastgeber, wo die Mitspieler starten
+    (der erste, der sich verbindet, bekommt den ersten Mitspieler-Platz der Karte usw.), welche
+    Computergegner mit welcher Stärke dabei sind und wer mit wem im Team spielt. Die Zahl der
+    Menschen ergibt sich aus der Liste. Bisher verteilte das Spiel die Kartenplätze selbst, und
+    alle Computergegner hatten dieselbe Stärke.
+  - **Online-Raum:** **Der Platz in der Raumliste ist der Startplatz auf der Karte** — jede Zeile
+    nennt ihn (»Startplatz 3«), dazu das Team. Unter der Liste stehen zwei neue Wahlen für den
+    angeklickten Platz: **Stärke** (der Gastgeber für jeden Computergegner einzeln, gilt auch für
+    »COMPUTERGEGNER HIER«) und **Team** (das eigene stellt jeder selbst ein, das der Computergegner
+    der Gastgeber). Die eine »Schwierigkeit« des Raums ist damit weggefallen.
+  - Der Startknopf sagt, wenn etwas nicht geht: »Platz 5 hat auf dieser Karte keinen Startplatz«
+    (der Raum hat mehr Plätze als die Karte) oder »alle im selben Team, kein Gegner«.
+  - **Spielende im Netz behoben:** Mit Computergegnern zählte das Urteil nur die Computer — wer sie
+    besiegt hatte, »gewann«, auch wenn der gegnerische Mensch noch stand. Jetzt zählen feindliche
+    Menschen mit, verbündete nicht.
+  - **»Zurück zum Menü« und »Start« stehen fest unten** im Gefechts- und Mehrspielerschirm. Mit
+    der Platzliste und dem Netzkasten war der Schirm beim LAN-Gastgeber höher als 1080 Bildpunkte,
+    und der Startknopf lag unter dem Rand; jetzt rollt nur der Inhalt darüber.
+  - Dabei behoben: Brach der Gastgeber das Verteilen der Partie ab (zum Beispiel »mehr Menschen
+    als Startplätze«), gab es danach eine NullReferenceException im Netzteil.
+  - ⚠ **Netzprotokoll 5**: Die Aufstellung reist im Sitzungspaket mit, damit alle Rechner dieselben
+    Gegner, Stärken und Bündnisse rechnen. Fassungen mit Protokoll 4 spielen nicht mehr mit dieser
+    zusammen.
+  Gemessen: LAN-Paar auf NET07 mit »Du + Computer schwer (Team 1) gegen Mitspieler + Computer
+  leicht (Team 2)« — beide Rechner mit derselben Aufstellung und Bündnistafel, Prüfsummen
+  übereinstimmend (grün); der alte LAN-Weg ohne Aufstellung ebenso grün. Online über den
+  Lobby-Server: Raum auf NET02, Gastgeber und Computer schwer in Team 1, Mitspieler in Team 2 —
+  grün. Prüfschalter `--lobby-probe-staerke=`, `--lobby-probe-team=`, `--net-team=`;
+  Gegenschalter `--gefecht-plaetze-alt`.
 - **Gefecht: Stärke und Team je Computergegner** (Spielerwunsch: »ich kann also nicht beliebig
   sagen, ich nehme ein computergegner leicht, einen normal und einen schweren … und team bildung
   wäre gut«):
@@ -307,8 +339,7 @@ bisher nur dort beschrieben.*
     »GEFECHT STARTEN« ist gesperrt.
   - Die Aufstellung wird gemerkt und im **Spielstand** mitgespeichert. Bisher nahm ein geladenes
     Gefecht die Gegnerzahl und Stufe aus dem, was zuletzt im Schirm stand.
-  - Im Mehrspielerschirm und im Online-Raum bleibt es vorerst bei einer Schwierigkeit für alle;
-    Stärke und Teams im Netz kommen als nächster Schritt.
+  - Im Mehrspieler gilt dasselbe, siehe den Eintrag darüber.
   Gemessen auf NET07, 2 gegen 2 (Du + Computer schwer gegen Computer leicht + normal), 15
   Minuten Spielzeit: 116 Abschüsse, keiner davon unter Verbündeten. Das Ende nach Teams
   prüft `--gefecht-teams-probe`, Speichern und Laden mit Teams ist deckungsgleich

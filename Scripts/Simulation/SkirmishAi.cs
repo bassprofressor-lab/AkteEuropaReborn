@@ -802,7 +802,9 @@ public partial class MapEntityLayer : Node2D
         // »die ersten aiCount Plaetze«. Nur ohne Netz (dort bleibt es bei der Partie des Vermittlers).
         // Gegenschalter --gefecht-plaetze-alt. Simulation/GefechtTeams.cs.
         Dictionary<int, AiLevel>? stufen = null;
-        if (UI.SkirmishSetup.PlatzListe && humans.Length == 0 && !UI.SkirmishSetup.PlaetzeAlt)
+        // P7 Teil 2: auch im Netz, wenn die Sitzung eine Aufstellung traegt (ApplySession) — alle
+        // Maschinen haben dieselbe, die Menschenplaetze stehen darin als ArtMensch.
+        if (UI.SkirmishSetup.PlatzListe && !UI.SkirmishSetup.PlaetzeAlt)
             (foes, stufen) = GefechtAufstellung(live, human);
         if (humans.Length > 0)
             GD.Print($"Netzspiel: Menschenplätze {string.Join(",", humans)} — " +

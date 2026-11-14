@@ -263,6 +263,37 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Multiplayer: strength and team per position, fixed start positions** (continuing the skirmish
+  request, now in LAN and online; e.g. two humans against two computer opponents):
+  - **LAN host:** the multiplayer screen shows the same position list as skirmish, with the extra
+    choice **"Player"** (a human who joins). The host decides where the other players start (the
+    first to connect gets the map's first "Player" position, and so on), which computer opponents
+    take part at which strength, and who is on which team. The number of humans follows from the
+    list. So far the game assigned the map positions itself, and all computer opponents had the
+    same strength.
+  - **Online room:** **the position in the room list is the start position on the map** — every
+    row names it ("start position 3"), plus the team. Below the list there are two new choices for
+    the selected position: **Strength** (the host, per computer opponent, also used by "COMPUTER
+    OPPONENT HERE") and **Team** (everyone sets their own; the host sets the computer opponents').
+    The room's single "difficulty" is gone.
+  - The start button says when something is wrong: "position 5 has no start position on this map"
+    (the room has more positions than the map) or "everyone on the same team, no enemy".
+  - **Fixed match end in network play:** with computer opponents the verdict only counted the
+    computers — whoever had beaten them "won", even with the enemy human still standing. Enemy
+    humans now count, allied ones do not.
+  - **"Back to menu" and "Start" stay fixed at the bottom** of the skirmish and multiplayer screens.
+    With the position list and the network box the LAN host's screen was taller than 1080 pixels
+    and the start button lay below the edge; now only the content above scrolls.
+  - Also fixed: if the host aborted handing out the match (e.g. "more humans than start
+    positions"), a NullReferenceException followed in the network code.
+  - ⚠ **Network protocol 5**: the line-up travels in the session packet, so every machine computes
+    the same opponents, strengths and alliances. Versions with protocol 4 no longer play with this
+    one.
+  Measured: LAN pair on NET07 with "You + computer hard (team 1) vs player + computer easy
+  (team 2)" — both machines with the same line-up and alliance table, checksums agreeing (green);
+  the old LAN path without a line-up green as well. Online through the lobby server: room on
+  NET02, host and computer hard in team 1, the other player in team 2 — green. Test switches
+  `--lobby-probe-staerke=`, `--lobby-probe-team=`, `--net-team=`; opt-out `--gefecht-plaetze-alt`.
 - **Skirmish: strength and team per computer opponent** (player request: "I can't just say I take
   one easy, one normal and one hard computer opponent … and forming teams would be good"):
   - **One row per start position** instead of "opponents / start position / difficulty": the
@@ -283,8 +314,7 @@ your own copy of the 1997 game.
     is disabled.
   - The line-up is remembered and stored in the **saved game**. So far a loaded skirmish took the
     number and level of opponents from whatever the screen last showed.
-  - The multiplayer screen and the online room keep one difficulty for all for now; strength and
-    teams over the network are the next step.
+  - Multiplayer works the same way, see the entry above.
   Measured on NET07, 2 vs 2 (You + computer hard vs computer easy + normal), 15 minutes of
   game time: 116 kills, none between allies. The team ending is checked by `--gefecht-teams-probe`;
   saving and loading with teams is identical (`--spielstand-check`). Without teams the skirmish is

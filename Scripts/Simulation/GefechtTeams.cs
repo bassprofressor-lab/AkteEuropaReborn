@@ -39,7 +39,8 @@ public partial class MapEntityLayer
             stufen[p] = UI.SkirmishSetup.StufeVon(art);
         }
         GD.Print("Gefecht-Aufstellung: " + string.Join(", ", live.Select(p =>
-            $"Platz {p + 1} " + (p == human ? "Du" : stufen.TryGetValue(p, out var s) ? $"KI {s}" : "leer") +
+            $"Platz {p + 1} " + (p == human ? "Du" : stufen.TryGetValue(p, out var s) ? $"KI {s}"
+                : UI.SkirmishSetup.PlatzArt[p] == UI.SkirmishSetup.ArtMensch ? "Mensch" : "leer") +
             (UI.SkirmishSetup.PlatzTeam[p] > 0 ? $" Team {UI.SkirmishSetup.PlatzTeam[p]}" : ""))));
         return (foes, stufen);
     }
