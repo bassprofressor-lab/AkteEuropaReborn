@@ -157,6 +157,7 @@ public sealed partial class NetGameRunner : Node
     private ulong _stallSince, _stallSaid;
     private int _desyncTick = -1;
     private ulong _ownDesyncHash, _otherDesyncHash;
+    private string _grund = "";   // Fable B6: der Abbruchgrund fuer den Spieler
     private int _otherDesyncPlayer = -1;
     private Godot.FileAccess? _log;
 
@@ -414,6 +415,8 @@ public sealed partial class NetGameRunner : Node
             }
             if (!gleich)
             {
+                _grund = "Die Partie wurde abgebrochen: die Rechner haben verschiedene KI-Daten. Abhilfe: auf beiden " +
+                         "Rechnern im Hauptmenü den Inhalt der CD neu einlesen (DATA/AI*.CWI), dann noch einmal starten.";
                 Say($"NETZ-ABBRUCH: die KI-Sektortafeln der Teilnehmer sind verschieden ({string.Join(" ", z)}). " +
                     "Einer hat AIxx.CWI eingelesen, der andere rechnet sie — die Partie liefe auseinander. " +
                     "Abhilfe: auf beiden Rechnern den Inhalt neu einlesen (CD 1, DATA/AI*.CWI).");
@@ -1119,8 +1122,11 @@ public sealed partial class NetGameRunner : Node
         // ⭐ 11.11.2026: im gespielten Spiel nie das Programm beenden — zurück ins Menü.
         if (_limit == 0 && _ui != null)
         {
+            // Fable B6: den wahren Grund durchreichen, wo er bekannt ist
             Abschied(code == 0 ? "Partie beendet."
-                     : "Die Partie wurde abgebrochen: die Rechner sind auseinandergelaufen oder die Verbindung riss ab.");
+                     : _grund.Length > 0 ? _grund
+                     : _ownDesyncHash != 0 ? "Die Partie wurde abgebrochen: die Rechner sind auseinandergelaufen (verschiedene Spielstände)."
+                     : "Die Partie wurde abgebrochen: die Verbindung riss ab.");
             return;
         }
         _phase = Phase.Ende;

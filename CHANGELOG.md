@@ -263,6 +263,29 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Online lobby more robust** (Fable review P4: B6, B7, B8, B9, C8, C11):
+  - **An invalid name locked you out for good** (B9): the name was saved before it was checked,
+    the window reconnected with it on its own next time and hid the name field — the only way out
+    was editing `settings.cfg`. Now the name field already checks the server's rule (1 to 20
+    characters, letters incl. umlauts, digits, spaces and - _ ., shown as a hint), the name is
+    saved only once the server accepted it, and if the server refuses it the name field returns
+    with its reason. A previously saved invalid name now leads to the name field too.
+  - **Own password field** (B7): the room list's password field silently became the password of
+    your own room. "Eigenes Spiel eröffnen" now has its own field (empty = open).
+  - **Room list after a failed attempt** (B8): after "wrong password", "room full" or "no such
+    room" no more room updates arrived. Now the list stays live and the reason is shown on top.
+  - **Disconnect and server gone** (C8): on a disconnect or when the server does not answer for
+    10 s, the login returns with "VERBINDEN" and the reason instead of standing at "Verbinde mit
+    …". The message area has a frame and a heading.
+  - **Lobby and room chat told apart** (C11): lines carry "[Lobby]" or "[Raum]".
+  - **Version** (B6): the status line names the version ("0.7.0, network protocol 4 — only
+    players with the same version see each other") instead of the "online" count, which came from
+    the login and was never updated. On LAN a protocol error (different versions) shows in the
+    network box at once instead of "just try again" after 30 s, and when a network match stops
+    because of different AI data, the menu now says what to do (re-import the CD).
+  Checked against the lobby server with the probes `--lobby-probe-name=`, `--lobby-probe-roh`,
+  `--lobby-probe-pass=`, `--lobby-probe-beitritt=` and in a picture. Opt-outs `--lobby-alt`,
+  `--netz-grund-alt`.
 - **Skirmish and multiplayer: only the start places the map has** (Fable review B2, C3, B5): the
   menu offered "Spieler 1–8" and up to 7 opponents on every map. What the map lacked fell back
   silently: in skirmish, NET02 with "Spieler 8" started as player 1 with "5 instead of 7

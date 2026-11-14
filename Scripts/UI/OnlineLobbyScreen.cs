@@ -40,7 +40,11 @@ public partial class OnlineLobbyScreen : Control
 
     private Label _status = null!;
     private VBoxContainer _login = null!, _rooms = null!, _room = null!;
-    private LineEdit _name = null!, _roomName = null!, _password = null!, _chatIn = null!;
+    private LineEdit _name = null!, _roomName = null!, _password = null!, _newPassword = null!, _chatIn = null!;
+    private Label _nameHint = null!;
+    private string _pendingName = "";   // Fable B9: erst nach »welcome« speichern
+    private int _seenErrors;
+    private ulong _verbindeSeit;
     private ItemList _roomList = null!, _members = null!;
     private RichTextLabel _chat = null!;
     private Label _roomHead = null!;
@@ -79,6 +83,13 @@ public partial class OnlineLobbyScreen : Control
         _login = new VBoxContainer();
         _name = new LineEdit { Text = Settings.OnlineName, MaxLength = 20, PlaceholderText = "dein Name" };
         _login.AddChild(Row("Name", _name));
+        _nameHint = new Label
+        {
+            Text = NameRegel,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Modulate = new Color(0.6f, 0.64f, 0.7f),
+        };
+        _login.AddChild(_nameHint);
         var connect = new Button { Text = "VERBINDEN", CustomMinimumSize = new Vector2(0, 36) };
         connect.Pressed += Connect;
         _name.TextSubmitted += _ => Connect();
@@ -93,7 +104,7 @@ public partial class OnlineLobbyScreen : Control
         _roomList.ItemSelected += _ => UpdateJoinButton();
         _roomList.ItemActivated += _ => JoinSelected();
         _rooms.AddChild(_roomList);
-        _password = new LineEdit { PlaceholderText = "Passwort (nur falls der Raum eines hat)", Secret = true };
+        _password = new LineEdit { PlaceholderText = "Passwort zum Beitreten (nur für Räume mit 🔒)", Secret = true };
         _rooms.AddChild(_password);
         _join = new Button { Text = "BEITRETEN", Disabled = true };
         _join.Pressed += JoinSelected;
@@ -102,6 +113,10 @@ public partial class OnlineLobbyScreen : Control
         _rooms.AddChild(Sub("Eigenes Spiel eröffnen"));
         _roomName = new LineEdit { MaxLength = 40 };
         _rooms.AddChild(Row("Raumname", _roomName));
+        // ⭐ 14.11.2026 — Fable B7: eigenes Feld. Bisher wurde das Beitrittsfeld still zum Passwort
+        // des eigenen Raums, und wer absichtlich einen verschlossenen Raum wollte, fand kein Feld.
+        _newPassword = new LineEdit { PlaceholderText = "leer = offen für alle", Secret = true, MaxLength = 40 };
+        _rooms.AddChild(Row("Passwort", _newPassword));
         var create = new Button { Text = "RAUM ERÖFFNEN" };
         create.Pressed += CreateRoom;
         _rooms.AddChild(create);
@@ -149,6 +164,15 @@ public partial class OnlineLobbyScreen : Control
             BbcodeEnabled = false,
             FitContent = false,
         };
+        // Fable C8: der Chat hatte keinen Rahmen und sah aus wie leerer Hintergrund
+        var chatRahmen = new StyleBoxFlat
+        {
+            BgColor = new Color(0.08f, 0.09f, 0.12f), BorderColor = new Color(0.3f, 0.34f, 0.42f),
+            ContentMarginLeft = 8, ContentMarginRight = 8, ContentMarginTop = 6, ContentMarginBottom = 6,
+        };
+        chatRahmen.SetBorderWidthAll(1);
+        _chat.AddThemeStyleboxOverride("normal", chatRahmen);
+        box.AddChild(Sub("Nachrichten"));
         box.AddChild(_chat);
         _chatIn = new LineEdit { MaxLength = 200, PlaceholderText = "Nachricht … (Enter schickt)" };
         _chatIn.TextSubmitted += SendChat;
@@ -182,6 +206,20 @@ public partial class OnlineLobbyScreen : Control
             _name.Text = "ProbeHost";
             CallDeferred(nameof(Connect));
         }
+        // Pruefschalter Fable B9: --lobby-probe-name=<name> tippt den Namen und drueckt VERBINDEN;
+        // B7: --lobby-probe-pass=<pw> (Passwort des eigenen Raums); B8: --lobby-probe-beitritt=<raum>:<pw>
+        foreach (string a in Core.CommandLine.Args)
+        {
+            if (a.StartsWith("--lobby-probe-pass=")) _newPassword.Text = a["--lobby-probe-pass=".Length..];
+            if (a.StartsWith("--lobby-probe-beitritt=")) _probeBeitritt = a["--lobby-probe-beitritt=".Length..];
+        }
+        foreach (string a in Core.CommandLine.Args)
+            if (a.StartsWith("--lobby-probe-name="))
+            {
+                _name.Text = a["--lobby-probe-name=".Length..];
+                _login.Visible = true;
+                CallDeferred(nameof(Connect));
+            }
     }
 
     // ---- der Prüfschalter des Spielerwegs: --net-probe=online:<raum> [--lobby-shot=<präfix>] ----
@@ -223,6 +261,27 @@ public partial class OnlineLobbyScreen : Control
         }
     }
 
+    private string _probeBeitritt = "";
+    private int _probeRaeume = -1;
+    private bool _probeBeigetreten;
+
+    private void BeitrittProbe(LobbyClient l)
+    {
+        if (_probeBeitritt.Length == 0 || _probeBeigetreten || !l.Open || l.InRoom) return;
+        int c = _probeBeitritt.LastIndexOf(':');
+        string raum = c > 0 ? _probeBeitritt[..c] : _probeBeitritt, pw = c > 0 ? _probeBeitritt[(c + 1)..] : "";
+        for (int i = 0; i < _roomIds.Count; i++)
+            if (l.Rooms.TryGetValue(_roomIds[i], out var r) && (string?)r["name"] == raum)
+            {
+                _probeBeigetreten = true;
+                _roomList.Select(i);
+                _password.Text = pw;
+                GD.Print($"lobby-probe: trete »{raum}« bei (Passwort »{pw}«, verschlossen: {(bool?)r["password"] == true})");
+                JoinSelected();
+                return;
+            }
+    }
+
     private void Shot(string what)
     {
         if (_shotPrefix == null) return;
@@ -239,13 +298,26 @@ public partial class OnlineLobbyScreen : Control
     private void Connect()
     {
         string n = _name.Text.Trim();
-        if (n.Length == 0) { _status.Text = "Bitte einen Namen eingeben."; return; }
-        Settings.OnlineName = n;
+        if (n.Length == 0) { _login.Visible = true; _status.Text = "Bitte einen Namen eingeben."; return; }
+        // ⭐ 14.11.2026 — Fable B9: die Regel des Servers schon hier pruefen, und den Namen erst
+        // speichern, wenn der Server ihn angenommen hat. Bisher wurde ein ungueltiger Name
+        // gespeichert, das Fenster verband beim naechsten Oeffnen von selbst damit und blendete
+        // das Namensfeld aus — dauerhaft ausgesperrt, Ausweg nur settings.cfg von Hand.
+        if (!B9Alt && !NameGueltig(n) && Array.IndexOf(Core.CommandLine.Args, "--lobby-probe-roh") < 0)   // Pruefschalter: Serverweg
+        {
+            _login.Visible = true;
+            _status.Text = $"Der Name »{n}« geht nicht. {NameRegel}";
+            GD.Print("lobby: " + _status.Text);
+            return;
+        }
+        if (B9Alt) Settings.OnlineName = n; else _pendingName = n;
         if (!NetworkManager.OpenLobbyFromMenu(Settings.OnlineServer, n))
         {
+            _login.Visible = true;
             _status.Text = "Verbindung gescheitert: " + NetworkManager.Fault;
             return;
         }
+        _verbindeSeit = Time.GetTicksMsec();
         _login.Visible = false;
         if (_roomName.Text.Length == 0) _roomName.Text = $"Akte Europa {n}s Spiel";
     }
@@ -257,8 +329,8 @@ public partial class OnlineLobbyScreen : Control
         string name = _roomName.Text.Trim();
         if (name.Length == 0) name = $"Akte Europa {l.MyName}s Spiel";
         var settings = new JsonObject { ["map"] = CurrentMap?.Invoke() ?? SkirmishSetup.Map };
-        l.UnlistRooms();
-        l.CreateRoom(name, Math.Clamp(MaxHumans, 2, 8), _password.Text, settings);
+        if (B8Alt) l.UnlistRooms();   // Fable B8: erst abbestellen, wenn der Raum da ist (Refresh)
+        l.CreateRoom(name, Math.Clamp(MaxHumans, 2, 8), B7Alt ? _password.Text : _newPassword.Text, settings);
     }
 
     private void JoinSelected()
@@ -267,7 +339,7 @@ public partial class OnlineLobbyScreen : Control
         if (l is not { Open: true }) return;
         var sel = _roomList.GetSelectedItems();
         if (sel.Length == 0 || sel[0] >= _roomIds.Count) return;
-        l.UnlistRooms();
+        if (B8Alt) l.UnlistRooms();
         l.JoinRoom(_roomIds[sel[0]], _password.Text);
     }
 
@@ -306,9 +378,16 @@ public partial class OnlineLobbyScreen : Control
             QueueFree();
             return;
         }
-        if (l.Revision != _seenRev) { _seenRev = l.Revision; Refresh(); }
+        if (!B9Alt && LobbyFehler(l)) return;
+        if (l.Revision != _seenRev)
+        {
+            _seenRev = l.Revision; Refresh();
+            if (_probeBeitritt.Length > 0 && l.Rooms.Count != _probeRaeume)
+            { _probeRaeume = l.Rooms.Count; GD.Print($"lobby-probe: Räume in der Liste {_probeRaeume}"); }
+        }
         Status();
         ProbeTick(l);
+        BeitrittProbe(l);
         if (AutoConnect && _shotPrefix != null && l.Open && !_zurueckBild)
         {
             if (_zurueckT == 0) _zurueckT = Time.GetTicksMsec();
@@ -324,14 +403,19 @@ public partial class OnlineLobbyScreen : Control
     private void Status()
     {
         var l = NetworkManager.Lobby;
+        if (l != null && _fehlerBis > Time.GetTicksMsec()) { _status.Text = _fehlerZeile; return; }
         _status.Text = l == null
             ? (NetworkManager.Fault.Length > 0 ? NetworkManager.Fault : "Nicht verbunden. Server: " + Settings.OnlineServer)
             : l.State switch
             {
                 LobbyClient.Phase.Verbinde => $"Verbinde mit {l.Url} …",
                 LobbyClient.Phase.Getrennt => "Getrennt: " + l.Fault,
-                _ => $"Angemeldet als »{l.MyName}« · {l.Online} online · Server {l.ServerVersion}" +
-                     (l.Motd.Length > 0 ? $"\n{l.Motd}" : ""),
+                // Fable B6/B12: die Fassung nennen (nur gleiche sehen einander); die »online«-Zahl
+                // stammte aus der Anmeldung und wurde nie erneuert — weg damit.
+                _ => LobbyAlt
+                     ? $"Angemeldet als »{l.MyName}« · {l.Online} online · Server {l.ServerVersion}" + (l.Motd.Length > 0 ? $"\n{l.Motd}" : "")
+                     : $"Angemeldet als »{l.MyName}« · Fassung {NetworkManager.GameVersion().Replace("/n", ", Netzprotokoll ")} — " +
+                       "nur Spieler mit derselben Fassung sehen einander" + (l.Motd.Length > 0 ? $"\n{l.Motd}" : ""),
             };
     }
 
@@ -344,7 +428,7 @@ public partial class OnlineLobbyScreen : Control
         _room.Visible = open && l.InRoom;
 
         if (open && !l.InRoom && !_listing) { _listing = true; l.ListRooms(); }
-        if (l.InRoom) _listing = false;
+        if (l.InRoom && _listing) { if (!B8Alt) l.UnlistRooms(); _listing = false; }
 
         // Raumliste
         string keep = SelectedRoomId();
@@ -399,13 +483,91 @@ public partial class OnlineLobbyScreen : Control
         for (; _seenChat < l.Chat.Count; _seenChat++)
         {
             var c = l.Chat[_seenChat];
-            _chat.AddText($"{c.Name}: {c.Text}\n");      // Original: »<Name>: <Text>« (Handler 994 @0x4C4688)
+            // Original: »<Name>: <Text>« (Handler 994 @0x4C4688); Fable C11: Raum und Lobby kennzeichnen
+            _chat.AddText(LobbyAlt ? $"{c.Name}: {c.Text}\n" : $"{(c.InRoom ? "[Raum]" : "[Lobby]")} {c.Name}: {c.Text}\n");
         }
         for (; _seenEvents < l.Events.Count; _seenEvents++)
             _chat.AddText($"— {l.Events[_seenEvents]}\n");
     }
 
     private bool _listing;
+
+    // ---- ⭐ 14.11.2026 — Fable P4 (B7, B8, B9, C8, C11) — Gegenschalter --lobby-alt -----------
+    private static bool LobbyAlt => Array.IndexOf(Core.CommandLine.Args, "--lobby-alt") >= 0;
+    private static bool B7Alt => LobbyAlt;
+    private static bool B8Alt => LobbyAlt;
+    private static bool B9Alt => LobbyAlt;
+
+    /// <summary>Die Regel des Servers (gemessen, Fable B9): 1 bis 20 Zeichen, Buchstaben (auch
+    /// Umlaute), Ziffern, Leerzeichen und - _ .</summary>
+    public const string NameRegel = "Erlaubt: 1 bis 20 Zeichen — Buchstaben (auch Umlaute), Ziffern, Leerzeichen und - _ .";
+
+    public static bool NameGueltig(string n)
+    {
+        if (n.Length is < 1 or > 20 || n.Trim().Length == 0) return false;
+        foreach (char ch in n)
+            if (!(char.IsLetterOrDigit(ch) || ch is ' ' or '-' or '_' or '.')) return false;
+        return true;
+    }
+
+    /// <summary>Fehler des Servers und Trennung behandeln. true: das Fenster ist auf die Anmeldung
+    /// zurueckgefallen (Leitung zu, Namensfeld mit Grund).</summary>
+    private bool LobbyFehler(LobbyClient l)
+    {
+        if (l.State == LobbyClient.Phase.Angemeldet && _pendingName.Length > 0)
+        {
+            Settings.OnlineName = _pendingName;   // erst jetzt speichern
+            GD.Print($"lobby: Name »{_pendingName}« vom Server angenommen und gespeichert");
+            _pendingName = "";
+        }
+        if (l.ErrorCount != _seenErrors)
+        {
+            _seenErrors = l.ErrorCount;
+            switch (l.LastError)
+            {
+                case "name":
+                    ZurAnmeldung($"Der Server nimmt den Namen »{_name.Text.Trim()}« nicht an — {l.LastErrorText}");
+                    return true;
+                case "proto":
+                    ZurAnmeldung("Der Server spricht ein anderes Protokoll — bitte die neueste Fassung des Spiels holen. " + l.LastErrorText);
+                    return true;
+                default:
+                    // B8: nach einem gescheiterten Beitritt/Eroeffnen (bad_password, room_full,
+                    // no_such_room …) die Raumliste wieder abonnieren und den Grund oben zeigen
+                    if (!l.InRoom) { _listing = false; Refresh(); }
+                    _fehlerZeile = $"Der Server sagt: {l.LastErrorText} ({l.LastError})";
+                    _fehlerBis = Time.GetTicksMsec() + 8000;
+                    break;
+            }
+        }
+        if (l.State == LobbyClient.Phase.Getrennt)
+        {
+            ZurAnmeldung("Die Verbindung zum Server ist getrennt: " + l.Fault + " — »VERBINDEN« versucht es noch einmal.");
+            return true;
+        }
+        if (l.State == LobbyClient.Phase.Verbinde && _verbindeSeit != 0 && Time.GetTicksMsec() - _verbindeSeit > 10000)
+        {
+            ZurAnmeldung($"Der Server ({Settings.OnlineServer}) antwortet nicht. Internetverbindung prüfen, dann »VERBINDEN«.");
+            return true;
+        }
+        return false;
+    }
+
+    private string _fehlerZeile = "";
+    private ulong _fehlerBis;
+
+    private void ZurAnmeldung(string grund)
+    {
+        NetworkManager.Cancel(grund);
+        _pendingName = "";
+        _verbindeSeit = 0;
+        _listing = false;
+        _login.Visible = true;
+        _rooms.Visible = _room.Visible = false;
+        _status.Text = grund;
+        _chat.AddText($"— {grund}\n");
+        GD.Print("lobby: zurück zur Anmeldung — " + grund);
+    }
 
     private string SelectedRoomId()
     {

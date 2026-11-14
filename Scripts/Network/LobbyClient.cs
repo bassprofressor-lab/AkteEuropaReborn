@@ -60,6 +60,10 @@ public sealed class LobbyClient
     public readonly List<string> Events = new();
     /// <summary>Der letzte Fehlercode einer Antwort (<c>room_full</c>, <c>not_host</c> …).</summary>
     public string LastError { get; private set; } = "";
+    /// <summary>Der Text zum letzten Fehler des Servers (Fable B9: fuer das Namensfeld).</summary>
+    public string LastErrorText { get; private set; } = "";
+    /// <summary>Zaehlt jeden Fehler des Servers — das Fenster erkennt daran einen NEUEN (Fable B8).</summary>
+    public int ErrorCount { get; private set; }
 
     // ---- die Partie -----------------------------------------------------------
     public JsonObject? MatchStart { get; private set; }
@@ -300,6 +304,8 @@ public sealed class LobbyClient
                 break;
             case "error":
                 LastError = (string?)m["code"] ?? "";
+                LastErrorText = (string?)m["msg"] ?? "";
+                ErrorCount++;
                 Events.Add($"Server: {LastError} — {(string?)m["msg"] ?? ""}");
                 if (LastError == "proto") Fault = "Server spricht ein anderes Protokoll: " + ((string?)m["msg"] ?? "");
                 Revision++;

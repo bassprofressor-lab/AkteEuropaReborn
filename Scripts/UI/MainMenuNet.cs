@@ -613,6 +613,21 @@ public partial class MainMenu
                 BackToLobby("abgebrochen — die Leitung ist wieder zu.");
                 return;
             }
+            // ⭐ 14.11.2026 — Fable B6: ein Fehler der Leitung (»Protokoll x des Gastgebers passt nicht
+            // zu unserem y«) stand nur im Protokoll; der Spieler sah 30 s »warte auf die Partie« und dann
+            // »einfach noch einmal versuchen«. Jetzt sofort abbrechen und den wahren Grund zeigen.
+            if (NetworkManager.Link is { Fault.Length: > 0 } lf && !NetworkManager.SessionReady
+                && System.Array.IndexOf(Core.CommandLine.Args, "--netz-grund-alt") < 0)
+            {
+                if (NetworkManager.FromMenu)
+                {
+                    BackToLobby("Nicht verbunden: " + lf.Fault + ". Beide Rechner brauchen dieselbe Fassung des Spiels.");
+                    return;
+                }
+                GD.PrintErr("netz: " + lf.Fault);
+                GetTree().Quit(5);
+                return;
+            }
             if (NetworkManager.TimedOut)
             {
                 // ⚠ HIER STAND `GetTree().Quit(5)`, und das war der Absturz.

@@ -284,6 +284,31 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Online-Lobby robuster** (Fable-Prüfung P4: B6, B7, B8, B9, C8, C11):
+  - **Ungültiger Name sperrte dauerhaft aus** (B9): Der Name wurde vor der Prüfung gespeichert,
+    das Fenster verband beim nächsten Öffnen von selbst damit und blendete das Namensfeld aus —
+    der Ausweg war nur `settings.cfg` von Hand. Jetzt prüft schon das Namensfeld die Regel des
+    Servers (1 bis 20 Zeichen, Buchstaben auch mit Umlauten, Ziffern, Leerzeichen und - _ .,
+    steht als Hinweis darunter), gespeichert wird erst, wenn der Server den Namen angenommen hat,
+    und lehnt der Server ihn ab, kommt das Namensfeld mit seiner Begründung zurück. Auch ein
+    früher gespeicherter ungültiger Name führt jetzt zum Namensfeld statt ins Leere.
+  - **Eigenes Passwortfeld** (B7): Das Feld »Passwort« der Raumliste wurde still zum Passwort des
+    eigenen Raums. Jetzt hat »Eigenes Spiel eröffnen« ein eigenes Feld (leer = offen).
+  - **Raumliste nach einem Fehlversuch** (B8): Nach »Falsches Passwort«, »Raum voll« oder »Raum
+    gibt es nicht« kamen keine Raumänderungen mehr an. Jetzt bleibt die Liste lebendig, und der
+    Grund steht oben.
+  - **Trennung und Server weg** (C8): Bei Trennung oder wenn der Server 10 s nicht antwortet,
+    kommt die Anmeldung mit »VERBINDEN« und dem Grund zurück, statt bei »Verbinde mit …« zu
+    stehen. Der Nachrichtenbereich hat einen Rahmen und eine Überschrift.
+  - **Lobby und Raum im Chat getrennt** (C11): Zeilen tragen »[Lobby]« oder »[Raum]«.
+  - **Fassung** (B6): Die Statuszeile nennt die Fassung (»0.7.0, Netzprotokoll 4 — nur Spieler
+    mit derselben Fassung sehen einander«) statt der »online«-Zahl, die aus der Anmeldung stammte
+    und nie erneuert wurde. Im LAN erscheint ein Protokollfehler (verschiedene Fassungen) sofort
+    im Netzkasten statt nach 30 s »einfach noch einmal versuchen«, und bricht eine Netzpartie
+    wegen verschiedener KI-Daten ab, sagt das Menü jetzt, was zu tun ist (CD neu einlesen).
+  Geprüft gegen den Lobby-Server mit den Prüfschaltern `--lobby-probe-name=`, `--lobby-probe-roh`,
+  `--lobby-probe-pass=`, `--lobby-probe-beitritt=` und im Bild. Gegenschalter `--lobby-alt`,
+  `--netz-grund-alt`.
 - **Gefecht und Mehrspieler: nur die Startplätze, die die Karte hat** (Fable-Prüfung B2, C3, B5):
   Das Menü bot auf jeder Karte »Spieler 1–8« und bis zu 7 Gegner an. Was die Karte nicht hatte,
   fiel still um: im Gefecht startete man auf NET02 mit »Spieler 8« als Spieler 1 und bekam »5
