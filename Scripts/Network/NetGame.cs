@@ -344,7 +344,7 @@ public sealed partial class NetGameRunner : Node
         ulong tafeln = _sim.KiTafelPruefzahl() ^ (TafelpruefungFalsch ? 1UL : 0UL);
         Say($"#   KI-Sektortafeln: {_sim.KiTafelQuelle}, Pruefzahl {tafeln:X16}" +
             (TafelpruefungFalsch ? " (⚠ --net-tafelpruefung-falsch: absichtlich verfaelscht)" : ""));
-        byte[] hs = NetLink.HeadStartPacket(_s.Me, _sim.CommandTicks, tafeln);
+        byte[] hs = NetLink.HeadStartPacket(_s.Me, _sim.CommandTicks, tafeln, NetworkManager.MeinName());
         _link.SendAll(hs);
         _link.Take(hs);
         Say($"Vorlauf: meine Simulation ist bei Takt {_sim.CommandTicks}, warte auf die anderen");

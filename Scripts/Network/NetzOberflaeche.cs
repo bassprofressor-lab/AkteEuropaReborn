@@ -51,7 +51,16 @@ public partial class NetzOberflaeche : CanvasLayer
         _grid = new GridContainer { Columns = 3 };
         _grid.AddThemeConstantOverride("h_separation", 28);
         _grid.AddThemeConstantOverride("v_separation", 6);
-        _list.AddChild(_grid);
+        if (NetworkManager.TastenAlt) _list.AddChild(_grid);
+        else
+        {
+            // ⭐ Fable C12: die Tasten des Netzspiels standen nirgends ausser im Wartefenster
+            var spalte = new VBoxContainer();
+            spalte.AddThemeConstantOverride("separation", 10);
+            spalte.AddChild(_grid);
+            spalte.AddChild(new Label { Text = TastenText, Modulate = new Color(0.65f, 0.7f, 0.76f), AutowrapMode = TextServer.AutowrapMode.WordSmart });
+            _list.AddChild(spalte);
+        }
         _list.Visible = false;
         AddChild(_list);
 
@@ -63,6 +72,22 @@ public partial class NetzOberflaeche : CanvasLayer
             PlaceholderText = "Nachricht — Enter schickt, Esc verwirft",
             Visible = false,
         };
+        // Fable C12: zu Beginn der Partie einmal die Tasten zeigen (20 s), danach unter F4
+        if (!NetworkManager.TastenAlt)
+        {
+            _hilfe = new Label
+            {
+                Text = "Netzpartie — " + TastenText,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                AnchorLeft = 0, AnchorRight = 1, AnchorTop = 1, AnchorBottom = 1,
+                OffsetTop = -150, OffsetBottom = -120,
+                Modulate = new Color(0.9f, 0.92f, 0.95f),
+            };
+            _hilfe.AddThemeColorOverride("font_outline_color", Colors.Black);
+            _hilfe.AddThemeConstantOverride("outline_size", 6);
+            AddChild(_hilfe);
+            GetTree().CreateTimer(20.0, processAlways: true).Timeout += () => { if (IsInstanceValid(_hilfe)) _hilfe.Visible = false; };
+        }
         _chat.TextSubmitted += t =>
         {
             NetworkManager.SendChat(t);
@@ -99,6 +124,10 @@ public partial class NetzOberflaeche : CanvasLayer
     }
 
     public bool ChatOffen => _chat.Visible;
+
+    private Label? _hilfe;
+    public const string TastenText =
+        "Enter: Nachricht an alle  ·  F4 halten: Spieler  ·  Esc: Pause für ALLE  ·  Spielmenü: Aufgeben";
 
     private void CloseChat()
     {

@@ -263,6 +263,20 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **In network play: keys, who paused, names in LAN** (Fable review C12, part of D10):
+  - **Key help**: at the start of every network match the bottom of the screen shows "Enter: message
+    to all · hold F4: players · Esc: pause for EVERYONE · game menu: surrender" for 20 seconds, and
+    the same line is shown below the player list (F4). So far the keys appeared nowhere except in
+    the waiting window.
+  - **Who paused**: Esc pauses the match for everyone in network play, as in the original. Now the
+    message line tells everyone "Anna paused the match for everyone — "Continue" or Esc resumes",
+    and afterwards "Bert continues". Without that, someone else's pause looked like a hang. The
+    original names nobody — this is our addition.
+  - **Names in LAN**: the network box has a **"Your name"** field (the same name as in the online
+    lobby). It travels to all players at the start of the match; the player list, messages and the
+    waiting window show it instead of "Player 2".
+  Checked: LAN pair "Anna" vs "Bert" (both names on both machines, green), screenshot of the key help
+  in game, pause test bench with the message on both sides. Opt-out `--netz-tasten-alt`.
 - **Online and LAN: different versions and game data are detected beforehand** (Fable review D8 and an
   open point from P4):
   - **Game data in the room** (D8): the game now sends a checksum of its imported game data to the

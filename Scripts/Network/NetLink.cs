@@ -506,8 +506,12 @@ public sealed class NetLink
     /// zwei Wege baut — einen für sich, einen für die anderen — hat zwei Orte,
     /// an denen die Form auseinanderlaufen kann, und der Prüfstand sieht davon
     /// nichts.</summary>
-    public static byte[] HeadStartPacket(int player, int ticks, ulong tafeln = 0)
-        => new NetWriter(NetPacket.Anfang).U8((byte)player).I32(ticks).U64(tafeln).Done();
+    public static byte[] HeadStartPacket(int player, int ticks, ulong tafeln = 0, string name = "")
+        => new NetWriter(NetPacket.Anfang).U8((byte)player).I32(ticks).U64(tafeln).Text(name).Done();
+
+    /// <summary>⭐ 14.11.2026 — Fable C12/D10: die Spielernamen (aus dem Vorlaufpaket, Protokoll 5).
+    /// Im LAN hiessen alle »Spieler N«; online kommen sie weiter aus dem Raum.</summary>
+    public readonly Dictionary<int, string> Namen = new();
 
     /// <summary>Paket W4 (bug-641): die Prüfzahl der KI-Sektortafeln je Spieler, aus dem
     /// Vorlaufpaket (MapEntityLayer.KiTafelPruefzahl).</summary>
@@ -626,7 +630,8 @@ public sealed class NetLink
             {
                 int p = r.U8(), n = r.I32();
                 ulong tz = r.U64();
-                if (!r.Bad) { _headStart[p] = n; TafelPruefzahl[p] = tz; }
+                string name = !r.Bad && r.Left > 0 ? r.Text() : "";
+                if (!r.Bad) { _headStart[p] = n; TafelPruefzahl[p] = tz; if (name.Length > 0 && !Namen.ContainsKey(p)) { Namen[p] = name; GD.Print($"netz: Spieler {p} heisst »{name}«"); } }
                 break;
             }
             case NetPacket.Bereit:

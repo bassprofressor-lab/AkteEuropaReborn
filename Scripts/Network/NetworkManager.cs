@@ -66,7 +66,24 @@ public partial class NetworkManager : Node
     public static string PlayerName(int p)
     {
         if (Lobby != null && p >= 0 && p < RoomSlotsAtStart.Count) return Lobby.SlotInfo(RoomSlotsAtStart[p]).Name;
+        // Fable C12/D10: im LAN der Name aus dem Vorlaufpaket (Gegenschalter --netz-tasten-alt)
+        if (!TastenAlt && Link != null && Link.Namen.TryGetValue(p, out var n) && n.Length > 0)
+            return p == 0 ? $"{n} (Gastgeber)" : n;
         return p == 0 ? "Spieler 1 (Gastgeber)" : $"Spieler {p + 1}";
+    }
+
+    /// <summary>Gegenschalter fuer Fable C12/D10 (Namen im LAN, Tastenhilfe, Pausenmeldung).</summary>
+    public static bool TastenAlt => System.Array.IndexOf(Core.CommandLine.Args, "--netz-tasten-alt") >= 0;
+
+    /// <summary>Mein Name fuer die Mitspieler: --net-name=, sonst der Name aus den Einstellungen
+    /// (derselbe wie in der Online-Lobby), sonst leer (dann »Spieler N«).</summary>
+    public static string MeinName()
+    {
+        if (TastenAlt) return "";
+        foreach (string a in Core.CommandLine.Args)
+            if (a.StartsWith("--net-name=")) return a["--net-name=".Length..];
+        string n = UI.Settings.OnlineName.Trim();
+        return n.Length > 20 ? n[..20] : n;
     }
 
     /// <summary>Laufzeit zu Spieler p in ms; −1 = unbekannt.</summary>

@@ -160,8 +160,12 @@ public partial class MainMenu
         }
     }
 
+    private LineEdit? _netName;
+    private Control? _netNameRow;
+
     private void ApplyNetSearchVisible()
     {
+        if (_netNameRow != null) _netNameRow.Visible = _netMode is { Selected: 1 or 2 };   // online fragt die Lobby
         // Online gibt es keine Adresse — der Server steht fest (Settings.OnlineServer).
         if (_netAddrRow != null) _netAddrRow.Visible = _netMode is not { Selected: 3 };
         bool join = _netMode is { Selected: 2 };
@@ -232,6 +236,18 @@ public partial class MainMenu
         };
         _netAddrRow = Row("Adresse:Port", _netAddr);
         _netDetails.AddChild(_netAddrRow);
+        // ⭐ Fable C12/D10: der eigene Name auch im LAN (derselbe wie in der Online-Lobby)
+        if (!NetworkManager.TastenAlt)
+        {
+            _netName = new LineEdit
+            {
+                Text = Settings.OnlineName, MaxLength = 20, PlaceholderText = "so sehen dich die anderen",
+                TooltipText = "Dein Name in der Partie (Spielerliste, Nachrichten). Derselbe wie in der Online-Lobby.",
+            };
+            _netName.TextChanged += t => { if (!Core.Pruefschutz.Aktiv) Settings.OnlineName = t.Trim(); };
+            _netNameRow = Row("Dein Name", _netName);
+            _netDetails.AddChild(_netNameRow);
+        }
         _netPlayers = new ZahlWahl { MinValue = 2, MaxValue = 8, Value = 2, Beschriftung = v => $"{v} Menschen" };   // Fable C2
         _netDetails.AddChild(Row("Menschen", _netPlayers));
         _netStatus = new Label

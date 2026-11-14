@@ -21,6 +21,19 @@ public partial class MapViewer
     /// (<see cref="MapEntityLayer.PostPause"/>).</summary>
     private void NetzPauseZeigen(bool an, int wer)
     {
+        // ⭐ Fable C12: im Netz haelt Esc die Partie fuer ALLE an — ohne Namen sah das bei den anderen
+        // wie ein Haenger aus. Die Meldungszeile sagt, wer angehalten hat und wer weitermacht.
+        // (Das Original nennt niemanden — UNSERE ZUTAT, Gegenschalter --netz-tasten-alt.)
+        if (!Network.NetworkManager.TastenAlt && Network.NetworkManager.Link?.Session is { Players: > 1 })
+        {
+            int nr = System.Array.IndexOf(Network.NetworkManager.HumanSlots(), wer);
+            string name = nr >= 0 ? Network.NetworkManager.PlayerName(nr) : $"Spieler {wer + 1}";
+            if (nr == Network.NetworkManager.Link.Session.Me) name = "Du";
+            string zeile = an ? $"{name} {(name == "Du" ? "hast" : "hat")} die Partie für alle angehalten — »Weiter« oder Esc geht weiter."
+                              : $"{name} {(name == "Du" ? "machst" : "macht")} weiter.";
+            _entities.OnMeldung?.Invoke(zeile, "", 3, false);
+            GD.Print("netzpause-meldung: " + zeile);
+        }
         if (!UI.PausenFenster.Alt && UI.PausenFenster.Usable)
         {
             PausenFensterZeigen(an, wer);

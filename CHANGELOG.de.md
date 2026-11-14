@@ -284,6 +284,20 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Im Netzspiel: Tasten, wer angehalten hat, Namen im LAN** (Fable-Prüfung C12, D10-Teil):
+  - **Tastenhilfe**: Zu Beginn jeder Netzpartie steht 20 Sekunden lang unten »Enter: Nachricht an
+    alle · F4 halten: Spieler · Esc: Pause für ALLE · Spielmenü: Aufgeben«, und dieselbe Zeile steht
+    unter der Spielerliste (F4). Bisher standen die Tasten nirgends außer im Wartefenster.
+  - **Wer hat angehalten**: Esc hält im Netz die Partie für alle an, wie im Original. Jetzt sagt die
+    Meldungszeile bei allen »Anna hat die Partie für alle angehalten — »Weiter« oder Esc geht
+    weiter« und danach »Bert macht weiter«. Ohne das sah eine fremde Pause wie ein Hänger aus. Das
+    Original nennt niemanden — eine Zutat von uns.
+  - **Namen im LAN**: Im Netzkasten gibt es ein Feld **»Dein Name«** (derselbe Name wie in der
+    Online-Lobby). Er reist zu Beginn der Partie zu allen Mitspielern; Spielerliste, Nachrichten und
+    Wartefenster nennen ihn statt »Spieler 2«.
+  Geprüft: LAN-Paar »Anna« gegen »Bert« (beide Namen auf beiden Rechnern, grün), Bild der
+  Tastenhilfe im Spiel, Pausen-Prüfstand mit der Meldung auf beiden Seiten. Gegenschalter
+  `--netz-tasten-alt`.
 - **Online und LAN: verschiedene Fassungen und Spieldaten werden vorher erkannt** (Fable-Prüfung D8 und
   ein offener Punkt aus P4):
   - **Spieldaten im Raum** (D8): Das Spiel schickt jetzt eine Prüfsumme seiner eingelesenen
