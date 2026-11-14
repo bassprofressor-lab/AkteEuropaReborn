@@ -1008,6 +1008,39 @@ public sealed partial class NetGameRunner : Node
         _link.SendAusschalten(miss[0], _s.Me);
     }
 
+    /// <summary>
+    /// ⭐ 14.11.2026 — Fable B10: im LAN laeuft alles ueber den Rechner des Gastgebers (nur er reicht
+    /// weiter, NetLink). Ging er bei drei oder mehr Spielern, spielten die anderen noch ein paar
+    /// Takte und warteten dann FUER IMMER aufeinander (»Takt 347 ist nicht frei — es fehlt
+    /// Spieler 2«), und Ctrl-K darf im LAN nur der Gastgeber. Jetzt endet die Partie fuer sie mit
+    /// einer klaren Meldung, sobald der Gastgeber draussen ist und noch ein anderer Mensch mitspielt,
+    /// oder sobald seine Leitung reisst, OHNE dass er sich vorher ausgeschaltet hat (Absturz, Kabel —
+    /// dann kommt kein Ausschalten, und selbst zu zweit stuende man). Zu zweit nach einem SAUBEREN Abgang spielt der Verbliebene
+    /// weiter gegen die KI, wie bisher. Online ordnet der Server, dort gilt das nicht.
+    /// UNSERE SETZUNG (Gastgeberwechsel im LAN gibt es nicht). Gegenschalter --netz-gastgeber-alt.
+    /// </summary>
+    private bool GastgeberWeg()
+    {
+        if (_link.IsHost || _link.IsRelay || _s.Me == 0 || _phase == Phase.Ende) return false;
+        if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-gastgeber-alt") >= 0) return false;
+        bool gerissen = _link.Status == MultiplayerPeer.ConnectionStatus.Disconnected;
+        bool draussen = _link.Cut.ContainsKey(0);
+        if (!gerissen && !draussen) return false;
+        int andere = 0;
+        for (int p = 1; p < _s.Players; p++) if (p != _s.Me && !_link.Cut.ContainsKey(p)) andere++;
+        // Nach einem SAUBEREN Abgang reisst die Leitung immer mit (der Prozess schliesst sie) — dann
+        // entscheidet nur, ob noch jemand mitspielt. Gerissen OHNE Ausschalten: Absturz, dann Ende.
+        if (draussen && andere == 0) return false;
+        if (draussen) gerissen = false;
+        string m = gerissen
+            ? "Die Verbindung zum Gastgeber ist abgerissen. Im LAN läuft alles über seinen Rechner — die Partie ist beendet."
+            : "Der Gastgeber hat die Partie verlassen. Im LAN läuft alles über seinen Rechner — die Partie ist für alle beendet.";
+        Say("netz: Gastgeber weg (" + (gerissen ? "Leitung gerissen" : "ausgeschaltet") + $", {andere} andere Menschen) — {m}");
+        if (_limit > 0) { _phase = Phase.Ende; Say("NETZ-ERGEBNIS: Gastgeber weg."); Quit(3); return true; }
+        Abschied(m);
+        return true;
+    }
+
     /// <summary>Was zwischen den Takten aus dem Netz kommt: Ausschaltungen, Chat, Abgänge.</summary>
     private void NetzEreignisse()
     {
@@ -1019,6 +1052,7 @@ public sealed partial class NetGameRunner : Node
             Meldung($"{wer} hat das Spiel verlassen");
         }
         _link.NewCuts.Clear();
+        if (GastgeberWeg()) return;
 
         foreach (var (p, text) in _link.ChatIn)
             if (p != _s.Me) Meldung($"{NetworkManager.PlayerName(p)}: {text}");   // 994: bei allen ANDEREN

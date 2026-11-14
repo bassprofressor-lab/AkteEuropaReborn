@@ -284,6 +284,16 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Mehrspieler im LAN: geht der Gastgeber, gibt es eine klare Meldung** (Fable-Prüfung B10): Im
+  LAN läuft alles über den Rechner des Gastgebers. Verließ er eine Partie zu dritt oder mehr,
+  spielten die anderen noch ein paar Sekunden weiter und warteten dann für immer aufeinander
+  (»Takt 347 ist nicht frei — es fehlt Spieler 2«), und niemand durfte jemanden ausschalten.
+  Jetzt endet die Partie für sie sofort mit »Der Gastgeber hat die Partie verlassen«. Stürzt der
+  Gastgeber ab oder reißt seine Leitung, ohne dass er sich abgemeldet hat, endet die Partie nach
+  der Netz-Zeitgrenze (gemessen ~45 s) mit »Die Verbindung zum Gastgeber ist abgerissen« — auch
+  zu zweit, denn dort stand man bisher ebenfalls für immer. Geht der Gastgeber zu zweit sauber,
+  spielt der Verbliebene wie bisher gegen die KI weiter. Gemessen mit LAN-Läufen zu zweit und zu
+  dritt; Gegenschalter `--netz-gastgeber-alt`.
 - **Mehrspieler: nach dem Ende einer Partie zurück in die Lobby** (Fable-Prüfung B4): Nach Sieg
   oder Niederlage führte »Weiter« im Abschlussfenster zwar ins Menü, aber die Netzpartie war dort
   noch nicht abgemeldet — der Netzkasten war gesperrt (»von der Befehlszeile geöffnet«), die

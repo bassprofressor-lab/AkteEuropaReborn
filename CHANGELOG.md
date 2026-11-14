@@ -263,6 +263,16 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **LAN multiplayer: a clear message when the host leaves** (Fable review B10): on LAN everything
+  runs through the host's computer. When the host left a match of three or more, the others
+  played on for a few seconds and then waited for each other forever ("Takt 347 ist nicht frei —
+  es fehlt Spieler 2"), and nobody was allowed to switch anybody off. Now the match ends for them
+  at once with "Der Gastgeber hat die Partie verlassen". If the host crashes or loses the
+  connection without signing off, the match ends after the network timeout (measured ~45 s) with
+  "Die Verbindung zum Gastgeber ist abgerissen" — also with two players, who used to stand there
+  forever as well. If the host leaves a two-player match cleanly, the remaining player plays on
+  against the AI as before. Measured with LAN runs of two and three; opt-out
+  `--netz-gastgeber-alt`.
 - **Multiplayer: back to the lobby after a match** (Fable review B4): after victory or defeat
   "Weiter" in the end window did lead to the menu, but the network match was not yet signed off
   there — the network box was locked ("opened from the command line"), the online lobby did not
