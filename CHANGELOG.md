@@ -263,6 +263,19 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Online: back into the same room after a match, surrender** (Fable review C10, D5):
+  - So far the game signed off completely after every online match; you stood in the room list and
+    the group had to find each other again. Now you stay signed in and land back in the room — with
+    the same players, settings and computer opponents. If the match is still running for others,
+    the room shows "PARTIE LÄUFT NOCH"; once it is over for everyone, the host can start the
+    rematch. Measured: two matches in a row in the same room, both players back in the room each time.
+  - "Spiel verlassen" online now means **surrender**: the server is told (the others see
+    "surrendered" instead of a broken connection), and you return to the room.
+  - Fixed along the way: if the menu demo kept running while an online connection already stood
+    (rematch, or waiting long in the lobby), the map loader took the next demo map for a network
+    match — the joining player's program ended ("NETZ-FEHLER: es steht keine Partie"), the host got
+    an exception. The menu demo is never a network match now.
+  Probe `--lobby-probe-nochmal`; opt-out `--raum-alt`.
 - **Online lobby: the room like in classic real-time strategy games** (Fable review P6: C9/D3, D2,
   D4, B12):
   - **Settings in the room** (C9/D3): the room shows map (with picture, start places and size),

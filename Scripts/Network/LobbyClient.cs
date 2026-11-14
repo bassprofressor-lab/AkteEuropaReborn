@@ -153,6 +153,15 @@ public sealed class LobbyClient
     public void Start() => Send(new JsonObject { ["t"] = "start", ["rid"] = Rid() });
     public void Loaded() => Send(new JsonObject { ["t"] = "loaded" });
     public void Surrender() => Send(new JsonObject { ["t"] = "surrender" });
+
+    /// <summary>Fable C10: die Partie ist fuer uns vorbei, der Raum bleibt — Partiezustand leeren,
+    /// damit das Lobbyfenster nicht sofort wieder »Partie beginnt« sieht.</summary>
+    public void PartieZuruecksetzen()
+    {
+        MatchStart = null; MatchId = ""; Go = false; YouSlot = -1;
+        Frames.Clear(); Left.Clear(); LastSeq = 0;
+        Revision++;
+    }
     public void MatchEnd(int winnerTeam, int durationS)
         => Send(new JsonObject
         {

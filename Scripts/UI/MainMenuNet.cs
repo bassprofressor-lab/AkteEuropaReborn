@@ -126,7 +126,7 @@ public partial class MainMenu
     {
         if (_netMode == null) return;
 
-        if (NetworkManager.Active)
+        if (NetworkManager.Active && !(NetworkManager.FromMenu && NetworkManager.Link == null))
         {
             if (_netFrame != null) _netFrame.Visible = true;
             return;
@@ -278,7 +278,8 @@ public partial class MainMenu
 
         // Hat die Befehlszeile die Steckdose schon geöffnet, soll der Schirm das
         // ZEIGEN und nicht das Gegenteil behaupten (Regel 11).
-        if (NetworkManager.Active)
+        // Fable C10: ein aus dem MENUE gehaltener Lobby-Draht (zurueck im Raum) ist das nicht.
+        if (NetworkManager.Active && !(NetworkManager.FromMenu && NetworkManager.Link == null))
         {
             _netMode.Selected = (NetworkManager.Link?.IsHost ?? NetworkManager.WantHost) ? 1 : 2;   // bug-760: online gibt es vor match_start noch keine Leitung
             _netDetails.Visible = true;
@@ -484,7 +485,9 @@ public partial class MainMenu
     /// Namen), im LAN in den Netzkasten. Die Meldung des Endes steht in der Statuszeile.</summary>
     private async void NachDerPartie()
     {
-        if (NetworkManager.Active) return;
+        // Fable C10: nach einer Online-Partie ist der Lobby-Draht noch offen (zurueck in den Raum) —
+        // nur eine offene SPIELLEITUNG heisst »noch im Spiel«.
+        if (NetworkManager.Link != null || (NetworkManager.Lobby != null && !NetworkManager.ZurueckZurLobby)) return;
         string msg = NetworkManager.Fault;
         bool online = NetworkManager.ZurueckZurLobby;
         if (!online && msg.Length == 0) return;
@@ -516,8 +519,8 @@ public partial class MainMenu
         foreach (var k in GetTree().Root.GetChildren()) if (k is Rendering.NetGameRunner) runner = true;
         GD.Print($"netz-ende-probe: Active={NetworkManager.Active} Taktgeber={(runner ? "HAENGT NOCH" : "weg")} " +
                  $"Netzkasten={(_netMode?.Disabled == true ? "GESPERRT" : "frei")} Lobby={(lobby ? "offen" : "zu")} " +
-                 $"ZurueckZurLobby={NetworkManager.ZurueckZurLobby} Status=»{_netStatus?.Text}«");
-        GetTree().Quit(0);
+                 $"ZurueckZurLobby={NetworkManager.ZurueckZurLobby} Status=»{_netStatus?.Text}« Lobbydraht={(NetworkManager.Lobby != null ? "offen" : "zu")}");
+        if (NetworkManager.Lobby == null) GetTree().Quit(0);   // C10: sonst misst das Lobbyfenster weiter
     }
 
     /// <summary>Das Online-Lobbyfenster über den Gefechtsschirm legen.</summary>
@@ -536,7 +539,12 @@ public partial class MainMenu
         };
         // bug-764: der Gefechtsschirm schien durch das Fenster — solange es offen ist, aus.
         if (_setup != null) _setup.Visible = false;
-        lobby.TreeExiting += () => { if (_setup != null && IsInsideTree()) _setup.Visible = true; };
+        lobby.TreeExiting += () =>
+        {
+            if (_setup != null && IsInsideTree()) _setup.Visible = true;
+            // Fable C10: nach »ZURÜCK« aus einem gehaltenen Raum den Netzkasten wieder freigeben
+            if (!NetworkManager.Active && _netMode != null) { _netMode.Disabled = false; if (_netAddr != null) _netAddr.Editable = true; }
+        };
         AddChild(lobby);
     }
 

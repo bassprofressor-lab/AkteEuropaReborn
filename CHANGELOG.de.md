@@ -284,6 +284,20 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Online: nach der Partie zurück in denselben Raum, Aufgeben** (Fable-Prüfung C10, D5):
+  - Bisher meldete das Spiel nach jeder Online-Partie ganz ab; man stand in der Raumliste, und die
+    Runde musste sich neu finden. Jetzt bleibt man angemeldet und landet wieder im Raum — mit
+    denselben Mitspielern, Einstellungen und Computergegnern. Läuft die Partie für andere noch,
+    zeigt der Raum »PARTIE LÄUFT NOCH«; sobald sie für alle vorbei ist, kann der Gastgeber die
+    Revanche starten. Gemessen: zwei Partien hintereinander im selben Raum, beide Spieler jedes
+    Mal zurück im Raum.
+  - »Spiel verlassen« heißt online jetzt **Aufgeben**: der Server erfährt es (die anderen sehen
+    »hat aufgegeben« statt einer abgerissenen Leitung), und man kommt zurück in den Raum.
+  - Dabei behoben: Lief im Menü die Demo weiter, während schon eine Online-Leitung stand (Revanche,
+    oder lange in der Lobby gewartet), hielt der Kartenlader die nächste Demokarte für eine
+    Netzpartie — beim Mitspieler endete das Programm (»NETZ-FEHLER: es steht keine Partie«), beim
+    Gastgeber gab es eine Ausnahme. Die Menü-Demo ist jetzt nie eine Netzpartie.
+  Prüfschalter `--lobby-probe-nochmal`; Gegenschalter `--raum-alt`.
 - **Online-Lobby: der Raum wie in klassischen Echtzeitstrategiespielen** (Fable-Prüfung P6: C9/D3,
   D2, D4, B12):
   - **Einstellungen im Raum** (C9/D3): Der Raum zeigt Karte (mit Kartenbild, Startplätzen und

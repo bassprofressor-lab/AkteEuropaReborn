@@ -281,6 +281,43 @@ public partial class OnlineLobbyScreen : Control
     private string _probeKarte = "";
     private ulong _probeRaumT;
 
+    private static int _runde;
+    private ulong _nachPartieT;
+    private string _nachPartieStand = "";
+
+    /// <summary>Pruefweg Fable C10 (mit --netz-ende-probe): nach der Partie im Raum? Druckt jeden
+    /// Raumzustand und beendet, sobald der Raum wieder »lobby« ist (oder nach 30 s).</summary>
+    private void RaumNachPartieProbe(LobbyClient l)
+    {
+        if (!Rendering.NetGameRunner.EndeProbeGefeuert) return;
+        if (_nachPartieT == 0) _nachPartieT = Time.GetTicksMsec();
+        string stand = l.InRoom ? (string?)l.Room?["state"] ?? "?" : "kein Raum";
+        if (stand != _nachPartieStand)
+        {
+            _nachPartieStand = stand;
+            GD.Print($"lobby-probe: nach der Partie — Raum {(l.InRoom ? (string?)l.Room?["name"] : "-")}, Zustand {stand}, " +
+                     $"{l.HumanRoomSlots().Count} Menschen, START {(_start.Visible ? (_start.Disabled ? "gesperrt" : "frei") : "unsichtbar")} »{_start.Text}«");
+        }
+        // --lobby-probe-nochmal: beim ersten Mal als Gastgeber die Revanche starten statt zu beenden
+        if (stand == "lobby" && _runde == 0 && l.IAmHost && l.HumanRoomSlots().Count >= 2
+            && Array.IndexOf(Core.CommandLine.Args, "--lobby-probe-nochmal") >= 0)
+        {
+            _runde = 1;
+            Rendering.NetGameRunner.EndeProbeGefeuert = false;
+            GD.Print("lobby-probe: Revanche — START im selben Raum");
+            l.Start();
+            return;
+        }
+        if (stand == "lobby" && _runde == 0 && !l.IAmHost && Array.IndexOf(Core.CommandLine.Args, "--lobby-probe-nochmal") >= 0)
+        { _runde = 1; Rendering.NetGameRunner.EndeProbeGefeuert = false; return; }   // Mitspieler wartet auf die Revanche
+        if (stand == "lobby" || Time.GetTicksMsec() - _nachPartieT > 30000)
+        {
+            GD.Print("lobby-probe: Ende der Raumprobe");
+            Rendering.NetGameRunner.EndeProbeGefeuert = false;
+            GetTree().CreateTimer(0.5).Timeout += () => GetTree().Quit(0);
+        }
+    }
+
     private int _hinausSchritt = -1;
     private ulong _hinausT;
 
@@ -457,6 +494,7 @@ public partial class OnlineLobbyScreen : Control
             { _probeRaeume = l.Rooms.Count; GD.Print($"lobby-probe: Räume in der Liste {_probeRaeume}"); }
         }
         Status();
+        RaumNachPartieProbe(l);
         ProbeRaum(l);
         ProbeTick(l);
         BeitrittProbe(l);
@@ -559,6 +597,14 @@ public partial class OnlineLobbyScreen : Control
             if (keepSel >= 0 && keepSel < _members.ItemCount) _members.Select(keepSel);
             _start.Visible = l.IAmHost;
             _start.Disabled = humans < 2;
+            // Fable C10: zurueck im Raum, waehrend die anderen noch spielen
+            if ((string?)room["state"] == "in_game")
+            {
+                _start.Visible = true;
+                _start.Disabled = true;
+                _start.Text = "PARTIE LÄUFT NOCH — warte, bis sie zu Ende ist";
+            }
+            else
             _start.Text = humans < 2 ? "START (wartet auf Mitspieler)"
                         : kis > 0 ? $"START ({humans} Menschen, {kis} Computergegner)" : $"START ({humans} Menschen)";
             if (!LobbyAlt) { RaumEinstellungenZeigen(l, room, settings, kis); PlatzKnoepfeZeigen(l); }

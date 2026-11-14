@@ -101,6 +101,16 @@ public partial class NetworkManager : Node
     public static void EndeDerPartie(string meldung, int dauerS)
     {
         bool online = Lobby != null;
+        // ⭐ 14.11.2026 — Fable C10: nach einer Online-Partie aus dem Menue ZURUECK IN DENSELBEN RAUM
+        // (klassisch), statt abzumelden und die Runde neu suchen zu lassen. Nur die Spielleitung
+        // schliesst; der Raum und die Anmeldung bleiben. Befehlszeilenlaeufe (FromMenu falsch) gehen
+        // den alten Weg. Gegenschalter --raum-alt.
+        if (online && FromMenu && Lobby is { Open: true } && !HatSchalter("--raum-alt"))
+        {
+            Lobby.MatchEnd(0, 0);
+            ImRaumBleiben(meldung);
+            return;
+        }
         if (Lobby is { Open: true })
         {
             // ⚠ UNSERE SETZUNG: ein Ergebnis, das auf allen Maschinen gleich ist — Sieger
@@ -115,6 +125,25 @@ public partial class NetworkManager : Node
     }
 
     public static string Fault { get; private set; } = "";
+
+    /// <summary>Fable C10: die Partie endet, der Lobby-Draht bleibt offen und im Raum.</summary>
+    private static void ImRaumBleiben(string meldung)
+    {
+        Link?.Close();
+        Link = null;
+        Lobby?.PartieZuruecksetzen();
+        Fault = meldung;
+        ZurueckZurLobby = true;
+        RoomSlotsAtStart = new();
+        Determinism.Forced = null;
+        if (Instance is { } i)
+        {
+            i._offered = i._announced = i._applied = i._timedOut = false;
+            i._roomAsked = i._listAsked = i._joinAsked = i._startAsked = i._relayed = false;
+            i._wantHost = i._wantJoin = false;
+        }
+        GD.Print($"netz: Partie vorbei, zurück in den Raum — {meldung}");
+    }
 
     /// <summary>
     /// Die Kartenplätze, die von MENSCHEN geführt werden — auf jeder Maschine

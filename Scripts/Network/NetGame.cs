@@ -192,6 +192,12 @@ public sealed partial class NetGameRunner : Node
     {
         if (Active) return true;
         if (!NetworkManager.Active) return false;
+        // ⭐ 14.11.2026 — Fable C10: die DEMO im Hintergrund des Menues ist nie eine Netzpartie. Seit der
+        // Lobby-Draht nach einer Partie offen bleibt (zurueck im Raum), lud die Demo bei der Revanche
+        // ihre naechste Karte, waehrend die neue Leitung schon stand — und bekam einen Taktgeber
+        // (Mitspieler: »NETZ-FEHLER: es steht keine Partie«, Programmende; Gastgeber: Ausnahme in _Process).
+        for (Node? n = host; n != null; n = n.GetParent())
+            if (n is UI.MenuBackdrop) return false;
 
         var r = new NetGameRunner();
         string outPath = "";
@@ -275,7 +281,14 @@ public sealed partial class NetGameRunner : Node
                 Takt = () => _tick,
             };
             AddChild(_ui);
-            VerlassenImNetz = () => Abschied("Du hast die Partie verlassen.");
+            // ⭐ 14.11.2026 — Fable D5: online heisst Verlassen AUFGEBEN — dem Server sagen (surrender),
+            // damit die anderen »hat aufgegeben« sehen statt einer abgerissenen Leitung.
+            VerlassenImNetz = () =>
+            {
+                if (NetworkManager.Lobby is { Open: true } lb && System.Array.IndexOf(Core.CommandLine.Args, "--raum-alt") < 0)
+                { lb.Surrender(); Abschied("Du hast aufgegeben."); }
+                else Abschied("Du hast die Partie verlassen.");
+            };
             AbschiedImNetz = m => Abschied(m);   // Fable B4
             _chatSeen = NetworkManager.Lobby?.Chat.Count ?? 0;
         }
