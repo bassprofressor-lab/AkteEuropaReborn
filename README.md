@@ -49,9 +49,37 @@ A base with the side panel, the resource bar and the overview map:
 
 ![Base](docs/screenshots/02-basis.png)
 
+## New in 0.7.0: multiplayer and map editor
+
+**Online through our own lobby server**, no port forwarding: sign in, open or join a room, put
+computer opponents with strength and team on free positions, chat in the room, start. The match runs
+in lockstep just like on a LAN; if the connection drops, the game reconnects.
+
+![Online room with two humans and two computer opponents](docs/screenshots/05-online-raum.png)
+
+**Teams and computer opponents of your choice**, in skirmish and network play alike: for every start
+position you, another player, or an easy, normal or hard computer opponent, plus the team.
+
+![Skirmish screen with positions and teams](docs/screenshots/06-gefecht-teams.png)
+
+In the game: chat on Enter, "Warten auf …" with Ctrl-K, pause for everyone, and the winning team at
+the end.
+
+![LAN match with a chat line](docs/screenshots/08-lan-partie.jpg)
+
+![End screen with the winning team](docs/screenshots/09-endbild.jpg)
+
+**The map editor** generates playable maps for 2 to 8 players (35 landscapes from the original tile
+sets) and edits them with brushes for ground, height, forest and rock, rails, buildings, units,
+deposits, start positions, bridges and ramps, with undo and mirroring. "Play" starts the map straight
+away as a skirmish.
+
+![Map editor while editing](docs/screenshots/07-editor.jpg)
+
 ## Status
 
-The **33-mission campaign** and skirmish games are playable. From the two
+The **33-mission campaign**, skirmish against the computer and **multiplayer on LAN and online**
+are playable; a map editor comes with it. From the two
 discs, the first launch derives:
 
 | | |
@@ -68,10 +96,10 @@ and defence, range, reload time, speed, fuel and ammunition all come from the
 game's records rather than from guessed constants. Where something could not be
 recovered, the code says so — every assumption of our own is marked as such.
 
-## Road to 0.7.0
+## Road to 0.7.0 — done
 
-**0.7.0 ships when every one of the 33 campaign missions has been played
-through individually and found clean.** Not before.
+**0.7.0 was to ship only once every one of the 33 campaign missions had been played
+through individually and found clean.** That point has been reached.
 
 The reason is a lesson this project paid dearly for: **a single mission played
 attentively found more defects than a hundred automated harnesses combined.**
@@ -103,7 +131,7 @@ stays open or needs input goes into **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)**
 (German) — including the cases where an earlier explanation of ours turned out
 to be wrong. Both are kept as we go, not written afterwards.
 
-⭐ **Where we stand (2026-11-11, release 0.7.0):** **all 33 missions have
+⭐ **Where we stand (2026-11-14, release 0.7.0):** **all 33 missions have
 been played through**, and **0.7.0** brings **multiplayer over the internet** with its own lobby — the whole campaign, up to the credits. Along the way mission 2 became completable for the first time,
 the power plants in mission 4 and the bunkers in mission 7 became destructible,
 and the enemy now plays with the original's own AI. **0.6.2 came out of
@@ -125,7 +153,7 @@ mission 26 that finally ends, the shipyard with its own stock, captured
 airfields that come with their aircraft, and the fourth round of reports from
 **KayelGee**; **0.6.8** brings KayelGee's fifth round with saves that finally
 load properly again; **0.6.9** missions 28 to 33, the original's save window
-and the closing film after mission 33; **0.6.10** KayelGee's sixth round and LAN multiplayer in lockstep again; **0.6.11** KayelGee's seventh round, Reaper's first and a skirmish computer opponent that forms groups and marches; **0.6.12** KayelGee's eighth round, Reaper's second, units that fire on the move and bridges drawn live; **0.6.13** the missing game functions (traps, magnet bomb, teleporter, gas cloud), the flat flight attitude and skirmish with a starting base; **0.7.0** online multiplayer with lobby, chat and "Warten auf …"/Ctrl-K, the Discord status and a map editor that produces playable maps. **Each is a stop along
+and the closing film after mission 33; **0.6.10** KayelGee's sixth round and LAN multiplayer in lockstep again; **0.6.11** KayelGee's seventh round, Reaper's first and a skirmish computer opponent that forms groups and marches; **0.6.12** KayelGee's eighth round, Reaper's second, units that fire on the move and bridges drawn live; **0.6.13** the missing game functions (traps, magnet bomb, teleporter, gas cloud), the flat flight attitude and skirmish with a starting base; **0.7.0** online multiplayer with lobby, chat and "Warten auf …"/Ctrl-K, teams and computer opponents of your choice, spectators and reconnecting, the Discord status and a map editor that produces playable maps. **Each is a stop along
 this road, not its end.** What changed, in
 plain words: [CHANGELOG.md](CHANGELOG.md).
 
@@ -136,11 +164,10 @@ small thing. That is exactly what progress hangs on.
 
 ## What is next
 
-- Multiplayer: reconnect after a dropout, alliances and teams online
-- Map editor, finished
+- Multiplayer: reconnect on LAN and after a crash too, spectators on LAN
+- Map editor: copies of shipped maps with bridges, ramps and forest table
 - A competitive skirmish mode
 - English/German language switch
-- A "Reborn" graphics mode you can toggle against the original sprites
 - Wiki
 
 Come talk about it on **[Discord](https://discord.gg/MVMfRWrMKv)**.

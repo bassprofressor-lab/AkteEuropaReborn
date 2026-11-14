@@ -51,9 +51,36 @@ Eine Basis mit Seitenpanel, Rohstoffleiste und Übersichtskarte:
 
 ![Basis](docs/screenshots/02-basis.png)
 
+## Neu in 0.7.0: Mehrspieler und Karteneditor
+
+**Online über den eigenen Lobby-Server**, ohne Portfreigabe: anmelden, Raum eröffnen oder beitreten,
+Computergegner mit Stärke und Team auf freie Plätze setzen, im Raum chatten, starten. Die Partie läuft
+im Gleichschritt wie im LAN; reißt die Leitung ab, verbindet das Spiel neu.
+
+![Online-Raum mit zwei Menschen und zwei Computergegnern](docs/screenshots/05-online-raum.png)
+
+**Teams und Computergegner nach Wahl**, im Gefecht wie im Netz: je Startplatz du, ein Mitspieler oder
+ein Computergegner leicht, normal oder schwer, und dazu das Team.
+
+![Gefechtsschirm mit Plätzen und Teams](docs/screenshots/06-gefecht-teams.png)
+
+Im Spiel: Chat per Enter, »Warten auf …« mit Ctrl-K, Pause für alle, und am Ende das Siegerteam.
+
+![LAN-Partie mit Chatzeile](docs/screenshots/08-lan-partie.jpg)
+
+![Endbild mit Siegerteam](docs/screenshots/09-endbild.jpg)
+
+**Der Karteneditor** erzeugt spielbare Karten für 2 bis 8 Spieler (35 Landschaften aus den
+Originalkachelsätzen) und bearbeitet sie mit Pinseln für Boden, Höhe, Wald und Fels, Gleise, Gebäude,
+Einheiten, Vorkommen, Startplätze, Brücken und Rampen, mit Rückgängig und Spiegeln. »Spielen« startet
+die Karte direkt als Gefecht.
+
+![Karteneditor beim Bearbeiten](docs/screenshots/07-editor.jpg)
+
 ## Stand
 
-Spielbar sind Gefechte und die **Kampagne mit 33 Missionen**. Aus den zwei
+Spielbar sind die **Kampagne mit 33 Missionen**, Gefechte gegen den Computer und der
+**Mehrspieler im LAN und online**; dazu kommt ein Karteneditor. Aus den zwei
 Discs entstehen beim ersten Start:
 
 | | |
@@ -71,10 +98,10 @@ Munition stammen aus den Sätzen des Spiels und nicht aus geratenen Konstanten.
 Wo etwas nicht zu bergen war, sagt der Code das — jede eigene Setzung ist als
 solche gekennzeichnet.
 
-## Road to 0.7.0
+## Road to 0.7.0 — geschafft
 
-**0.7.0 kommt heraus, wenn jede der 33 Kampagnenmissionen einzeln durchgespielt
-und für sauber befunden ist.** Nicht früher.
+**0.7.0 sollte erst herauskommen, wenn jede der 33 Kampagnenmissionen einzeln durchgespielt
+und für sauber befunden ist.** Das ist jetzt erreicht.
 
 Der Grund ist eine Erfahrung aus diesem Projekt, und sie war teuer: **eine
 einzige aufmerksam gespielte Mission hat mehr Fehler gefunden als über hundert
@@ -109,7 +136,7 @@ braucht, in **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)** — samt der Fälle, in den
 sich eine frühere Erklärung von uns als falsch herausgestellt hat. Beides wird
 mitgeführt, nicht nachträglich geschrieben.
 
-⭐ **Stand heute (11.11.2026, Release 0.7.0):** **alle 33 Missionen sind
+⭐ **Stand heute (14.11.2026, Release 0.7.0):** **alle 33 Missionen sind
 durchgespielt**, und mit **0.7.0** gibt es den **Mehrspieler über das Internet** mit eigener Lobby — die ganze Kampagne, bis zum Abspann. Unterwegs wurde Mission 2 zum ersten Mal abschliessbar, die
 Kraftwerke in Mission 4 und die Bunker in Mission 7 zerstörbar, und der Gegner
 spielt jetzt mit der KI des Originals. **0.6.2 kam aus dem GEFECHT** (der
@@ -132,7 +159,7 @@ ihrem Lager, eingenommene Flughäfen samt ihrer Flugzeuge, dazu die vierte
 Runde Meldungen von **KayelGee**; **0.6.8** bringt die fünfte Runde Meldungen
 von **KayelGee** mit einem Spielstand, der endlich wieder richtig lädt;
 **0.6.9** die Missionen 28 bis 33, das Speicherfenster des Originals und den
-Abschlussfilm nach Mission 33; **0.6.10** die sechste Runde von KayelGee und den LAN-Mehrspieler wieder im Gleichschritt; **0.6.11** die siebte Runde von KayelGee, die erste von Reaper und einen Computergegner im Gefecht, der Gruppen bildet und marschiert; **0.6.12** die achte Runde von KayelGee, die zweite von Reaper, Einheiten, die im Fahren schießen, und lebend gezeichnete Brücken; **0.6.13** die fehlenden Spielfunktionen (Fallen, Magnetbombe, Teleporter, Gaswolke), die flache Fluglage und das Gefecht mit Startbasis; **0.7.0** den Online-Mehrspieler mit Lobby, Chat und »Warten auf …«/Ctrl-K, die Discord-Anzeige und einen Karteneditor, der spielbare Karten erzeugt. **Jede davon ist ein Halt auf diesem Weg, nicht sein Ende.** Was sich geändert hat, in einfachen Worten:
+Abschlussfilm nach Mission 33; **0.6.10** die sechste Runde von KayelGee und den LAN-Mehrspieler wieder im Gleichschritt; **0.6.11** die siebte Runde von KayelGee, die erste von Reaper und einen Computergegner im Gefecht, der Gruppen bildet und marschiert; **0.6.12** die achte Runde von KayelGee, die zweite von Reaper, Einheiten, die im Fahren schießen, und lebend gezeichnete Brücken; **0.6.13** die fehlenden Spielfunktionen (Fallen, Magnetbombe, Teleporter, Gaswolke), die flache Fluglage und das Gefecht mit Startbasis; **0.7.0** den Online-Mehrspieler mit Lobby, Chat und »Warten auf …«/Ctrl-K, Teams und Computergegner nach Wahl, Zuschauer und Wiederverbinden, die Discord-Anzeige und einen Karteneditor, der spielbare Karten erzeugt. **Jede davon ist ein Halt auf diesem Weg, nicht sein Ende.** Was sich geändert hat, in einfachen Worten:
 [CHANGELOG.de.md](CHANGELOG.de.md).
 
 **Mitmachen ist ausdrücklich erwünscht.** Wer eine Mission spielt und etwas
@@ -142,11 +169,10 @@ sich um eine Kleinigkeit handelt. Genau daran hängt der Fortschritt.
 
 ## Was als Nächstes kommt
 
-- Mehrspieler: Wiederverbinden nach einem Abbruch, Bündnisse und Teams online
-- Der Karteneditor, fertig
+- Mehrspieler: Wiederverbinden auch im LAN und nach einem Absturz, Zuschauer im LAN
+- Karteneditor: Kopien gelieferter Karten mit Brücken, Rampen und Waldtafel
 - Ein Gefechtsmodus für den Wettkampf
 - Umschalter Deutsch/Englisch
-- Ein „Reborn"-Grafikmodus, umschaltbar gegen die Originalbilder
 - Wiki
 
 Darüber reden wir auf **[Discord](https://discord.gg/MVMfRWrMKv)**.

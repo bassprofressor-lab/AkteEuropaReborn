@@ -7,7 +7,7 @@ dem eigenen Rechner aus der eigenen Fassung des Spiels von 1997.
 *In English: [CHANGELOG.md](CHANGELOG.md). Ältere Fassungen als 0.5.0 sind
 bisher nur dort beschrieben.*
 
-## 0.7.0 — 11.11.2026 · Online-Mehrspieler, Discord und ein Karteneditor, der nichts mehr kaputt macht
+## 0.7.0 — 14.11.2026 · Online-Mehrspieler, Teams, Discord und ein Karteneditor, der nichts mehr kaputt macht
 
 > **Mit 0.7.0 geht Akte Europa Reborn online.** Alle 33 Kampagnenmissionen
 > sind durchgespielt, und wie angekündigt kommt jetzt der Mehrspieler über das
@@ -20,13 +20,19 @@ bisher nur dort beschrieben.*
 > per Enter. Neu sind die Discord-Anzeige und ein Karteneditor, der gelieferte
 > Karten nicht mehr beschädigt und spielbare Karten erzeugt.
 >
+> **Teams und Computergegner nach Wahl:** Im Gefecht und im Netz legst du jetzt je Startplatz fest,
+> wer dort spielt (du, ein Mitspieler oder ein Computergegner leicht, normal oder schwer) und in
+> welchem Team. Zwei Menschen gegen zwei Computer geht also auch. Online kommen dazu: den eigenen
+> Startplatz wählen, **Zuschauer**, **Wiederverbinden** nach einem Leitungsabriss, eine Warnung bei
+> anderen Spieldaten, ein Spieltempo, Namen im LAN und ein Endbild mit Siegerteam.
+>
 > Wie immer hat jede Änderung einen Schalter, der das alte Verhalten
 > zurückholt, und einen Prüfstand. Wo das Original nichts vorgibt, steht im
 > Quelltext »UNSERE SETZUNG«.
 >
 > ✅ **Kein Neueinlesen nötig.** Spielstände von 0.6.13 laden weiter.
 >
-> ⚠ **Netzspiel:** Das Protokoll steht jetzt auf Stufe 4. 0.6.13 und 0.7.0
+> ⚠ **Netzspiel:** Das Protokoll steht jetzt auf Stufe 5. 0.6.13 und 0.7.0
 > spielen nicht miteinander, auch nicht im LAN. Online sehen sich nur Spieler
 > mit derselben Fassung.
 
@@ -107,282 +113,42 @@ bisher nur dort beschrieben.*
   Nach dem Verlassen der Karte lief er gegen die schon freigegebene Karte
   weiter.
 
-### Discord
+### Teams, Computergegner nach Wahl, Zuschauer, Wiederverbinden
 
-- **Discord zeigt, was du spielst.** Wenn Discord läuft, steht in deinem
-  Profil »Akte Europa Reborn«, dazu Hauptmenü, Kampagne mit Mission und Titel,
-  Gefecht oder Mehrspieler mit Karte oder Karteneditor, und wie lange schon.
-  Das Spiel spricht dafür nur mit der Discord-App auf deinem Rechner und
-  verändert am Spiel nichts. Abschalten kannst du es in den *Einstellungen*
-  unter »Discord«.
-- **Discord-Knopf unten links im Startmenü** — der bekannte blaue Knopf mit
-  Logo. Er öffnet die Einladung zu unserem Discord-Server im Browser.
+Nach dem ersten Bau von 0.7.0 kamen die Wünsche aus dem Spielertest und die Prüfung von Gefechts- und Mehrspielermenü durch Fable dazu. Das meiste davon gilt im Gefecht, im LAN und online.
 
-### Karteneditor
+- **Gefecht: Stärke und Team je Computergegner** (Spielerwunsch: »ich kann also nicht beliebig
+  sagen, ich nehme ein computergegner leicht, einen normal und einen schweren … und team bildung
+  wäre gut«):
+  - **Eine Zeile je Startplatz** statt »Gegner / Startplatz / Schwierigkeit«: Der Gefechtsschirm
+    zeigt links unter der Kartenliste alle Startplätze der gewählten Karte, wie in klassischen
+    Echtzeitstrategiespielen. Je Platz wählt man den **Spieler** (Du · Computer leicht · Computer
+    normal · Computer schwer · leer) und das **Team** (– für jeder gegen jeden, Team 1 bis 4).
+    Damit ist auch der Startplatz gewählt: Er ist die Zeile, auf der »Du« steht. Stellt man eine
+    andere Zeile auf »Du«, zieht man dorthin um, und die alte Zeile bekommt, was dort stand.
+  - **Jeder Computergegner spielt mit seiner eigenen Stärke**: Denktakt, Wellengröße, Pausen
+    zwischen den Angriffen und Technikleiter richten sich nach der Stufe seines Platzes, nicht
+    mehr nach einer Stufe für alle.
+  - **Teams**: Gleiches Team heißt verbündet, nach der Bündnistafel des Originals, die das Spiel
+    aus der Kampagne schon kennt. Verbündete greifen sich nicht an (weder die Computergegner noch
+    deine Einheiten von selbst), sie teilen die Sicht im Nebel, und Minen treffen den Verbündeten
+    nicht. Gewonnen ist die Partie, wenn kein gegnerisches Team mehr etwas hat; dein verbündeter
+    Computergegner muss dafür nicht stehen bleiben. Verloren ist sie wie bisher, wenn von dir
+    selbst nichts mehr steht.
+  - Unter der Liste steht die Aufstellung in einem Satz (»Team 1: Du + schwer gegen Team 2:
+    leicht + normal«). Gibt es keinen Gegner, weil alle in deinem Team sind, sagt sie das, und
+    »GEFECHT STARTEN« ist gesperrt.
+  - Die Aufstellung wird gemerkt und im **Spielstand** mitgespeichert. Bisher nahm ein geladenes
+    Gefecht die Gegnerzahl und Stufe aus dem, was zuletzt im Schirm stand.
+  - Im Mehrspieler gilt dasselbe, siehe den Eintrag darüber.
+  Gemessen auf NET07, 2 gegen 2 (Du + Computer schwer gegen Computer leicht + normal), 15
+  Minuten Spielzeit: 116 Abschüsse, keiner davon unter Verbündeten. Das Ende nach Teams
+  prüft `--gefecht-teams-probe`, Speichern und Laden mit Teams ist deckungsgleich
+  (`--spielstand-check`). Ohne Teams ist das Gefecht unverändert: NET07-Prüfsumme weiter
+  `3D49B2EF34977BF8`. Neu auf der Befehlszeile: `--gefecht-plaetze=du:1,schwer:1,leicht:2,normal:2`
+  (in der Reihenfolge der Startplätze); `--skirmish=karte,n,stufe,platz` geht weiter den alten
+  Weg. Gegenschalter `--gefecht-plaetze-alt`.
 
-- **Der Karteneditor macht nichts mehr kaputt** (Prüfung durch Fable, bug-804..808):
-  - »Karte erzeugen« überschrieb eine vorhandene Karte ohne Rückfrage, mit dem
-    Namen `NET07` oder `01` sogar eine mitgelieferte. Jetzt werden die Namen
-    mitgelieferter Karten abgewiesen, vor dem Überschreiben einer eigenen Karte
-    fragt ein Fenster nach, und der vorgeschlagene Name ist der erste freie
-    (`eigen02`, `eigen03` …).
-  - Ein neu gesetztes Gebäude konnte ein vorhandenes überschreiben (nach
-    Wegnehmen, Speichern und neu Setzen). Es nimmt jetzt den ersten freien Platz.
-  - Jede Editorkarte trug 50 unsichtbare »Phantomrampen« in der Kartenecke. Darum
-    konnte der Pionier auf eigenen Karten keine Landungsrampe bauen, und in der
-    Ecke oben links lag ein Rampenbild. Neue Karten sind sauber, alte werden beim
-    Laden geheilt.
-  - Speichern schreibt in eine Zwischendatei und benennt sie erst dann um — ein
-    Absturz beim Speichern hinterlässt keine halbe Karte mehr. Die gemeinsamen
-    Kachelsatzdateien werden nur noch geschrieben, wenn sich ihr Inhalt ändert.
-  - Eine mitgereiste Karte sah beim Mitspieler falsch aus: Wasser und Palmen im
-    Gebüsch. Die Bildverweise kamen vom Gastgeber, das Objektbild aber aus dem
-    eigenen Backlauf. Jetzt passt beides zusammen; was die Simulation liest,
-    kommt weiter unverändert vom Gastgeber.
-- **Faire Mehrspielerkarten** (bug-815):
-  - Neue Auswahl »Symmetrisch: ja«: Die Karte ist punktsymmetrisch, jede Hälfte
-    ist das um 180° gedrehte Bild der anderen — Wasser, Bodenarten, Höhen, Wald,
-    Startplätze und Vorkommen. Gemessen: Höhen zu 100 % gespiegelt, Gelände zu
-    96 % (der Rest sind Gebäude und Einheiten). Auf gespiegelten Startplätzen
-    stehen Basis und Werk seitenverkehrt, damit die Basen wirklich
-    gegenüberliegen. Geht nur bei gerader Spielerzahl.
-  - Nach dem Erzeugen steht eine Fairness-Zeile in der Statuszeile: Entfernung
-    jedes Spielers zum nächsten Vorkommen und zum nächsten Gegner.
-  - Neues Werkzeug »9 Startplatz«: ein Klick setzt für den gewählten Spieler
-    Basis, Werk und Truppe als Paket. Hat er schon einen Startplatz, wird der
-    alte weggenommen — so verschiebt man ihn. Rechtsklick nimmt ihn weg. Passt
-    das Paket nicht (Hang, Wasser, belegt), bleibt die Karte unverändert, und die
-    Zeile sagt, woran es lag. Rückgängig nimmt das ganze Paket in einem Schritt
-    zurück.
-  - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
-    Vorkommen (vorher schlug auch eine Statistikzeile an).
-- **Sofortbild im Karteneditor**: Bisher war jeder Pinselstrich erst nach F5 im Bild
-  (Speichern und Neuladen der ganzen Szene). Jetzt backt der Editor nach einem Strich —
-  mit kurzer Wartezeit, damit ein Zug nicht dutzendfach backt — eine Kopie der Karte im
-  Hintergrund, mit demselben Backofen wie beim Speichern, und tauscht Bodenbild und
-  Bäume/Felsen im laufenden Bild aus. Gemessen auf 150×150: 0,8 s nach dem Strich ist
-  er zu sehen; Rückgängig wirkt genauso schnell und bringt das Bild bytegleich zurück.
-  Gespeichert wird dabei nichts, F5 bleibt das Speichern. Grenze: hebt ein Strich eine
-  Zelle über die bisher höchste Stufe der Karte, ändert sich die Bildgröße — dann sagt
-  die Leiste »F5 zeigt es«. Prüflauf `--map-edit-sofort-check`. Gegenschalter
-  `--editor-sofortbild-aus`.
-- **Der Geröllpinsel malt Geröll** (bug-827): Auf flachem Land blieb die bemalte Zelle
-  selbst unverändert, nur ihre Nachbarn änderten sich; ein 3×3-Strich auf Sand änderte
-  keinen einzigen Bildpunkt. Ursache, gemessen an den Originalkarten von Kachelsatz 47:
-  »rau« hat dort kein eigenes Bild — rau ist meist Gras am Hang, und die Geröllkacheln
-  sind fast immer als »frei« eingetragen (4356 frei gegen 417 rau). Der Pinsel fand für
-  »rau« also keinen Bildstoff und zog eine Kachel, die aussah wie vorher. Jetzt malt er
-  das **Geröllbild** und setzt die Zelle auf rau (unsere Setzung, das Original hat keinen
-  Editor). Damit die Übergänge stimmen — im Original grenzt Geröll nur an Gras, Gras an
-  Sand, Sand an Wasser —, legt er bei Bedarf von selbst einen **Grasring** um die Stelle
-  (gemessen: Geröll auf Sand, 8 Ecken Gras dazwischen, 0 Kettenbrüche). Wasser wird dafür
-  nie umgemalt: liegt die Zelle zu nah am Ufer, bleibt es dort beim bisherigen Verhalten.
-  Nebenbei passen nach den Strichen des Prüflaufs alle Kachelecken (Eckpassquote 100,000 %
-  statt 99,975 %, harte Nähte 0,24 % statt 0,26 %). Der Prüflauf `--map-edit-sofort-check`
-  vergleicht jetzt das gebackene Bild und die Bildpunkte in der bemalten Zelle selbst
-  (kopflos zeigte die Textur das neue Bild nie, der alte Lauf maß also nichts).
-  Gegenschalter `--editor-geroellbild-aus` und `--editor-kettenring-aus`.
-- **Fußvolk im Karteneditor, Blickrichtung für alle Einheiten** (D9): Unter »4 Einheiten«
-  stehen jetzt »Leichter Soldat« und »Schwerer Soldat«. Geschrieben wird nicht Feld für
-  Feld, sondern der ganze Kartensatz, wie er auf den 55 Originalkarten am häufigsten
-  vorkommt (Leichter 266 von 617 gleich, Schwerer 156 von 447): Leben 20 bzw. 35,
-  Angriff 2 bzw. 5, Fußvolksatz und Bild wie im Original. Jeder Soldat bekommt seinen
-  Versatz in der Zelle nach der Formel des Originals (bis 18 Bildpunkte seitlich, 7 in
-  der Höhe), damit Trupps nicht in einer starren Reihe stehen. **R** dreht die
-  Blickrichtung der nächsten Einheit (Umschalt+R zurück), die Liste zeigt die Bilder in
-  der gewählten Richtung. **Flugzeuge gibt es bewusst nicht:** auf keiner Originalkarte
-  steht ein einziger Flieger in der Einheitentafel — das Original führt sie in einer
-  eigenen Tafel, ein Editorflieger hieße ein Dateiformat erfinden. Prüflauf
-  `--map-edit-fussvolk-check` (Satz, lebende Einheit, gespeicherte Datei, mit
-  `--fussvolk-shot=<datei>` ein Fensterbild). Gegenschalter `--editor-fussvolk-aus`.
-- **Brücken im Karteneditor** (Werkzeug »0 Brücke«): Ein Klick auf eine Uferzelle baut
-  eine Brücke über 1 bis 3 Wasserzellen zum Gegenufer, die Vorschau zeigt sie vorher grün.
-  Geschrieben wird genau das, was der Brückenbau des Originals schreibt (0x4CC280): 3 Zellen
-  breit, Fahrbahn in der Mitte eine Stufe über dem Wasser, Geländer links und rechts,
-  Brückensatz mit 500 Trefferpunkten, Lagen- und Kopfbytes. Gemessen an allen 52 Brücken
-  der 23 Originalkarten (705 Zellen) — die Editorbrücke erfüllt jede dieser Regeln ohne
-  Ausnahme, sieht aus wie eine Kartenbrücke (Steinbrücke) und lässt sich im Spiel
-  zerstören wie diese. Abgewiesen wird mit Grund: kein Wasser daneben, Wasser an zwei
-  Seiten, Gegenufer zu weit, Ufer verschieden hoch, etwas steht im Weg. Zurück nimmt sie
-  Strg+Z. Prüfläufe `--map-edit-bruecke-check` (mit `--bruecke-shot=<datei>` ein
-  Fensterbild) und `--bruecken-muster` (die Messung an den Originalen). Gegenschalter
-  `--editor-bruecke-aus`.
-- **Landungsrampen im Karteneditor** (Werkzeug »0 Brücke/Rampe«, in der Liste
-  »Landungsrampe«): Ein Klick auf eine Uferzelle setzt eine Rampe — nur dort fahren
-  Fahrzeuge auf Schiffe und wieder an Land. Geschrieben wird, was der Molenbau des
-  Originals schreibt: eine Zelle, Rampensatz mit 200 Trefferpunkten, Rampenkachel in
-  Richtung des Wassers, befahrbar, Lage 200 + Platz. Gemessen an den Originalkarten: von 45
-  Rampensätzen tragen 24 eine Rampenkachel, und an diesen 24 gilt jede Regel ohne Ausnahme
-  (genau ein Wassernachbar, Richtung = Wasserseite, Rampe auf Wasserhöhe); die übrigen 21
-  sind Restsätze ohne Bild (Karten 8, 9 und NET07). Die Editorrampe erfüllt dieselbe
-  Messung. Das Sofortbild zeigt sie gleich (Rampen werden lebend gezeichnet, bisher erst
-  nach F5). Prüfläufe `--map-edit-rampe-check` (mit `--rampe-shot=<datei>` ein Fensterbild)
-  und `--rampen-muster`. Gegenschalter `--editor-rampe-aus`.
-- **Brücken und Rampen wieder wegnehmen**: Rechtsklick mit »0 Brücke/Rampe« oder
-  »7 Wegnehmen« nimmt das Bauwerk unter der Maus weg. Bisher galt eine Brückenkachel
-  beim Wegnehmen als Gegenstand — das Bild ging, der Brückensatz blieb verwaist in der
-  Karte. Jetzt wird der Satz geleert, und jede Zelle bekommt ihre alte Geländeart zurück:
-  die steht noch im Eckraster der Karte (gemessen: alle vier Ecken 0 heißt Wasser, bei 3747
-  von 3747 Wasserzellen; eine Ecke 0 heißt raues Ufer). Danach kachelt der Geländepinsel
-  sauber nach. Im Prüflauf bekamen 12 von 12 Brückenzellen ihre alte Art zurück.
-- **Editorfahrzeuge tragen ihren Entwurf und die Leerwerte des Originals** (Prüfpunkt B3):
-  Der Editor schrieb in einen Fahrzeugsatz außer Kampfwerten, Leben und Tank nur Nullen.
-  Die Originalkarten tragen dort je Bauart einheitlich »leer«-Markierungen (FF) und an
-  zwei Stellen den **Entwurf** der Einheit. Mit 0 hieß jede Editoreinheit im Infofenster
-  wie Entwurf 0 und wurde danach bewertet. Jetzt schreibt der Editor je Bauart die Werte,
-  die auf den 55 Originalkarten bei mindestens 60 % der Sätze stehen, und den Entwurf aus
-  der Entwurfstafel des Spiels, der genau zu Fahrwerk, Waffe und Ausrüstung passt — für 11
-  von 12 Landbauarten gibt es genau einen, und es ist auch der häufigste auf den Karten
-  (z. B. Reifen → »Maschinengewehr«, Ketten → »Leichter Panzer«). Folge im Gefecht:
-  Editoreinheiten werden wie die Einheiten der Originalkarten auf ihren Entwurf
-  nachgezogen (NET07: 24 von 24; eine Editorkarte vorher 0, jetzt 23). Prüflauf
-  `--map-edit-satz-check`. Gegenschalter `--editor-satzfelder-alt`.
-- **Gefecht: neue Rohstoffstufe »wie auf der Karte« — und Lager im Karteneditor**: Bisher
-  füllte das Gefecht beim Start alle Lager nach der gewählten Stufe (keine / wenige /
-  normal / viele) — so macht es auch das Original, und die Lagerwerte einer Karte gingen
-  dabei verloren. Die neue fünfte Stufe »wie auf der Karte« lässt jedes Gebäude mit dem
-  Lager starten, das in der Karte steht (bewusste Abweichung vom Original, nur im Gefecht;
-  die vier Stufen des Originals bleiben unverändert). Neu aufgestellte Startbasen, die die
-  Karte nicht kennt, bekommen dann das Lager von »normal«. Passend dazu gibt es im
-  Karteneditor beim Gebäudepinsel eine Lagerauswahl mit den Werten der Originalkarten:
-  Bauteile für Basis und Depot (keine / 500-500-500 / 1000-1500-800 / 1500-2000-1000),
-  Terranium für Fabriken (0 bis 2000) und Minen (0 bis 200); ein Klick auf ein stehendes
-  Gebäude übernimmt die Auswahl. Gemessen: Basis aus dem Editor mit 500/500/500 startet mit
-  »wie auf der Karte« genau so, mit »normal« wie bisher mit 300/400/200. Einen
-  Gebäudenamen bietet der Editor bewusst nicht an — das Original überschreibt ihn beim
-  Missionsstart mit der Platznummer. Prüflauf `--map-edit-lager-check`; Gegenschalter
-  `--editor-lager-aus`.
-- **Laufzeit .NET 10 statt .NET 8**: .NET 8 hat am 10.11.2026 sein Support-Ende erreicht
-  und bekommt keine Sicherheitsupdates mehr. Das Spiel bringt jetzt .NET 10.0.15 mit
-  (Langzeitfassung, Support bis 14.11.2028). Spielerisch ändert sich nichts: die
-  NET07-Prüfsummen sind über 30 s Spielzeit Bild für Bild gleich wie mit .NET 8, Kampagne 1
-  läuft 3000 s durch, Spielstände laden deckungsgleich. Der Installer wird dadurch rund
-  1,7 MB größer. Gebaut wird der Installer jetzt mit Inno Setup 7.1.1.
-- **Mehrspieler: kein Absturz mehr beim Empfang großer eigener Karten** (Fable-Prüfung A1/A3):
-  Spielte der Gastgeber eine große Editorkarte (z. B. 168×168), stürzte der Mitspieler beim
-  Aufbereiten der mitgereisten Karte ab — 12 von 12 Versuchen. Der Absturz kam immer bei
-  einer großen Speicheranforderung, während im Hintergrund Godot-Objekte aus dem Menü
-  aufgeräumt wurden. Jetzt wird vor dem Aufbereiten aufgeräumt; gemessen 3 von 3 Partien
-  ohne Absturz (vorher 5 von 5 mit). Außerdem galt eine abgebrochene Karte danach für
-  immer als vorhanden — jetzt zählt sie erst, wenn sie vollständig aufbereitet ist.
-  Gegenschalter `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
-- **Karteneditor: der Hafen steht im Wasser, die Werft an Land** (gemeldet: »Der Hafen steht oft
-  auf dem Land, wobei er ja im Wasser stehen muss«): Der Generator setzte den Hafen wie jedes
-  andere herrenlose Gebäude auf Bauland, und weil die Verknüpfung zur Werft fehlte, zeigte er
-  auf Gebäudeplatz 0 — meist eine Basis. Gemessen an den Originalkarten: der Hafen steht ganz im
-  Wasser, die Werft, die seine Schiffe bezahlt, ganz an Land am Ufer, beide als Paar 6 bis 15
-  Felder auseinander. Jetzt setzt der Generator genau so ein Paar und verknüpft den Hafen mit
-  seiner Werft; auf den Probekarten stand jeder Hafen vollständig im Wasser und verwies auf
-  seine Werft. Gegenschalter `--editor-hafen-paar-alt`.
-- **Karteneditor: den Hafen von Hand setzen.** Auch der Gebäudepinsel setzt den Hafen jetzt nur
-  noch ganz ins Wasser (jede Zelle seiner Grundfläche muss freies Wasser sein, sonst sagt die
-  Statuszeile, warum nicht) und verknüpft ihn mit der nächsten Werft, die noch keinen Hafen hat
-  und höchstens 15 Felder entfernt steht. Gibt es keine, wird der Hafen abgewiesen: »erst eine
-  Werft an Land ans Ufer setzen«. Der Hafen bekommt den Eigner seiner Werft, so wie das Original
-  ihn bei der Einnahme mit der Werft weiterreicht. Wer eine Werft wegnimmt, nimmt ihren Hafen
-  mit (Strg+Z holt beide zurück); ein weggenommener Hafen gibt seine Verknüpfung frei. Dabei
-  behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
-  und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
-  `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
-- **Online: Zuschauer** (Fable-Prüfung D10): Im Raum gibt es in der Teamwahl jetzt **»Zuschauer«**. Wer
-  das für sich wählt, spielt nicht mit, sondern schaut zu:
-  - Er bekommt beim Start einen Kartenplatz, dem nichts gehört, und ist mit allen verbündet. Weil der
-    Nebel des Spiels die Bündnistafel des Originals fragt, sieht er damit alles, was alle Spieler sehen.
-  - Er besitzt nichts und kann nichts befehlen; für ihn gibt es weder Sieg noch Niederlage, und im
-    Endbild steht er nicht. Er geht, wann er will.
-  - Die Raumliste zeigt »Zuschauer« statt eines Startplatzes; der Startknopf zählt ihn mit (»3 Menschen,
-    davon 1 Zuschauer«). Hat die Karte keinen freien Platz (alle acht gehören jemandem, z. B. NET07),
-    sagt der Startknopf das.
-  - Im LAN gibt es keine Zuschauer (dort fehlt ein Raum, in dem man »ich schaue zu« wählen kann).
-  Gemessen gegen den Lobby-Server: zwei Spieler und ein Zuschauer auf NET02 — der Zuschauer sitzt auf
-  Platz 8, besitzt nichts, sieht mit allen Aufdeckern beider Spieler, alle drei Rechner grün.
-  Prüfschalter `--net-team=8`; Gegenschalter `--zuschauer-alt`.
-- **Online: Wiederverbinden nach einem Verbindungsabriss** (Fable-Prüfung D9):
-  - Reißt die Leitung zum Lobby-Server mitten in der Partie ab (WLAN, Router), verbindet das Spiel jetzt
-    alle 3 Sekunden neu und meldet sich mit seinem Wiederaufnahme-Schlüssel an. Der Server hält den
-    Platz 60 Sekunden; das Spiel holt alle Spielrahmen ab der letzten Nummer nach und läuft weiter. Die
-    Meldungszeile sagt »Verbindung zum Server unterbrochen — verbinde neu …« und danach »Verbindung
-    wieder da«; die anderen sehen so lange »Warten auf …«.
-  - Eigene Spielrahmen gehen in der Zeit nicht mehr verloren: Sie bleiben in der Schlange und gehen nach
-    dem Wiederverbinden hinaus. Was der Server vor dem Abriss nicht mehr bekommen hat (kein Echo), wird
-    noch einmal geschickt. Bisher wurden sie verworfen, und die anderen warteten für immer auf unsere
-    Takte, bis sie uns ausschalteten.
-  - Kommt die Verbindung in 60 Sekunden nicht wieder, endet die Partie für den Betroffenen mit einer
-    klaren Meldung.
-  - ⚠ Nicht abgedeckt: ein Neustart des Spiels nach einem Absturz (dann müsste die ganze Partie ab dem
-    ersten Takt nachgerechnet werden) und das LAN (dort läuft alles über den Rechner des Gastgebers).
-  Gemessen gegen den Lobby-Server: Mitspieler trennt in Takt 150 hart, einmal sofort und einmal mit 10 s
-  künstlichem Ausfall — wieder verbunden nach 0,1 bzw. 10,2 s, Partie läuft weiter, beide Rechner grün.
-  Prüfschalter `--net-abriss-bei=N`, `--net-abriss-dauer=ms`; Gegenschalter `--wiederverbinden-alt`.
-- **Karteneditor aufgeräumt** (Fable-Prüfung des Editors, Rest von F; für Spieler ohne sichtbare Änderung):
-  die fünf eigenen Schleifen über das Grundmuster eines Gebäudes sind eine (`FussZellen`), die doppelte
-  Frage »steht hier eine Einheit« ist eine (`MapFactory.EinheitAuf`), der doppelte Gefechtsstart aus dem
-  Editor ist einer (`SkirmishSetup.EditorGefecht`), und die neun statischen Zähler eines Pinselstrichs
-  sind ein Ergebnisobjekt (`MapEditTerrain.Letzter`). Die übrigen F-Punkte (Prüfstand ausgelagert,
-  Parametersatz statt Kommazeile, tote Pfade, Gegenschalter für A4/A5) waren schon am 12./13.11.
-  erledigt. Geprüft mit allen Editor-Prüfständen (Gelände, P5, Startplätze, Spiegeln, Fahrwerk, Wald,
-  Sofortbild, Spielen, Fußvolk, Brücken, Häfen: bestanden) und dem alten Spielen-Weg.
-- **Online-Raum: den eigenen Startplatz wählen** (Fable-Prüfung D2-Rest, F): Einen freien Platz anklicken
-  und **»HIERHIN WECHSELN«** — man setzt sich dorthin und startet damit an diesem Startplatz der Karte.
-  Bisher konnte ein Mitspieler seinen Platz nicht wählen (der Aufruf `move_slot` war geschrieben und
-  ungenutzt; damit ist jetzt jeder Lobby-Aufruf in Gebrauch). Geprüft online: Mitspieler wechselt auf
-  Platz 4 und startet auf Startplatz 4, grün. Prüfschalter `--net-platz=N`.
-- **Spieltempo als Einstellung** (Fable-Prüfung D10): Gefechtsschirm, Mehrspielerschirm und Online-Raum
-  haben die Zeile **»Spieltempo«** (normal / schnell ×2 / sehr schnell ×3). »normal« ist das Tempo des
-  Originals und die Vorgabe; im Netz beginnen alle Rechner mit dem Tempo des Gastgebers (es reist im
-  Sitzungspaket mit). Im Spiel ändern + und − es weiter, im Netz für alle. Das Original hält das Tempo
-  im Netz fest auf 1 — eine Abweichung von uns, nur im Gefecht. Geprüft: LAN-Paar mit Tempo 2 (beide
-  Rechner starten mit 2, grün), NET07-Prüfsumme unverändert. Gegenschalter `--tempo-alt`.
-- **Discord in der Online-Lobby** (Fable-Prüfung D10): Neben »BEITRETEN« steht **»MITSPIELER FINDEN
-  (Discord)«**, im Raum neben »RAUM VERLASSEN« **»EINLADEN (Discord)«**. Beide öffnen den Discord-Server
-  des Spiels, wie der Knopf im Hauptmenü — dort, wo man auf Mitspieler wartet. Gegenschalter
-  `--lobby-discord-alt`.
-- **Endbild im Gefecht und im Netz: wer gewonnen hat** (Fable-Prüfung D5):
-  - Das Abschlussfenster ist das der Kampagne, nach dem Original. Im Gefecht sagte es nicht, wer
-    gewonnen hat, alle Mitspieler hießen »CPU«, und »Missionsbezahlung $0« stand da. Jetzt:
-    - Titel **»GEFECHT GEWONNEN« / »GEFECHT VERLOREN«**, darunter **»Sieger: Team 1 — Du + CPU
-      schwer«** (oder, wenn man selbst ausgeschieden ist und noch gekämpft wird, »Es kämpfen noch:
-      …«).
-    - Die Spalten tragen Namen: »DU«, die Namen der Mitspieler, »CPU LEICHT/NORMAL/SCHWER«, auch für
-      schon besiegte Computergegner. Gibt es Teams, steht eine Zeile »Team« darüber.
-    - Die Missionsbezahlung entfällt im Gefecht; die Kampagne bleibt unverändert.
-  - Online meldet das Spiel dem Lobby-Server jetzt den Sieger (`match_end` mit dem Team bzw. dem
-    Startplatz), sobald nur noch eine Seite steht — bisher immer 0. ⚠ Diese Meldung ist nicht im
-    Paarlauf gemessen (eine Probe, die den Gegner abräumt, liefe im Netz sofort auseinander); das
-    Fenster selbst ist mit `--endbild-probe=` im Bild geprüft.
-  Gegenschalter `--endbild-alt`.
-- **Im Netzspiel: Tasten, wer angehalten hat, Namen im LAN** (Fable-Prüfung C12, D10-Teil):
-  - **Tastenhilfe**: Zu Beginn jeder Netzpartie steht 20 Sekunden lang unten »Enter: Nachricht an
-    alle · F4 halten: Spieler · Esc: Pause für ALLE · Spielmenü: Aufgeben«, und dieselbe Zeile steht
-    unter der Spielerliste (F4). Bisher standen die Tasten nirgends außer im Wartefenster.
-  - **Wer hat angehalten**: Esc hält im Netz die Partie für alle an, wie im Original. Jetzt sagt die
-    Meldungszeile bei allen »Anna hat die Partie für alle angehalten — »Weiter« oder Esc geht
-    weiter« und danach »Bert macht weiter«. Ohne das sah eine fremde Pause wie ein Hänger aus. Das
-    Original nennt niemanden — eine Zutat von uns.
-  - **Namen im LAN**: Im Netzkasten gibt es ein Feld **»Dein Name«** (derselbe Name wie in der
-    Online-Lobby). Er reist zu Beginn der Partie zu allen Mitspielern; Spielerliste, Nachrichten und
-    Wartefenster nennen ihn statt »Spieler 2«.
-  Geprüft: LAN-Paar »Anna« gegen »Bert« (beide Namen auf beiden Rechnern, grün), Bild der
-  Tastenhilfe im Spiel, Pausen-Prüfstand mit der Meldung auf beiden Seiten. Gegenschalter
-  `--netz-tasten-alt`.
-- **Online und LAN: verschiedene Fassungen und Spieldaten werden vorher erkannt** (Fable-Prüfung D8 und
-  ein offener Punkt aus P4):
-  - **Spieldaten im Raum** (D8): Das Spiel schickt jetzt eine Prüfsumme seiner eingelesenen
-    Spieldaten an den Lobby-Server (bisher immer »00000000«). Gerechnet wird über das, was die
-    Simulation liest: die Spieltabellen, die Einheitenverzeichnisse und die mitgelieferten
-    Mehrspielerkarten, rund 50 MB in etwa 0,2 s, einmal je Programmlauf. Hat ein Mitspieler im
-    Raum eine andere Summe, steht bei ihm »⚠ andere Spieldaten« (mit Erklärung im Tooltip), und der
-    Startknopf sagt »⚠ andere Spieldaten im Raum«. Gesperrt wird nicht — eine Abweichung in einer
-    Karte, die nicht gespielt wird, schadet nicht —, aber man weiß vorher, warum eine Partie
-    auseinanderlaufen könnte.
-  - **Fassung im LAN-Angebot**: Ein Gastgeber im LAN nennt jetzt seine Fassung. Eine Partie einer
-    anderen Fassung steht in der Suchliste als »⚠ andere Fassung 0.6.13«, ist nicht wählbar, und die
-    Statuszeile sagt »1 Partie gefunden, aber mit einer anderen Fassung des Spiels«. Bisher sah sie
-    aus wie jede andere, und das Beitreten scheiterte erst danach mit »Protokoll passt nicht«.
-  Geprüft: LAN-Suche gegen einen Gastgeber derselben und einer vorgetäuschten anderen Fassung;
-  Online-Raum mit einem Mitspieler mit vorgetäuschter anderer Summe (Warnung sichtbar, Partie grün).
-  Prüfschalter `--lan-fassung-test=`, `--inhaltssumme-test=`; Gegenschalter `--inhaltssumme-alt`,
-  `--lan-fassung-alt`.
 - **Mehrspieler: Stärke und Team je Platz, feste Startplätze** (Fortsetzung des Gefechts-Wunsches,
   jetzt im LAN und online; z. B. zwei Menschen gegen zwei Computergegner):
   - **LAN-Gastgeber:** Der Mehrspielerschirm zeigt dieselbe Platzliste wie das Gefecht, mit der
@@ -415,37 +181,106 @@ bisher nur dort beschrieben.*
   Lobby-Server: Raum auf NET02, Gastgeber und Computer schwer in Team 1, Mitspieler in Team 2 —
   grün. Prüfschalter `--lobby-probe-staerke=`, `--lobby-probe-team=`, `--net-team=`;
   Gegenschalter `--gefecht-plaetze-alt`.
-- **Gefecht: Stärke und Team je Computergegner** (Spielerwunsch: »ich kann also nicht beliebig
-  sagen, ich nehme ein computergegner leicht, einen normal und einen schweren … und team bildung
-  wäre gut«):
-  - **Eine Zeile je Startplatz** statt »Gegner / Startplatz / Schwierigkeit«: Der Gefechtsschirm
-    zeigt links unter der Kartenliste alle Startplätze der gewählten Karte, wie in klassischen
-    Echtzeitstrategiespielen. Je Platz wählt man den **Spieler** (Du · Computer leicht · Computer
-    normal · Computer schwer · leer) und das **Team** (– für jeder gegen jeden, Team 1 bis 4).
-    Damit ist auch der Startplatz gewählt: Er ist die Zeile, auf der »Du« steht. Stellt man eine
-    andere Zeile auf »Du«, zieht man dorthin um, und die alte Zeile bekommt, was dort stand.
-  - **Jeder Computergegner spielt mit seiner eigenen Stärke**: Denktakt, Wellengröße, Pausen
-    zwischen den Angriffen und Technikleiter richten sich nach der Stufe seines Platzes, nicht
-    mehr nach einer Stufe für alle.
-  - **Teams**: Gleiches Team heißt verbündet, nach der Bündnistafel des Originals, die das Spiel
-    aus der Kampagne schon kennt. Verbündete greifen sich nicht an (weder die Computergegner noch
-    deine Einheiten von selbst), sie teilen die Sicht im Nebel, und Minen treffen den Verbündeten
-    nicht. Gewonnen ist die Partie, wenn kein gegnerisches Team mehr etwas hat; dein verbündeter
-    Computergegner muss dafür nicht stehen bleiben. Verloren ist sie wie bisher, wenn von dir
-    selbst nichts mehr steht.
-  - Unter der Liste steht die Aufstellung in einem Satz (»Team 1: Du + schwer gegen Team 2:
-    leicht + normal«). Gibt es keinen Gegner, weil alle in deinem Team sind, sagt sie das, und
-    »GEFECHT STARTEN« ist gesperrt.
-  - Die Aufstellung wird gemerkt und im **Spielstand** mitgespeichert. Bisher nahm ein geladenes
-    Gefecht die Gegnerzahl und Stufe aus dem, was zuletzt im Schirm stand.
-  - Im Mehrspieler gilt dasselbe, siehe den Eintrag darüber.
-  Gemessen auf NET07, 2 gegen 2 (Du + Computer schwer gegen Computer leicht + normal), 15
-  Minuten Spielzeit: 116 Abschüsse, keiner davon unter Verbündeten. Das Ende nach Teams
-  prüft `--gefecht-teams-probe`, Speichern und Laden mit Teams ist deckungsgleich
-  (`--spielstand-check`). Ohne Teams ist das Gefecht unverändert: NET07-Prüfsumme weiter
-  `3D49B2EF34977BF8`. Neu auf der Befehlszeile: `--gefecht-plaetze=du:1,schwer:1,leicht:2,normal:2`
-  (in der Reihenfolge der Startplätze); `--skirmish=karte,n,stufe,platz` geht weiter den alten
-  Weg. Gegenschalter `--gefecht-plaetze-alt`.
+
+- **Online: Wiederverbinden nach einem Verbindungsabriss** (Fable-Prüfung D9):
+  - Reißt die Leitung zum Lobby-Server mitten in der Partie ab (WLAN, Router), verbindet das Spiel jetzt
+    alle 3 Sekunden neu und meldet sich mit seinem Wiederaufnahme-Schlüssel an. Der Server hält den
+    Platz 60 Sekunden; das Spiel holt alle Spielrahmen ab der letzten Nummer nach und läuft weiter. Die
+    Meldungszeile sagt »Verbindung zum Server unterbrochen — verbinde neu …« und danach »Verbindung
+    wieder da«; die anderen sehen so lange »Warten auf …«.
+  - Eigene Spielrahmen gehen in der Zeit nicht mehr verloren: Sie bleiben in der Schlange und gehen nach
+    dem Wiederverbinden hinaus. Was der Server vor dem Abriss nicht mehr bekommen hat (kein Echo), wird
+    noch einmal geschickt. Bisher wurden sie verworfen, und die anderen warteten für immer auf unsere
+    Takte, bis sie uns ausschalteten.
+  - Kommt die Verbindung in 60 Sekunden nicht wieder, endet die Partie für den Betroffenen mit einer
+    klaren Meldung.
+  - ⚠ Nicht abgedeckt: ein Neustart des Spiels nach einem Absturz (dann müsste die ganze Partie ab dem
+    ersten Takt nachgerechnet werden) und das LAN (dort läuft alles über den Rechner des Gastgebers).
+  Gemessen gegen den Lobby-Server: Mitspieler trennt in Takt 150 hart, einmal sofort und einmal mit 10 s
+  künstlichem Ausfall — wieder verbunden nach 0,1 bzw. 10,2 s, Partie läuft weiter, beide Rechner grün.
+  Prüfschalter `--net-abriss-bei=N`, `--net-abriss-dauer=ms`; Gegenschalter `--wiederverbinden-alt`.
+
+- **Online: Zuschauer** (Fable-Prüfung D10): Im Raum gibt es in der Teamwahl jetzt **»Zuschauer«**. Wer
+  das für sich wählt, spielt nicht mit, sondern schaut zu:
+  - Er bekommt beim Start einen Kartenplatz, dem nichts gehört, und ist mit allen verbündet. Weil der
+    Nebel des Spiels die Bündnistafel des Originals fragt, sieht er damit alles, was alle Spieler sehen.
+  - Er besitzt nichts und kann nichts befehlen; für ihn gibt es weder Sieg noch Niederlage, und im
+    Endbild steht er nicht. Er geht, wann er will.
+  - Die Raumliste zeigt »Zuschauer« statt eines Startplatzes; der Startknopf zählt ihn mit (»3 Menschen,
+    davon 1 Zuschauer«). Hat die Karte keinen freien Platz (alle acht gehören jemandem, z. B. NET07),
+    sagt der Startknopf das.
+  - Im LAN gibt es keine Zuschauer (dort fehlt ein Raum, in dem man »ich schaue zu« wählen kann).
+  Gemessen gegen den Lobby-Server: zwei Spieler und ein Zuschauer auf NET02 — der Zuschauer sitzt auf
+  Platz 8, besitzt nichts, sieht mit allen Aufdeckern beider Spieler, alle drei Rechner grün.
+  Prüfschalter `--net-team=8`; Gegenschalter `--zuschauer-alt`.
+
+- **Online-Raum: den eigenen Startplatz wählen** (Fable-Prüfung D2-Rest, F): Einen freien Platz anklicken
+  und **»HIERHIN WECHSELN«** — man setzt sich dorthin und startet damit an diesem Startplatz der Karte.
+  Bisher konnte ein Mitspieler seinen Platz nicht wählen (der Aufruf `move_slot` war geschrieben und
+  ungenutzt; damit ist jetzt jeder Lobby-Aufruf in Gebrauch). Geprüft online: Mitspieler wechselt auf
+  Platz 4 und startet auf Startplatz 4, grün. Prüfschalter `--net-platz=N`.
+
+- **Endbild im Gefecht und im Netz: wer gewonnen hat** (Fable-Prüfung D5):
+  - Das Abschlussfenster ist das der Kampagne, nach dem Original. Im Gefecht sagte es nicht, wer
+    gewonnen hat, alle Mitspieler hießen »CPU«, und »Missionsbezahlung $0« stand da. Jetzt:
+    - Titel **»GEFECHT GEWONNEN« / »GEFECHT VERLOREN«**, darunter **»Sieger: Team 1 — Du + CPU
+      schwer«** (oder, wenn man selbst ausgeschieden ist und noch gekämpft wird, »Es kämpfen noch:
+      …«).
+    - Die Spalten tragen Namen: »DU«, die Namen der Mitspieler, »CPU LEICHT/NORMAL/SCHWER«, auch für
+      schon besiegte Computergegner. Gibt es Teams, steht eine Zeile »Team« darüber.
+    - Die Missionsbezahlung entfällt im Gefecht; die Kampagne bleibt unverändert.
+  - Online meldet das Spiel dem Lobby-Server jetzt den Sieger (`match_end` mit dem Team bzw. dem
+    Startplatz), sobald nur noch eine Seite steht — bisher immer 0. ⚠ Diese Meldung ist nicht im
+    Paarlauf gemessen (eine Probe, die den Gegner abräumt, liefe im Netz sofort auseinander); das
+    Fenster selbst ist mit `--endbild-probe=` im Bild geprüft.
+  Gegenschalter `--endbild-alt`.
+
+- **Im Netzspiel: Tasten, wer angehalten hat, Namen im LAN** (Fable-Prüfung C12, D10-Teil):
+  - **Tastenhilfe**: Zu Beginn jeder Netzpartie steht 20 Sekunden lang unten »Enter: Nachricht an
+    alle · F4 halten: Spieler · Esc: Pause für ALLE · Spielmenü: Aufgeben«, und dieselbe Zeile steht
+    unter der Spielerliste (F4). Bisher standen die Tasten nirgends außer im Wartefenster.
+  - **Wer hat angehalten**: Esc hält im Netz die Partie für alle an, wie im Original. Jetzt sagt die
+    Meldungszeile bei allen »Anna hat die Partie für alle angehalten — »Weiter« oder Esc geht
+    weiter« und danach »Bert macht weiter«. Ohne das sah eine fremde Pause wie ein Hänger aus. Das
+    Original nennt niemanden — eine Zutat von uns.
+  - **Namen im LAN**: Im Netzkasten gibt es ein Feld **»Dein Name«** (derselbe Name wie in der
+    Online-Lobby). Er reist zu Beginn der Partie zu allen Mitspielern; Spielerliste, Nachrichten und
+    Wartefenster nennen ihn statt »Spieler 2«.
+  Geprüft: LAN-Paar »Anna« gegen »Bert« (beide Namen auf beiden Rechnern, grün), Bild der
+  Tastenhilfe im Spiel, Pausen-Prüfstand mit der Meldung auf beiden Seiten. Gegenschalter
+  `--netz-tasten-alt`.
+
+- **Online und LAN: verschiedene Fassungen und Spieldaten werden vorher erkannt** (Fable-Prüfung D8 und
+  ein offener Punkt aus P4):
+  - **Spieldaten im Raum** (D8): Das Spiel schickt jetzt eine Prüfsumme seiner eingelesenen
+    Spieldaten an den Lobby-Server (bisher immer »00000000«). Gerechnet wird über das, was die
+    Simulation liest: die Spieltabellen, die Einheitenverzeichnisse und die mitgelieferten
+    Mehrspielerkarten, rund 50 MB in etwa 0,2 s, einmal je Programmlauf. Hat ein Mitspieler im
+    Raum eine andere Summe, steht bei ihm »⚠ andere Spieldaten« (mit Erklärung im Tooltip), und der
+    Startknopf sagt »⚠ andere Spieldaten im Raum«. Gesperrt wird nicht — eine Abweichung in einer
+    Karte, die nicht gespielt wird, schadet nicht —, aber man weiß vorher, warum eine Partie
+    auseinanderlaufen könnte.
+  - **Fassung im LAN-Angebot**: Ein Gastgeber im LAN nennt jetzt seine Fassung. Eine Partie einer
+    anderen Fassung steht in der Suchliste als »⚠ andere Fassung 0.6.13«, ist nicht wählbar, und die
+    Statuszeile sagt »1 Partie gefunden, aber mit einer anderen Fassung des Spiels«. Bisher sah sie
+    aus wie jede andere, und das Beitreten scheiterte erst danach mit »Protokoll passt nicht«.
+  Geprüft: LAN-Suche gegen einen Gastgeber derselben und einer vorgetäuschten anderen Fassung;
+  Online-Raum mit einem Mitspieler mit vorgetäuschter anderer Summe (Warnung sichtbar, Partie grün).
+  Prüfschalter `--lan-fassung-test=`, `--inhaltssumme-test=`; Gegenschalter `--inhaltssumme-alt`,
+  `--lan-fassung-alt`.
+
+- **Spieltempo als Einstellung** (Fable-Prüfung D10): Gefechtsschirm, Mehrspielerschirm und Online-Raum
+  haben die Zeile **»Spieltempo«** (normal / schnell ×2 / sehr schnell ×3). »normal« ist das Tempo des
+  Originals und die Vorgabe; im Netz beginnen alle Rechner mit dem Tempo des Gastgebers (es reist im
+  Sitzungspaket mit). Im Spiel ändern + und − es weiter, im Netz für alle. Das Original hält das Tempo
+  im Netz fest auf 1 — eine Abweichung von uns, nur im Gefecht. Geprüft: LAN-Paar mit Tempo 2 (beide
+  Rechner starten mit 2, grün), NET07-Prüfsumme unverändert. Gegenschalter `--tempo-alt`.
+
+- **Discord in der Online-Lobby** (Fable-Prüfung D10): Neben »BEITRETEN« steht **»MITSPIELER FINDEN
+  (Discord)«**, im Raum neben »RAUM VERLASSEN« **»EINLADEN (Discord)«**. Beide öffnen den Discord-Server
+  des Spiels, wie der Knopf im Hauptmenü — dort, wo man auf Mitspieler wartet. Gegenschalter
+  `--lobby-discord-alt`.
+
 - **Online: nach der Partie zurück in denselben Raum, Aufgeben** (Fable-Prüfung C10, D5):
   - Bisher meldete das Spiel nach jeder Online-Partie ganz ab; man stand in der Raumliste, und die
     Runde musste sich neu finden. Jetzt bleibt man angemeldet und landet wieder im Raum — mit
@@ -460,6 +295,7 @@ bisher nur dort beschrieben.*
     Netzpartie — beim Mitspieler endete das Programm (»NETZ-FEHLER: es steht keine Partie«), beim
     Gastgeber gab es eine Ausnahme. Die Menü-Demo ist jetzt nie eine Netzpartie.
   Prüfschalter `--lobby-probe-nochmal`; Gegenschalter `--raum-alt`.
+
 - **Online-Lobby: der Raum wie in klassischen Echtzeitstrategiespielen** (Fable-Prüfung P6: C9/D3,
   D2, D4, B12):
   - **Einstellungen im Raum** (C9/D3): Der Raum zeigt Karte (mit Kartenbild, Startplätzen und
@@ -480,6 +316,7 @@ bisher nur dort beschrieben.*
   gesetzt — beide Rechner spielen NET02 gegen genau eine KI, grün; Hinauswerfen bestätigt.
   Prüfschalter `--lobby-probe-plaetze=`, `--lobby-probe-karte=`, `--lobby-probe-ki=`,
   `--lobby-probe-hinaus`; Gegenschalter `--lobby-alt`.
+
 - **Gefechts- und Mehrspielerschirm überarbeitet** (Fable-Prüfung P5):
   - **Feste Auswahlen statt Hochzählen** (C2): Gegner (»3 Computergegner«, höchstens so viele,
     wie die Karte Plätze hat), Konto (»$ 0« bis »$ 10000« in den Tausenderstufen des Originals),
@@ -510,6 +347,7 @@ bisher nur dort beschrieben.*
   Alles im Bild geprüft (Gefecht, Mehrspieler als Gastgeber und beim Beitreten, Lobby); LAN-Paare
   und eine LAN-Kartenreise grün, NET07-Prüfsumme unverändert. Gegenschalter `--gefecht-schirm-alt`,
   `--gefecht-merken-aus`, `--netz-grund-alt`, `--lobby-alt`.
+
 - **Online-Lobby robuster** (Fable-Prüfung P4: B6, B7, B8, B9, C8, C11):
   - **Ungültiger Name sperrte dauerhaft aus** (B9): Der Name wurde vor der Prüfung gespeichert,
     das Fenster verband beim nächsten Öffnen von selbst damit und blendete das Namensfeld aus —
@@ -535,6 +373,7 @@ bisher nur dort beschrieben.*
   Geprüft gegen den Lobby-Server mit den Prüfschaltern `--lobby-probe-name=`, `--lobby-probe-roh`,
   `--lobby-probe-pass=`, `--lobby-probe-beitritt=` und im Bild. Gegenschalter `--lobby-alt`,
   `--netz-grund-alt`.
+
 - **Gefecht und Mehrspieler: nur die Startplätze, die die Karte hat** (Fable-Prüfung B2, C3, B5):
   Das Menü bot auf jeder Karte »Spieler 1–8« und bis zu 7 Gegner an. Was die Karte nicht hatte,
   fiel still um: im Gefecht startete man auf NET02 mit »Spieler 8« als Spieler 1 und bekam »5
@@ -549,17 +388,20 @@ bisher nur dort beschrieben.*
   nicht gebaut« neben »wer keine Basis hat, bekommt beim Start Basis und Fabrik«); sie nennt jetzt
   die Startplätze der Karte. Gemessen im LAN-Paar NET02, zu dritt NET08 (alle grün) und im
   Einzelgefecht; Bild des Gefechtsschirms geprüft. Gegenschalter `--startplatz-alt`.
+
 - **Mehrspieler: Fortschritt der Kartenübertragung** (Fable-Prüfung D4): Spielt der Gastgeber
   eine eigene Karte, reist sie zu den Mitspielern — online in gut 160 Teilen, das dauert einige
   Sekunden. Bisher stand dabei nur »warte auf die Partie des Gastgebers«, von einem Hänger nicht
   zu unterscheiden. Jetzt zeigt der Netzkasten »Karte des Gastgebers wird übertragen: 37 % (60
   von 162 Teilen)« und danach »… sie wird vorbereitet«. Gemessen im Online-Paar auf einer eigenen
   Karte (0 bis 99 %, danach grün). Gegenschalter `--kartenreise-anzeige-alt`.
+
 - **Mehrspieler: Kartentitel statt Dateinamen** (Fable-Prüfung C14): Die Online-Raumliste, der
   Raumkopf und die LAN-Liste nannten Karten nach ihrem Dateinamen (»NET07«, »eigen01«). Jetzt
   steht dort der Titel aus dem Gefechtsmenü (»Gefechtsfeld (NET07)«), bei eigenen Karten der im
   Editor vergebene Titel (»Eigene Karte: …«); auch die Kartenliste im Gefechtsmenü nimmt für
   eigene Karten jetzt diesen Titel. Gegenschalter `--kartentitel-alt`.
+
 - **Mehrspieler: fehlt einem Mitspieler die Karte, startet er nicht** (Fable-Prüfung B12): Kam die
   Karte des Gastgebers bei einem Mitspieler nicht an (eine gelieferte Karte nicht eingelesen,
   oder eine eigene Karte ohne Bild, die darum nicht verschickt wurde), startete er trotzdem — auf
@@ -571,6 +413,7 @@ bisher nur dort beschrieben.*
   lud — die Leitung wird jetzt erst getrennt, wenn er es bestätigt hat. Gemessen im LAN zu dritt
   und im Online-Paar (die Verbliebenen laufen grün durch); Prüfschalter
   `--netz-probe-karte-fehlt`, Gegenschalter `--netz-karte-fehlt-alt`.
+
 - **Mehrspieler im LAN: geht der Gastgeber, gibt es eine klare Meldung** (Fable-Prüfung B10): Im
   LAN läuft alles über den Rechner des Gastgebers. Verließ er eine Partie zu dritt oder mehr,
   spielten die anderen noch ein paar Sekunden weiter und warteten dann für immer aufeinander
@@ -581,6 +424,7 @@ bisher nur dort beschrieben.*
   zu zweit, denn dort stand man bisher ebenfalls für immer. Geht der Gastgeber zu zweit sauber,
   spielt der Verbliebene wie bisher gegen die KI weiter. Gemessen mit LAN-Läufen zu zweit und zu
   dritt; Gegenschalter `--netz-gastgeber-alt`.
+
 - **Mehrspieler: nach dem Ende einer Partie zurück in die Lobby** (Fable-Prüfung B4): Nach Sieg
   oder Niederlage führte »Weiter« im Abschlussfenster zwar ins Menü, aber die Netzpartie war dort
   noch nicht abgemeldet — der Netzkasten war gesperrt (»von der Befehlszeile geöffnet«), die
@@ -589,6 +433,7 @@ bisher nur dort beschrieben.*
   beenden«) die Netzpartie zuerst ab: online geht es gleich zurück in die Lobby, im LAN in den
   Netzkasten mit der Meldung »Partie beendet.«. Gemessen im LAN- und im Online-Paar mit dem neuen
   Prüfschalter `--netz-ende-probe=<Takte>`; Gegenschalter `--netz-ende-alt`.
+
 - **Mehrspieler-Kleinigkeiten** (Fable-Prüfung): Eigene Editorkarten stehen wieder in der
   Kartenliste von Gefecht und Mehrspieler (sie fehlten ganz); »Zurück zum Menü« beim Warten auf
   eine Netzpartie bricht die Verbindung ab (vorher endete ein späterer Kampagnenstart mit einem
@@ -596,11 +441,206 @@ bisher nur dort beschrieben.*
   spielen weiter); eine abgerissene Verbindung schreibt das Protokoll nicht mehr mit tausenden
   gleichen Fehlern voll. Gegenschalter `--eigene-karten-alt`, `--netz-verlassen-alt`,
   `--netz-pump-alt`.
+
+- **Mehrspieler: kein Absturz mehr beim Empfang großer eigener Karten** (Fable-Prüfung A1/A3):
+  Spielte der Gastgeber eine große Editorkarte (z. B. 168×168), stürzte der Mitspieler beim
+  Aufbereiten der mitgereisten Karte ab — 12 von 12 Versuchen. Der Absturz kam immer bei
+  einer großen Speicheranforderung, während im Hintergrund Godot-Objekte aus dem Menü
+  aufgeräumt wurden. Jetzt wird vor dem Aufbereiten aufgeräumt; gemessen 3 von 3 Partien
+  ohne Absturz (vorher 5 von 5 mit). Außerdem galt eine abgebrochene Karte danach für
+  immer als vorhanden — jetzt zählt sie erst, wenn sie vollständig aufbereitet ist.
+  Gegenschalter `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
+
+### Discord
+
+- **Discord zeigt, was du spielst.** Wenn Discord läuft, steht in deinem
+  Profil »Akte Europa Reborn«, dazu Hauptmenü, Kampagne mit Mission und Titel,
+  Gefecht oder Mehrspieler mit Karte oder Karteneditor, und wie lange schon.
+  Das Spiel spricht dafür nur mit der Discord-App auf deinem Rechner und
+  verändert am Spiel nichts. Abschalten kannst du es in den *Einstellungen*
+  unter »Discord«.
+- **Discord-Knopf unten links im Startmenü** — der bekannte blaue Knopf mit
+  Logo. Er öffnet die Einladung zu unserem Discord-Server im Browser.
+
+### Karteneditor
+
+- **Der Karteneditor macht nichts mehr kaputt** (Prüfung durch Fable, bug-804..808):
+  - »Karte erzeugen« überschrieb eine vorhandene Karte ohne Rückfrage, mit dem
+    Namen `NET07` oder `01` sogar eine mitgelieferte. Jetzt werden die Namen
+    mitgelieferter Karten abgewiesen, vor dem Überschreiben einer eigenen Karte
+    fragt ein Fenster nach, und der vorgeschlagene Name ist der erste freie
+    (`eigen02`, `eigen03` …).
+  - Ein neu gesetztes Gebäude konnte ein vorhandenes überschreiben (nach
+    Wegnehmen, Speichern und neu Setzen). Es nimmt jetzt den ersten freien Platz.
+  - Jede Editorkarte trug 50 unsichtbare »Phantomrampen« in der Kartenecke. Darum
+    konnte der Pionier auf eigenen Karten keine Landungsrampe bauen, und in der
+    Ecke oben links lag ein Rampenbild. Neue Karten sind sauber, alte werden beim
+    Laden geheilt.
+  - Speichern schreibt in eine Zwischendatei und benennt sie erst dann um — ein
+    Absturz beim Speichern hinterlässt keine halbe Karte mehr. Die gemeinsamen
+    Kachelsatzdateien werden nur noch geschrieben, wenn sich ihr Inhalt ändert.
+  - Eine mitgereiste Karte sah beim Mitspieler falsch aus: Wasser und Palmen im
+    Gebüsch. Die Bildverweise kamen vom Gastgeber, das Objektbild aber aus dem
+    eigenen Backlauf. Jetzt passt beides zusammen; was die Simulation liest,
+    kommt weiter unverändert vom Gastgeber.
+
+- **Faire Mehrspielerkarten** (bug-815):
+  - Neue Auswahl »Symmetrisch: ja«: Die Karte ist punktsymmetrisch, jede Hälfte
+    ist das um 180° gedrehte Bild der anderen — Wasser, Bodenarten, Höhen, Wald,
+    Startplätze und Vorkommen. Gemessen: Höhen zu 100 % gespiegelt, Gelände zu
+    96 % (der Rest sind Gebäude und Einheiten). Auf gespiegelten Startplätzen
+    stehen Basis und Werk seitenverkehrt, damit die Basen wirklich
+    gegenüberliegen. Geht nur bei gerader Spielerzahl.
+  - Nach dem Erzeugen steht eine Fairness-Zeile in der Statuszeile: Entfernung
+    jedes Spielers zum nächsten Vorkommen und zum nächsten Gegner.
+  - Neues Werkzeug »9 Startplatz«: ein Klick setzt für den gewählten Spieler
+    Basis, Werk und Truppe als Paket. Hat er schon einen Startplatz, wird der
+    alte weggenommen — so verschiebt man ihn. Rechtsklick nimmt ihn weg. Passt
+    das Paket nicht (Hang, Wasser, belegt), bleibt die Karte unverändert, und die
+    Zeile sagt, woran es lag. Rückgängig nimmt das ganze Paket in einem Schritt
+    zurück.
+  - Gelb wird die Statuszeile nur noch bei wirklich fehlenden Startplätzen oder
+    Vorkommen (vorher schlug auch eine Statistikzeile an).
+
+- **Sofortbild im Karteneditor**: Bisher war jeder Pinselstrich erst nach F5 im Bild
+  (Speichern und Neuladen der ganzen Szene). Jetzt backt der Editor nach einem Strich —
+  mit kurzer Wartezeit, damit ein Zug nicht dutzendfach backt — eine Kopie der Karte im
+  Hintergrund, mit demselben Backofen wie beim Speichern, und tauscht Bodenbild und
+  Bäume/Felsen im laufenden Bild aus. Gemessen auf 150×150: 0,8 s nach dem Strich ist
+  er zu sehen; Rückgängig wirkt genauso schnell und bringt das Bild bytegleich zurück.
+  Gespeichert wird dabei nichts, F5 bleibt das Speichern. Grenze: hebt ein Strich eine
+  Zelle über die bisher höchste Stufe der Karte, ändert sich die Bildgröße — dann sagt
+  die Leiste »F5 zeigt es«. Prüflauf `--map-edit-sofort-check`. Gegenschalter
+  `--editor-sofortbild-aus`.
+
+- **Der Geröllpinsel malt Geröll** (bug-827): Auf flachem Land blieb die bemalte Zelle
+  selbst unverändert, nur ihre Nachbarn änderten sich; ein 3×3-Strich auf Sand änderte
+  keinen einzigen Bildpunkt. Ursache, gemessen an den Originalkarten von Kachelsatz 47:
+  »rau« hat dort kein eigenes Bild — rau ist meist Gras am Hang, und die Geröllkacheln
+  sind fast immer als »frei« eingetragen (4356 frei gegen 417 rau). Der Pinsel fand für
+  »rau« also keinen Bildstoff und zog eine Kachel, die aussah wie vorher. Jetzt malt er
+  das **Geröllbild** und setzt die Zelle auf rau (unsere Setzung, das Original hat keinen
+  Editor). Damit die Übergänge stimmen — im Original grenzt Geröll nur an Gras, Gras an
+  Sand, Sand an Wasser —, legt er bei Bedarf von selbst einen **Grasring** um die Stelle
+  (gemessen: Geröll auf Sand, 8 Ecken Gras dazwischen, 0 Kettenbrüche). Wasser wird dafür
+  nie umgemalt: liegt die Zelle zu nah am Ufer, bleibt es dort beim bisherigen Verhalten.
+  Nebenbei passen nach den Strichen des Prüflaufs alle Kachelecken (Eckpassquote 100,000 %
+  statt 99,975 %, harte Nähte 0,24 % statt 0,26 %). Der Prüflauf `--map-edit-sofort-check`
+  vergleicht jetzt das gebackene Bild und die Bildpunkte in der bemalten Zelle selbst
+  (kopflos zeigte die Textur das neue Bild nie, der alte Lauf maß also nichts).
+  Gegenschalter `--editor-geroellbild-aus` und `--editor-kettenring-aus`.
+
+- **Fußvolk im Karteneditor, Blickrichtung für alle Einheiten** (D9): Unter »4 Einheiten«
+  stehen jetzt »Leichter Soldat« und »Schwerer Soldat«. Geschrieben wird nicht Feld für
+  Feld, sondern der ganze Kartensatz, wie er auf den 55 Originalkarten am häufigsten
+  vorkommt (Leichter 266 von 617 gleich, Schwerer 156 von 447): Leben 20 bzw. 35,
+  Angriff 2 bzw. 5, Fußvolksatz und Bild wie im Original. Jeder Soldat bekommt seinen
+  Versatz in der Zelle nach der Formel des Originals (bis 18 Bildpunkte seitlich, 7 in
+  der Höhe), damit Trupps nicht in einer starren Reihe stehen. **R** dreht die
+  Blickrichtung der nächsten Einheit (Umschalt+R zurück), die Liste zeigt die Bilder in
+  der gewählten Richtung. **Flugzeuge gibt es bewusst nicht:** auf keiner Originalkarte
+  steht ein einziger Flieger in der Einheitentafel — das Original führt sie in einer
+  eigenen Tafel, ein Editorflieger hieße ein Dateiformat erfinden. Prüflauf
+  `--map-edit-fussvolk-check` (Satz, lebende Einheit, gespeicherte Datei, mit
+  `--fussvolk-shot=<datei>` ein Fensterbild). Gegenschalter `--editor-fussvolk-aus`.
+
+- **Brücken im Karteneditor** (Werkzeug »0 Brücke«): Ein Klick auf eine Uferzelle baut
+  eine Brücke über 1 bis 3 Wasserzellen zum Gegenufer, die Vorschau zeigt sie vorher grün.
+  Geschrieben wird genau das, was der Brückenbau des Originals schreibt (0x4CC280): 3 Zellen
+  breit, Fahrbahn in der Mitte eine Stufe über dem Wasser, Geländer links und rechts,
+  Brückensatz mit 500 Trefferpunkten, Lagen- und Kopfbytes. Gemessen an allen 52 Brücken
+  der 23 Originalkarten (705 Zellen) — die Editorbrücke erfüllt jede dieser Regeln ohne
+  Ausnahme, sieht aus wie eine Kartenbrücke (Steinbrücke) und lässt sich im Spiel
+  zerstören wie diese. Abgewiesen wird mit Grund: kein Wasser daneben, Wasser an zwei
+  Seiten, Gegenufer zu weit, Ufer verschieden hoch, etwas steht im Weg. Zurück nimmt sie
+  Strg+Z. Prüfläufe `--map-edit-bruecke-check` (mit `--bruecke-shot=<datei>` ein
+  Fensterbild) und `--bruecken-muster` (die Messung an den Originalen). Gegenschalter
+  `--editor-bruecke-aus`.
+
+- **Landungsrampen im Karteneditor** (Werkzeug »0 Brücke/Rampe«, in der Liste
+  »Landungsrampe«): Ein Klick auf eine Uferzelle setzt eine Rampe — nur dort fahren
+  Fahrzeuge auf Schiffe und wieder an Land. Geschrieben wird, was der Molenbau des
+  Originals schreibt: eine Zelle, Rampensatz mit 200 Trefferpunkten, Rampenkachel in
+  Richtung des Wassers, befahrbar, Lage 200 + Platz. Gemessen an den Originalkarten: von 45
+  Rampensätzen tragen 24 eine Rampenkachel, und an diesen 24 gilt jede Regel ohne Ausnahme
+  (genau ein Wassernachbar, Richtung = Wasserseite, Rampe auf Wasserhöhe); die übrigen 21
+  sind Restsätze ohne Bild (Karten 8, 9 und NET07). Die Editorrampe erfüllt dieselbe
+  Messung. Das Sofortbild zeigt sie gleich (Rampen werden lebend gezeichnet, bisher erst
+  nach F5). Prüfläufe `--map-edit-rampe-check` (mit `--rampe-shot=<datei>` ein Fensterbild)
+  und `--rampen-muster`. Gegenschalter `--editor-rampe-aus`.
+
+- **Brücken und Rampen wieder wegnehmen**: Rechtsklick mit »0 Brücke/Rampe« oder
+  »7 Wegnehmen« nimmt das Bauwerk unter der Maus weg. Bisher galt eine Brückenkachel
+  beim Wegnehmen als Gegenstand — das Bild ging, der Brückensatz blieb verwaist in der
+  Karte. Jetzt wird der Satz geleert, und jede Zelle bekommt ihre alte Geländeart zurück:
+  die steht noch im Eckraster der Karte (gemessen: alle vier Ecken 0 heißt Wasser, bei 3747
+  von 3747 Wasserzellen; eine Ecke 0 heißt raues Ufer). Danach kachelt der Geländepinsel
+  sauber nach. Im Prüflauf bekamen 12 von 12 Brückenzellen ihre alte Art zurück.
+
+- **Editorfahrzeuge tragen ihren Entwurf und die Leerwerte des Originals** (Prüfpunkt B3):
+  Der Editor schrieb in einen Fahrzeugsatz außer Kampfwerten, Leben und Tank nur Nullen.
+  Die Originalkarten tragen dort je Bauart einheitlich »leer«-Markierungen (FF) und an
+  zwei Stellen den **Entwurf** der Einheit. Mit 0 hieß jede Editoreinheit im Infofenster
+  wie Entwurf 0 und wurde danach bewertet. Jetzt schreibt der Editor je Bauart die Werte,
+  die auf den 55 Originalkarten bei mindestens 60 % der Sätze stehen, und den Entwurf aus
+  der Entwurfstafel des Spiels, der genau zu Fahrwerk, Waffe und Ausrüstung passt — für 11
+  von 12 Landbauarten gibt es genau einen, und es ist auch der häufigste auf den Karten
+  (z. B. Reifen → »Maschinengewehr«, Ketten → »Leichter Panzer«). Folge im Gefecht:
+  Editoreinheiten werden wie die Einheiten der Originalkarten auf ihren Entwurf
+  nachgezogen (NET07: 24 von 24; eine Editorkarte vorher 0, jetzt 23). Prüflauf
+  `--map-edit-satz-check`. Gegenschalter `--editor-satzfelder-alt`.
+
+- **Gefecht: neue Rohstoffstufe »wie auf der Karte« — und Lager im Karteneditor**: Bisher
+  füllte das Gefecht beim Start alle Lager nach der gewählten Stufe (keine / wenige /
+  normal / viele) — so macht es auch das Original, und die Lagerwerte einer Karte gingen
+  dabei verloren. Die neue fünfte Stufe »wie auf der Karte« lässt jedes Gebäude mit dem
+  Lager starten, das in der Karte steht (bewusste Abweichung vom Original, nur im Gefecht;
+  die vier Stufen des Originals bleiben unverändert). Neu aufgestellte Startbasen, die die
+  Karte nicht kennt, bekommen dann das Lager von »normal«. Passend dazu gibt es im
+  Karteneditor beim Gebäudepinsel eine Lagerauswahl mit den Werten der Originalkarten:
+  Bauteile für Basis und Depot (keine / 500-500-500 / 1000-1500-800 / 1500-2000-1000),
+  Terranium für Fabriken (0 bis 2000) und Minen (0 bis 200); ein Klick auf ein stehendes
+  Gebäude übernimmt die Auswahl. Gemessen: Basis aus dem Editor mit 500/500/500 startet mit
+  »wie auf der Karte« genau so, mit »normal« wie bisher mit 300/400/200. Einen
+  Gebäudenamen bietet der Editor bewusst nicht an — das Original überschreibt ihn beim
+  Missionsstart mit der Platznummer. Prüflauf `--map-edit-lager-check`; Gegenschalter
+  `--editor-lager-aus`.
+
+- **Karteneditor: der Hafen steht im Wasser, die Werft an Land** (gemeldet: »Der Hafen steht oft
+  auf dem Land, wobei er ja im Wasser stehen muss«): Der Generator setzte den Hafen wie jedes
+  andere herrenlose Gebäude auf Bauland, und weil die Verknüpfung zur Werft fehlte, zeigte er
+  auf Gebäudeplatz 0 — meist eine Basis. Gemessen an den Originalkarten: der Hafen steht ganz im
+  Wasser, die Werft, die seine Schiffe bezahlt, ganz an Land am Ufer, beide als Paar 6 bis 15
+  Felder auseinander. Jetzt setzt der Generator genau so ein Paar und verknüpft den Hafen mit
+  seiner Werft; auf den Probekarten stand jeder Hafen vollständig im Wasser und verwies auf
+  seine Werft. Gegenschalter `--editor-hafen-paar-alt`.
+
+- **Karteneditor: den Hafen von Hand setzen.** Auch der Gebäudepinsel setzt den Hafen jetzt nur
+  noch ganz ins Wasser (jede Zelle seiner Grundfläche muss freies Wasser sein, sonst sagt die
+  Statuszeile, warum nicht) und verknüpft ihn mit der nächsten Werft, die noch keinen Hafen hat
+  und höchstens 15 Felder entfernt steht. Gibt es keine, wird der Hafen abgewiesen: »erst eine
+  Werft an Land ans Ufer setzen«. Der Hafen bekommt den Eigner seiner Werft, so wie das Original
+  ihn bei der Einnahme mit der Werft weiterreicht. Wer eine Werft wegnimmt, nimmt ihren Hafen
+  mit (Strg+Z holt beide zurück); ein weggenommener Hafen gibt seine Verknüpfung frei. Dabei
+  behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
+  und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
+  `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+
+- **Karteneditor aufgeräumt** (Fable-Prüfung des Editors, Rest von F; für Spieler ohne sichtbare Änderung):
+  die fünf eigenen Schleifen über das Grundmuster eines Gebäudes sind eine (`FussZellen`), die doppelte
+  Frage »steht hier eine Einheit« ist eine (`MapFactory.EinheitAuf`), der doppelte Gefechtsstart aus dem
+  Editor ist einer (`SkirmishSetup.EditorGefecht`), und die neun statischen Zähler eines Pinselstrichs
+  sind ein Ergebnisobjekt (`MapEditTerrain.Letzter`). Die übrigen F-Punkte (Prüfstand ausgelagert,
+  Parametersatz statt Kommazeile, tote Pfade, Gegenschalter für A4/A5) waren schon am 12./13.11.
+  erledigt. Geprüft mit allen Editor-Prüfständen (Gelände, P5, Startplätze, Spiegeln, Fahrwerk, Wald,
+  Sofortbild, Spielen, Fußvolk, Brücken, Häfen: bestanden) und dem alten Spielen-Weg.
+
 - **Karteneditor aufgeräumt** (Prüfpunkt F): Der Ordner für eigene Kachelsätze darf jetzt
   ein Komma enthalten — der Schirm reicht seine Einstellungen als Auftrag weiter statt als
   Befehlszeile, die am Komma zerlegt wurde (erzeugte Karten byte-gleich wie vorher). Der
   Prüfstand des Bearbeitungsmodus (500 Zeilen) steht in einer eigenen Datei, zwei
   unsichtbare, nie gelesene Anzeigen sind entfernt.
+
 - **Der Wald erzeugter Karten brennt**: Wald war auf Editorkarten nur gesperrter Boden
   mit Baumbild — Flammenwerfer und Brand wirkten dort nicht (»0 davon sind Wald und
   können brennen«). Jetzt trägt der Generator jeden Baum so ein wie das Original:
@@ -610,11 +650,13 @@ bisher nur dort beschrieben.*
   weggenommener Baum gibt seine Zelle wieder frei (bisher blieb sie gesperrt) und
   verschwindet aus der Waldtafel. Prüflauf `--map-edit-wald-check`. Gegenschalter
   `--generator-wald-alt`.
+
 - **»Spielen« im Bedienfeld fragt auch**: Der Knopf »Spielen« im Bearbeitungsmodus
   startete noch fest als Spieler 1 gegen sieben Computergegner. Jetzt speichert er
   (falls nötig), kehrt in den Editorschirm zurück und öffnet dasselbe Fenster wie
   »Im Gefecht spielen« (Platz, Gegnerzahl, KI-Stufe). Gegenschalter
   `--editor-spielen-alt`.
+
 - **Kleinigkeiten im Karteneditor**:
   - **Typ 0** steht nicht mehr in der Gebäudeauswahl. Gemessen: 75 von 144 Sätzen mit
     Typ 0 in den gelieferten Karten sind leere Plätze, der Rest trägt Werte anderer
@@ -627,6 +669,7 @@ bisher nur dort beschrieben.*
   - Das **rote Kreuz** einer weggenommenen Einheit verschwindet, wenn man an derselben
     Stelle wieder eine setzt.
   - Zwei Tooltips sprachen noch von »Startmarken«; sie heißen Startplätze.
+
 - **Bericht in normalem Deutsch**: Das Berichtsfeld des Karteneditors zeigte nach
   dem Erzeugen, Öffnen und Prüfen die volle Werkstattausgabe (»can_build_here«,
   »Bodenblock«, »Fächer unter 8 Beobachtungen«, Speicheradressen). Jetzt steht oben
@@ -635,17 +678,20 @@ bisher nur dort beschrieben.*
   »alles in Ordnung« oder die Beanstandungen einzeln. Die vollständigen Zeilen gibt
   es mit dem Schalter **Technische Einzelheiten zeigen**. Außerdem wird eine neu
   erzeugte Karte gleich in der Kartenliste gewählt (mit Vorschau).
+
 - **Umlaute im Karteneditor**: Der Editor schrieb »Groesse«, »ZURUECK«, »OEFFNEN«,
   »Gelaende« neben »Wüste mit Küste« und »Dünen«. Alle sichtbaren Texte des
   Editorschirms und des Bedienfelds (Knöpfe, Überschriften, Hinweise, Meldungen) und
   die Kartenbeschreibung im Gefechtsaufbau haben jetzt echte Umlaute und ß. Die Namen
   der Prüfschalter (`pruefen` usw.) bleiben, wie sie sind.
+
 - **Luftkissen aufs Wasser, Läufer auf Geröll** (bug-825): Der Einheitenpinsel des
   Editors behandelte Luftkissen und Läufer wie gewöhnliche Fahrzeuge — ein Luftkissen
   ließ sich nicht aufs Wasser stellen, ein Läufer nicht auf rauen Boden, obwohl beide
   dort im Spiel fahren. Jetzt zählt das Fahrwerk wie im Spiel. Prüflauf
   `--map-edit-fahrwerk-check` (Luftkissen auf Wasser und Läufer auf Geröll gesetzt,
   Reifen auf Wasser abgewiesen). Gegenschalter `--editor-fahrwerk-alt`.
+
 - **Keine geraden Seeränder und Dämme mehr in erzeugten Karten**: Auf symmetrischen
   Karten wurde das Rauschfeld zur Hälfte kopiert — an der Kartenmitte stießen zwei
   unabhängige Hälften aneinander, und Seen und Bodenarten brachen dort als gerade
@@ -655,6 +701,7 @@ bisher nur dort beschrieben.*
   leicht (bleiben aber durchgehend befahrbar, die Fahrwege zum nächsten Gegner bleiben
   gleich lang). 8 Probekarten, alle bestanden. Gegenschalter `--generator-naht-alt`
   und `--generator-damm-alt`.
+
 - **Kartenverwaltung: Vorschau und Titel** (bug-824): Unter »Gewählte Karte und
   Bericht« zeigt der Editor jetzt das Bild der in der Liste gewählten Karte mit Titel,
   Größe und Startplätzen. Der neue Knopf **Titel …** setzt den Anzeigenamen, der im
@@ -662,16 +709,19 @@ bisher nur dort beschrieben.*
   Kartenliste wurden einmal angelegt und nie erneuert — nach dem Bearbeiten zeigte der
   Gefechtsaufbau das alte Bild. Jetzt wird ein Vorschaubild neu gemacht, sobald die Karte
   neuer ist; beim Umbenennen und Löschen geht es mit. Gegenschalter `--vorschau-alt`.
+
 - **Spielerzahl sichtbar und änderbar**: Das Startplatz-Werkzeug (Taste 9) nennt jetzt,
   wie viele und welche Spieler die Karte hat (»die Karte hat 2 Spieler (Sp 1, Sp 2)«)
   und wie man das ändert: den nächsten freien Spieler wählen und klicken = ein Spieler
   mehr, Rechtsklick = einer weniger. Die Zeile wird nach jedem Klick nachgezählt.
+
 - **Spiegeln beim Malen**: Im Bearbeitungsmodus gibt es neben der Pinselgröße den
   Knopf **⇅ Spiegeln** (Taste **M**). Ist er an, landet jeder Strich zugleich auf der
   um die Kartenmitte gedrehten Zelle (180°, genau wie bei symmetrisch erzeugten
   Karten) — für Bodenart, Höhe, Wald/Fels und Gleise. Gebäude, Einheiten, Startplätze
   und Vorkommen hängen an Spielern und werden bewusst nicht gespiegelt. Ein
   Rückgängig nimmt beide Hälften zurück. Prüflauf `--map-edit-spiegel-check`.
+
 - **Minikarte im Editor ganz anklickbar** (bug-823): Das Bedienfeld des
   Bearbeitungsmodus war höher als sein Platz und wuchs nach unten über den oberen Teil
   der Minikarte — Klicks dort kamen nie an, anklickbar war nur ihr unterer Streifen.
@@ -680,6 +730,7 @@ bisher nur dort beschrieben.*
   Zurück stehen fest unten. Neuer Prüflauf `--map-edit-minikarte-check` (drei echte
   Mausklicks: Kamera springt, die Karte wird nicht bemalt). Gegenschalter
   `--editor-feld-alt`.
+
 - **Gleich weite Nachbarn auf breiten und hohen Karten** (bug-822): Die Startplätze
   lagen mit gleichem WINKEL auf einer Ellipse. Auf einer breiten Karte rückten sie
   dadurch an den langen Seiten zusammen, während die zwei an den Enden weit weg lagen
@@ -691,6 +742,7 @@ bisher nur dort beschrieben.*
   von dem innerhalb der Karte nur 2–3 Wasserzellen übrig bleiben, wird zu Land.
   ⚠ Dieselbe Zufallszahl ergibt ab 3 Spielern damit eine andere Karte als vorher.
   Gegenschalter `--generator-ring-alt` (Platzwahl) und `--generator-sattel-alt`.
+
 - **Mitgelieferte Karten: deine Kopie wird wieder geöffnet** (bug-821): Wer eine
   mitgelieferte Karte im Editor öffnete, bekam bei JEDEM Öffnen eine neue Arbeitskopie
   (`01_kopie`, `01_kopie2`, `01_kopie3` …) — die Kartenliste lief mit halbfertigen
@@ -698,6 +750,7 @@ bisher nur dort beschrieben.*
   Editor deine vorhandene Kopie (und schreibt dabei nichts); eine weitere legt man
   bewusst mit »Kopie anlegen …« an. Geprüft: dreimal geöffnet, eine Kopie.
   Gegenschalter `--editor-kopie-neu`.
+
 - **Keine abgeschnürten Wasserstraßen mehr in erzeugten Karten** (bug-820): Lief eine
   Wasserstraße schräg und nur eine Ecke breit, blieb an ihrer engsten Stelle eine
   einzelne Wasserzelle ohne geraden Nachbarn stehen — die Prüfung meldete ein
@@ -707,6 +760,7 @@ bisher nur dort beschrieben.*
   Stelle greift die Regel nicht (5 weitere Probekarten: keine Änderung gemeldet). Die Prüfung
   nennt bei winzigen Wassergebieten jetzt auch die Zelle. Gegenschalter
   `--generator-sattel-alt`.
+
 - **Verständliche Namen im Karteneditor**: Einheiten hießen nur nach ihrem Fahrwerk
   (»Reifen«, »Ketten«), Objekte »Objekt 555« und Gleise »Linie 0..9«. Jetzt steht
   bei jeder Einheit die Waffe dabei (»Ketten · Leichte Bordkanone«, Namen aus der
@@ -716,6 +770,7 @@ bisher nur dort beschrieben.*
   dem Hinweis, dass Gleise mit derselben Nummer eine Strecke bilden. Die Auswahlliste
   hat dafür die volle Breite (das Vorschaubild sitzt jetzt klein in der Kopfzeile),
   und jeder Eintrag zeigt seinen vollen Namen auch als Tooltip.
+
 - **»Im Gefecht spielen« mit Wahl**: Der Knopf im Karteneditor startete bisher
   immer als Spieler 1 gegen bis zu sieben Computergegner auf der Stufe, die zuletzt
   im Gefechtsaufbau stand, und nach der Partie landete man im Startmenü. Jetzt fragt
@@ -723,6 +778,7 @@ bisher nur dort beschrieben.*
   mitspielen (auch »keine«, um die Karte allein zu erkunden) und auf welcher Stufe;
   die übrigen Plätze bleiben unbeteiligt stehen. Nach der Partie geht es zurück in
   den Editor, mit derselben Karte geöffnet. Gegenschalter `--editor-spielen-alt`.
+
 - **Eigene Karten verwalten**: Unter der Kartenauswahl im Karteneditor stehen jetzt
   drei Knöpfe — **Umbenennen …**, **Kopie anlegen …** und **Löschen …** (mit
   Rückfrage). Sie wirken auf alle vier Dateien einer Karte, und der Name wird auch
@@ -730,12 +786,14 @@ bisher nur dort beschrieben.*
   lässt sich nur eine Kopie anlegen), vorhandene Namen werden nie überschrieben, und
   eine Karte mit ungespeicherten Pinselstrichen lässt sich nicht umbenennen oder
   löschen. Prüflauf `--map-verwaltung-check` (12 Schritte auf echten Dateien).
+
 - **F5 behält den Blick**: Speichern mit F5 im Karteneditor lädt die Karte neu —
   bisher sprang die Ansicht danach an den Kartenanfang und auf den kleinsten Zoom,
   und man musste die Stelle, an der man gerade malte, erst wieder suchen. Jetzt
   stehen Ausschnitt und Zoom nach dem Speichern genau wie vorher (Prüflauf
   `--map-edit-kamera-check`: Abstand 0 px; mit dem Gegenschalter
   `--editor-kamera-alt` wieder 288 px daneben).
+
 - **Keine blauen Punkte mehr nach dem Malen** (bug-819): Wer im Karteneditor auf
   einer erzeugten Karte die Höhe änderte oder Geröll malte, bekam rundherum
   Kacheln, deren Ecken nicht zusammenpassten — mitten im Land tauchten kleine
@@ -748,6 +806,7 @@ bisher nur dort beschrieben.*
   acht Geröllstrichen: 0 statt 8 blaue Punkte, Eckpassquote 99,98 % statt 99,57 %
   (Originalkarten 99,96–100 %), harte Nähte 0,25 % statt 0,37 %. Die Prüfung nennt
   bei blauen Punkten jetzt auch deren Lage. Gegenschalter `--editor-pinsel-ecken-alt`.
+
 - **Weggenommene Gebäude geben ihren Platz wieder ganz frei** (bug-818): Wer im
   Karteneditor auf einer erzeugten Karte ein Gebäude setzte und wieder wegnahm,
   bekam oft nur einen Teil der Grundfläche zurück — je nach Karte blieben 5 bis 20
@@ -757,6 +816,7 @@ bisher nur dort beschrieben.*
   jetzt 37 von 37 Zellen (vorher z. B. 17 von 37) und nennt bei einem Rest jede
   gesperrte Zelle mit Grund; `--map-editor-samen=<Zahl>` macht seine Karte
   wiederholbar. Gegenschalter `--editor-zone3-alt`.
+
 - **Keine Sandbalken mehr im Wald erzeugter Karten** (bug-817): Am Waldrand
   standen diagonale Reihen sandfarbener Balken, zwischen den Büschen sichtbar.
   Ursache war die Bodenfüllung unter Waldzellen: Sie übernahm die Kachel des
@@ -764,6 +824,7 @@ bisher nur dort beschrieben.*
   Zelle treppab weiter. Jetzt zählen zuerst gleichmäßige Bodenkacheln, ein
   Übergang nur, wenn ringsum nichts anderes liegt (Gegenschalter
   `--fuellung-uebergang-alt`).
+
 - **Malen wie gewohnt** (bug-814):
   - Mit gedrückter Maustaste ziehen malt Bodenart, Höhe, Wald/Fels, Gleise und
     Wegnehmen — jede Zelle einmal je Strich. Bisher war es ein Klick je Zelle.
@@ -775,6 +836,7 @@ bisher nur dort beschrieben.*
   - Neues Werkzeug »8 Vorkommen«: links setzt ein Terranium-Vorkommen, rechts
     nimmt eins weg. Alle Vorkommen stehen als gelbe Raute auf der Karte — vorher
     waren sie im Editor unsichtbar und nur vom Generator zu setzen.
+
 - **Erzeugen mit Wahl** (bug-813):
   - Jede Karte bekommt eine Zufallszahl, und »Neu würfeln« macht eine neue. Bisher
     ergaben gleiche Einstellungen immer dieselbe Karte. Die Zahl steht sichtbar
@@ -789,6 +851,7 @@ bisher nur dort beschrieben.*
     Felder vom Start). Gemessen lag es vorher auf derselben Karte 1 bis 38 Felder
     entfernt, jetzt zum Beispiel 11 bis 19 (Hochformat, 8 Spieler) oder 14 bis 17
     (Mittel, 8 Spieler).
+
 - **Der Bearbeitungsmodus ist ein Editor** (bug-812):
   - Kein Nebel des Krieges mehr: Man sieht die ganze Karte mit allen Gebäuden
     und Objekten, die Minikarte ist voll. Vorher sah man nur die eigene Basis.
@@ -804,11 +867,13 @@ bisher nur dort beschrieben.*
     Gleise weisen belegte Zellen ab, Einheiten lassen sich nicht stapeln, Gleise
     nicht aufs Wasser legen. Wer zu »Einheiten« wechselt, während »herrenlos«
     gewählt ist, bekommt Spieler 1.
+
 - **Kein Absturz mehr beim schnellen Schließen des Karteneditors** (bug-809).
   Die Vorschau der Kachelsätze lief in einem Hintergrundprozess, der Funktionen
   der Spiel-Engine aufrief; schloss man den Editor in den ersten Sekunden, konnte
   das Spiel abstürzen. Die Messung lernt außerdem nur noch aus mitgelieferten
   Karten, nicht aus Kopien.
+
 - **Netzspiel mit eigener Karte startet zuverlässig** (bug-810, bug-811):
   - Der Mitspieler backte jede mitgereiste Karte sofort, auch wenn er dieselbe
     Karte schon hatte. Bei großen Karten dauerte das Sekunden, die Verbindung riss
@@ -820,6 +885,7 @@ bisher nur dort beschrieben.*
   - Eine Kopie einer Original-Netzkarte unter anderem Namen bekam beim Gastgeber
     die Original-KI-Tafel, beim Mitspieler eine gerechnete — die Partie brach ab.
     Die Originaltafel gilt jetzt nur für die mitgelieferten Karten selbst.
+
 - **Feste Kartengrößen statt Hochzählen** (bug-800). Sieben Größen zum
   Anklicken, jede nach einer Karte des Originals gewählt: Klein 100×100,
   Mittel 150×150 (wie NET03), Groß 168×168 (NET01), Sehr groß 230×230 (NET02),
@@ -827,17 +893,20 @@ bisher nur dort beschrieben.*
   Die Spielerzahl 2 bis 8 wählt man per Knopf, und sie schlägt eine passende
   Größe vor. Vorgabe ist 150×150 für 2 Spieler; 64×64 war zu klein für den
   Mehrspieler. Eine eigene Größe gibt es weiter, ausklappbar.
+
 - **Kachelsätze sind beschrieben** (bug-801). Zu jedem Satz stehen ein Name,
   eine kurze Beschreibung, ein Vorschaubild aus einer Originalkarte, die
   Bodenstoffe als Farbfelder und die Originalkarten, die ihn benutzen (etwa
   »Wüste mit Küste – NET02, NET07«). Die Namen sind unsere Zusammenfassung,
   das Original kennt nur die Nummern.
+
 - **Ein Bedienfeld zum Bearbeiten** (bug-802). Bisher gab es nur zwei
   Textzeilen und Tasten. Jetzt steht rechts ein Feld mit den Werkzeugen
   (Bodenart, Höhe, Gebäude, Einheiten, Wald/Fels, Gleise, neu: Wegnehmen),
   einer Bildliste der Auswahl mit Namen, den Besitzern in Parteifarben, einer
   Zeile, die sagt, was Links- und Rechtsklick gerade tun, und den Knöpfen
   Speichern, Spielen und Zurück. Alle alten Tasten gelten weiter.
+
 - **Ein neuer Kartengenerator: Karten sehen aus wie die des Originals**
   (bug-768). Erzeugte Karten zeigten helle Dreiecke, einzelne Wasserflecken
   im Festland und rechteckige Hangblöcke. Der Grund: Die Karten des Originals
@@ -849,23 +918,28 @@ bisher nur dort beschrieben.*
   Böden als zusammenhängende Flächen auf ein Eckraster und wählt dann nur
   Kacheln, deren Ecken passen. Gemessen: 100 % passende Ecken und keine
   Wasserflecken mehr, in allen neun Probekarten über vier Kachelsätze.
+
 - **Kein Mosaik mehr unter dem Nebel** (bug-772). Aus denselben vier Stoffen
   rechnet das Original auch das Bild unter dem Nebel und den Bauplatz. Der
   Editor schrieb sie zellweise falsch, darum lag unter dem Nebel ein Mosaik aus
   Wasser- und Grasblöcken. Das war sehr wahrscheinlich das »wilde Wasser«.
+
 - **Hügel mit Ecken und Diagonalen** (bug-769): Die Hangkacheln 9 bis 14 sind
   die Diagonalen. Der Editor kannte nur die vier Geraden, daher die kantigen
   Rechtecke.
+
 - **Mehrspielertaugliche Karten für 2 bis 8 Spieler** (bug-770). Die
   Startplätze werden zuerst gesetzt, symmetrisch verteilt, jeder auf ebenem,
   baubarem Land. Jeder Startplatz ist von jedem anderen über Land erreichbar,
   zwischen benachbarten Plätzen gibt es freie Wege. Vorkommen und neutrale
   Gebäude werden reihum je Startgebiet verteilt (Unterschied höchstens eins).
   Vorher standen bei vier Spielern zwei Startgebiete ohne Vorkommen da.
+
 - **Prüfstand für erzeugte Karten** (bug-771): `--map-check` misst jetzt
   passende Ecken, Wasserflecken, Erreichbarkeit aller Startplätze, Fairness der
   Wege und den Bauplatz um jeden Start, mit den Originalkarten als Messlatte.
   Gegenschalter `--generator-alt` holt den alten Generator zurück.
+
 - **Öffnen beschädigt keine gelieferte Karte mehr** (bug-739). Bisher schrieb
   *Vorhandene öffnen* die Karte sofort unter demselben Namen zurück. Dabei
   gingen Brücken, Rampen, die Waldtafel und die Terranium-Plätze verloren, in
@@ -874,21 +948,35 @@ bisher nur dort beschrieben.*
   Karten werden erst beim Speichern (F5) geschrieben. Eine zweite Sperre
   verhindert das Speichern einer gelieferten Karte unter ihrem eigenen Namen.
   Hattest du eine Karte schon beschädigt, hilft ein Neueinlesen.
+
 - **Einheiten aus dem Editor sind bewaffnet** (bug-740). Editor und Generator
   setzten Waffe, Munition, Tempo, Reichweite und Sicht auf 0, die Truppe konnte
   also weder kämpfen noch richtig fahren. Jetzt kommt je Bauart der häufigste
   Satz aus den 54 gelieferten Karten.
+
 - **Gebäude bekommen die richtigen Griffzellen** (bug-741): 60000 + Platz wie
   im Original statt 51000 + Platz, was im Waldband lag.
+
 - **Nur die sperrenden Zellen eines Gebäudes werden belegt** (bug-742). Bisher
   wurde das ganze Rechteck gestempelt, auch über Wasser und Einheiten, während
   einzelne sperrende Zellen fehlten und man durch sie hindurchfahren konnte.
+
 - **»Im Gefecht spielen«** (bug-743): ein Knopf im Editor startet die Karte
   direkt als Gefecht. Du spielst Platz 1, alle anderen besetzten Plätze spielt
   der Computer (unsere Setzung).
+
 - **Ehrliche Kartenprüfung** (bug-744). Die Startplätze kommen aus den
   Einheiten und nicht mehr aus veralteten Startmarken. Fahrzeuge dürfen nur über
   freien Boden, Fußvolk auch über rauen. Bis zu 8 Spieler.
+
+### Laufzeit
+
+- **Laufzeit .NET 10 statt .NET 8**: .NET 8 hat am 10.11.2026 sein Support-Ende erreicht
+  und bekommt keine Sicherheitsupdates mehr. Das Spiel bringt jetzt .NET 10.0.15 mit
+  (Langzeitfassung, Support bis 14.11.2028). Spielerisch ändert sich nichts: die
+  NET07-Prüfsummen sind über 30 s Spielzeit Bild für Bild gleich wie mit .NET 8, Kampagne 1
+  läuft 3000 s durch, Spielstände laden deckungsgleich. Der Installer wird dadurch rund
+  1,7 MB größer. Gebaut wird der Installer jetzt mit Inno Setup 7.1.1.
 
 ### Für Neugierige
 
@@ -918,14 +1006,11 @@ bisher nur dort beschrieben.*
 
 ### Bekannte Einschränkungen
 
-- **Kein Wiederverbinden.** Reißt die Verbindung ab, ist die Partie für dich
-  vorbei. Die anderen spielen weiter. Der Server hält die Partie schon vor; der
-  Weg zurück hinein kommt in einer der nächsten Fassungen.
-- **Online jeder gegen jeden.** Bündnisse und Teams werden noch nicht
-  übertragen.
-- **Kein Kartenabgleich.** Haben zwei Spieler verschieden eingelesene Daten,
-  merkt das Spiel es erst an auseinanderlaufenden Prüfsummen.
-- **Im LAN tragen die Spieler keine Namen**, sie heißen »Spieler 1, 2, …«.
+- **Wiederverbinden nur online und nur bei laufendem Spiel.** Reißt die Leitung zum Server ab,
+  kommst du binnen 60 Sekunden zurück in die Partie. Nach einem Absturz oder Neustart des Spiels
+  geht das nicht, und im LAN gibt es kein Wiederverbinden.
+- **Zuschauer nur online**, nicht im LAN. Ein Zuschauer läuft im Gleichschritt mit: Hängt seine
+  Leitung, warten alle (»Warten auf …«, mit Ctrl-K ausschalten).
 - **Kopien gelieferter Karten** tragen Brücken, Rampen, Waldtafel und
   Terranium-Plätze noch nicht mit.
 - **Der Geländepinsel des Editors** schreibt die Stoffe unter dem Nebel noch

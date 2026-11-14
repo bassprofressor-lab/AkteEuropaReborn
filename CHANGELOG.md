@@ -6,7 +6,7 @@ your own copy of the 1997 game.
 
 *Auf Deutsch: [CHANGELOG.de.md](CHANGELOG.de.md).*
 
-## 0.7.0 — 2026-11-11 · online multiplayer, Discord, and a map editor that no longer breaks things
+## 0.7.0 — 2026-11-14 · online multiplayer, Discord, and a map editor that no longer breaks things
 
 > **With 0.7.0, Akte Europa Reborn goes online.** All 33 campaign missions
 > have been played through, and as announced, multiplayer over the internet is
@@ -18,13 +18,19 @@ your own copy of the 1997 game.
 > Ctrl-K, and chat on Enter. New are the Discord status and a map editor that no
 > longer damages shipped maps and produces playable ones.
 >
+> **Teams and computer opponents of your choice:** in skirmish and network play you now decide for
+> every start position who plays there (you, another player, or an easy, normal or hard computer
+> opponent) and in which team. Two humans against two computers works too. Online adds: choosing
+> your own start position, **spectators**, **reconnecting** after a dropped connection, a warning on
+> different game data, a game speed, names on LAN, and an end screen with the winning team.
+>
 > As always, every change has a switch that brings back the old behaviour, and
 > a test bench. Where the original prescribes nothing, the source says "UNSERE
 > SETZUNG" (our choice).
 >
 > ✅ **No re-import needed.** Savegames from 0.6.13 still load.
 >
-> ⚠ **Network play:** the protocol is now at level 4. 0.6.13 and 0.7.0 do not
+> ⚠ **Network play:** the protocol is now at level 5. 0.6.13 and 0.7.0 do not
 > play together, not even on a LAN. Online, players only see others on the same
 > version.
 
@@ -99,266 +105,38 @@ your own copy of the 1997 game.
 - **Going to the menu no longer leaves a ticker running** (bug-766). After
   leaving the map it kept running against the already freed map.
 
-### Discord
+### Teams, computer opponents of your choice, spectators, reconnecting
 
-- **Discord shows what you are playing.** While Discord runs, your profile
-  shows "Akte Europa Reborn" with main menu, campaign mission and title,
-  skirmish or multiplayer with map, or map editor, and for how long. The game
-  only talks to the Discord app on your own machine and changes nothing in the
-  game. You can turn it off under *Settings* → "Discord".
-- **Discord button bottom left in the start menu** — the familiar blue button
-  with the logo. It opens the invite to our Discord server in your browser.
+After the first build of 0.7.0 came the wishes from player testing and Fable's review of the skirmish and multiplayer menus. Most of it applies in skirmish, on LAN and online.
 
-### Map editor
+- **Skirmish: strength and team per computer opponent** (player request: "I can't just say I take
+  one easy, one normal and one hard computer opponent … and forming teams would be good"):
+  - **One row per start position** instead of "opponents / start position / difficulty": the
+    skirmish screen lists every start position of the chosen map on the left under the map list,
+    as in classic real-time strategy games. For each position you pick the **player** (You ·
+    Computer easy · Computer normal · Computer hard · empty) and the **team** (– for free-for-all,
+    Team 1 to 4). That also picks your start position: it is the row that says "You". Setting
+    another row to "You" moves you there, and the old row takes what that row had.
+  - **Every computer opponent plays at its own strength**: thinking rate, wave size, pauses between
+    attacks and tech ladder follow the level of its position, no longer one level for all.
+  - **Teams**: same team means allied, using the original's alliance table the game already knows
+    from the campaign. Allies do not attack each other (neither the computer opponents nor your own
+    units on their own), they share vision in the fog, and mines do not hit an ally. The match is
+    won when no enemy team has anything left; your allied computer opponent does not have to
+    survive for that. It is lost, as before, when nothing of yours is left.
+  - Below the list the line-up is shown in one sentence ("Team 1: You + hard vs Team 2: easy +
+    normal"). If there is no enemy because everyone is on your team, it says so and "START SKIRMISH"
+    is disabled.
+  - The line-up is remembered and stored in the **saved game**. So far a loaded skirmish took the
+    number and level of opponents from whatever the screen last showed.
+  - Multiplayer works the same way, see the entry above.
+  Measured on NET07, 2 vs 2 (You + computer hard vs computer easy + normal), 15 minutes of
+  game time: 116 kills, none between allies. The team ending is checked by `--gefecht-teams-probe`;
+  saving and loading with teams is identical (`--spielstand-check`). Without teams the skirmish is
+  unchanged: NET07 checksum still `3D49B2EF34977BF8`. New on the command line:
+  `--gefecht-plaetze=du:1,schwer:1,leicht:2,normal:2` (in the order of the start positions);
+  `--skirmish=map,n,level,slot` keeps the old way. Opt-out `--gefecht-plaetze-alt`.
 
-- **The map editor no longer breaks things** (review by Fable, bug-804..808):
-  - "Create map" overwrote an existing map without asking, and with the name
-    `NET07` or `01` even a shipped one. Names of shipped maps are now refused, a
-    dialog asks before overwriting your own map, and the suggested name is the
-    first free one (`eigen02`, `eigen03` …).
-  - A newly placed building could overwrite an existing one (after removing,
-    saving and placing again). It now takes the first free slot.
-  - Every editor map carried 50 invisible "phantom ramps" in the map corner, so
-    the pioneer could not build a landing ramp on custom maps, and a ramp sprite
-    sat in the top-left corner. New maps are clean, old ones are healed on load.
-  - Saving writes to a temporary file and renames it afterwards, so a crash while
-    saving no longer leaves half a map. The shared tile set files are only
-    written when their content changes.
-  - A map sent over the network looked wrong for the joining player: water and
-    palm trees in the bushes. The picture references came from the host, the
-    object image from the local bake. Both now match; everything the simulation
-    reads still comes unchanged from the host.
-- **Fair multiplayer maps** (bug-815):
-  - New choice "Symmetrisch: ja": the map is point-symmetric, each half is the
-    other rotated by 180° — water, ground, heights, forest, start positions and
-    deposits. Measured: heights 100 % mirrored, terrain 96 % (the rest is
-    buildings and units). On mirrored start plots base and factory swap sides so
-    the bases really face each other. Even player counts only.
-  - After creating, the status line shows a fairness line: each player's
-    distance to the nearest deposit and the nearest enemy.
-  - New tool "9 Start position": one click places base, factory and troop for
-    the selected player as one package. If the player already has a start
-    position, the old one is removed — that's how you move it. Right click
-    removes it. If the package doesn't fit (slope, water, occupied), the map stays
-    unchanged and the line says why. Undo takes the whole package back in one
-    step.
-  - The status line only turns yellow for really missing start positions or
-    deposits (a statistics line used to trigger it too).
-- **Instant picture in the map editor**: every brush stroke used to show only after F5
-  (saving and reloading the whole scene). After a stroke — with a short delay so a drag
-  doesn't bake dozens of times — the editor now bakes a copy of the map in the
-  background, with the same baker as saving, and swaps the ground picture and the
-  trees/rocks in the running view. Measured on 150×150: visible 0.8 s after the stroke;
-  undo is just as quick and brings the picture back byte for byte. Nothing is saved;
-  F5 stays the save. Limit: if a stroke raises a cell above the map's highest level so
-  far, the picture size changes — the panel then says "F5 zeigt es". Check
-  `--map-edit-sofort-check`. Opt-out `--editor-sofortbild-aus`.
-- **The rubble brush paints rubble** (bug-827): on flat land the painted cell itself
-  stayed unchanged, only its neighbours changed; a 3×3 stroke on sand changed not a
-  single pixel. Cause, measured on the original maps of tileset 47: "rough" has no
-  picture of its own there — rough is mostly grass on slopes, and the rubble tiles are
-  almost always marked "free" (4356 free vs. 417 rough). The brush found no material for
-  "rough" and drew a tile that looked like the old one. It now paints the **rubble
-  picture** and sets the cell to rough (our choice, the original has no editor). To keep
-  transitions right — in the originals rubble only borders grass, grass borders sand,
-  sand borders water — it lays a **ring of grass** around the spot when needed
-  (measured: rubble on sand, 8 grass corners in between, 0 chain breaks). Water is never
-  repainted for this: if the cell is too close to the shore, the old behaviour stays
-  there. As a side effect, all tile corners now match after the check's strokes (corner
-  match 100.000 % instead of 99.975 %, hard seams 0.24 % instead of 0.26 %). The check
-  `--map-edit-sofort-check` now compares the baked picture and the pixels in the painted
-  cell itself (headless, the texture never showed the new picture, so the old check
-  measured nothing). Opt-outs `--editor-geroellbild-aus` and `--editor-kettenring-aus`.
-- **Infantry in the map editor, facing for all units** (D9): "4 Einheiten" now lists
-  "Leichter Soldat" and "Schwerer Soldat". The editor writes the whole map record as it
-  most often appears on the 55 original maps (light 266 of 617 identical, heavy 156 of
-  447): health 20/35, attack 2/5, infantry set and picture as in the original. Each
-  soldier gets its in-cell offset by the original's formula (up to 18 px sideways, 7 px
-  vertically), so squads don't stand in a rigid row. **R** turns the facing of the next
-  unit (Shift+R back); the list shows the pictures in the chosen direction. **Aircraft
-  are left out on purpose:** not one original map has an aircraft in its unit table —
-  the original keeps them in a separate table, and an editor aircraft would mean
-  inventing a file format. Check `--map-edit-fussvolk-check` (record, live unit, saved
-  file, with `--fussvolk-shot=<file>` a window picture). Opt-out `--editor-fussvolk-aus`.
-- **Bridges in the map editor** (tool "0 Brücke"): a click on a shore cell builds a bridge
-  over 1 to 3 water cells to the far bank; the preview shows it in green first. The editor
-  writes exactly what the original's bridge builder writes (0x4CC280): 3 cells wide, the
-  roadway in the middle one level above the water, railings on both sides, a bridge record
-  with 500 hit points, layer and head bytes. Measured on all 52 bridges of the 23 original
-  maps (705 cells) — the editor bridge meets every one of these rules without exception,
-  looks like a map bridge (stone) and can be destroyed in game like one. Refused with a
-  reason: no water next to it, water on two sides, far bank too far, banks at different
-  heights, something in the way. Ctrl+Z takes it back. Checks `--map-edit-bruecke-check`
-  (with `--bruecke-shot=<file>` a window picture) and `--bruecken-muster` (the measurement
-  on the originals). Opt-out `--editor-bruecke-aus`.
-- **Landing ramps in the map editor** (tool "0 Brücke/Rampe", list entry
-  "Landungsrampe"): a click on a shore cell places a ramp — the only place where vehicles
-  board ships and come back ashore. The editor writes what the original's pier builder
-  writes: one cell, a ramp record with 200 hit points, the ramp tile facing the water,
-  passable, layer 200 + slot. Measured on the original maps: of 45 ramp records 24 carry a
-  ramp tile, and every rule holds for these 24 without exception (exactly one water
-  neighbour, direction = water side, ramp at water level); the other 21 are leftover
-  records without a picture (maps 8, 9 and NET07). The editor ramp passes the same
-  measurement. The instant picture shows it at once (ramps are drawn live, before only
-  after F5). Checks `--map-edit-rampe-check` (with `--rampe-shot=<file>` a window
-  picture) and `--rampen-muster`. Opt-out `--editor-rampe-aus`.
-- **Removing bridges and ramps**: right-click with "0 Brücke/Rampe" or "7 Wegnehmen"
-  removes the structure under the mouse. Before, a bridge tile counted as an object when
-  removed — the picture went, the bridge record stayed behind, orphaned. Now the record is
-  cleared and every cell gets its old terrain type back: it is still in the map's corner
-  raster (measured: all four corners 0 means water, for 3747 of 3747 water cells; one
-  corner 0 means rough shore). Then the terrain brush retiles cleanly. In the check, 12 of
-  12 bridge cells got their old type back.
-- **Editor vehicles carry their design and the original's empty markers** (check item
-  B3): apart from combat values, health and fuel the editor wrote only zeros into a vehicle
-  record. The original maps carry uniform "empty" markers (FF) per type there, and the
-  unit's **design** in two places. With 0, every editor unit was named and valued like
-  design 0 in the info window. The editor now writes, per type, the values found in at
-  least 60 % of the records on the 55 original maps, and the design from the game's design
-  table that matches chassis, weapon and equipment exactly — 11 of 12 land types have
-  exactly one, and it is also the most frequent on the maps (e.g. Reifen → "Maschinen-
-  gewehr", Ketten → "Leichter Panzer"). In skirmish, editor units are now pulled onto their
-  design like the units of the original maps (NET07: 24 of 24; an editor map 0 before,
-  now 23). Check `--map-edit-satz-check`. Opt-out `--editor-satzfelder-alt`.
-- **Skirmish: new resource level "wie auf der Karte" (as on the map) — and stores in the
-  map editor**: so far skirmish filled every store at the start according to the chosen
-  level (none / few / normal / many) — the original does the same, and a map's own store
-  values were lost. The new fifth level "wie auf der Karte" starts every building with the
-  stores written in the map (a deliberate deviation from the original, skirmish only; the
-  original's four levels are unchanged). Newly placed start bases the map does not know get
-  the "normal" stores. To go with it, the map editor's building brush now offers store
-  choices with the values of the original maps: parts for base and depot (none /
-  500-500-500 / 1000-1500-800 / 1500-2000-1000), terranium for factories (0 to 2000) and
-  mines (0 to 200); clicking a placed building applies the choice. Measured: an editor base
-  with 500/500/500 starts exactly so with "wie auf der Karte", and with 300/400/200 on
-  "normal" as before. The editor deliberately offers no building name — the original
-  overwrites it with the slot number at mission start. Check `--map-edit-lager-check`;
-  opt-out `--editor-lager-aus`.
-- **Runtime .NET 10 instead of .NET 8**: .NET 8 reached end of support on 10 Nov 2026 and
-  gets no more security updates. The game now ships .NET 10.0.15 (long-term support until
-  14 Nov 2028). Nothing changes in play: the NET07 checksums over 30 s of game time are
-  identical frame by frame to .NET 8, campaign 1 runs 3000 s, saves load identically. The
-  installer grows by about 1.7 MB. The installer is now built with Inno Setup 7.1.1.
-- **Multiplayer: no more crash when receiving large own maps** (Fable review A1/A3): when the
-  host played a large editor map (e.g. 168×168), the other player crashed while preparing
-  the transferred map — 12 of 12 attempts. The crash always came on a large memory request
-  while Godot objects from the menu were being cleaned up in the background. The game now
-  cleans up before preparing; measured 3 of 3 matches without a crash (before 5 of 5 with).
-  Also, an aborted map counted as present forever — it now counts only once fully prepared.
-  Opt-outs `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
-- **Map editor: the harbour stands in the water, the shipyard on land** (reported: "the harbour
-  often stands on land, though it must be in the water"): the generator placed the harbour like
-  any other neutral building on building land, and with no link to its shipyard it pointed at
-  building slot 0 — usually a base. Measured on the original maps: the harbour stands fully in
-  the water, the shipyard that pays for its ships fully on land at the shore, both as a pair 6
-  to 15 cells apart. The generator now places exactly such a pair and links the harbour to its
-  shipyard; on the test maps every harbour stood fully in water and pointed at its shipyard.
-  Opt-out `--editor-hafen-paar-alt`.
-- **Map editor: placing a harbour by hand.** The building brush now also places a harbour only
-  fully in water (every cell of its footprint must be free water, otherwise the status line says
-  why) and links it to the nearest shipyard that has no harbour yet and stands at most 15 cells
-  away. If there is none, the harbour is refused: "place a shipyard on land at the shore first".
-  The harbour takes its shipyard's owner, just as the original hands it over together with the
-  shipyard on capture. Removing a shipyard removes its harbour too (Ctrl+Z brings both back);
-  a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
-  it became blocked ground and no ship could pass there any more — they are water again. Test
-  bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
-- **Online: spectators** (Fable review D10): the team choice in the room now has **"Spectator"**. Whoever
-  picks it for themselves does not play but watches:
-  - At the start they get a map position that owns nothing and are allied with everyone. Since the
-    game's fog asks the original's alliance table, they see everything all players see.
-  - They own nothing and cannot command anything; there is no win or loss for them, and they do not
-    appear in the end screen. They leave whenever they like.
-  - The room list shows "Spectator" instead of a start position; the start button counts them ("3
-    humans, 1 of them spectator"). If the map has no free position (all eight are owned, e.g. NET07),
-    the start button says so.
-  - There are no spectators in LAN (there is no room where one could choose "I am watching").
-  Measured against the lobby server: two players and one spectator on NET02 — the spectator sits on
-  position 8, owns nothing, sees through all scouts of both players, all three machines green. Test
-  switch `--net-team=8`; opt-out `--zuschauer-alt`.
-- **Online: reconnecting after a dropped connection** (Fable review D9):
-  - If the connection to the lobby server drops in the middle of a match (Wi-Fi, router), the game now
-    reconnects every 3 seconds and signs in with its resume key. The server holds the seat for 60
-    seconds; the game fetches all game frames since the last number and carries on. The message line
-    says "connection to the server interrupted — reconnecting …" and then "connection is back"; the
-    others see "Waiting for …" in the meantime.
-  - Own game frames are no longer lost meanwhile: they stay queued and go out after reconnecting.
-    Whatever the server did not receive before the drop (no echo) is sent again. So far they were
-    discarded, and the others waited forever for our ticks until they dropped us.
-  - If the connection does not come back within 60 seconds, the match ends for that player with a clear
-    message.
-  - ⚠ Not covered: restarting the game after a crash (the whole match would have to be recomputed from
-    the first tick) and LAN (everything runs through the host's machine there).
-  Measured against the lobby server: the other player cuts the line hard at tick 150, once immediately
-  and once with an artificial 10 s outage — reconnected after 0.1 and 10.2 s, the match continues, both
-  machines green. Test switches `--net-abriss-bei=N`, `--net-abriss-dauer=ms`; opt-out
-  `--wiederverbinden-alt`.
-- **Map editor tidied up** (Fable editor review, remainder of F; no visible change for players): the five
-  separate loops over a building's footprint pattern are one (`FussZellen`), the duplicated "is there a
-  unit here" check is one (`MapFactory.EinheitAuf`), the duplicated skirmish start from the editor is one
-  (`SkirmishSetup.EditorGefecht`), and the nine static counters of a brush stroke are one result object
-  (`MapEditTerrain.Letzter`). The other F points (test bench moved out, parameter set instead of a comma
-  string, dead paths, opt-outs for A4/A5) were already done on 12/13 Nov. Checked with all editor test
-  benches (terrain, P5, start positions, mirroring, chassis, forest, instant picture, play, infantry,
-  bridges, harbours: passed) and the old play path.
-- **Online room: choose your own start position** (Fable review D2 remainder, F): click a free position
-  and **"MOVE HERE"** — you take that position and start at that start position on the map. So far a
-  player could not choose their position (the `move_slot` call was written and unused; now every lobby
-  call is in use). Checked online: the other player moves to position 4 and starts at start position 4,
-  green. Test switch `--net-platz=N`.
-- **Game speed as a setting** (Fable review D10): the skirmish screen, the multiplayer screen and the
-  online room have a **"Game speed"** row (normal / fast ×2 / very fast ×3). "normal" is the original's
-  speed and the default; in network play every machine starts with the host's speed (it travels in the
-  session packet). In game + and − still change it, in network play for everyone. The original keeps
-  the speed fixed at 1 in network play — a deviation of ours, skirmish only. Checked: LAN pair at speed
-  2 (both machines start at 2, green), NET07 checksum unchanged. Opt-out `--tempo-alt`.
-- **Discord in the online lobby** (Fable review D10): next to "JOIN" there is **"FIND PLAYERS
-  (Discord)"**, and in the room next to "LEAVE ROOM" **"INVITE (Discord)"**. Both open the game's
-  Discord server, like the button in the main menu — right where you wait for other players. Opt-out
-  `--lobby-discord-alt`.
-- **End screen in skirmish and network play: who won** (Fable review D5):
-  - The end window is the campaign's, after the original. In skirmish it did not say who won, every
-    other player was called "CPU", and "mission pay $0" was shown. Now:
-    - Title **"SKIRMISH WON" / "SKIRMISH LOST"**, below it **"Winner: Team 1 — You + CPU hard"** (or,
-      if you are out and the others still fight, "Still fighting: …").
-    - The columns carry names: "YOU", the other players' names, "CPU EASY/NORMAL/HARD", also for
-      computer opponents already beaten. With teams there is a "Team" row on top.
-    - Mission pay is dropped in skirmish; the campaign is unchanged.
-  - Online the game now reports the winner to the lobby server (`match_end` with the team or start
-    position) as soon as only one side is left — so far always 0. ⚠ This report is not measured in a
-    pair run (a probe that wipes out the enemy would go out of sync right away in network play); the
-    window itself is checked as a picture with `--endbild-probe=`.
-  Opt-out `--endbild-alt`.
-- **In network play: keys, who paused, names in LAN** (Fable review C12, part of D10):
-  - **Key help**: at the start of every network match the bottom of the screen shows "Enter: message
-    to all · hold F4: players · Esc: pause for EVERYONE · game menu: surrender" for 20 seconds, and
-    the same line is shown below the player list (F4). So far the keys appeared nowhere except in
-    the waiting window.
-  - **Who paused**: Esc pauses the match for everyone in network play, as in the original. Now the
-    message line tells everyone "Anna paused the match for everyone — "Continue" or Esc resumes",
-    and afterwards "Bert continues". Without that, someone else's pause looked like a hang. The
-    original names nobody — this is our addition.
-  - **Names in LAN**: the network box has a **"Your name"** field (the same name as in the online
-    lobby). It travels to all players at the start of the match; the player list, messages and the
-    waiting window show it instead of "Player 2".
-  Checked: LAN pair "Anna" vs "Bert" (both names on both machines, green), screenshot of the key help
-  in game, pause test bench with the message on both sides. Opt-out `--netz-tasten-alt`.
-- **Online and LAN: different versions and game data are detected beforehand** (Fable review D8 and an
-  open point from P4):
-  - **Game data in the room** (D8): the game now sends a checksum of its imported game data to the
-    lobby server (so far always "00000000"). It covers what the simulation reads: the game tables,
-    the unit indexes and the bundled multiplayer maps, about 50 MB in roughly 0.2 s, once per run.
-    If a player in the room has a different checksum, their row shows "⚠ different game data" (with
-    an explanation in the tooltip), and the start button says "⚠ different game data in the room".
-    Nothing is blocked — a difference in a map that is not played does no harm — but you know
-    beforehand why a match might go out of sync.
-  - **Version in the LAN offer**: a LAN host now states its version. A match of a different version
-    shows in the search list as "⚠ different version 0.6.13", cannot be selected, and the status line
-    says "1 match found, but with a different version of the game". So far it looked like any other,
-    and joining only failed afterwards with "protocol does not match".
-  Checked: LAN search against a host of the same and of a faked different version; online room with
-  a player with a faked different checksum (warning visible, match green). Test switches
-  `--lan-fassung-test=`, `--inhaltssumme-test=`; opt-outs `--inhaltssumme-alt`, `--lan-fassung-alt`.
 - **Multiplayer: strength and team per position, fixed start positions** (continuing the skirmish
   request, now in LAN and online; e.g. two humans against two computer opponents):
   - **LAN host:** the multiplayer screen shows the same position list as skirmish, with the extra
@@ -390,33 +168,103 @@ your own copy of the 1997 game.
   the old LAN path without a line-up green as well. Online through the lobby server: room on
   NET02, host and computer hard in team 1, the other player in team 2 — green. Test switches
   `--lobby-probe-staerke=`, `--lobby-probe-team=`, `--net-team=`; opt-out `--gefecht-plaetze-alt`.
-- **Skirmish: strength and team per computer opponent** (player request: "I can't just say I take
-  one easy, one normal and one hard computer opponent … and forming teams would be good"):
-  - **One row per start position** instead of "opponents / start position / difficulty": the
-    skirmish screen lists every start position of the chosen map on the left under the map list,
-    as in classic real-time strategy games. For each position you pick the **player** (You ·
-    Computer easy · Computer normal · Computer hard · empty) and the **team** (– for free-for-all,
-    Team 1 to 4). That also picks your start position: it is the row that says "You". Setting
-    another row to "You" moves you there, and the old row takes what that row had.
-  - **Every computer opponent plays at its own strength**: thinking rate, wave size, pauses between
-    attacks and tech ladder follow the level of its position, no longer one level for all.
-  - **Teams**: same team means allied, using the original's alliance table the game already knows
-    from the campaign. Allies do not attack each other (neither the computer opponents nor your own
-    units on their own), they share vision in the fog, and mines do not hit an ally. The match is
-    won when no enemy team has anything left; your allied computer opponent does not have to
-    survive for that. It is lost, as before, when nothing of yours is left.
-  - Below the list the line-up is shown in one sentence ("Team 1: You + hard vs Team 2: easy +
-    normal"). If there is no enemy because everyone is on your team, it says so and "START SKIRMISH"
-    is disabled.
-  - The line-up is remembered and stored in the **saved game**. So far a loaded skirmish took the
-    number and level of opponents from whatever the screen last showed.
-  - Multiplayer works the same way, see the entry above.
-  Measured on NET07, 2 vs 2 (You + computer hard vs computer easy + normal), 15 minutes of
-  game time: 116 kills, none between allies. The team ending is checked by `--gefecht-teams-probe`;
-  saving and loading with teams is identical (`--spielstand-check`). Without teams the skirmish is
-  unchanged: NET07 checksum still `3D49B2EF34977BF8`. New on the command line:
-  `--gefecht-plaetze=du:1,schwer:1,leicht:2,normal:2` (in the order of the start positions);
-  `--skirmish=map,n,level,slot` keeps the old way. Opt-out `--gefecht-plaetze-alt`.
+
+- **Online: reconnecting after a dropped connection** (Fable review D9):
+  - If the connection to the lobby server drops in the middle of a match (Wi-Fi, router), the game now
+    reconnects every 3 seconds and signs in with its resume key. The server holds the seat for 60
+    seconds; the game fetches all game frames since the last number and carries on. The message line
+    says "connection to the server interrupted — reconnecting …" and then "connection is back"; the
+    others see "Waiting for …" in the meantime.
+  - Own game frames are no longer lost meanwhile: they stay queued and go out after reconnecting.
+    Whatever the server did not receive before the drop (no echo) is sent again. So far they were
+    discarded, and the others waited forever for our ticks until they dropped us.
+  - If the connection does not come back within 60 seconds, the match ends for that player with a clear
+    message.
+  - ⚠ Not covered: restarting the game after a crash (the whole match would have to be recomputed from
+    the first tick) and LAN (everything runs through the host's machine there).
+  Measured against the lobby server: the other player cuts the line hard at tick 150, once immediately
+  and once with an artificial 10 s outage — reconnected after 0.1 and 10.2 s, the match continues, both
+  machines green. Test switches `--net-abriss-bei=N`, `--net-abriss-dauer=ms`; opt-out
+  `--wiederverbinden-alt`.
+
+- **Online: spectators** (Fable review D10): the team choice in the room now has **"Spectator"**. Whoever
+  picks it for themselves does not play but watches:
+  - At the start they get a map position that owns nothing and are allied with everyone. Since the
+    game's fog asks the original's alliance table, they see everything all players see.
+  - They own nothing and cannot command anything; there is no win or loss for them, and they do not
+    appear in the end screen. They leave whenever they like.
+  - The room list shows "Spectator" instead of a start position; the start button counts them ("3
+    humans, 1 of them spectator"). If the map has no free position (all eight are owned, e.g. NET07),
+    the start button says so.
+  - There are no spectators in LAN (there is no room where one could choose "I am watching").
+  Measured against the lobby server: two players and one spectator on NET02 — the spectator sits on
+  position 8, owns nothing, sees through all scouts of both players, all three machines green. Test
+  switch `--net-team=8`; opt-out `--zuschauer-alt`.
+
+- **Online room: choose your own start position** (Fable review D2 remainder, F): click a free position
+  and **"MOVE HERE"** — you take that position and start at that start position on the map. So far a
+  player could not choose their position (the `move_slot` call was written and unused; now every lobby
+  call is in use). Checked online: the other player moves to position 4 and starts at start position 4,
+  green. Test switch `--net-platz=N`.
+
+- **End screen in skirmish and network play: who won** (Fable review D5):
+  - The end window is the campaign's, after the original. In skirmish it did not say who won, every
+    other player was called "CPU", and "mission pay $0" was shown. Now:
+    - Title **"SKIRMISH WON" / "SKIRMISH LOST"**, below it **"Winner: Team 1 — You + CPU hard"** (or,
+      if you are out and the others still fight, "Still fighting: …").
+    - The columns carry names: "YOU", the other players' names, "CPU EASY/NORMAL/HARD", also for
+      computer opponents already beaten. With teams there is a "Team" row on top.
+    - Mission pay is dropped in skirmish; the campaign is unchanged.
+  - Online the game now reports the winner to the lobby server (`match_end` with the team or start
+    position) as soon as only one side is left — so far always 0. ⚠ This report is not measured in a
+    pair run (a probe that wipes out the enemy would go out of sync right away in network play); the
+    window itself is checked as a picture with `--endbild-probe=`.
+  Opt-out `--endbild-alt`.
+
+- **In network play: keys, who paused, names in LAN** (Fable review C12, part of D10):
+  - **Key help**: at the start of every network match the bottom of the screen shows "Enter: message
+    to all · hold F4: players · Esc: pause for EVERYONE · game menu: surrender" for 20 seconds, and
+    the same line is shown below the player list (F4). So far the keys appeared nowhere except in
+    the waiting window.
+  - **Who paused**: Esc pauses the match for everyone in network play, as in the original. Now the
+    message line tells everyone "Anna paused the match for everyone — "Continue" or Esc resumes",
+    and afterwards "Bert continues". Without that, someone else's pause looked like a hang. The
+    original names nobody — this is our addition.
+  - **Names in LAN**: the network box has a **"Your name"** field (the same name as in the online
+    lobby). It travels to all players at the start of the match; the player list, messages and the
+    waiting window show it instead of "Player 2".
+  Checked: LAN pair "Anna" vs "Bert" (both names on both machines, green), screenshot of the key help
+  in game, pause test bench with the message on both sides. Opt-out `--netz-tasten-alt`.
+
+- **Online and LAN: different versions and game data are detected beforehand** (Fable review D8 and an
+  open point from P4):
+  - **Game data in the room** (D8): the game now sends a checksum of its imported game data to the
+    lobby server (so far always "00000000"). It covers what the simulation reads: the game tables,
+    the unit indexes and the bundled multiplayer maps, about 50 MB in roughly 0.2 s, once per run.
+    If a player in the room has a different checksum, their row shows "⚠ different game data" (with
+    an explanation in the tooltip), and the start button says "⚠ different game data in the room".
+    Nothing is blocked — a difference in a map that is not played does no harm — but you know
+    beforehand why a match might go out of sync.
+  - **Version in the LAN offer**: a LAN host now states its version. A match of a different version
+    shows in the search list as "⚠ different version 0.6.13", cannot be selected, and the status line
+    says "1 match found, but with a different version of the game". So far it looked like any other,
+    and joining only failed afterwards with "protocol does not match".
+  Checked: LAN search against a host of the same and of a faked different version; online room with
+  a player with a faked different checksum (warning visible, match green). Test switches
+  `--lan-fassung-test=`, `--inhaltssumme-test=`; opt-outs `--inhaltssumme-alt`, `--lan-fassung-alt`.
+
+- **Game speed as a setting** (Fable review D10): the skirmish screen, the multiplayer screen and the
+  online room have a **"Game speed"** row (normal / fast ×2 / very fast ×3). "normal" is the original's
+  speed and the default; in network play every machine starts with the host's speed (it travels in the
+  session packet). In game + and − still change it, in network play for everyone. The original keeps
+  the speed fixed at 1 in network play — a deviation of ours, skirmish only. Checked: LAN pair at speed
+  2 (both machines start at 2, green), NET07 checksum unchanged. Opt-out `--tempo-alt`.
+
+- **Discord in the online lobby** (Fable review D10): next to "JOIN" there is **"FIND PLAYERS
+  (Discord)"**, and in the room next to "LEAVE ROOM" **"INVITE (Discord)"**. Both open the game's
+  Discord server, like the button in the main menu — right where you wait for other players. Opt-out
+  `--lobby-discord-alt`.
+
 - **Online: back into the same room after a match, surrender** (Fable review C10, D5):
   - So far the game signed off completely after every online match; you stood in the room list and
     the group had to find each other again. Now you stay signed in and land back in the room — with
@@ -430,6 +278,7 @@ your own copy of the 1997 game.
     match — the joining player's program ended ("NETZ-FEHLER: es steht keine Partie"), the host got
     an exception. The menu demo is never a network match now.
   Probe `--lobby-probe-nochmal`; opt-out `--raum-alt`.
+
 - **Online lobby: the room like in classic real-time strategy games** (Fable review P6: C9/D3, D2,
   D4, B12):
   - **Settings in the room** (C9/D3): the room shows map (with picture, start places and size),
@@ -448,6 +297,7 @@ your own copy of the 1997 game.
   added — both machines play NET02 against exactly one AI, green; kicking confirmed. Probes
   `--lobby-probe-plaetze=`, `--lobby-probe-karte=`, `--lobby-probe-ki=`, `--lobby-probe-hinaus`;
   opt-out `--lobby-alt`.
+
 - **Skirmish and multiplayer screen reworked** (Fable review P5):
   - **Fixed choices instead of counting up** (C2): opponents ("3 Computergegner", at most as many
     as the map has places), money ("$ 0" to "$ 10000" in the original's thousand steps), tech
@@ -474,6 +324,7 @@ your own copy of the 1997 game.
     server errors without error codes.
   Everything checked in pictures; LAN pairs and a LAN map transfer green, NET07 checksum unchanged.
   Opt-outs `--gefecht-schirm-alt`, `--gefecht-merken-aus`, `--netz-grund-alt`, `--lobby-alt`.
+
 - **Online lobby more robust** (Fable review P4: B6, B7, B8, B9, C8, C11):
   - **An invalid name locked you out for good** (B9): the name was saved before it was checked,
     the window reconnected with it on its own next time and hid the name field — the only way out
@@ -497,6 +348,7 @@ your own copy of the 1997 game.
   Checked against the lobby server with the probes `--lobby-probe-name=`, `--lobby-probe-roh`,
   `--lobby-probe-pass=`, `--lobby-probe-beitritt=` and in a picture. Opt-outs `--lobby-alt`,
   `--netz-grund-alt`.
+
 - **Skirmish and multiplayer: only the start places the map has** (Fable review B2, C3, B5): the
   menu offered "Spieler 1–8" and up to 7 opponents on every map. What the map lacked fell back
   silently: in skirmish, NET02 with "Spieler 8" started as player 1 with "5 instead of 7
@@ -511,17 +363,20 @@ your own copy of the 1997 game.
   base gets base and factory at the start"); it now names the map's start places. Measured in a
   LAN pair on NET02, with three on NET08 (all green) and in a single skirmish; skirmish screen
   checked in a picture. Opt-out `--startplatz-alt`.
+
 - **Multiplayer: progress of the map transfer** (Fable review D4): when the host plays an own map,
   it travels to the other players — online in some 160 parts, which takes a few seconds. So far
   only "warte auf die Partie des Gastgebers" was shown, indistinguishable from a hang. Now the
   network box shows "Karte des Gastgebers wird übertragen: 37 % (60 von 162 Teilen)" and then
   "… sie wird vorbereitet". Measured in an online pair on an own map (0 to 99 %, then green).
   Opt-out `--kartenreise-anzeige-alt`.
+
 - **Multiplayer: map titles instead of file names** (Fable review C14): the online room list, the
   room header and the LAN list named maps by their file name ("NET07", "eigen01"). Now they show
   the title from the skirmish menu ("Gefechtsfeld (NET07)"), for own maps the title given in the
   editor ("Eigene Karte: …"); the skirmish map list now uses that title for own maps too.
   Opt-out `--kartentitel-alt`.
+
 - **Multiplayer: a player missing the map does not start** (Fable review B12): if the host's map
   did not reach a player (a shipped map not imported, or an own map without an image that was
   therefore not sent), they started anyway — on whatever map stood in their own menu, and the
@@ -532,6 +387,7 @@ your own copy of the 1997 game.
   while the host was loading the map — the connection is now closed only after the host has
   acknowledged it. Measured on LAN with three players and in an online pair (the remaining
   players run green); probe `--netz-probe-karte-fehlt`, opt-out `--netz-karte-fehlt-alt`.
+
 - **LAN multiplayer: a clear message when the host leaves** (Fable review B10): on LAN everything
   runs through the host's computer. When the host left a match of three or more, the others
   played on for a few seconds and then waited for each other forever ("Takt 347 ist nicht frei —
@@ -542,6 +398,7 @@ your own copy of the 1997 game.
   forever as well. If the host leaves a two-player match cleanly, the remaining player plays on
   against the AI as before. Measured with LAN runs of two and three; opt-out
   `--netz-gastgeber-alt`.
+
 - **Multiplayer: back to the lobby after a match** (Fable review B4): after victory or defeat
   "Weiter" in the end window did lead to the menu, but the network match was not yet signed off
   there — the network box was locked ("opened from the command line"), the online lobby did not
@@ -550,16 +407,200 @@ your own copy of the 1997 game.
   you go straight back to the lobby, on LAN to the network box with the message "Partie
   beendet.". Measured in a LAN and an online pair with the new probe `--netz-ende-probe=<ticks>`;
   opt-out `--netz-ende-alt`.
+
 - **Multiplayer details** (Fable review): own editor maps are back in the map list of skirmish
   and multiplayer (they were missing entirely); "Zurück zum Menü" while waiting for a network
   match closes the connection (before, a later campaign start ended with an error); a running
   network match can be left via "Spiel verlassen" (the others play on); a broken connection
   no longer floods the log with thousands of identical errors. Opt-outs `--eigene-karten-alt`,
   `--netz-verlassen-alt`, `--netz-pump-alt`.
+
+- **Multiplayer: no more crash when receiving large own maps** (Fable review A1/A3): when the
+  host played a large editor map (e.g. 168×168), the other player crashed while preparing
+  the transferred map — 12 of 12 attempts. The crash always came on a large memory request
+  while Godot objects from the menu were being cleaned up in the background. The game now
+  cleans up before preparing; measured 3 of 3 matches without a crash (before 5 of 5 with).
+  Also, an aborted map counted as present forever — it now counts only once fully prepared.
+  Opt-outs `--netzkarte-gc-alt`, `--netzkarte-marke-alt`.
+
+### Discord
+
+- **Discord shows what you are playing.** While Discord runs, your profile
+  shows "Akte Europa Reborn" with main menu, campaign mission and title,
+  skirmish or multiplayer with map, or map editor, and for how long. The game
+  only talks to the Discord app on your own machine and changes nothing in the
+  game. You can turn it off under *Settings* → "Discord".
+- **Discord button bottom left in the start menu** — the familiar blue button
+  with the logo. It opens the invite to our Discord server in your browser.
+
+### Map editor
+
+- **The map editor no longer breaks things** (review by Fable, bug-804..808):
+  - "Create map" overwrote an existing map without asking, and with the name
+    `NET07` or `01` even a shipped one. Names of shipped maps are now refused, a
+    dialog asks before overwriting your own map, and the suggested name is the
+    first free one (`eigen02`, `eigen03` …).
+  - A newly placed building could overwrite an existing one (after removing,
+    saving and placing again). It now takes the first free slot.
+  - Every editor map carried 50 invisible "phantom ramps" in the map corner, so
+    the pioneer could not build a landing ramp on custom maps, and a ramp sprite
+    sat in the top-left corner. New maps are clean, old ones are healed on load.
+  - Saving writes to a temporary file and renames it afterwards, so a crash while
+    saving no longer leaves half a map. The shared tile set files are only
+    written when their content changes.
+  - A map sent over the network looked wrong for the joining player: water and
+    palm trees in the bushes. The picture references came from the host, the
+    object image from the local bake. Both now match; everything the simulation
+    reads still comes unchanged from the host.
+
+- **Fair multiplayer maps** (bug-815):
+  - New choice "Symmetrisch: ja": the map is point-symmetric, each half is the
+    other rotated by 180° — water, ground, heights, forest, start positions and
+    deposits. Measured: heights 100 % mirrored, terrain 96 % (the rest is
+    buildings and units). On mirrored start plots base and factory swap sides so
+    the bases really face each other. Even player counts only.
+  - After creating, the status line shows a fairness line: each player's
+    distance to the nearest deposit and the nearest enemy.
+  - New tool "9 Start position": one click places base, factory and troop for
+    the selected player as one package. If the player already has a start
+    position, the old one is removed — that's how you move it. Right click
+    removes it. If the package doesn't fit (slope, water, occupied), the map stays
+    unchanged and the line says why. Undo takes the whole package back in one
+    step.
+  - The status line only turns yellow for really missing start positions or
+    deposits (a statistics line used to trigger it too).
+
+- **Instant picture in the map editor**: every brush stroke used to show only after F5
+  (saving and reloading the whole scene). After a stroke — with a short delay so a drag
+  doesn't bake dozens of times — the editor now bakes a copy of the map in the
+  background, with the same baker as saving, and swaps the ground picture and the
+  trees/rocks in the running view. Measured on 150×150: visible 0.8 s after the stroke;
+  undo is just as quick and brings the picture back byte for byte. Nothing is saved;
+  F5 stays the save. Limit: if a stroke raises a cell above the map's highest level so
+  far, the picture size changes — the panel then says "F5 zeigt es". Check
+  `--map-edit-sofort-check`. Opt-out `--editor-sofortbild-aus`.
+
+- **The rubble brush paints rubble** (bug-827): on flat land the painted cell itself
+  stayed unchanged, only its neighbours changed; a 3×3 stroke on sand changed not a
+  single pixel. Cause, measured on the original maps of tileset 47: "rough" has no
+  picture of its own there — rough is mostly grass on slopes, and the rubble tiles are
+  almost always marked "free" (4356 free vs. 417 rough). The brush found no material for
+  "rough" and drew a tile that looked like the old one. It now paints the **rubble
+  picture** and sets the cell to rough (our choice, the original has no editor). To keep
+  transitions right — in the originals rubble only borders grass, grass borders sand,
+  sand borders water — it lays a **ring of grass** around the spot when needed
+  (measured: rubble on sand, 8 grass corners in between, 0 chain breaks). Water is never
+  repainted for this: if the cell is too close to the shore, the old behaviour stays
+  there. As a side effect, all tile corners now match after the check's strokes (corner
+  match 100.000 % instead of 99.975 %, hard seams 0.24 % instead of 0.26 %). The check
+  `--map-edit-sofort-check` now compares the baked picture and the pixels in the painted
+  cell itself (headless, the texture never showed the new picture, so the old check
+  measured nothing). Opt-outs `--editor-geroellbild-aus` and `--editor-kettenring-aus`.
+
+- **Infantry in the map editor, facing for all units** (D9): "4 Einheiten" now lists
+  "Leichter Soldat" and "Schwerer Soldat". The editor writes the whole map record as it
+  most often appears on the 55 original maps (light 266 of 617 identical, heavy 156 of
+  447): health 20/35, attack 2/5, infantry set and picture as in the original. Each
+  soldier gets its in-cell offset by the original's formula (up to 18 px sideways, 7 px
+  vertically), so squads don't stand in a rigid row. **R** turns the facing of the next
+  unit (Shift+R back); the list shows the pictures in the chosen direction. **Aircraft
+  are left out on purpose:** not one original map has an aircraft in its unit table —
+  the original keeps them in a separate table, and an editor aircraft would mean
+  inventing a file format. Check `--map-edit-fussvolk-check` (record, live unit, saved
+  file, with `--fussvolk-shot=<file>` a window picture). Opt-out `--editor-fussvolk-aus`.
+
+- **Bridges in the map editor** (tool "0 Brücke"): a click on a shore cell builds a bridge
+  over 1 to 3 water cells to the far bank; the preview shows it in green first. The editor
+  writes exactly what the original's bridge builder writes (0x4CC280): 3 cells wide, the
+  roadway in the middle one level above the water, railings on both sides, a bridge record
+  with 500 hit points, layer and head bytes. Measured on all 52 bridges of the 23 original
+  maps (705 cells) — the editor bridge meets every one of these rules without exception,
+  looks like a map bridge (stone) and can be destroyed in game like one. Refused with a
+  reason: no water next to it, water on two sides, far bank too far, banks at different
+  heights, something in the way. Ctrl+Z takes it back. Checks `--map-edit-bruecke-check`
+  (with `--bruecke-shot=<file>` a window picture) and `--bruecken-muster` (the measurement
+  on the originals). Opt-out `--editor-bruecke-aus`.
+
+- **Landing ramps in the map editor** (tool "0 Brücke/Rampe", list entry
+  "Landungsrampe"): a click on a shore cell places a ramp — the only place where vehicles
+  board ships and come back ashore. The editor writes what the original's pier builder
+  writes: one cell, a ramp record with 200 hit points, the ramp tile facing the water,
+  passable, layer 200 + slot. Measured on the original maps: of 45 ramp records 24 carry a
+  ramp tile, and every rule holds for these 24 without exception (exactly one water
+  neighbour, direction = water side, ramp at water level); the other 21 are leftover
+  records without a picture (maps 8, 9 and NET07). The editor ramp passes the same
+  measurement. The instant picture shows it at once (ramps are drawn live, before only
+  after F5). Checks `--map-edit-rampe-check` (with `--rampe-shot=<file>` a window
+  picture) and `--rampen-muster`. Opt-out `--editor-rampe-aus`.
+
+- **Removing bridges and ramps**: right-click with "0 Brücke/Rampe" or "7 Wegnehmen"
+  removes the structure under the mouse. Before, a bridge tile counted as an object when
+  removed — the picture went, the bridge record stayed behind, orphaned. Now the record is
+  cleared and every cell gets its old terrain type back: it is still in the map's corner
+  raster (measured: all four corners 0 means water, for 3747 of 3747 water cells; one
+  corner 0 means rough shore). Then the terrain brush retiles cleanly. In the check, 12 of
+  12 bridge cells got their old type back.
+
+- **Editor vehicles carry their design and the original's empty markers** (check item
+  B3): apart from combat values, health and fuel the editor wrote only zeros into a vehicle
+  record. The original maps carry uniform "empty" markers (FF) per type there, and the
+  unit's **design** in two places. With 0, every editor unit was named and valued like
+  design 0 in the info window. The editor now writes, per type, the values found in at
+  least 60 % of the records on the 55 original maps, and the design from the game's design
+  table that matches chassis, weapon and equipment exactly — 11 of 12 land types have
+  exactly one, and it is also the most frequent on the maps (e.g. Reifen → "Maschinen-
+  gewehr", Ketten → "Leichter Panzer"). In skirmish, editor units are now pulled onto their
+  design like the units of the original maps (NET07: 24 of 24; an editor map 0 before,
+  now 23). Check `--map-edit-satz-check`. Opt-out `--editor-satzfelder-alt`.
+
+- **Skirmish: new resource level "wie auf der Karte" (as on the map) — and stores in the
+  map editor**: so far skirmish filled every store at the start according to the chosen
+  level (none / few / normal / many) — the original does the same, and a map's own store
+  values were lost. The new fifth level "wie auf der Karte" starts every building with the
+  stores written in the map (a deliberate deviation from the original, skirmish only; the
+  original's four levels are unchanged). Newly placed start bases the map does not know get
+  the "normal" stores. To go with it, the map editor's building brush now offers store
+  choices with the values of the original maps: parts for base and depot (none /
+  500-500-500 / 1000-1500-800 / 1500-2000-1000), terranium for factories (0 to 2000) and
+  mines (0 to 200); clicking a placed building applies the choice. Measured: an editor base
+  with 500/500/500 starts exactly so with "wie auf der Karte", and with 300/400/200 on
+  "normal" as before. The editor deliberately offers no building name — the original
+  overwrites it with the slot number at mission start. Check `--map-edit-lager-check`;
+  opt-out `--editor-lager-aus`.
+
+- **Map editor: the harbour stands in the water, the shipyard on land** (reported: "the harbour
+  often stands on land, though it must be in the water"): the generator placed the harbour like
+  any other neutral building on building land, and with no link to its shipyard it pointed at
+  building slot 0 — usually a base. Measured on the original maps: the harbour stands fully in
+  the water, the shipyard that pays for its ships fully on land at the shore, both as a pair 6
+  to 15 cells apart. The generator now places exactly such a pair and links the harbour to its
+  shipyard; on the test maps every harbour stood fully in water and pointed at its shipyard.
+  Opt-out `--editor-hafen-paar-alt`.
+
+- **Map editor: placing a harbour by hand.** The building brush now also places a harbour only
+  fully in water (every cell of its footprint must be free water, otherwise the status line says
+  why) and links it to the nearest shipyard that has no harbour yet and stands at most 15 cells
+  away. If there is none, the harbour is refused: "place a shipyard on land at the shore first".
+  The harbour takes its shipyard's owner, just as the original hands it over together with the
+  shipyard on capture. Removing a shipyard removes its harbour too (Ctrl+Z brings both back);
+  a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
+  it became blocked ground and no ship could pass there any more — they are water again. Test
+  bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+
+- **Map editor tidied up** (Fable editor review, remainder of F; no visible change for players): the five
+  separate loops over a building's footprint pattern are one (`FussZellen`), the duplicated "is there a
+  unit here" check is one (`MapFactory.EinheitAuf`), the duplicated skirmish start from the editor is one
+  (`SkirmishSetup.EditorGefecht`), and the nine static counters of a brush stroke are one result object
+  (`MapEditTerrain.Letzter`). The other F points (test bench moved out, parameter set instead of a comma
+  string, dead paths, opt-outs for A4/A5) were already done on 12/13 Nov. Checked with all editor test
+  benches (terrain, P5, start positions, mirroring, chassis, forest, instant picture, play, infantry,
+  bridges, harbours: passed) and the old play path.
+
 - **Map editor tidied up** (check item F): the folder for own tilesets may now contain a
   comma — the screen passes its settings on as an order instead of a command line split at
   commas (generated maps byte-identical to before). The edit mode's test harness (500
   lines) lives in its own file; two invisible, never-read labels are gone.
+
 - **Forest on generated maps burns**: on editor maps, forest was only blocked ground
   with a tree picture — flamethrowers and fire had no effect there ("0 davon sind Wald
   und können brennen"). The generator now records every tree the way the original
@@ -568,10 +609,12 @@ your own copy of the 1997 game.
   unchanged. In the editor a placed tree becomes real forest as well, and a removed
   tree frees its cell again (it used to stay blocked) and leaves the forest table.
   Check `--map-edit-wald-check`. Opt-out `--generator-wald-alt`.
+
 - **"Spielen" in the edit panel asks too**: the edit-mode "Spielen" button still
   started you as player 1 against seven computer opponents. It now saves (if needed),
   returns to the editor screen and opens the same window as "Play in skirmish" (slot,
   opponent count, AI level). Opt-out `--editor-spielen-alt`.
+
 - **Small things in the map editor**:
   - **Type 0** is no longer offered as a building. Measured: 75 of 144 type-0 records
     in the shipped maps are empty slots, the rest carry values of other types — type 0
@@ -583,6 +626,7 @@ your own copy of the 1997 game.
     not only when it is too cramped.
   - The **red cross** of a removed unit disappears when you place one on the same spot.
   - Two tooltips still said "Startmarken"; they are start positions now.
+
 - **Report in plain German**: after generating, opening and checking, the map
   editor's report field showed the full workshop output ("can_build_here",
   "Bodenblock", "Fächer unter 8 Beobachtungen", memory addresses). It now starts with
@@ -590,17 +634,20 @@ your own copy of the 1997 game.
   warnings as bullet points, for a check "alles in Ordnung" or each complaint on its
   own line. The full lines are behind the **Technische Einzelheiten zeigen** switch.
   Also, a freshly generated map is selected in the map list right away (with preview).
+
 - **Umlauts in the map editor**: the editor wrote "Groesse", "ZURUECK", "OEFFNEN",
   "Gelaende" next to "Wüste mit Küste" and "Dünen". All visible texts of the editor
   screen and the edit panel (buttons, headings, hints, messages) and the map
   description in the skirmish setup now use real umlauts and ß. Check switch names
   (`pruefen` etc.) stay as they are.
+
 - **Hovercraft on water, walkers on rubble** (bug-825): the editor's unit brush treated
   hovercraft and walkers like ordinary vehicles — a hovercraft couldn't be placed on
   water and a walker not on rough ground, although both go there in the game. The
   chassis now counts as it does in the game. Check `--map-edit-fahrwerk-check`
   (hovercraft on water and walker on rubble placed, wheels on water refused). Opt-out
   `--editor-fahrwerk-alt`.
+
 - **No more straight lake edges and dams in generated maps**: on symmetric maps the
   noise field was half copied — at the map centre two unrelated halves met, and lakes
   and ground types broke off there in a straight edge. The field is now averaged with
@@ -609,6 +656,7 @@ your own copy of the 1997 game.
   now curve slightly (still drivable all the way, road distances to the nearest enemy
   stay equal). 8 sample maps, all passing. Opt-outs `--generator-naht-alt` and
   `--generator-damm-alt`.
+
 - **Map management: preview and title** (bug-824): under "Gewählte Karte und
   Bericht" the editor now shows the picture of the map selected in the list, with
   title, size and start positions. The new **Titel …** button sets the display name
@@ -616,16 +664,19 @@ your own copy of the 1997 game.
   thumbnails were made once and never renewed — after editing, the skirmish setup
   showed the old picture. A thumbnail is now remade as soon as the map is newer, and
   renaming or deleting takes it along. Opt-out `--vorschau-alt`.
+
 - **Player count visible and changeable**: the start position tool (key 9) now says
   how many and which players the map has ("die Karte hat 2 Spieler (Sp 1, Sp 2)") and
   how to change that: pick the next free player and click = one more player,
   right-click = one fewer. The line is recounted after every click.
+
 - **Mirror while painting**: next to the brush size, edit mode now has a
   **⇅ Spiegeln** button (key **M**). When on, every stroke also lands on the cell
   rotated about the map centre (180°, exactly like symmetric generated maps) — for
   ground type, height, forest/rock and rails. Buildings, units, start positions and
   deposits belong to players and are deliberately not mirrored. One undo takes back
   both halves. Check `--map-edit-spiegel-check`.
+
 - **The editor minimap is fully clickable** (bug-823): the edit-mode panel was taller
   than its space and grew down over the upper part of the minimap — clicks there never
   arrived, only its bottom strip was clickable. The panel now stays above the minimap:
@@ -633,6 +684,7 @@ your own copy of the 1997 game.
   Save / Play / Back stay fixed at the bottom. New check `--map-edit-minikarte-check`
   (three real mouse clicks: the camera jumps, the map is not painted). Opt-out
   `--editor-feld-alt`.
+
 - **Equally distant neighbours on wide and tall maps** (bug-822): start positions
   sat at equal ANGLES on an ellipse, so on a wide map they bunched up along the long
   sides while the two at the ends were far away — 254×125 with 8 players: nearest
@@ -643,12 +695,14 @@ your own copy of the 1997 game.
   that leaves only 2–3 water cells inside the map becomes land. ⚠ From 3 players on,
   the same seed now gives a different map than before. Opt-outs
   `--generator-ring-alt` (placement) and `--generator-sattel-alt`.
+
 - **Shipped maps: your copy is opened again** (bug-821): opening a shipped map in the
   editor created a NEW working copy every time (`01_kopie`, `01_kopie2`,
   `01_kopie3` …) — the map list filled up with half-finished copies, and last time's
   work sat in a different one. The editor now opens your existing copy (writing
   nothing); another one is made on purpose with "Make a copy …". Checked: opened three
   times, one copy. Opt-out `--editor-kopie-neu`.
+
 - **No more pinched waterways in generated maps** (bug-820): where a waterway ran
   diagonally and only one corner wide, its narrowest point left a single water cell
   without a straight neighbour — the check reported an "isolated water area" and the
@@ -657,6 +711,7 @@ your own copy of the 1997 game.
   On maps without such a spot the rule does nothing (5 more sample maps: no change reported).
   The check now also names the cell of any tiny water area. Opt-out
   `--generator-sattel-alt`.
+
 - **Clear names in the map editor**: units were only named after their chassis
   ("Reifen", "Ketten"), objects "Objekt 555" and rails "Linie 0..9". Every unit now
   shows its weapon too ("Ketten · Leichte Bordkanone", names from the game's
@@ -666,6 +721,7 @@ your own copy of the 1997 game.
   note that rails with the same number form one line. The selection list now gets
   the full width (the preview sits small in the header), and every entry also
   shows its full name as a tooltip.
+
 - **"Play in skirmish" with a choice**: the map editor's button used to always
   start you as player 1 against up to seven computer opponents on whatever level was
   last set in the skirmish setup, and after the match you ended up in the main menu.
@@ -673,17 +729,20 @@ your own copy of the 1997 game.
   join (including "none", to explore the map alone) and on which level; the other
   slots stay out of the game. After the match you return to the editor with the same
   map open. Opt-out `--editor-spielen-alt`.
+
 - **Manage your own maps**: below the map list in the map editor there are now
   three buttons — **Rename …**, **Make a copy …** and **Delete …** (with a
   confirmation). They act on all four files of a map and also update the name stored
   inside it. Shipped maps stay locked (you can only make a copy of them), existing
   names are never overwritten, and a map with unsaved brush strokes can't be renamed
   or deleted. Check `--map-verwaltung-check` (12 steps on real files).
+
 - **F5 keeps your view**: saving with F5 in the map editor reloads the map — until
   now the view then jumped to the start of the map at the smallest zoom, and you had
   to find the spot you were painting all over again. Position and zoom now stay
   exactly as they were (check `--map-edit-kamera-check`: 0 px off; with the opt-out
   `--editor-kamera-alt` it is 288 px off again).
+
 - **No more blue dots after painting** (bug-819): changing the height or painting
   rubble on a generated map in the map editor left tiles around the stroke whose
   corners didn't match — small blue water dots appeared in the middle of land, and
@@ -696,6 +755,7 @@ your own copy of the 1997 game.
   99.98 % instead of 99.57 % (original maps 99.96–100 %), hard seams 0.25 % instead
   of 0.37 %. The check now also says where any blue dots are. Opt-out
   `--editor-pinsel-ecken-alt`.
+
 - **Removed buildings free their whole footprint again** (bug-818): placing and
   then removing a building on a generated map in the map editor often gave back only
   part of the footprint — depending on the map, 5 to 20 of the 37 cells stayed
@@ -705,12 +765,14 @@ your own copy of the 1997 game.
   17 of 37) and names every cell still blocked, with the reason;
   `--map-editor-samen=<number>` makes its map repeatable. Opt-out
   `--editor-zone3-alt`.
+
 - **No more sand bars in the forest of generated maps** (bug-817): along forest
   edges there were diagonal rows of sand-coloured bars, visible between the
   bushes. The ground fill under forest cells copied its neighbour's tile — even a
   transition tile with a sand edge — and passed it on cell by cell. Even ground
   tiles now vote first; a transition only counts when nothing else is around
   (counter-switch `--fuellung-uebergang-alt`).
+
 - **Painting as you'd expect** (bug-814):
   - Dragging with the mouse button held paints ground, height, forest/rock,
     rails and removal — each cell once per stroke. Before, it was one click per
@@ -722,6 +784,7 @@ your own copy of the 1997 game.
   - New tool "8 Deposits": left places a terranium deposit, right removes one.
     All deposits show as a yellow diamond on the map — before they were invisible
     in the editor and only the generator could place them.
+
 - **Create with choices** (bug-813):
   - Every map gets a random number, and "Neu würfeln" (re-roll) makes a new one.
     Until now the same settings always produced the same map. The number is
@@ -735,6 +798,7 @@ your own copy of the 1997 game.
   - Every player gets their first deposit at a similar distance (12 to 20 cells
     from the start). Measured before, it lay 1 to 38 cells away on the same map;
     now e.g. 11 to 19 (portrait, 8 players) or 14 to 17 (medium, 8 players).
+
 - **Edit mode is an editor** (bug-812):
   - No fog of war any more: the whole map with all buildings and objects is
     visible and the minimap is full. Before, you only saw your own base.
@@ -749,10 +813,12 @@ your own copy of the 1997 game.
   - Brushes no longer overwrite buildings and units: terrain, objects and rails
     refuse occupied cells, units can't be stacked, rails can't go on water.
     Switching to "Units" while "ownerless" is selected picks player 1.
+
 - **No more crash when closing the map editor quickly** (bug-809). The tile set
   preview ran in a background thread that called engine functions; closing the
   editor within the first seconds could crash the game. The measurement now also
   learns only from shipped maps, not copies.
+
 - **Network games on custom maps start reliably** (bug-810, bug-811):
   - The joining player baked every transferred map right away, even when they
     already had the same map. On large maps this took seconds, the connection
@@ -764,6 +830,7 @@ your own copy of the 1997 game.
   - A copy of an original network map under another name got the original AI
     table on the host but a computed one on the joining player, and the game
     aborted. The original table now only applies to the shipped maps themselves.
+
 - **Fixed map sizes instead of counting up** (bug-800). Seven sizes to click,
   each modelled on an original map: Small 100×100, Medium 150×150 (like NET03),
   Large 168×168 (NET01), Very large 230×230 (NET02), Huge 254×254 (NET05/06),
@@ -771,15 +838,18 @@ your own copy of the 1997 game.
   button and suggests a matching size. The default is 150×150 for 2 players;
   64×64 was too small for multiplayer. A custom size is still there, folded
   away.
+
 - **Tile sets are described** (bug-801). Each set shows a name, a short
   description, a preview cut from an original map, its ground materials as
   colour swatches and the original maps that use it (e.g. "Wüste mit Küste –
   NET02, NET07"). The names are our summary; the original only has numbers.
+
 - **A panel for editing** (bug-802). Until now there were two lines of text and
   keys. Now a panel on the right holds the tools (ground, height, buildings,
   units, forest/rock, rails, new: remove), a picture list of the selection with
   names, the owners in party colours, a line saying what left and right click do
   right now, and the buttons Save, Play and Back. All old keys still work.
+
 - **A new map generator: maps look like the original's** (bug-768). Generated
   maps showed bright triangles, single water specks inland and rectangular
   slope blocks. The reason: the original's maps are a corner tile system. Each
@@ -790,22 +860,27 @@ your own copy of the 1997 game.
   original maps, lays water and grounds as connected areas on a corner grid and
   then picks only tiles whose corners fit. Measured: 100 % matching corners and
   no more water specks, in all nine test maps across four tile sets.
+
 - **No more mosaic under the fog** (bug-772). From the same four materials the
   original also computes the picture under the fog and the building ground. The
   editor wrote them wrongly cell by cell, so a mosaic of water and grass blocks
   lay under the fog — very likely the "wild water".
+
 - **Hills with corners and diagonals** (bug-769): slope tiles 9 to 14 are the
   diagonals. The editor only knew the four straight ones, hence the boxy
   rectangles.
+
 - **Multiplayer-ready maps for 2 to 8 players** (bug-770). Start positions are
   placed first, symmetrically, each on flat buildable land. Every start can reach
   every other by land, with free paths between neighbouring starts. Deposits and
   neutral buildings are dealt out per start area in turn (difference at most
   one); before, two of four start areas had no deposit at all.
+
 - **Test bench for generated maps** (bug-771): `--map-check` now measures
   matching corners, water specks, reachability of all starts, fairness of the
   paths and building ground around each start, with the original maps as the
   yardstick. Counter-switch `--generator-alt` brings back the old generator.
+
 - **Opening no longer damages a shipped map** (bug-739). Until now *Open
   existing* immediately wrote the map back under the same name, losing bridges,
   ramps, the forest table and the Terranium sites — in missions 14, 17, 20 and
@@ -813,21 +888,34 @@ your own copy of the 1997 game.
   only as a copy (`…_kopie`); your own maps are written only when you save (F5).
   A second guard refuses to save a shipped map under its own name. If you had
   already damaged a map, a re-import repairs it.
+
 - **Units from the editor are armed** (bug-740). Editor and generator set
   weapon, ammunition, speed, range and sight to 0, so the troops could neither
   fight nor move properly. Each unit type now gets the most common record from
   the 54 shipped maps.
+
 - **Buildings get the right grip cells** (bug-741): 60000 + slot as in the
   original instead of 51000 + slot, which lay in the forest band.
+
 - **Only a building's blocking cells are occupied** (bug-742). Until now the
   whole rectangle was stamped, even over water and units, while some blocking
   cells were missing and could be driven through.
+
 - **"Im Gefecht spielen"** (bug-743): a button in the editor starts the map
   directly as a skirmish. You play slot 1, the computer plays every other
   occupied slot (our choice).
+
 - **Honest map check** (bug-744). Start positions now come from the units, not
   from outdated start markers. Vehicles may only cross free ground, infantry
   rough ground as well. Up to 8 players.
+
+### Runtime
+
+- **Runtime .NET 10 instead of .NET 8**: .NET 8 reached end of support on 10 Nov 2026 and
+  gets no more security updates. The game now ships .NET 10.0.15 (long-term support until
+  14 Nov 2028). Nothing changes in play: the NET07 checksums over 30 s of game time are
+  identical frame by frame to .NET 8, campaign 1 runs 3000 s, saves load identically. The
+  installer grows by about 1.7 MB. The installer is now built with Inno Setup 7.1.1.
 
 ### For the curious
 
@@ -856,14 +944,11 @@ your own copy of the 1997 game.
 
 ### Known limitations
 
-- **No reconnect.** If your connection breaks, the match is over for you; the
-  others play on. The server already keeps the match; the way back in comes in
-  one of the next versions.
-- **Online it is everyone against everyone.** Alliances and teams are not
-  transmitted yet.
-- **No data check.** If two players imported different data, the game only
-  notices through diverging checksums.
-- **On LAN players carry no names**; they are "Spieler 1, 2, …".
+- **Reconnect only online and only while the game keeps running.** If the connection to the server
+  drops, you get back into the match within 60 seconds. After a crash or restart of the game this
+  does not work, and there is no reconnect on LAN.
+- **Spectators only online**, not on LAN. A spectator runs in lockstep too: if their connection
+  hangs, everyone waits ("Warten auf …", drop them with Ctrl-K).
 - **Copies of shipped maps** do not carry bridges, ramps, forest table and
   Terranium sites yet.
 - **The editor's terrain brush** still writes the materials under the fog cell
