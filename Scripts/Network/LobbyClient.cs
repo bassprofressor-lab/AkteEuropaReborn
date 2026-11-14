@@ -31,7 +31,7 @@ public sealed class LobbyClient
 
     public enum Phase { Aus, Verbinde, Angemeldet, Getrennt }
 
-    private readonly WebSocketPeer _ws = new();
+    private WebSocketPeer _ws = new();   // D9: beim Wiederverbinden neu
     private bool _helloSent;
     private int _rid;
 
@@ -107,6 +107,37 @@ public sealed class LobbyClient
     }
 
     private JsonObject? _hello;
+
+    // ---- ⭐ 14.11.2026 — Fable D9: WIEDERVERBINDEN waehrend der Partie ----------------------
+    // Reisst die Leitung zum Server ab, haelt er den Platz 60 s (Auftrag §3.6). Das Spiel laeuft im
+    // Speicher weiter; es meldet sich mit seinem resume_token neu an, bekommt »resume« und fordert mit
+    // »resync« die Rahmen ab der letzten Nummer nach. Gegenschalter --wiederverbinden-alt.
+
+    /// <summary>Wie oft eine Partie nach einem Abriss wieder aufgenommen wurde (resume).</summary>
+    public int Wiederaufnahmen { get; private set; }
+    public ulong WiederaufnahmeMs { get; private set; }
+    public static bool WiederverbindenAlt => Array.IndexOf(Core.CommandLine.Args, "--wiederverbinden-alt") >= 0;
+
+    /// <summary>Neu verbinden und mit dem resume_token anmelden. false, wenn es keinen gibt.</summary>
+    public bool Wiederverbinden()
+    {
+        if (ResumeToken.Length == 0 || _hello == null || WiederverbindenAlt) return false;
+        _ws = new WebSocketPeer { InboundBufferSize = 1 << 20, OutboundBufferSize = 1 << 20, MaxQueuedPackets = 8192 };
+        if (_ws.ConnectToUrl(Url) != Error.Ok) return false;
+        _hello["resume_token"] = ResumeToken;
+        _helloSent = false;
+        Fault = "";
+        State = Phase.Verbinde;
+        GD.Print($"lobby: verbinde neu ({Url}) mit resume_token, letzter Rahmen {LastSeq}");
+        return true;
+    }
+
+    /// <summary>Pruefweg --net-abriss-bei: die Leitung hart trennen, als waere das Kabel gezogen.</summary>
+    public void AbrissProbe()
+    {
+        _ws.Close(4001, "abriss-probe");
+        GD.Print("lobby: Leitung absichtlich getrennt (--net-abriss-bei)");
+    }
 
     public void Close()
     {
@@ -292,6 +323,20 @@ public sealed class LobbyClient
                 Go = true;
                 Revision++;
                 GD.Print("lobby: go — Spielpakete frei");
+                break;
+            case "resume":
+                // D9: die Partie laeuft weiter, wir sind wieder drin — Rahmen ab der letzten Nummer nachholen
+                MatchId = (string?)m["match"] ?? MatchId;
+                YouSlot = (int?)m["you_slot"] ?? YouSlot;
+                if (m["room"] is JsonObject rr) Room = (JsonObject)rr.DeepClone();
+                State = Phase.Angemeldet;
+                Go = true;
+                Wiederaufnahmen++;
+                WiederaufnahmeMs = Time.GetTicksMsec();
+                Send(new JsonObject { ["t"] = "resync", ["from_seq"] = LastSeq + 1 });
+                Events.Add("Verbindung zum Server wieder da — die Partie geht weiter");
+                Revision++;
+                GD.Print($"lobby: Partie {MatchId} wieder aufgenommen, resync ab Rahmen {LastSeq + 1}");
                 break;
             case "player_lost":
                 Events.Add($"{NameOf((string?)m["player"])} hat die Verbindung verloren — Platz wird {(int?)m["hold_s"] ?? 60} s gehalten");

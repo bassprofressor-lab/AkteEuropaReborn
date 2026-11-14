@@ -215,12 +215,44 @@ public sealed class NetLink
     private void SendePaced()
     {
         if (_relay == null) return;
+        // ⭐ Fable D9: ohne Leitung zum Server bleiben die Rahmen in der Schlange (bisher verworfen —
+        // dann wartete jeder andere fuer immer auf unsere Takte)
+        if (!LobbyClient.WiederverbindenAlt && !_relay.Open) return;
         ulong now = Time.GetTicksMsec();
         if (_rahmen.Count > 0 && now - _lastSend >= BuendelMs)
         {
             _lastSend = now;
-            if (_relay.SendBinary(_rahmen.Dequeue())) Bundles++; else Dropped++;
+            var r = _rahmen.Dequeue();
+            if (_relay.SendBinary(r)) { Bundles++; if (!LobbyClient.WiederverbindenAlt) _unbestaetigt.Enqueue(r); }
+            else Dropped++;
         }
+    }
+
+    // ---- Fable D9: Rahmen, deren Echo noch fehlt --------------------------------------
+    // Der Server schickt jeden Rahmen an alle zurueck, auch an den Absender, in seiner Reihenfolge.
+    // Was geschickt, aber nie zurueckgekommen ist, hat der Server beim Abriss nicht mehr bekommen —
+    // nach dem Wiederaufnehmen (und nachdem die nachgeholten Rahmen da sind) geht es noch einmal
+    // hinaus. Ein doppelt angekommenes Taktpaket schadet nicht (es legt dieselben Saetze ab).
+    private readonly Queue<byte[]> _unbestaetigt = new();
+    private int _aufnahmenGesehen;
+    public int Nachgeschickt { get; private set; }
+
+    private void Nachschicken()
+    {
+        if (_relay == null || LobbyClient.WiederverbindenAlt) return;
+        if (_relay.Wiederaufnahmen == _aufnahmenGesehen || !_relay.Open) return;
+        // 2 s nach dem resume: bis dahin sind die Echos der Rahmen, die der Server noch bekam, mit dem
+        // resync da (er schickt sie am Stueck). Was dann noch fehlt, hat er nie bekommen.
+        if (Time.GetTicksMsec() - _relay.WiederaufnahmeMs < 2000) return;
+        _aufnahmenGesehen = _relay.Wiederaufnahmen;
+        int n = _unbestaetigt.Count;
+        var neu = new Queue<byte[]>(_unbestaetigt);
+        foreach (var r in _rahmen) neu.Enqueue(r);
+        _rahmen.Clear();
+        foreach (var r in neu) _rahmen.Enqueue(r);
+        _unbestaetigt.Clear();
+        Nachgeschickt += n;
+        GD.Print($"netz: nach dem Wiederaufnehmen {n} unbestaetigte Rahmen erneut in die Schlange");
     }
 
     private void Bundle()
@@ -577,9 +609,11 @@ public sealed class NetLink
             while (_relay.Frames.Count > 0)
             {
                 var f = _relay.Frames.Dequeue();
+                if (f.Slot == _relaySlot && _unbestaetigt.Count > 0) _unbestaetigt.Dequeue();   // D9: Echo da
                 // eigenes Echo: schon über Take eingetragen — bis auf das Ausschalten
                 TakeFrame(f.Data, ownEcho: f.Slot == _relaySlot);
             }
+            Nachschicken();
             return;
         }
         if (_peer == null) return;

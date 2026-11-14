@@ -372,6 +372,7 @@ public sealed partial class NetGameRunner : Node
         // ⭐ 11.11.2026 (Online 2b): die Karte ist weg (Spieler ins Menü) — vorher lief der
         // Taktgeber hier gegen ein freigegebenes Objekt weiter.
         if (!IsInstanceValid(_sim)) { Abschied("Partie verlassen.", menue: false); return; }
+        if (RelayWache()) return;   // Fable D9
         _link.Pump();
         NetzEreignisse();
         if (_phase == Phase.Ende) return;
@@ -1064,6 +1065,66 @@ public sealed partial class NetGameRunner : Node
         if (_limit > 0) { _phase = Phase.Ende; Say("NETZ-ERGEBNIS: Gastgeber weg."); Quit(3); return true; }
         Abschied(m);
         return true;
+    }
+
+    // ---- ⭐ 14.11.2026 — Fable D9: die Leitung zum Server reisst ab -------------------------------
+    private ulong _abrissSeit, _letzterVersuch;
+    private int _abrissBei = -1;
+    private bool _abrissProbeGefeuert;
+
+    /// <summary>Online: ist der Draht zum Server weg, alle 3 s neu verbinden (60 s haelt der Server
+    /// den Platz). In der Zeit steht die Partie — die anderen sehen »Warten auf«. true = Abschied.</summary>
+    private bool RelayWache()
+    {
+        if (!_link.IsRelay || NetworkManager.Lobby is not { } lb || _phase is not (Phase.Vorlauf or Phase.Laufen)) return false;
+        if (_abrissBei < 0)
+        {
+            _abrissBei = 0;
+            foreach (string a in Core.CommandLine.Args)
+                if (a.StartsWith("--net-abriss-bei=") && int.TryParse(a["--net-abriss-bei=".Length..], out int t)) _abrissBei = t;
+        }
+        if (_abrissBei > 0 && !_abrissProbeGefeuert && _tick - _start >= _abrissBei)
+        {
+            _abrissProbeGefeuert = true;
+            Say($"NETZ-PROBE: Leitung zum Server in Takt {_tick} getrennt (--net-abriss-bei)");
+            lb.AbrissProbe();
+        }
+        if (LobbyClient.WiederverbindenAlt) return false;
+        ulong now = Time.GetTicksMsec();
+        if (lb.State == LobbyClient.Phase.Getrennt)
+        {
+            if (_abrissSeit == 0)
+            {
+                _abrissSeit = now;
+                Say("netz: Verbindung zum Server abgerissen — verbinde neu (der Server hält den Platz 60 s)");
+                Meldung("Verbindung zum Server unterbrochen — verbinde neu …");
+            }
+            if (now - _abrissSeit > 60000)
+            {
+                Say("NETZ-ERGEBNIS: Wiederverbinden gescheitert.");
+                if (_limit > 0) { _phase = Phase.Ende; Quit(3); return true; }
+                Abschied("Die Verbindung zum Server ist abgerissen und kam in 60 s nicht wieder — die Partie ist für dich beendet.");
+                return true;
+            }
+            // Pruefweg --net-abriss-dauer=ms: den Ausfall kuenstlich verlaengern (erst danach neu verbinden)
+            int dauer = 0;
+            foreach (string a in Core.CommandLine.Args)
+                if (a.StartsWith("--net-abriss-dauer=")) int.TryParse(a["--net-abriss-dauer=".Length..], out dauer);
+            if (now - _abrissSeit < (ulong)System.Math.Max(0, dauer)) return false;
+            if (now - _letzterVersuch >= 3000)
+            {
+                _letzterVersuch = now;
+                if (!lb.Wiederverbinden()) Say("netz: Wiederverbinden nicht möglich (kein resume_token)");
+            }
+            return false;
+        }
+        if (_abrissSeit != 0 && lb.Open && lb.Wiederaufnahmen > 0)
+        {
+            Say($"netz: wieder verbunden nach {(now - _abrissSeit) / 1000.0:0.0} s — Partie läuft weiter");
+            Meldung("Verbindung zum Server wieder da — die Partie geht weiter.");
+            _abrissSeit = 0;
+        }
+        return false;
     }
 
     /// <summary>Was zwischen den Takten aus dem Netz kommt: Ausschaltungen, Chat, Abgänge.</summary>
