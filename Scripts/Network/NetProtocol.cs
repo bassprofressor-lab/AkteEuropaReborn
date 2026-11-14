@@ -189,6 +189,8 @@ public sealed class NetSession
     /// spielt (SkirmishSetup.ArtLeer/ArtMensch/ArtLeicht/ArtNormal/ArtSchwer) und in welchem Team
     /// (0 = keins). Ohne sie (Aufstellung falsch) gilt der alte Weg: AiCount Gegner mit Level.
     /// Die Teams bauen auf JEDER Maschine dieselbe Buendnistafel — sie muessen also mit.</summary>
+    /// <summary>Fable D10: das Spieltempo beim Start (1..3), Protokoll 5.</summary>
+    public int Tempo = 1;
     public bool Aufstellung;
     public int[] Art = new int[8];
     public int[] Team = new int[8];

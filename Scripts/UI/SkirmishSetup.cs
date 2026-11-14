@@ -268,6 +268,13 @@ public static class SkirmishSetup
         _ => ArtNormal,
     };
 
+    /// <summary>⭐ 14.11.2026 — Fable D10: das Spieltempo beim Start (1..3 wie Befehl 989; 1 =
+    /// das Tempo des Originals, das im Netz fest auf 1 steht). Im Spiel aendern es +/- weiter fuer
+    /// alle. UNSERE ABWEICHUNG nur fuer das Gefecht; Gegenschalter --tempo-alt (immer 1).</summary>
+    public static int Tempo = 1;
+    public static bool TempoAlt => System.Array.IndexOf(Core.CommandLine.Args, "--tempo-alt") >= 0;
+    public static string TempoName(int v) => v switch { 2 => "schnell (×2)", 3 => "sehr schnell (×3)", _ => "normal" };
+
     public static bool PlaetzeAlt => System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-plaetze-alt") >= 0;
 
     /// <summary>Die Aufstellung als Text »art:team« je Platz 0..7, z. B. »1:1,4:1,2:2,3:2,0:0,…«

@@ -150,7 +150,7 @@ public partial class MainMenu
     private void EinstellungenSperren(bool sperren)
     {
         if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-grund-alt") >= 0) sperren = false;
-        foreach (var o in new OptionButton?[] { _ai, _slot, _level, _res, _konto, _tech })
+        foreach (var o in new OptionButton?[] { _ai, _slot, _level, _res, _konto, _tech, _tempo })
             if (o != null) o.Disabled = sperren;
         if (_allUnits != null) _allUnits.Disabled = sperren;
         if (_mapList != null)

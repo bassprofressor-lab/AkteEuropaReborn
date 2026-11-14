@@ -263,6 +263,12 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Game speed as a setting** (Fable review D10): the skirmish screen, the multiplayer screen and the
+  online room have a **"Game speed"** row (normal / fast ×2 / very fast ×3). "normal" is the original's
+  speed and the default; in network play every machine starts with the host's speed (it travels in the
+  session packet). In game + and − still change it, in network play for everyone. The original keeps
+  the speed fixed at 1 in network play — a deviation of ours, skirmish only. Checked: LAN pair at speed
+  2 (both machines start at 2, green), NET07 checksum unchanged. Opt-out `--tempo-alt`.
 - **Discord in the online lobby** (Fable review D10): next to "JOIN" there is **"FIND PLAYERS
   (Discord)"**, and in the room next to "LEAVE ROOM" **"INVITE (Discord)"**. Both open the game's
   Discord server, like the button in the main menu — right where you wait for other players. Opt-out

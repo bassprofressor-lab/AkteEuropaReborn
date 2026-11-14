@@ -312,6 +312,12 @@ public sealed partial class NetGameRunner : Node
         // Netzschalter dword[0x539234]); ein Prozess, der mit Stufe 2 ins Netz
         // ginge, führe je Aufruf zwei Takte.
         if (!NettaktAlt) _sim.NetzTaktUebernehmen();
+        // Fable D10: das Starttempo der Partie (auf allen Maschinen dasselbe, aus der Sitzung)
+        if (!UI.SkirmishSetup.TempoAlt && _s.Tempo is >= 2 and <= 3)
+        {
+            MapEntityLayer.GameSpeed = _s.Tempo;
+            Say($"netz: Starttempo {_s.Tempo} ({UI.SkirmishSetup.TempoName(_s.Tempo)})");
+        }
 
         // Der Ausgangskorb: ein Klick wird ab jetzt NICHT mehr sofort in den
         // Ring gelegt, sondern erst über die Leitung geschickt. Das ist der

@@ -824,6 +824,7 @@ public partial class NetworkManager : Node
             Techstandard = UI.SkirmishSetup.Techstandard,
             Resources = UI.SkirmishSetup.Resources,
             AllUnits = UI.SkirmishSetup.AllUnits,
+            Tempo = UI.SkirmishSetup.TempoAlt ? 1 : System.Math.Clamp(UI.SkirmishSetup.Tempo, 1, 3),
             // ⭐ bug-734: Konto, B8 und Startbasis. ⚠ Die Schalter liest der MapViewer erst
             // NACH dem Szenenwechsel; hier, im Menue, stehen sie noch nicht in den
             // statischen Feldern. Darum die Befehlszeile selbst.
@@ -952,6 +953,7 @@ public partial class NetworkManager : Node
         UI.SkirmishSetup.Techstandard = s.Techstandard;
         UI.SkirmishSetup.Resources = s.Resources;
         UI.SkirmishSetup.AllUnits = s.AllUnits;
+        UI.SkirmishSetup.Tempo = System.Math.Clamp(s.Tempo, 1, 3);
         // ⭐ bug-734: Konto, B8 und Startbasis kommen ebenfalls aus der Partie.
         // --netz-sitzung-alt = der Stand bis Protokoll 2 (jeder nimmt seine eigenen).
         if (!SitzungAlt)

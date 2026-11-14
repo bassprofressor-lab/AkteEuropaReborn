@@ -494,6 +494,7 @@ public sealed class NetLink
             .U64(s.KartenSumme)
             .U8((byte)s.Slot.Length)
             .Also(w => { foreach (int sl in s.Slot) w.U8((byte)sl); })
+            .U8((byte)s.Tempo)                // Protokoll 5 (Fable D10): Starttempo
             .Bool(s.Aufstellung)              // Protokoll 5 (P7): Art + Team je Kartenplatz
             .Also(w => { for (int p = 0; p < 8; p++) w.U8((byte)s.Art[p]).U8((byte)s.Team[p]); })
             .Done();
@@ -729,6 +730,7 @@ public sealed class NetLink
         s.Slot = slots;
         if (proto >= 5)
         {
+            s.Tempo = r.U8();
             s.Aufstellung = r.Bool();
             for (int p = 0; p < 8; p++) { s.Art[p] = r.U8(); s.Team[p] = r.U8(); }
         }

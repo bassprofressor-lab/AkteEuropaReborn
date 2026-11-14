@@ -697,7 +697,7 @@ public partial class OnlineLobbyScreen : Control
     private TextureRect _raumBild = null!;
     private Label _raumKarteText = null!;
     private OptionButton _raumKarte = null!, _raumLevel = null!, _raumRes = null!;
-    private ZahlWahl _raumKonto = null!, _raumTech = null!;
+    private ZahlWahl _raumKonto = null!, _raumTech = null!, _raumTempo = null!;
     private CheckBox _raumAlle = null!;
     private Button _kiDazu = null!, _platzFrei = null!, _hinaus = null!;
     private Label _platzHinweis = null!;
@@ -763,6 +763,9 @@ public partial class OnlineLobbyScreen : Control
         _raumTech = new ZahlWahl { MinValue = 1, MaxValue = 8, Beschriftung = v => $"Stufe {v} von 8" };
         _raumTech.ValueChanged += _ => Geaendert();
         Feld("Techstandard", _raumTech);
+        _raumTempo = new ZahlWahl { Werte = new[] { 1, 2, 3 }, Value = 1, Beschriftung = SkirmishSetup.TempoName };
+        _raumTempo.ValueChanged += _ => Geaendert();
+        if (!SkirmishSetup.TempoAlt) Feld("Spieltempo", _raumTempo);
         _raumAlle = new CheckBox { Text = "Alle Einheiten kaufbar" };
         _raumAlle.Toggled += _ => Geaendert();
         Feld("", _raumAlle);
@@ -919,8 +922,9 @@ public partial class OnlineLobbyScreen : Control
             if ((int?)s["money"] is int mo) _raumKonto.Value = mo;
             if ((int?)s["tech"] is int te) _raumTech.Value = te;
             if ((bool?)s["all"] is bool al) _raumAlle.ButtonPressed = al;
+            _raumTempo.Value = (int?)s["tempo"] ?? 1;
         }
-        foreach (var c in new Control[] { _raumKarte, _raumLevel, _raumRes, _raumKonto, _raumTech })
+        foreach (var c in new Control[] { _raumKarte, _raumLevel, _raumRes, _raumKonto, _raumTech, _raumTempo })
             if (c is BaseButton b) b.Disabled = !host;
         _raumAlle.Disabled = !host;
         _fuelle = false;
@@ -949,6 +953,7 @@ public partial class OnlineLobbyScreen : Control
             ["money"] = (int)_raumKonto.Value,
             ["tech"] = (int)_raumTech.Value,
             ["all"] = _raumAlle.ButtonPressed,
+            ["tempo"] = (int)_raumTempo.Value,
         };
         Senden(l, s);
     }

@@ -284,6 +284,12 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Spieltempo als Einstellung** (Fable-Prüfung D10): Gefechtsschirm, Mehrspielerschirm und Online-Raum
+  haben die Zeile **»Spieltempo«** (normal / schnell ×2 / sehr schnell ×3). »normal« ist das Tempo des
+  Originals und die Vorgabe; im Netz beginnen alle Rechner mit dem Tempo des Gastgebers (es reist im
+  Sitzungspaket mit). Im Spiel ändern + und − es weiter, im Netz für alle. Das Original hält das Tempo
+  im Netz fest auf 1 — eine Abweichung von uns, nur im Gefecht. Geprüft: LAN-Paar mit Tempo 2 (beide
+  Rechner starten mit 2, grün), NET07-Prüfsumme unverändert. Gegenschalter `--tempo-alt`.
 - **Discord in der Online-Lobby** (Fable-Prüfung D10): Neben »BEITRETEN« steht **»MITSPIELER FINDEN
   (Discord)«**, im Raum neben »RAUM VERLASSEN« **»EINLADEN (Discord)«**. Beide öffnen den Discord-Server
   des Spiels, wie der Knopf im Hauptmenü — dort, wo man auf Mitspieler wartet. Gegenschalter

@@ -89,6 +89,7 @@ public partial class MainMenu : Control
     private PanelContainer? _allUnitsPanel;
 
     private ZahlWahl _ai = null!;
+    private ZahlWahl? _tempo;   // Fable D10
 
     /// <summary>»Techstandard« 1..8 — siehe <see cref="SkirmishSetup.Techstandard"/>.
     /// Optional wie <see cref="_allUnits"/>, weil der Schirm auch ohne die Zeile
@@ -1031,6 +1032,14 @@ public partial class MainMenu : Control
         }));
 
         SkirmishSetup.Techstandard = Settings.SkirmishTechstandard;
+        // ⭐ Fable D10: Spieltempo als Regel (Simulation-Takt je Bild 1..3, Befehl 989)
+        if (!SkirmishSetup.TempoAlt)
+            right.AddChild(Row("Spieltempo", _tempo = new ZahlWahl
+            {
+                Werte = new[] { 1, 2, 3 }, Value = 1, Beschriftung = SkirmishSetup.TempoName,
+                TooltipText = "Wie schnell die Partie beginnt. »normal« ist das Tempo des Originals.\n" +
+                              "Im Spiel ändern + und − es weiter — im Netz für alle.",
+            }));
         right.AddChild(Row("Techstandard", _tech = new ZahlWahl
         {
             MinValue = 1, MaxValue = 8, Value = SkirmishSetup.Techstandard,
@@ -2318,6 +2327,7 @@ public partial class MainMenu : Control
             ["money"] = SkirmishSetup.StartMoney,
             ["tech"] = SkirmishSetup.Techstandard,
             ["all"] = SkirmishSetup.AllUnits,
+            ["tempo"] = SkirmishSetup.Tempo,
         };
     }
 
@@ -2336,6 +2346,7 @@ public partial class MainMenu : Control
         if ((int?)s["money"] is int mo && _konto != null) _konto.Value = mo;
         if ((int?)s["tech"] is int te && _tech != null) _tech.Value = te;
         if ((bool?)s["all"] is bool al && _allUnits != null) _allUnits.ButtonPressed = al;
+        if ((int?)s["tempo"] is int tp && _tempo != null) _tempo.Value = tp;
         ApplySetupFields();
     }
 
@@ -2354,6 +2365,7 @@ public partial class MainMenu : Control
         if (_res != null && Settings.SkirmishResources >= 0 && Settings.SkirmishResources < _res.ItemCount)
             _res.Selected = Settings.SkirmishResources;
         if (_konto != null && Settings.SkirmishMoney >= 0) _konto.Value = Settings.SkirmishMoney;
+        if (_tempo != null) _tempo.Value = Mathf.Clamp(Settings.SkirmishTempo, 1, 3);
         if (_netAddr != null && Settings.NetAddress.Length > 0) _netAddr.Text = Settings.NetAddress;
         if (_netPlayers != null) _netPlayers.Value = Settings.NetHumans;
         PlaetzeLaden();   // P7: nach Gegnerzahl und Stufe — ohne gemerkte Liste daraus
@@ -2367,6 +2379,7 @@ public partial class MainMenu : Control
         Settings.SkirmishLevel = _level.Selected;
         if (_res != null) Settings.SkirmishResources = _res.Selected;
         if (_konto != null) Settings.SkirmishMoney = (int)_konto.Value;
+        if (_tempo != null) Settings.SkirmishTempo = (int)_tempo.Value;
         if (_netAddr != null && _netMode is { Selected: 2 }) Settings.NetAddress = _netAddr.Text;
         if (_netPlayers != null) Settings.NetHumans = (int)_netPlayers.Value;
         PlaetzeMerken();   // P7
@@ -2600,6 +2613,9 @@ public partial class MainMenu : Control
         // Vorgabe, die keine Installation je zu sehen bekommt).
         if (_konto != null)
             SkirmishSetup.StartMoney = Mathf.Clamp((int)_konto.Value, 0, 10000);
+        SkirmishSetup.Tempo = _tempo != null ? Mathf.Clamp((int)_tempo.Value, 1, 3) : 1;
+        foreach (string a in OS.GetCmdlineUserArgs())   // Pruefweg: --tempo=N
+            if (a.StartsWith("--tempo=") && int.TryParse(a[8..], out int tw)) SkirmishSetup.Tempo = Mathf.Clamp(tw, 1, 3);
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
         PlaetzeUebernehmen();                    // P7: die Platzliste (nur im Gefecht)
         GefechtMerken();

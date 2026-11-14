@@ -267,6 +267,7 @@ public static class Settings
     public static int SkirmishLevel { get => I("skirmish_level", 1); set => Set("skirmish_level", value); }
     public static int SkirmishResources { get => I("skirmish_resources", -1); set => Set("skirmish_resources", value); }
     public static int SkirmishMoney { get => I("skirmish_money", -1); set => Set("skirmish_money", value); }
+    public static int SkirmishTempo { get => I("skirmish_tempo", 1); set => Set("skirmish_tempo", value); }
     public static string NetAddress { get => S("net_address", ""); set => Set("net_address", value); }
     public static int NetHumans { get => I("net_humans", 2); set => Set("net_humans", value); }
     /// <summary>P7 (14.11.2026): die Aufstellung des Gefechts, »art:team« je Platz 0..7.</summary>

@@ -699,6 +699,9 @@ public partial class MapViewer : Node2D
                 ? _entities.StartCampaign(UI.SkirmishSetup.Human, UI.SkirmishSetup.Level)
                 : _entities.StartSkirmish(UI.SkirmishSetup.Human,
                          UI.SkirmishSetup.AiCount, UI.SkirmishSetup.Level);
+            // Fable D10: Starttempo im Gefecht (im Netz setzt es der Taktgeber aus der Sitzung)
+            if (UI.SkirmishSetup.CampaignMission == 0 && !UI.SkirmishSetup.TempoAlt && Network.NetworkManager.Link == null)
+                MapEntityLayer.GameSpeed = System.Math.Clamp(UI.SkirmishSetup.Tempo, 1, 3);
             // Der Kontostand geht von einer Mission in die naechste mit — das
             // ist gelesen, siehe Campaign.CampaignManager.Balance. Vorher fing
             // JEDE Kampagnenmission bei $0 an; genau das hat der Spieler als
