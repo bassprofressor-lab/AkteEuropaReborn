@@ -303,7 +303,13 @@ public static class GameCursors
         _shownType = typ;
         _shownFrame = bild;
         Input.SetCustomMouseCursor(bilder[bild], Input.CursorShape.Arrow, _hot);
+        AktuellesBild = bilder[bild];
     }
+
+    /// <summary>14.11.2026: das gerade gesetzte Zeigerbild (null = Systemzeiger) — für den
+    /// Vorführer (Debug/Vorfuehrung.cs), der den Zeiger im Filmbild selbst zeichnet.</summary>
+    public static Texture2D? AktuellesBild { get; private set; }
+    public static Vector2 AktuellerHot => _hot;
 
     /// <summary>Zurück zum Systemzeiger — für die Menüs und für den Fall, dass
     /// der Spieler die Zeigerhilfen abschaltet.</summary>
@@ -312,5 +318,6 @@ public static class GameCursors
         if (_shownType < 0) return;
         _shownType = _shownFrame = -1;
         Input.SetCustomMouseCursor(null, Input.CursorShape.Arrow);
+        AktuellesBild = null;
     }
 }

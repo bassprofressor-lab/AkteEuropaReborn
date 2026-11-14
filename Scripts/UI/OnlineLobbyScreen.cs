@@ -60,6 +60,16 @@ public partial class OnlineLobbyScreen : Control
     private int _seenRev = -1, _seenChat, _seenEvents;
     private bool _handedOver;
 
+    /// <summary>14.11.2026: der Name, mit dem die Lobby anmeldet — der Pruefschalter
+    /// <c>--net-name=</c> (bisher nur im LAN) geht dem gespeicherten vor, damit zwei Pruef- oder
+    /// Aufnahmelaeufe auf einem Rechner unter verschiedenen Namen auftreten.</summary>
+    private static string StartName()
+    {
+        foreach (string a in Core.CommandLine.Args)
+            if (a.StartsWith("--net-name=")) return a["--net-name=".Length..];
+        return Settings.OnlineName;
+    }
+
     public override void _Ready()
     {
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -88,7 +98,7 @@ public partial class OnlineLobbyScreen : Control
 
         // ---- 1. anmelden ------------------------------------------------------
         _login = new VBoxContainer();
-        _name = new LineEdit { Text = Settings.OnlineName, MaxLength = 20, PlaceholderText = "dein Name" };
+        _name = new LineEdit { Text = StartName(), MaxLength = 20, PlaceholderText = "dein Name" };
         _login.AddChild(Row("Name", _name));
         _nameHint = new Label
         {
@@ -219,7 +229,7 @@ public partial class OnlineLobbyScreen : Control
         if (Meldung.Length > 0) _chat.AddText($"— {Meldung}\n");
         // ⭐ 11.11.2026 (Spielerwunsch): mit gespeichertem Namen gleich verbinden — die
         // Namensabfrage kommt nur beim ersten Mal oder wenn die Verbindung scheitert.
-        if (NetworkManager.Lobby == null && Settings.OnlineName.Length > 0)
+        if (NetworkManager.Lobby == null && StartName().Length > 0)
         {
             _login.Visible = false;
             CallDeferred(nameof(Connect));

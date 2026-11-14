@@ -278,7 +278,7 @@ public partial class MapEditOverlay : Node2D
 
         if (e is InputEventMouseMotion)
         {
-            var cell = _layer.CellAt(GetLocalMousePosition());
+            var cell = _layer.CellAt(Debug.Vorfuehrung.LokaleMaus(this));
             if (cell != _hover) { _hover = cell; Ziehen(cell); QueueRedraw(); }   // P5: Ziehen
             return;
         }
@@ -293,7 +293,7 @@ public partial class MapEditOverlay : Node2D
         }
         if (e is InputEventMouseButton { Pressed: true } mb)
         {
-            var cell = _layer.CellAt(GetLocalMousePosition());
+            var cell = _layer.CellAt(Debug.Vorfuehrung.LokaleMaus(this));
             if (cell == null) return;
             if (mb.ButtonIndex is MouseButton.Left or MouseButton.Right)
             {

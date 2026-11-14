@@ -831,6 +831,15 @@ your own copy of the 1997 game.
 
 ### For the curious
 
+- **Recording helper "demonstrator"** (`--vorfuehrung=<script file>`, for video footage): it drives
+  the game from a text file like a hand. A drawn mouse glides across the screen, clicks (with a short
+  yellow ring), drags, turns the wheel and presses keys (`warte`, `zu x y`, `klick`, `ziehe`,
+  `taste`, `text`, `rad`, `ende`). It is needed for Godot's movie writer (`--write-movie`), which does
+  not draw the real mouse pointer. During a demonstration the map editor asks the demonstrator for
+  the mouse position, otherwise Windows as before. Without the switch nothing changes.
+- **`--net-name=<name>` now also applies to the online lobby** (so far LAN only), so two test or
+  recording runs on one machine appear under different names; without the switch the lobby uses the
+  saved name as before.
 - Online test with two or three players on one machine:
   `--net-online --net-host --net-raum=<name>` and
   `--net-online --net-join --net-raum=<name>`; NET07 over 6000 ticks with direct

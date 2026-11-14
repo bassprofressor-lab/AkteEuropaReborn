@@ -892,6 +892,16 @@ bisher nur dort beschrieben.*
 
 ### Für Neugierige
 
+- **Aufnahmehelfer »Vorführer«** (`--vorfuehrung=<skriptdatei>`, für Videomaterial): Er bedient das
+  Spiel nach einer Textdatei wie eine Hand. Eine gezeichnete Maus fährt weich über den Schirm, klickt
+  (mit kurzem gelbem Ring), zieht, dreht das Rad und drückt Tasten (`warte`, `zu x y`, `klick`,
+  `ziehe`, `taste`, `text`, `rad`, `ende`). Gebraucht wird er für Godots Filmschreiber
+  (`--write-movie`), der den echten Mauszeiger nicht mitzeichnet. Der Karteneditor fragt die
+  Mausposition während einer Vorführung beim Vorführer ab, sonst wie bisher bei Windows. Ohne den
+  Schalter ändert sich nichts.
+- **`--net-name=<name>` gilt jetzt auch für die Online-Lobby** (bisher nur im LAN). So treten zwei
+  Prüf- oder Aufnahmeläufe auf einem Rechner unter verschiedenen Namen auf; ohne den Schalter nimmt
+  die Lobby wie bisher den gespeicherten Namen.
 - Online-Prüflauf mit zwei oder drei Rechnern auf einer Maschine:
   `--net-online --net-host --net-raum=<name>` und
   `--net-online --net-join --net-raum=<name>`; NET07 über 6000 Takte mit

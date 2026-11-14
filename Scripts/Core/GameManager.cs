@@ -17,6 +17,7 @@ public partial class GameManager : Node
     public override void _Ready()
     {
         GD.Print("GameManager ready");
+        Debug.Vorfuehrung.WennVerlangt(GetTree().Root);   // 14.11.2026: Aufnahmehelfer --vorfuehrung=
         MuellsammlerOhneNebenlauf();
         // ⚠ Schadensbehebung, kein Nachbau: bis zum 21.08.2026 hat der
         // Musikregler die Lautstaerke des MIDI-Geraets SYSTEMWEIT verstellt,
