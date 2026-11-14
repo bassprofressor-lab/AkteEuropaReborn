@@ -248,9 +248,9 @@ public partial class NetworkManager : Node
     {
         if (Lobby != null) return true;
         var l = new LobbyClient();
-        // content_hash: UNSERE SETZUNG, Platzhalter — der Server vergleicht ihn nicht,
-        // das Spiel noch nicht (Kartenprüfsumme kommt mit der Lobby, Stufe 2).
-        if (!l.Connect(url, name, GameVersion(), "00000000"))
+        // ⭐ 14.11.2026 — Fable D8: content_hash = Pruefsumme der eingelesenen Spieldaten
+        // (Network/Inhaltssumme.cs); der Server vergleicht nichts, der Raum warnt.
+        if (!l.Connect(url, name, GameVersion(), Inhaltssumme.Wert()))
         {
             Fault = l.Fault;
             GD.PrintErr("netz: " + Fault);
@@ -496,6 +496,9 @@ public partial class NetworkManager : Node
     /// </summary>
     private NetOffer MyOffer() => new()
     {
+        // Fable: das LAN-Angebot nennt seine Fassung; --lan-fassung-test=<text> taeuscht eine andere vor
+        Fassung = System.Array.Find(Core.CommandLine.Args, a => a.StartsWith("--lan-fassung-test="))?["--lan-fassung-test=".Length..]
+                  ?? GameVersion(),
         Port = _port,
         Map = UI.SkirmishSetup.Map,
         Host = HostName(),

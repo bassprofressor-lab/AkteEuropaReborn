@@ -284,6 +284,24 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Online und LAN: verschiedene Fassungen und Spieldaten werden vorher erkannt** (Fable-Prüfung D8 und
+  ein offener Punkt aus P4):
+  - **Spieldaten im Raum** (D8): Das Spiel schickt jetzt eine Prüfsumme seiner eingelesenen
+    Spieldaten an den Lobby-Server (bisher immer »00000000«). Gerechnet wird über das, was die
+    Simulation liest: die Spieltabellen, die Einheitenverzeichnisse und die mitgelieferten
+    Mehrspielerkarten, rund 50 MB in etwa 0,2 s, einmal je Programmlauf. Hat ein Mitspieler im
+    Raum eine andere Summe, steht bei ihm »⚠ andere Spieldaten« (mit Erklärung im Tooltip), und der
+    Startknopf sagt »⚠ andere Spieldaten im Raum«. Gesperrt wird nicht — eine Abweichung in einer
+    Karte, die nicht gespielt wird, schadet nicht —, aber man weiß vorher, warum eine Partie
+    auseinanderlaufen könnte.
+  - **Fassung im LAN-Angebot**: Ein Gastgeber im LAN nennt jetzt seine Fassung. Eine Partie einer
+    anderen Fassung steht in der Suchliste als »⚠ andere Fassung 0.6.13«, ist nicht wählbar, und die
+    Statuszeile sagt »1 Partie gefunden, aber mit einer anderen Fassung des Spiels«. Bisher sah sie
+    aus wie jede andere, und das Beitreten scheiterte erst danach mit »Protokoll passt nicht«.
+  Geprüft: LAN-Suche gegen einen Gastgeber derselben und einer vorgetäuschten anderen Fassung;
+  Online-Raum mit einem Mitspieler mit vorgetäuschter anderer Summe (Warnung sichtbar, Partie grün).
+  Prüfschalter `--lan-fassung-test=`, `--inhaltssumme-test=`; Gegenschalter `--inhaltssumme-alt`,
+  `--lan-fassung-alt`.
 - **Mehrspieler: Stärke und Team je Platz, feste Startplätze** (Fortsetzung des Gefechts-Wunsches,
   jetzt im LAN und online; z. B. zwei Menschen gegen zwei Computergegner):
   - **LAN-Gastgeber:** Der Mehrspielerschirm zeigt dieselbe Platzliste wie das Gefecht, mit der

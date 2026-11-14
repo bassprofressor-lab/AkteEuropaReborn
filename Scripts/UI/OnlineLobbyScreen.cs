@@ -594,7 +594,7 @@ public partial class OnlineLobbyScreen : Control
             _members.Clear();
             _platzInfo.Clear();
             _platzTeam.Clear(); _platzKi.Clear();
-            int humans = 0, kis = 0;
+            int humans = 0, kis = 0, andereDaten = 0;
             // ⭐ P7 Teil 2: Raumplatz n = Startplatz n der Karte (Network/NetzAufstellung.cs)
             var plRaum = MapPreview.Startplaetze((string?)settings?["map"] ?? "");
             string Zusatz(int sl, int team) => P7Alt ? "" :
@@ -613,8 +613,16 @@ public partial class OnlineLobbyScreen : Control
                         bool host = (string?)o["player"] == (string?)room["host"];
                         bool ich = (string?)o["player"] == l.MyId;
                         int ping = (int?)o["ping_ms"] ?? -1;
+                        // ⭐ Fable D8: andere Spieldaten (content_hash) sichtbar machen
+                        string hash = (string?)o["content_hash"] ?? "";
+                        bool anders = !Inhaltssumme.Alt && hash.Length > 0 && hash != "00000000" && hash != Inhaltssumme.Wert();
+                        if (anders) andereDaten++;
                         _members.AddItem($"{(LobbyAlt ? "Platz " : "")}{sl + 1}.  {(string?)o["name"]}" + (host ? "  (Gastgeber)" : "") +
-                                         (ich ? "  — du" : "") + Zusatz(sl, team) + (ping >= 0 ? $"  ·  {ping} ms" : ""));
+                                         (ich ? "  — du" : "") + Zusatz(sl, team) + (ping >= 0 ? $"  ·  {ping} ms" : "") +
+                                         (anders ? "  ·  ⚠ andere Spieldaten" : ""));
+                        if (anders) _members.SetItemTooltip(_members.ItemCount - 1,
+                            "Dieser Spieler hat andere eingelesene Spieldaten als du (Prüfsumme " + hash + " statt " + Inhaltssumme.Wert() +
+                            ").\nDie Partie kann dann auseinanderlaufen. Abhilfe: beide lesen die Original-CDs mit derselben Fassung neu ein.");
                         _platzInfo.Add((sl, ich ? 'I' : 'M', (string?)o["player"] ?? ""));
                     }
                     else if (!LobbyAlt && (string?)o["ai"] is { Length: > 0 } ai)
@@ -647,6 +655,7 @@ public partial class OnlineLobbyScreen : Control
                 bool feind = besetzt.Any(a => besetzt.Any(b => a.Slot != b.Slot &&
                                  !(_platzTeam.GetValueOrDefault(a.Slot) > 0 && _platzTeam.GetValueOrDefault(a.Slot) == _platzTeam.GetValueOrDefault(b.Slot))));
                 if (ohne >= 0) { _start.Disabled = true; _start.Text = $"START — Platz {ohne + 1} hat auf dieser Karte keinen Startplatz"; }
+                else if (andereDaten > 0 && !_start.Disabled) _start.Text += "  ⚠ andere Spieldaten im Raum";
                 else if (!feind) { _start.Disabled = true; _start.Text = "START — alle im selben Team, kein Gegner"; }
             }
             if (!LobbyAlt) { RaumEinstellungenZeigen(l, room, settings, kis); PlatzKnoepfeZeigen(l); }

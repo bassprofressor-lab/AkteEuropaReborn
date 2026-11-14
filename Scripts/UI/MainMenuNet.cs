@@ -387,6 +387,13 @@ public partial class MainMenu
                 // gäbe nichts — und »voll« ist eine andere Nachricht als »nichts
                 // da«.
                 if (o.Free <= 0) _netList.SetItemDisabled(row, true);
+                // Fable: eine andere Fassung kann nicht mitspielen — sichtbar, aber nicht waehlbar
+                if (!o.Passt)
+                {
+                    _netList.SetItemDisabled(row, true);
+                    _netList.SetItemTooltip(row, o.Describe() + "\nDiese Partie läuft mit einer anderen Fassung des Spiels — " +
+                                                 "Beitreten geht nur mit derselben Fassung.");
+                }
             }
         _netList.Visible = _netList.ItemCount > 0;
         if (_netStatus != null)

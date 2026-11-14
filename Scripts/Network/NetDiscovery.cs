@@ -1,6 +1,7 @@
 namespace AkteEuropaReborn.Network;
 
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 /// <summary>
@@ -273,9 +274,14 @@ public sealed class NetDiscovery
         if (_found.Count == 0)
             return "Keine offene Partie im LAN gefunden. Hat der Gastgeber schon »PARTIE STARTEN« gedrückt? " +
                    "Wenn ja, hält vielleicht eine Firewall die Suche auf — dann seine Adresse oben von Hand eintragen.";
+        // Fable: Partien einer anderen Fassung zaehlen nicht als »offen«
+        int fremd = _found.Count(o => !o.Passt);
+        if (fremd == _found.Count)
+            return (_found.Count == 1 ? "1 Partie gefunden" : $"{_found.Count} Partien gefunden") +
+                   ", aber mit einer anderen Fassung des Spiels — Beitreten geht nur mit derselben Fassung.";
         if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-grund-alt") < 0)
-            return _found.Count == 1 ? "1 offene Partie gefunden — anklicken, dann »PARTIE STARTEN«."
-                                     : $"{_found.Count} offene Partien gefunden — eine anklicken, dann »PARTIE STARTEN«.";
+            return _found.Count - fremd == 1 ? "1 offene Partie gefunden — anklicken, dann »PARTIE STARTEN«."
+                                     : $"{_found.Count - fremd} offene Partien gefunden — eine anklicken, dann »PARTIE STARTEN«.";
         string wege = SawBroadcast && SawLoopback ? "LAN-Rundruf und Rückschleife"
                     : SawBroadcast ? "LAN-Rundruf"
                     : "NUR die Rückschleife (127.0.0.1) — im LAN hat niemand geantwortet. " +
@@ -309,6 +315,14 @@ public sealed class NetOffer
     public bool Running;
     /// <summary>Über welchen Weg die Antwort kam — nur für den Bericht.</summary>
     public string Via = "";
+    /// <summary>⭐ 14.11.2026 (Fable, offen aus P4): Fassung und Netzprotokoll des Gastgebers
+    /// (»0.7.0/n5«). Leer = ein Gastgeber, der sie noch nicht schickt (ältere Fassung). Hinten an
+    /// das Paket gehängt, damit ältere Sucher das Angebot weiter lesen; die Suchform bleibt 1.</summary>
+    public string Fassung = "";
+    /// <summary>Passt die Fassung zu meiner? Sonst bricht das Beitreten später mit »Protokoll passt
+    /// nicht« ab — die Liste zeigt es vorher. Gegenschalter --lan-fassung-alt.</summary>
+    public bool Passt => Fassung == NetworkManager.GameVersion()
+                         || System.Array.IndexOf(Core.CommandLine.Args, "--lan-fassung-alt") >= 0;
 
     public int Free => Running ? 0 : Players - Here < 0 ? 0 : Players - Here;
 
@@ -323,6 +337,7 @@ public sealed class NetOffer
             .U8((byte)Players)
             .U8((byte)Here)
             .Bool(Running)
+            .Text(Fassung)
             .Done();
 
     /// <summary>⚠ Die Adresse kommt NICHT aus dem Paket, sondern aus dem
@@ -344,6 +359,7 @@ public sealed class NetOffer
             Here = r.U8(),
             Running = r.Bool(),
         };
+        if (!r.Bad && r.Left > 0) o.Fassung = r.Text();
         if (r.Bad || proto != NetDiscovery.Protokoll || o.Port <= 0) return null;
         return o;
     }
@@ -365,6 +381,8 @@ public sealed class NetOffer
     public string ListLine()
     {
         string m = UI.MainMenu.KartenTitel(Map);   // Fable C14
+        if (!Passt)
+            return $"{m}  ·  ⚠ andere Fassung {(Fassung.Length > 0 ? Fassung.Split('/')[0] : "(älter)")}";   // Adresse im Tooltip
         return $"{Target}  ·  {m}  ·  " +
                (Running ? "läuft schon" : $"{Here}/{Players}, {Free} frei");
     }
@@ -378,5 +396,6 @@ public sealed class NetOffer
         => $"{(Address.Length > 0 ? Target : $"(diese Maschine):{Port}")}  " +
            $"{(Map.Length > 0 ? Map : "?")}  " +
            (Running ? "läuft schon" : $"{Here}/{Players} Menschen, {Free} frei") +
-           (Host.Length > 0 ? $"  »{Host}«" : "");
+           (Host.Length > 0 ? $"  »{Host}«" : "") +
+           (Fassung.Length > 0 ? $"  Fassung {Fassung}" : "  Fassung unbekannt");
 }

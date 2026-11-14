@@ -263,6 +263,22 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Online and LAN: different versions and game data are detected beforehand** (Fable review D8 and an
+  open point from P4):
+  - **Game data in the room** (D8): the game now sends a checksum of its imported game data to the
+    lobby server (so far always "00000000"). It covers what the simulation reads: the game tables,
+    the unit indexes and the bundled multiplayer maps, about 50 MB in roughly 0.2 s, once per run.
+    If a player in the room has a different checksum, their row shows "⚠ different game data" (with
+    an explanation in the tooltip), and the start button says "⚠ different game data in the room".
+    Nothing is blocked — a difference in a map that is not played does no harm — but you know
+    beforehand why a match might go out of sync.
+  - **Version in the LAN offer**: a LAN host now states its version. A match of a different version
+    shows in the search list as "⚠ different version 0.6.13", cannot be selected, and the status line
+    says "1 match found, but with a different version of the game". So far it looked like any other,
+    and joining only failed afterwards with "protocol does not match".
+  Checked: LAN search against a host of the same and of a faked different version; online room with
+  a player with a faked different checksum (warning visible, match green). Test switches
+  `--lan-fassung-test=`, `--inhaltssumme-test=`; opt-outs `--inhaltssumme-alt`, `--lan-fassung-alt`.
 - **Multiplayer: strength and team per position, fixed start positions** (continuing the skirmish
   request, now in LAN and online; e.g. two humans against two computer opponents):
   - **LAN host:** the multiplayer screen shows the same position list as skirmish, with the extra
