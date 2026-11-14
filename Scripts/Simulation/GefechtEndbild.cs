@@ -37,6 +37,7 @@ public partial class MapEntityLayer
         // ein ausgeschiedener Computergegner steht nicht mehr in _ai — die Aufstellung kennt ihn noch
         if (UI.SkirmishSetup.PlatzListe)
             for (int p = 0; p < 8; p++) if (UI.SkirmishSetup.PlatzArt[p] != UI.SkirmishSetup.ArtLeer) Dazu(p);
+        l.RemoveAll(UI.SkirmishSetup.IstZuschauer);   // D10: Zuschauer stehen nicht in der Abrechnung
         l.Sort();
         return l;
     }

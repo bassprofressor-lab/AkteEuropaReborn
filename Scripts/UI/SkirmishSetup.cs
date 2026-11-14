@@ -257,6 +257,14 @@ public static class SkirmishSetup
     /// <summary>Nur im Mehrspielerschirm (LAN-Gastgeber): hier startet ein Mitspieler. In der
     /// Sitzung wird daraus <see cref="ArtMensch"/> (besetzt) oder <see cref="ArtLeer"/>.</summary>
     public const int ArtMitspieler = 5;
+    /// <summary>⭐ 14.11.2026 — Fable D10: ein ZUSCHAUER. Er bekommt einen Kartenplatz, der nichts
+    /// besitzt, ist mit allen verbuendet (sieht also, was alle sehen — die Nebelrunde fragt die
+    /// Buendnistafel) und hat weder Sieg noch Niederlage. Online: Team »Zuschauer« im Raum
+    /// (Serverteam 8). Gegenschalter --zuschauer-alt.</summary>
+    public const int ArtZuschauer = 6;
+    public const int ZuschauerTeam = 8;
+    public static bool ZuschauerAlt => System.Array.IndexOf(Core.CommandLine.Args, "--zuschauer-alt") >= 0;
+    public static bool IstZuschauer(int p) => PlatzListe && p is >= 0 and < 8 && PlatzArt[p] == ArtZuschauer;
 
     /// <summary>true: <see cref="PlatzArt"/>/<see cref="PlatzTeam"/> bestimmen Gegner, Stufen
     /// und Bündnisse; <see cref="AiCount"/>/<see cref="Level"/> sind dann nur noch Anzeige.</summary>
@@ -312,7 +320,7 @@ public static class SkirmishSetup
         {
             var at = teile[p].Split(':');
             if (at.Length != 2 || !int.TryParse(at[0], out a[p]) || !int.TryParse(at[1], out t[p])) return false;
-            if (a[p] is < ArtLeer or > ArtMitspieler || t[p] is < 0 or > 8) return false;
+            if (a[p] is < ArtLeer or > ArtZuschauer || t[p] is < 0 or > 8) return false;
         }
         System.Array.Copy(a, art, 8); System.Array.Copy(t, team, 8);
         return true;
@@ -320,12 +328,15 @@ public static class SkirmishSetup
 
     /// <summary>Wer mit wem verbündet ist, nach den Teams (jeder mit sich selbst).</summary>
     public static bool Verbuendet(int a, int b)
-        => a == b || (a is >= 0 and < 8 && b is >= 0 and < 8 && PlatzTeam[a] > 0 && PlatzTeam[a] == PlatzTeam[b]);
+        => a == b || (a is >= 0 and < 8 && b is >= 0 and < 8 &&
+                      ((PlatzTeam[a] > 0 && PlatzTeam[a] == PlatzTeam[b])
+                       || PlatzArt[a] == ArtZuschauer || PlatzArt[b] == ArtZuschauer));
 
     public static bool HatTeams()
     {
         if (!PlatzListe) return false;
-        for (int p = 0; p < 8; p++) if (PlatzArt[p] != ArtLeer && PlatzTeam[p] > 0) return true;
+        for (int p = 0; p < 8; p++)
+            if (PlatzArt[p] == ArtZuschauer || (PlatzArt[p] != ArtLeer && PlatzTeam[p] > 0)) return true;
         return false;
     }
 }

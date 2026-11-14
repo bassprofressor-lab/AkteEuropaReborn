@@ -191,6 +191,7 @@ public partial class NetworkManager : Node
     // ---- die Schalter -------------------------------------------------------
 
     private bool _wantHost, _wantJoin;
+    private ulong _vollSeit;
     private int _port = 27015, _players = 2, _lead = 6, _waitMs = 20000;
     private string _address = "127.0.0.1";
     private uint _forcedSeed;
@@ -327,8 +328,13 @@ public partial class NetworkManager : Node
                 NetzTeamSetzen(l);
                 if (l.InRoom && _announced && !_startAsked && l.HumanRoomSlots().Count >= _players)
                 {
-                    _startAsked = true;
-                    l.Start();
+                    // Pruefweg (nur Befehlszeile): 2 s warten, damit Mitspieler ihr Team (--net-team) noch setzen
+                    if (_vollSeit == 0) _vollSeit = Time.GetTicksMsec();
+                    if (Time.GetTicksMsec() - _vollSeit >= 2000)
+                    {
+                        _startAsked = true;
+                        l.Start();
+                    }
                 }
             }
             else

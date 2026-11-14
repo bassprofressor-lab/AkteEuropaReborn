@@ -75,6 +75,22 @@ public partial class NetworkManager
     {
         if (room["slots"] is not JsonArray slots) return true;
         for (int p = 0; p < 8; p++) { s.Art[p] = SkirmishSetup.ArtLeer; s.Team[p] = 0; }
+        // Fable D10: Zuschauer (Team 8) bekommen Plaetze ohne Besitz, nicht ihren Raumplatz
+        var zuschauerPlatz = new Dictionary<int, int>();   // Raumplatz -> Kartenplatz
+        var leer = new Queue<int>(MapPreview.LeerePlaetze(s.Map));
+        if (!SkirmishSetup.ZuschauerAlt)
+            foreach (var node in slots)
+                if (node is JsonObject z && z["player"] != null && ((int?)z["team"] ?? 0) == SkirmishSetup.ZuschauerTeam)
+                {
+                    int rs = (int?)z["slot"] ?? -1;
+                    if (leer.Count == 0)
+                    {
+                        Cancel("Auf dieser Karte ist kein Platz für einen Zuschauer frei (alle acht Plätze gehören " +
+                               "jemandem) — eine Karte mit weniger Startplätzen wählen.");
+                        return false;
+                    }
+                    zuschauerPlatz[rs] = leer.Dequeue();
+                }
         foreach (var node in slots)
         {
             if (node is not JsonObject o) continue;
@@ -82,6 +98,7 @@ public partial class NetworkManager
             bool mensch = o["player"] != null;
             string ai = (string?)o["ai"] ?? "";
             if (!mensch && ai.Length == 0) continue;
+            if (zuschauerPlatz.TryGetValue(rs, out int zp)) { s.Art[zp] = SkirmishSetup.ArtZuschauer; continue; }
             if (rs < 0 || rs >= pl.Count)
             {
                 Cancel($"Platz {rs + 1} im Raum hat auf dieser Karte keinen Startplatz (sie hat {pl.Count}) — " +
@@ -101,7 +118,8 @@ public partial class NetworkManager
         for (int k = 0; k < s.Slot.Length && k < RoomSlotsAtStart.Count; k++)
         {
             int rs = RoomSlotsAtStart[k];
-            if (rs >= 0 && rs < pl.Count) s.Slot[k] = pl[rs];
+            if (zuschauerPlatz.TryGetValue(rs, out int zp)) s.Slot[k] = zp;
+            else if (rs >= 0 && rs < pl.Count) s.Slot[k] = pl[rs];
         }
         return AufstellungFertig(s);
     }
@@ -132,7 +150,8 @@ public partial class NetworkManager
         s.AiCount = s.Art.Count(SkirmishSetup.IstKi);
         GD.Print("netz: Aufstellung — " + string.Join(", ", Enumerable.Range(0, 8)
             .Where(p => s.Art[p] != SkirmishSetup.ArtLeer)
-            .Select(p => $"Platz {p + 1} " + (s.Art[p] == SkirmishSetup.ArtMensch ? $"Mensch Nr. {System.Array.IndexOf(s.Slot, p)}"
+            .Select(p => $"Platz {p + 1} " + (s.Art[p] == SkirmishSetup.ArtZuschauer ? $"Zuschauer Nr. {System.Array.IndexOf(s.Slot, p)}"
+                                              : s.Art[p] == SkirmishSetup.ArtMensch ? $"Mensch Nr. {System.Array.IndexOf(s.Slot, p)}"
                                                 : $"KI {SkirmishSetup.StufeVon(s.Art[p])}") +
                          (s.Team[p] > 0 ? $" Team {s.Team[p]}" : ""))));
         return true;

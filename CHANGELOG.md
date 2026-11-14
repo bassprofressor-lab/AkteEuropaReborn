@@ -263,6 +263,19 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Online: spectators** (Fable review D10): the team choice in the room now has **"Spectator"**. Whoever
+  picks it for themselves does not play but watches:
+  - At the start they get a map position that owns nothing and are allied with everyone. Since the
+    game's fog asks the original's alliance table, they see everything all players see.
+  - They own nothing and cannot command anything; there is no win or loss for them, and they do not
+    appear in the end screen. They leave whenever they like.
+  - The room list shows "Spectator" instead of a start position; the start button counts them ("3
+    humans, 1 of them spectator"). If the map has no free position (all eight are owned, e.g. NET07),
+    the start button says so.
+  - There are no spectators in LAN (there is no room where one could choose "I am watching").
+  Measured against the lobby server: two players and one spectator on NET02 — the spectator sits on
+  position 8, owns nothing, sees through all scouts of both players, all three machines green. Test
+  switch `--net-team=8`; opt-out `--zuschauer-alt`.
 - **Online: reconnecting after a dropped connection** (Fable review D9):
   - If the connection to the lobby server drops in the middle of a match (Wi-Fi, router), the game now
     reconnects every 3 seconds and signs in with its resume key. The server holds the seat for 60

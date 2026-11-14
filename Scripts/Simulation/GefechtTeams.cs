@@ -33,6 +33,7 @@ public partial class MapEntityLayer
         foreach (int p in live)
         {
             if (p == human || p is < 0 or > 7) continue;
+            if (UI.SkirmishSetup.IstZuschauer(p)) continue;
             int art = UI.SkirmishSetup.PlatzArt[p];
             if (!UI.SkirmishSetup.IstKi(art)) continue;
             foes.Add(p);

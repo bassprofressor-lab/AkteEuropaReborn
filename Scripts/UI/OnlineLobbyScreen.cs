@@ -610,6 +610,7 @@ public partial class OnlineLobbyScreen : Control
             // ⭐ P7 Teil 2: Raumplatz n = Startplatz n der Karte (Network/NetzAufstellung.cs)
             var plRaum = MapPreview.Startplaetze((string?)settings?["map"] ?? "");
             string Zusatz(int sl, int team) => P7Alt ? "" :
+                team == SkirmishSetup.ZuschauerTeam && !SkirmishSetup.ZuschauerAlt ? "  ·  Zuschauer" :
                 (sl < plRaum.Count ? $"  ·  Startplatz {plRaum[sl] + 1}" : "  ·  ⚠ kein Startplatz auf dieser Karte") +
                 (team > 0 ? $"  ·  Team {team}" : "");
             if (room["slots"] is JsonArray slots)
@@ -662,13 +663,19 @@ public partial class OnlineLobbyScreen : Control
             // P7: ohne Startplatz oder ohne Gegner kein Start — mit Grund auf dem Knopf
             if (!P7Alt && (string?)room["state"] != "in_game" && humans >= 2)
             {
-                var besetzt = _platzInfo.Where(p => p.Art != 'F').ToList();
+                bool Zusch((int Slot, char Art, string Player) p) => p.Art is 'I' or 'M' && !SkirmishSetup.ZuschauerAlt
+                                                                   && _platzTeam.GetValueOrDefault(p.Slot) == SkirmishSetup.ZuschauerTeam;
+                int zuschauer = _platzInfo.Count(Zusch);
+                var besetzt = _platzInfo.Where(p => p.Art != 'F' && !Zusch(p)).ToList();
+                int leerePl = MapPreview.LeerePlaetze((string?)settings?["map"] ?? "").Count;
+                if (zuschauer > 0) _start.Text = _start.Text.Replace(" Menschen", $" Menschen, davon {zuschauer} Zuschauer");
                 int ohne = besetzt.Where(p => plRaum.Count > 0 && p.Slot >= plRaum.Count).Select(p => p.Slot).DefaultIfEmpty(-1).First();
                 bool feind = besetzt.Any(a => besetzt.Any(b => a.Slot != b.Slot &&
                                  !(_platzTeam.GetValueOrDefault(a.Slot) > 0 && _platzTeam.GetValueOrDefault(a.Slot) == _platzTeam.GetValueOrDefault(b.Slot))));
                 if (ohne >= 0) { _start.Disabled = true; _start.Text = $"START — Platz {ohne + 1} hat auf dieser Karte keinen Startplatz"; }
                 else if (andereDaten > 0 && !_start.Disabled) _start.Text += "  ⚠ andere Spieldaten im Raum";
                 else if (!feind) { _start.Disabled = true; _start.Text = "START — alle im selben Team, kein Gegner"; }
+                else if (zuschauer > leerePl) { _start.Disabled = true; _start.Text = "START — diese Karte hat keinen freien Platz für Zuschauer"; }
             }
             if (!LobbyAlt) { RaumEinstellungenZeigen(l, room, settings, kis); PlatzKnoepfeZeigen(l); }
         }
@@ -815,6 +822,8 @@ public partial class OnlineLobbyScreen : Control
                               "Computergegner der Gastgeber." };
             _teamWahl.AddItem("–");
             for (int t = 1; t <= 4; t++) _teamWahl.AddItem($"Team {t}");
+            // Fable D10: Zuschauer — sieht alles, spielt nicht mit (Serverteam 8)
+            if (!SkirmishSetup.ZuschauerAlt) _teamWahl.AddItem("Zuschauer");
             _teamWahl.ItemSelected += _ => TeamGewaehlt();
             h2.AddChild(_teamWahl);
             into.AddChild(h2);
@@ -851,7 +860,8 @@ public partial class OnlineLobbyScreen : Control
         if (p is { } q)
         {
             if (_platzKi.TryGetValue(q.Slot, out var ai)) _kiStaerke.Select(Math.Max(0, Array.IndexOf(Stufen, ai)));
-            _teamWahl.Select(Math.Clamp(_platzTeam.GetValueOrDefault(q.Slot), 0, 4));
+            int tq = _platzTeam.GetValueOrDefault(q.Slot);
+            _teamWahl.Select(tq == SkirmishSetup.ZuschauerTeam && _teamWahl.ItemCount > 5 ? 5 : Math.Clamp(tq, 0, 4));
         }
         _plWaehlen = false;
         _kiStaerke.Disabled = !host || p is not { Art: 'K' or 'F' };
@@ -889,7 +899,8 @@ public partial class OnlineLobbyScreen : Control
     private void TeamGewaehlt()
     {
         if (_plWaehlen || NetworkManager.Lobby is not { } l || GewaehlterPlatz() is not { } p) return;
-        int team = _teamWahl.Selected;
+        int team = _teamWahl.Selected == 5 ? SkirmishSetup.ZuschauerTeam : _teamWahl.Selected;
+        if (team == SkirmishSetup.ZuschauerTeam && p.Art != 'I') { PlatzKnoepfeZeigen(l); return; }   // nur Menschen schauen zu
         if (p.Art == 'I') l.SetSlot(team, p.Slot);
         else if (p.Art == 'K' && l.IAmHost && _platzKi.TryGetValue(p.Slot, out var ai)) l.SetAi(p.Slot, ai, team, p.Slot);
         else return;

@@ -342,8 +342,21 @@ public static class MapPreview
         }
         var l = new List<int>(fabrik.Count > 0 && !erobern ? fabrik : live);
         _plaetze[name] = (l, stand);
+        _besetzt[name] = new List<int>(live);
         return l;
     }
+
+    /// <summary>Fable D10 (Zuschauer): die Plaetze 0..7, denen auf dieser Karte nichts gehoert —
+    /// weder Einheit noch Gebaeude. Absteigend (7 zuerst).</summary>
+    public static List<int> LeerePlaetze(string name)
+    {
+        Startplaetze(name);
+        var besetzt = _besetzt.TryGetValue(name, out var b) ? b : new List<int>();
+        var l = new List<int>();
+        for (int p = 7; p >= 0; p--) if (!besetzt.Contains(p)) l.Add(p);
+        return l;
+    }
+    private static readonly Dictionary<string, List<int>> _besetzt = new();
     private static readonly Dictionary<string, (List<int> Liste, ulong Stand)> _plaetze = new();
 
     /// <summary>Fable D7: Breite und Hoehe einer Karte in Feldern (0,0 wenn unlesbar), zwischengespeichert.</summary>

@@ -18116,6 +18116,8 @@ public partial class MapEntityLayer : Node2D
             return "";
         }
 
+        // Fable D10: ein Zuschauer gewinnt und verliert nicht — er schaut zu, bis er geht
+        if (UI.SkirmishSetup.IstZuschauer(ViewPlayer) && !UI.SkirmishSetup.ZuschauerAlt) return "";
         // A skirmish does not need the map's own player table — the NET maps
         // carry none at all. Judge it by what is left standing instead.
         if (_aiOn)

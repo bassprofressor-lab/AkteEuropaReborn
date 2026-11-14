@@ -779,7 +779,9 @@ public partial class MapEntityLayer : Node2D
         bool buildUp = producers.Count > 0 && !conquest;
         var live = buildUp ? producers : LivePlayers();
         if (live.Count == 0) return -1;
-        if (!live.Contains(human)) human = live[0];
+        // Fable D10: ein Zuschauer sitzt bewusst auf einem Platz ohne Besitz — nicht umsetzen
+        bool zuschauer = UI.SkirmishSetup.IstZuschauer(human) && !UI.SkirmishSetup.ZuschauerAlt;
+        if (!live.Contains(human) && !zuschauer) human = live[0];
         // ⚠ IM NETZSPIEL SIND ALLE MENSCHENPLÄTZE TABU, nicht nur der eigene —
         // und das ist keine Feinheit, sondern die Bedingung dafür, dass ein
         // Netzspiel mit KI-Gegnern überhaupt laufen kann.
@@ -852,7 +854,8 @@ public partial class MapEntityLayer : Node2D
         // Gegenschalter --netplaetze-alt.
         if (!NetzplaetzeAlt)
             foreach (int p in humans)
-                if (!mine.Contains(p)) mine.Add(p);
+                if (!mine.Contains(p) && !UI.SkirmishSetup.IstZuschauer(p)) mine.Add(p);   // D10: Zuschauer spielen nicht
+        if (zuschauer) mine.Remove(human);
         // ⚠ 17.08.2026 — C24: VOR dem Verteilen der Basen. Wer nicht mitspielt,
         // soll auch keine Basis zugeteilt bekommen, und seine Einheiten sollen
         // beim Verteilen nicht mehr im Weg stehen.
@@ -867,6 +870,9 @@ public partial class MapEntityLayer : Node2D
         // P7: die Buendnistafel aus den Teams — VOR der KI, damit sie auf den richtigen Feinden plant
         if (stufen != null) GefechtTeamsSetzen(mine);
         EnableSkirmishAi(foes, level, stufen);
+        if (zuschauer)
+            GD.Print($"Zuschauer: Platz {human + 1}, mit allen verbuendet — sieht mit {Watchers(human).Count()} Aufdeckern " +
+                     $"(aller Plaetze), besitzt {AssetsOf(human)}");
         var per = BasesPerSlot();
         float spread = BaseSpread();
         GD.Print($"Gemetzel: Spieler {human} (Startplatz {human + 1}) gegen {foes.Count} KI ({level}); " +

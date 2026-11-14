@@ -284,6 +284,19 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Online: Zuschauer** (Fable-Prüfung D10): Im Raum gibt es in der Teamwahl jetzt **»Zuschauer«**. Wer
+  das für sich wählt, spielt nicht mit, sondern schaut zu:
+  - Er bekommt beim Start einen Kartenplatz, dem nichts gehört, und ist mit allen verbündet. Weil der
+    Nebel des Spiels die Bündnistafel des Originals fragt, sieht er damit alles, was alle Spieler sehen.
+  - Er besitzt nichts und kann nichts befehlen; für ihn gibt es weder Sieg noch Niederlage, und im
+    Endbild steht er nicht. Er geht, wann er will.
+  - Die Raumliste zeigt »Zuschauer« statt eines Startplatzes; der Startknopf zählt ihn mit (»3 Menschen,
+    davon 1 Zuschauer«). Hat die Karte keinen freien Platz (alle acht gehören jemandem, z. B. NET07),
+    sagt der Startknopf das.
+  - Im LAN gibt es keine Zuschauer (dort fehlt ein Raum, in dem man »ich schaue zu« wählen kann).
+  Gemessen gegen den Lobby-Server: zwei Spieler und ein Zuschauer auf NET02 — der Zuschauer sitzt auf
+  Platz 8, besitzt nichts, sieht mit allen Aufdeckern beider Spieler, alle drei Rechner grün.
+  Prüfschalter `--net-team=8`; Gegenschalter `--zuschauer-alt`.
 - **Online: Wiederverbinden nach einem Verbindungsabriss** (Fable-Prüfung D9):
   - Reißt die Leitung zum Lobby-Server mitten in der Partie ab (WLAN, Router), verbindet das Spiel jetzt
     alle 3 Sekunden neu und meldet sich mit seinem Wiederaufnahme-Schlüssel an. Der Server hält den
