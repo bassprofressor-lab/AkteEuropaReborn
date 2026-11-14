@@ -284,6 +284,20 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Endbild im Gefecht und im Netz: wer gewonnen hat** (Fable-Prüfung D5):
+  - Das Abschlussfenster ist das der Kampagne, nach dem Original. Im Gefecht sagte es nicht, wer
+    gewonnen hat, alle Mitspieler hießen »CPU«, und »Missionsbezahlung $0« stand da. Jetzt:
+    - Titel **»GEFECHT GEWONNEN« / »GEFECHT VERLOREN«**, darunter **»Sieger: Team 1 — Du + CPU
+      schwer«** (oder, wenn man selbst ausgeschieden ist und noch gekämpft wird, »Es kämpfen noch:
+      …«).
+    - Die Spalten tragen Namen: »DU«, die Namen der Mitspieler, »CPU LEICHT/NORMAL/SCHWER«, auch für
+      schon besiegte Computergegner. Gibt es Teams, steht eine Zeile »Team« darüber.
+    - Die Missionsbezahlung entfällt im Gefecht; die Kampagne bleibt unverändert.
+  - Online meldet das Spiel dem Lobby-Server jetzt den Sieger (`match_end` mit dem Team bzw. dem
+    Startplatz), sobald nur noch eine Seite steht — bisher immer 0. ⚠ Diese Meldung ist nicht im
+    Paarlauf gemessen (eine Probe, die den Gegner abräumt, liefe im Netz sofort auseinander); das
+    Fenster selbst ist mit `--endbild-probe=` im Bild geprüft.
+  Gegenschalter `--endbild-alt`.
 - **Im Netzspiel: Tasten, wer angehalten hat, Namen im LAN** (Fable-Prüfung C12, D10-Teil):
   - **Tastenhilfe**: Zu Beginn jeder Netzpartie steht 20 Sekunden lang unten »Enter: Nachricht an
     alle · F4 halten: Spieler · Esc: Pause für ALLE · Spielmenü: Aufgeben«, und dieselbe Zeile steht

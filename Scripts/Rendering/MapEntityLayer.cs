@@ -12256,6 +12256,11 @@ public partial class MapEntityLayer : Node2D
         public EndColumn[] Columns = System.Array.Empty<EndColumn>();
         public int Built, Kills, Losses, Pay, Balance;
         public int SubDone = -1, SubTotal = -1;
+        /// <summary>⭐ Fable D5 (Simulation/GefechtEndbild.cs): Gefecht statt Kampagne — dann Namen,
+        /// Teams und das Ergebnis; ohne Bezahlung.</summary>
+        public bool Gefecht;
+        public string[]? Teams;
+        public string Ergebnis = "";
     }
 
     /// <summary>Das Original hat acht Spalten in der Tabelle (Bildschirmfoto:
@@ -12331,6 +12336,7 @@ public partial class MapEntityLayer : Node2D
                 ? rec.Name : p == me ? "SPIELER" : "CPU";
         }
         r.Columns = cols;
+        GefechtEndbildFuellen(r);   // Fable D5: nur im Gefecht
         return r;
     }
 

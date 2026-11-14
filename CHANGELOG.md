@@ -263,6 +263,19 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **End screen in skirmish and network play: who won** (Fable review D5):
+  - The end window is the campaign's, after the original. In skirmish it did not say who won, every
+    other player was called "CPU", and "mission pay $0" was shown. Now:
+    - Title **"SKIRMISH WON" / "SKIRMISH LOST"**, below it **"Winner: Team 1 — You + CPU hard"** (or,
+      if you are out and the others still fight, "Still fighting: …").
+    - The columns carry names: "YOU", the other players' names, "CPU EASY/NORMAL/HARD", also for
+      computer opponents already beaten. With teams there is a "Team" row on top.
+    - Mission pay is dropped in skirmish; the campaign is unchanged.
+  - Online the game now reports the winner to the lobby server (`match_end` with the team or start
+    position) as soon as only one side is left — so far always 0. ⚠ This report is not measured in a
+    pair run (a probe that wipes out the enemy would go out of sync right away in network play); the
+    window itself is checked as a picture with `--endbild-probe=`.
+  Opt-out `--endbild-alt`.
 - **In network play: keys, who paused, names in LAN** (Fable review C12, part of D10):
   - **Key help**: at the start of every network match the bottom of the screen shows "Enter: message
     to all · hold F4: players · Esc: pause for EVERYONE · game menu: surrender" for 20 seconds, and

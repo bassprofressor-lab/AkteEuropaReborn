@@ -75,6 +75,7 @@ public sealed partial class MissionEndWindow : PanelContainer
     private readonly GridContainer _grid = new();
     private readonly Label _timeL = new(), _builtL = new(), _scoreL = new(), _subL = new();
     private readonly Label _payL = new(), _balL = new();
+    private readonly Label _ergebnis = new();   // Fable D5
     private readonly Button _go = new();
     private readonly Button _x = new();
 
@@ -146,6 +147,12 @@ public sealed partial class MissionEndWindow : PanelContainer
         _mission.AddThemeColorOverride("font_color", MissionFg);
         _mission.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         body.AddChild(_mission);
+        _ergebnis.HorizontalAlignment = HorizontalAlignment.Center;
+        _ergebnis.AddThemeColorOverride("font_color", PayFg);
+        _ergebnis.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _ergebnis.CustomMinimumSize = new Vector2(420, 0);
+        _ergebnis.Visible = false;
+        body.AddChild(_ergebnis);
 
         // Die Tabelle sitzt im Original in einem schwarzen, eingelassenen
         // Kasten — nicht auf dem Fensterhintergrund.
@@ -234,6 +241,10 @@ public sealed partial class MissionEndWindow : PanelContainer
     {
         // ⚠ Der Titel bei Misserfolg ist unserer (siehe Klassenkopf).
         _title.Text = won ? "MISSION ERFOLGREICH BEENDET" : "MISSION GESCHEITERT";
+        // Fable D5: im Gefecht sagt der Titel Sieg oder Niederlage, darunter steht, wer gewonnen hat
+        if (r.Gefecht) _title.Text = won ? "GEFECHT GEWONNEN" : "GEFECHT VERLOREN";
+        _ergebnis.Visible = r.Gefecht && r.Ergebnis.Length > 0;
+        _ergebnis.Text = r.Ergebnis;
         _mission.Text = missionName;
         _mission.AddThemeColorOverride("font_color", MissionFg);
 
@@ -247,6 +258,12 @@ public sealed partial class MissionEndWindow : PanelContainer
             _grid.AddChild(Cell(c.Used ? c.Name.ToUpper() : "",
                                 c.Human ? HumanFg : CpuFg));
 
+        if (r.Teams != null)
+        {
+            _grid.AddChild(Cell("Team", PlainFg, HorizontalAlignment.Left));
+            for (int p = 0; p < r.Columns.Length; p++)
+                _grid.AddChild(Cell(r.Columns[p].Used ? r.Teams[p] ?? "" : "", r.Columns[p].Human ? HumanFg : CpuFg));
+        }
         for (int k = 0; k < RowNames.Length; k++)
         {
             _grid.AddChild(Cell(RowNames[k], PlainFg, HorizontalAlignment.Left));
@@ -274,6 +291,7 @@ public sealed partial class MissionEndWindow : PanelContainer
         _subL.Visible = r.SubTotal >= 0;
         if (r.SubTotal >= 0) _subL.Text = $"Untermissionen {r.SubDone} / {r.SubTotal}";
         _payL.Text = $"Missionsbezahlung ${r.Pay}";
+        _payL.Visible = !r.Gefecht;   // Fable D5: im Gefecht gibt es keine Bezahlung
         _balL.Text = $"Kontostand ${r.Balance}";
         _go.Text = continueLabel;
         _go.TooltipText = continueHint;

@@ -728,6 +728,9 @@ public partial class MapViewer : Node2D
             // Gelesen: berichte/nachladezeit-nachziehen-fable.md §5.1/§5.5.
             //
             // Ein Spielstand ist ausgenommen (siehe oben, Kopfbyte 3).
+            // Fable D5: --endbild-probe=<bild.png> — Feinde abraeumen, Endbild abwarten, fotografieren
+            if (System.Array.Find(OS.GetCmdlineUserArgs(), x => x.StartsWith("--endbild-probe=")) is { } eb)
+                _ = EndbildProbe(eb["--endbild-probe=".Length..]);
             // P7: --gefecht-teams-probe — das Ende nach Teams (Simulation/GefechtTeams.cs)
             if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--gefecht-teams-probe") >= 0)
             {
@@ -9193,6 +9196,9 @@ _mausProbePunkt = karte;
         if (record && mission > 0 && _entities.MissionVars() is { } vars)
             Campaign.CampaignManager.CarriedVars = vars;
         _endWindow.Fill(report, won, name, label, hint);
+        // ⭐ Fable D5: online dem Server den Sieger melden, sobald nur noch eine Seite steht
+        if (report.Gefecht && _entities.GefechtErgebnis() is { Entschieden: true } erg)
+            Network.NetworkManager.ErgebnisMelden(erg.SiegerKennung, 0, erg.Text);   // Dauer 0: je Rechner verschieden
         _endBanner.Visible = true;
         CenterEndWindow();
         // erst im naechsten Bild steht die Mindestgroesse fest

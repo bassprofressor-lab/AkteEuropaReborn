@@ -115,16 +115,30 @@ public partial class NetworkManager : Node
     /// <summary>Die Netzpartie ist vorbei (Karte verlassen, ausgeschaltet, Abweichung):
     /// dem Server das Ende melden und alles schliessen. Ein Online-Spieler landet danach
     /// wieder in der Lobby (Menü), ein LAN-Spieler im Netzkasten.</summary>
+    /// <summary>⭐ Fable D5: das Ergebnis dieser Partie, einmal gemeldet (match_end). Danach
+    /// meldet EndeDerPartie dasselbe statt »0« — der Server zaehlt die Mehrheit gleicher Ergebnisse.</summary>
+    private static (int Team, int Dauer)? _ergebnis;
+
+    public static void ErgebnisMelden(int siegerTeam, int dauerS, string text)
+    {
+        if (_ergebnis != null || Link?.Session == null) return;
+        _ergebnis = (siegerTeam, dauerS);
+        GD.Print($"netz: Ergebnis {text} (Kennung {siegerTeam})");
+        if (Lobby is { Open: true } l) l.MatchEnd(siegerTeam, dauerS);
+    }
+
     public static void EndeDerPartie(string meldung, int dauerS)
     {
         bool online = Lobby != null;
+        var erg = _ergebnis;
+        _ergebnis = null;
         // ⭐ 14.11.2026 — Fable C10: nach einer Online-Partie aus dem Menue ZURUECK IN DENSELBEN RAUM
         // (klassisch), statt abzumelden und die Runde neu suchen zu lassen. Nur die Spielleitung
         // schliesst; der Raum und die Anmeldung bleiben. Befehlszeilenlaeufe (FromMenu falsch) gehen
         // den alten Weg. Gegenschalter --raum-alt.
         if (online && FromMenu && Lobby is { Open: true } && !HatSchalter("--raum-alt"))
         {
-            Lobby.MatchEnd(0, 0);
+            if (erg == null) Lobby.MatchEnd(0, 0);   // D5: schon gemeldet -> nicht mit 0 ueberschreiben
             ImRaumBleiben(meldung);
             return;
         }
@@ -132,7 +146,7 @@ public partial class NetworkManager : Node
         {
             // ⚠ UNSERE SETZUNG: ein Ergebnis, das auf allen Maschinen gleich ist — Sieger
             // ermittelt der Server nicht (Auftrag §5), und die Dauer ist je Maschine anders.
-            Lobby.MatchEnd(0, 0);
+            if (erg == null) Lobby.MatchEnd(0, 0);
             Lobby.LeaveRoom();
         }
         Cancel(meldung);
