@@ -284,6 +284,36 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Gefechts- und Mehrspielerschirm überarbeitet** (Fable-Prüfung P5):
+  - **Feste Auswahlen statt Hochzählen** (C2): Gegner (»3 Computergegner«, höchstens so viele,
+    wie die Karte Plätze hat), Konto (»$ 0« bis »$ 10000« in den Tausenderstufen des Originals),
+    Techstandard (»Stufe 1 von 8« … mit der Wirkung darunter) und Menschen sind Klapplisten.
+  - **Kartenliste mit Angaben** (D7): jede Karte nennt Spielerzahl und Größe (»Zwei Ufer (NET02)
+    · 6 Spieler · 230×230«).
+  - **Einstellungen werden gemerkt** (D6): Karte, Gegner, Schwierigkeit, Rohstoffe, Konto,
+    Menschen und die LAN-Adresse zum Beitreten stehen beim nächsten Start wieder da (bisher nur
+    Techstandard und »alle Einheiten«). Damit hat ein Mitspieler nach einer Netzpartie auch nicht
+    mehr die Werte des Gastgebers im eigenen Schirm.
+  - **Rohstoffe erklärt** (C4): Tooltip zu allen Stufen; »wie auf der Karte« heißt jetzt »wie auf
+    der Karte (eigene Karten)«, weil es nur dort etwas ändert.
+  - **Lesbar und ganz im Bild** (C1): Der Schirm liegt jetzt auf einem fast deckenden Grund statt
+    durchsichtig über der Demo; »Zurück zum Menü« und der Startknopf stehen nebeneinander und
+    sind bei 1920×1080 ganz zu sehen (vorher angeschnitten); die Online-Lobby passt ebenfalls
+    ganz ins Bild. Die Zeile mit den Spieltasten ist jetzt Tooltip am Startknopf (C13).
+  - **Ein Wort je Sache** (C5): »MEHRSPIELER« statt »MULTIPLAYER«, »GEFECHT STARTEN« statt
+    »GEMETZEL STARTEN«, »Zurück zum Menü«, »Drei Häfen«; der Haken heißt »Alle Einheiten kaufbar
+    (auch Flugzeuge)« mit kürzerem Text (C13); »Keim« und »Vermittler« sind aus den Spielertexten.
+  - **Rollen im Netzkasten** (C6): Der Gastgeber sieht seine Adressen für die Mitspieler sofort,
+    nicht erst nach »PARTIE STARTEN«; beim Beitreten sind Karte und Einstellungen abgeblendet,
+    weil sie der Gastgeber bestimmt; die Raumgröße wird in der Lobby selbst eingestellt (»Plätze«).
+  - **Meldungen in Spielerdeutsch** (C7): »Unter 127.0.0.1:27099 antwortet kein Gastgeber.
+    Adresse prüfen …« kommt nach rund 4 s statt nach 30 s (»nach 30000 ms keine Partie …
+    Verbindungszustand Connecting«); »Port 27015 ist schon belegt — läuft das Spiel schon in einem
+    zweiten Fenster als Gastgeber?« statt »CreateServer(27015) -> CantCreate«; die LAN-Suche sagt,
+    was zu tun ist; Serverfehler ohne Fehlercode.
+  Alles im Bild geprüft (Gefecht, Mehrspieler als Gastgeber und beim Beitreten, Lobby); LAN-Paare
+  und eine LAN-Kartenreise grün, NET07-Prüfsumme unverändert. Gegenschalter `--gefecht-schirm-alt`,
+  `--gefecht-merken-aus`, `--netz-grund-alt`, `--lobby-alt`.
 - **Online-Lobby robuster** (Fable-Prüfung P4: B6, B7, B8, B9, C8, C11):
   - **Ungültiger Name sperrte dauerhaft aus** (B9): Der Name wurde vor der Prüfung gespeichert,
     das Fenster verband beim nächsten Öffnen von selbst damit und blendete das Namensfeld aus —

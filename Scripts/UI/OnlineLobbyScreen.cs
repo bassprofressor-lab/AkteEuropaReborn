@@ -42,6 +42,7 @@ public partial class OnlineLobbyScreen : Control
     private VBoxContainer _login = null!, _rooms = null!, _room = null!;
     private LineEdit _name = null!, _roomName = null!, _password = null!, _newPassword = null!, _chatIn = null!;
     private Label _nameHint = null!;
+    private ZahlWahl _raumGroesse = null!;   // Fable C6
     private string _pendingName = "";   // Fable B9: erst nach »welcome« speichern
     private int _seenErrors;
     private ulong _verbindeSeit;
@@ -100,7 +101,7 @@ public partial class OnlineLobbyScreen : Control
         _rooms = new VBoxContainer { Visible = false };
         _rooms.AddThemeConstantOverride("separation", 6);
         _rooms.AddChild(Sub("Offene Spiele"));
-        _roomList = new ItemList { CustomMinimumSize = new Vector2(0, 170), AllowReselect = true };
+        _roomList = new ItemList { CustomMinimumSize = new Vector2(0, 130), AllowReselect = true };   // Fable C1: 170 -> 130, sonst ZURUECK unter dem Rand
         _roomList.ItemSelected += _ => UpdateJoinButton();
         _roomList.ItemActivated += _ => JoinSelected();
         _rooms.AddChild(_roomList);
@@ -117,6 +118,10 @@ public partial class OnlineLobbyScreen : Control
         // des eigenen Raums, und wer absichtlich einen verschlossenen Raum wollte, fand kein Feld.
         _newPassword = new LineEdit { PlaceholderText = "leer = offen für alle", Secret = true, MaxLength = 40 };
         _rooms.AddChild(Row("Passwort", _newPassword));
+        // ⭐ 14.11.2026 — Fable C6: die Raumgroesse stand nur als Fussnote (»Feld Menschen im
+        // Netzkasten«), und man musste dafuer zurueck. Jetzt hier, vorbelegt mit dem Netzkasten.
+        _raumGroesse = new ZahlWahl { MinValue = 2, MaxValue = 8, Value = Math.Clamp(MaxHumans, 2, 8), Beschriftung = v => $"{v} Menschen" };
+        _rooms.AddChild(Row("Plätze", _raumGroesse));
         var create = new Button { Text = "RAUM ERÖFFNEN" };
         create.Pressed += CreateRoom;
         _rooms.AddChild(create);
@@ -131,8 +136,7 @@ public partial class OnlineLobbyScreen : Control
         _rooms.AddChild(rename);
         _rooms.AddChild(new Label
         {
-            Text = "Karte, Techstandard, Konto und Rohstoffe stellst du VORHER im Gefechtsschirm ein; " +
-                   "die Zahl der Menschen steht im Netzkasten (Feld »Menschen«).",
+            Text = "Karte, Techstandard, Konto und Rohstoffe stellst du vorher im Mehrspielerschirm ein.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Modulate = new Color(0.6f, 0.64f, 0.7f),
         });
@@ -159,7 +163,7 @@ public partial class OnlineLobbyScreen : Control
         box.AddChild(new HSeparator());
         _chat = new RichTextLabel
         {
-            CustomMinimumSize = new Vector2(0, 120),
+            CustomMinimumSize = new Vector2(0, 90),   // Fable C1: 120 -> 90
             ScrollFollowing = true,
             BbcodeEnabled = false,
             FitContent = false,
@@ -330,7 +334,8 @@ public partial class OnlineLobbyScreen : Control
         if (name.Length == 0) name = $"Akte Europa {l.MyName}s Spiel";
         var settings = new JsonObject { ["map"] = CurrentMap?.Invoke() ?? SkirmishSetup.Map };
         if (B8Alt) l.UnlistRooms();   // Fable B8: erst abbestellen, wenn der Raum da ist (Refresh)
-        l.CreateRoom(name, Math.Clamp(MaxHumans, 2, 8), B7Alt ? _password.Text : _newPassword.Text, settings);
+        int groesse = LobbyAlt ? Math.Clamp(MaxHumans, 2, 8) : (int)_raumGroesse.Value;
+        l.CreateRoom(name, groesse, B7Alt ? _password.Text : _newPassword.Text, settings);
     }
 
     private void JoinSelected()
@@ -535,7 +540,8 @@ public partial class OnlineLobbyScreen : Control
                     // B8: nach einem gescheiterten Beitritt/Eroeffnen (bad_password, room_full,
                     // no_such_room …) die Raumliste wieder abonnieren und den Grund oben zeigen
                     if (!l.InRoom) { _listing = false; Refresh(); }
-                    _fehlerZeile = $"Der Server sagt: {l.LastErrorText} ({l.LastError})";
+                    _fehlerZeile = l.LastErrorText.Length > 0 ? l.LastErrorText : "Das hat nicht geklappt.";   // C7: ohne Fehlercode
+                    GD.Print($"lobby: Fehler {l.LastError}: {l.LastErrorText}");
                     _fehlerBis = Time.GetTicksMsec() + 8000;
                     break;
             }

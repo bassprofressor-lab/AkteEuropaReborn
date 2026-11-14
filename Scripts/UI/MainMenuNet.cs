@@ -32,7 +32,7 @@ public partial class MainMenu
     private OptionButton? _netMode;
     private Control? _netAddrRow;
     private LineEdit? _netAddr;
-    private SpinBox? _netPlayers;
+    private ZahlWahl? _netPlayers;
     private Label? _netStatus;
     private VBoxContainer? _netDetails;
 
@@ -97,12 +97,10 @@ public partial class MainMenu
     /// jetzt als Tooltip am Adressfeld — dort, wo man ihn braucht.</remarks>
     private static string NetStatusText(int sel) => sel switch
     {
-        1 => "Gastgeber: die Mitspieler rufen dich an. Karte, Keim und " +
-             "Plätze verteilst DU.",
+        1 => "Gastgeber: Karte und Einstellungen von hier gelten für alle.\n" + NetworkManager.HostHint(),
         3 => "Online über den Lobby-Server: »PARTIE STARTEN« öffnet die Lobby. " +
              "Karte und Einstellungen von hier gelten, wenn DU den Raum eröffnest.",
-        2 => "Beitreten: Karte, Keim und Startplatz kommen vom Gastgeber — " +
-             "was hier steht, wird überschrieben.",
+        2 => "Beitreten: Karte, Einstellungen und Startplatz bestimmt der Gastgeber.",
         _ => "Netzwerk aus",
     };
 
@@ -146,12 +144,29 @@ public partial class MainMenu
     /// sonst. ⚠ Eigene Methode, weil <c>OptionButton.Selected</c> aus dem CODE zu
     /// setzen das Signal <c>item_selected</c> nicht auslöst — derselbe Grund, aus
     /// dem <see cref="NetStatusText"/> herausgezogen ist.</summary>
+    /// <summary>⭐ 14.11.2026 — Fable C6: beim Beitreten waren Karte, Gegner, Rohstoffe … bedienbar,
+    /// obwohl der Gastgeber sie ueberschreibt. Jetzt gesperrt und abgeblendet, solange »Beitreten«
+    /// gewaehlt ist. Gegenschalter --netz-grund-alt.</summary>
+    private void EinstellungenSperren(bool sperren)
+    {
+        if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-grund-alt") >= 0) sperren = false;
+        foreach (var o in new OptionButton?[] { _ai, _slot, _level, _res, _konto, _tech })
+            if (o != null) o.Disabled = sperren;
+        if (_allUnits != null) _allUnits.Disabled = sperren;
+        if (_mapList != null)
+        {
+            _mapList.MouseFilter = sperren ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
+            _mapList.Modulate = sperren ? new Color(1, 1, 1, 0.45f) : Colors.White;
+        }
+    }
+
     private void ApplyNetSearchVisible()
     {
         // Online gibt es keine Adresse — der Server steht fest (Settings.OnlineServer).
         if (_netAddrRow != null) _netAddrRow.Visible = _netMode is not { Selected: 3 };
         bool join = _netMode is { Selected: 2 };
         if (_netSearch != null) _netSearch.Visible = join;
+        EinstellungenSperren(join);
         if (_netList != null && !join) _netList.Visible = false;
     }
 
@@ -216,7 +231,7 @@ public partial class MainMenu
         };
         _netAddrRow = Row("Adresse:Port", _netAddr);
         _netDetails.AddChild(_netAddrRow);
-        _netPlayers = new SpinBox { MinValue = 2, MaxValue = 8, Value = 2 };
+        _netPlayers = new ZahlWahl { MinValue = 2, MaxValue = 8, Value = 2, Beschriftung = v => $"{v} Menschen" };   // Fable C2
         _netDetails.AddChild(Row("Menschen", _netPlayers));
         _netStatus = new Label
         {

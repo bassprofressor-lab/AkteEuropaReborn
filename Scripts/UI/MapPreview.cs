@@ -346,6 +346,29 @@ public static class MapPreview
     }
     private static readonly Dictionary<string, (List<int> Liste, ulong Stand)> _plaetze = new();
 
+    /// <summary>Fable D7: Breite und Hoehe einer Karte in Feldern (0,0 wenn unlesbar), zwischengespeichert.</summary>
+    public static (int W, int H) Groesse(string name)
+    {
+        string p = Core.Content.Path("Maps/" + name + ".json");
+        ulong stand = FileAccess.FileExists(p) ? FileAccess.GetModifiedTime(p) : 0;
+        if (_groesse.TryGetValue(name, out var g) && g.Stand == stand) return (g.W, g.H);
+        int w = 0, h = 0;
+        if (stand != 0)
+        {
+            try
+            {
+                using var f = FileAccess.Open(p, FileAccess.ModeFlags.Read);
+                using var doc = System.Text.Json.JsonDocument.Parse(f!.GetAsText());
+                if (doc.RootElement.TryGetProperty("width", out var wv)) wv.TryGetInt32(out w);
+                if (doc.RootElement.TryGetProperty("height", out var hv)) hv.TryGetInt32(out h);
+            }
+            catch (System.Exception e) { GD.PrintErr("Kartengroesse: " + e.Message); }
+        }
+        _groesse[name] = (w, h, stand);
+        return (w, h);
+    }
+    private static readonly Dictionary<string, (int W, int H, ulong Stand)> _groesse = new();
+
     /// <summary>Gegenschalter fuer B2/B5/C3: --startplatz-alt (Spieler 1–8 auf jeder Karte).</summary>
     public static bool StartplatzAlt => System.Array.IndexOf(Core.CommandLine.Args, "--startplatz-alt") >= 0;
 

@@ -263,6 +263,32 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Skirmish and multiplayer screen reworked** (Fable review P5):
+  - **Fixed choices instead of counting up** (C2): opponents ("3 Computergegner", at most as many
+    as the map has places), money ("$ 0" to "$ 10000" in the original's thousand steps), tech
+    standard ("Stufe 1 von 8" … with its effect below) and humans are drop-down lists.
+  - **Map list with details** (D7): every map names its player count and size.
+  - **Settings are remembered** (D6): map, opponents, difficulty, resources, money, humans and the
+    LAN address to join are back on the next start (before only tech standard and "all units").
+    So after a network match a joining player no longer has the host's values in their screen.
+  - **Resources explained** (C4): tooltip for all levels; "wie auf der Karte" now reads "wie auf
+    der Karte (eigene Karten)", because it only changes something there.
+  - **Readable and fully on screen** (C1): the screen now sits on an almost opaque background
+    instead of see-through over the demo; "Zurück zum Menü" and the start button stand side by
+    side and are fully visible at 1920×1080 (cut off before); the online lobby fits too. The line
+    with the game keys is now a tooltip on the start button (C13).
+  - **One word per thing** (C5): "MEHRSPIELER", "GEFECHT STARTEN", "Zurück zum Menü", "Drei
+    Häfen"; the checkbox reads "Alle Einheiten kaufbar (auch Flugzeuge)" with a shorter text;
+    "Keim" and "Vermittler" are gone from player texts.
+  - **Roles in the network box** (C6): the host sees his addresses for the other players at once;
+    when joining, map and settings are greyed out because the host decides them; the room size is
+    set in the lobby itself ("Plätze").
+  - **Messages in plain German** (C7): "nobody answers at this address" arrives after about 4 s
+    instead of 30 s; "port already in use — is the game already running as host in a second
+    window?" instead of "CreateServer(27015) -> CantCreate"; the LAN search says what to do;
+    server errors without error codes.
+  Everything checked in pictures; LAN pairs and a LAN map transfer green, NET07 checksum unchanged.
+  Opt-outs `--gefecht-schirm-alt`, `--gefecht-merken-aus`, `--netz-grund-alt`, `--lobby-alt`.
 - **Online lobby more robust** (Fable review P4: B6, B7, B8, B9, C8, C11):
   - **An invalid name locked you out for good** (B9): the name was saved before it was checked,
     the window reconnected with it on its own next time and hid the name field — the only way out

@@ -257,6 +257,19 @@ public static class Settings
     /// Setzung, solange ungelesen ist, woher das Original im Netzwerkspiel
     /// seine Flugzeugvorlagen nimmt — bei den Schiffen tut das @0x4b2330, für
     /// die Flugzeuge ist das Gegenstück noch nicht gefunden.</para></summary>
+    // ⭐ 14.11.2026 — Fable D6: die Gefechts- und Netzeinstellungen merken. Bisher wurden nur
+    // Techstandard und der Haken »alle Einheiten« gespeichert; Karte, Gegnerzahl, Schwierigkeit,
+    // Rohstoffe, Konto, LAN-Adresse und Menschen standen bei jedem Start wieder auf der Vorgabe.
+    // ⚠ Prueflaeufe (Pruefschutz) LESEN sie nicht — ein gemerktes Konto aenderte sonst die
+    // Pruefsummen der kopflosen Gefechte. Gegenschalter --gefecht-merken-aus.
+    public static string SkirmishMap { get => S("skirmish_map", ""); set => Set("skirmish_map", value); }
+    public static int SkirmishAi { get => I("skirmish_ai", 3); set => Set("skirmish_ai", value); }
+    public static int SkirmishLevel { get => I("skirmish_level", 1); set => Set("skirmish_level", value); }
+    public static int SkirmishResources { get => I("skirmish_resources", -1); set => Set("skirmish_resources", value); }
+    public static int SkirmishMoney { get => I("skirmish_money", -1); set => Set("skirmish_money", value); }
+    public static string NetAddress { get => S("net_address", ""); set => Set("net_address", value); }
+    public static int NetHumans { get => I("net_humans", 2); set => Set("net_humans", value); }
+
     public static bool SkirmishAllUnits
     {
         get => B("skirmish_all_units", false);

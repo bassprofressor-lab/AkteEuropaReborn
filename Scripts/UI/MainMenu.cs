@@ -27,7 +27,7 @@ public partial class MainMenu : Control
     {
         ("map_NET07", "Gefechtsfeld (NET07)"),
         ("map_NET02", "Zwei Ufer (NET02)"),
-        ("map_NET04", "Drei Haefen (NET04)"),
+        ("map_NET04", "Drei Häfen (NET04)"),
         ("map_NET05", "Weites Land (NET05)"),
         ("map_NET06", "Doppelhafen (NET06)"),
         // ⭐ 30.10.2026, bug-733 (Spielerentscheidung 3): map_DM_4 »The Dam«, map_DM_3
@@ -88,16 +88,16 @@ public partial class MainMenu : Control
     /// haengen.</summary>
     private PanelContainer? _allUnitsPanel;
 
-    private SpinBox _ai = null!;
+    private ZahlWahl _ai = null!;
 
     /// <summary>»Techstandard« 1..8 — siehe <see cref="SkirmishSetup.Techstandard"/>.
     /// Optional wie <see cref="_allUnits"/>, weil der Schirm auch ohne die Zeile
     /// gebaut werden kann.</summary>
-    private SpinBox? _tech;
+    private ZahlWahl? _tech;
 
     /// <summary>»Konto« — das Startgeld eines Gefechts. Siehe
     /// <see cref="SkirmishSetup.StartMoney"/>.</summary>
-    private SpinBox? _konto;
+    private ZahlWahl? _konto;
     private Label _hint = null!;
 
     /// <summary>The skirmish setup, which used to BE the menu and is now what
@@ -542,13 +542,15 @@ public partial class MainMenu : Control
     private void ShowSetup(bool net = false)
     {
         _netEntry = net;
-        if (_setupTitle != null) _setupTitle.Text = net ? "MULTIPLAYER" : "GEFECHT";
+        // ⭐ 14.11.2026 — Fable C5: ein Wort je Sache und echte Umlaute. »MULTIPLAYER« hiess im
+        // Schirm, »ONLINE-MEHRSPIELER« in der Lobby; »GEMETZEL STARTEN« im Schirm »GEFECHT«.
+        if (_setupTitle != null) _setupTitle.Text = net ? "MEHRSPIELER" : "GEFECHT";
         if (_setupSub != null)
             _setupSub.Text = net
-                ? "Gegen Menschen ueber das Netz — Gastgeber oder beitreten"
-                : "Gegen den Rechner — im Original gibt es das nicht";
+                ? "Gegen Menschen im Netzwerk oder online — Gastgeber oder beitreten"
+                : "Gegen Computergegner";
         if (_startButton != null)
-            _startButton.Text = net ? "PARTIE STARTEN" : "GEMETZEL STARTEN";
+            _startButton.Text = net ? "PARTIE STARTEN" : "GEFECHT STARTEN";
         ApplyNetEntry(net);
 
         if (_start != null) _start.Visible = false;
@@ -738,6 +740,11 @@ public partial class MainMenu : Control
             Visible = false,          // shown from the start menu's "Gefecht"
         };
         scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        // ⭐ 14.11.2026 — Fable C1: der Schirm lag durchsichtig ueber der laufenden Demo; Titel und
+        // Untertitel standen ohne Grund auf dem Kartenbild, durch den Startknopf schien ein Panzer.
+        // Jetzt ein fast deckender Grund wie beim Lobbyfenster. Gegenschalter --gefecht-schirm-alt.
+        if (System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-schirm-alt") < 0)
+            scroll.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0.04f, 0.05f, 0.07f, 0.94f) });
         _setup = scroll;
         AddChild(scroll);
 
@@ -932,7 +939,13 @@ public partial class MainMenu : Control
         right.AddChild(_previewText);
         right.AddChild(new HSeparator());
 
-        right.AddChild(Row("Gegner", _ai = new SpinBox { MinValue = 1, MaxValue = 7, Value = 3 }));
+        // ⭐ 14.11.2026 — Fable C2: feste Auswahlen statt Hochzaehlen (ZahlWahl), Gegner bis zur
+        // Platzzahl der Karte (PlaetzeAusKarte), Konto und Techstandard als Liste.
+        right.AddChild(Row("Gegner", _ai = new ZahlWahl
+        {
+            MinValue = 1, MaxValue = 7, Value = 3,
+            Beschriftung = v => v == 1 ? "1 Computergegner" : $"{v} Computergegner",
+        }));
 
         // Which of the map's eight slots the human takes. The slots are the
         // original's own — a NET map fills some and leaves others empty — so
@@ -962,6 +975,15 @@ public partial class MainMenu : Control
             right.AddChild(Row("Rohstoffe", _res = new OptionButton()));
             foreach (string n in resNames) _res.AddItem(n);
             _res.Selected = Mathf.Clamp(SkirmishSetup.Resources, 0, resNames.Count - 1);
+            // ⭐ 14.11.2026 — Fable C4: die einzige Zeile ohne Erklaerung. Gemessen: Stufe 4 wirkt
+            // nur auf Karten, die eigene Lager tragen (Editorkarten); auf den gelieferten NET-Karten
+            // ist sie zahlengleich mit »normal«, weil dort neu aufgestellte Gebaeude »normal« bekommen.
+            if (_res.ItemCount > 4) _res.SetItemText(4, resNames[4] + " (eigene Karten)");
+            _res.TooltipText = "Womit Lager, Fabriken und Minen beim Start gefüllt sind — die Einstellung "
+                             + "des Originals.\nkeine / wenige / normal / viele: Bauteile in den Lagern "
+                             + "und Fabriken, Vorkommen in den Minen.\n»wie auf der Karte«: die Werte, die "
+                             + "im Karteneditor eingetragen sind — wirkt nur auf eigenen Karten;\n"
+                             + "auf den mitgelieferten Karten ist es dasselbe wie »normal«.";
         }
 
         // »Techstandard« ist die Einstellung des ORIGINALS, nicht unsere: der
@@ -986,9 +1008,11 @@ public partial class MainMenu : Control
         // ACHT Spieler, der Knopf @0x44D425 zählt in Tausendern bis 10000 und
         // springt dann auf 0, die Beschriftung ist `Konto ` (0x502628).
         // Vorgabe 0 — wie im Original (@0x4426DF).
-        right.AddChild(Row("Konto", _konto = new SpinBox
+        right.AddChild(Row("Konto", _konto = new ZahlWahl
         {
-            MinValue = 0, MaxValue = 10000, Step = 1000,
+            // die Stufen des Originalknopfs (@0x44D425: Tausender bis 10000) als feste Liste
+            Werte = new[] { 0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000 },
+            Beschriftung = v => v == 0 ? "$ 0 (kein Startgeld)" : $"$ {v}",
             Value = SkirmishSetup.StartMoney,
             TooltipText = "Startgeld je Spieler, in Tausenderschritten bis 10000 "
                         + "— die Einstellung des Originals.\n"
@@ -1000,9 +1024,10 @@ public partial class MainMenu : Control
         }));
 
         SkirmishSetup.Techstandard = Settings.SkirmishTechstandard;
-        right.AddChild(Row("Techstandard", _tech = new SpinBox
+        right.AddChild(Row("Techstandard", _tech = new ZahlWahl
         {
             MinValue = 1, MaxValue = 8, Value = SkirmishSetup.Techstandard,
+            Beschriftung = v => $"Stufe {v} von 8",
             TooltipText = "Technikstufe, mit der das Gefecht anfaengt — die "
                         + "Einstellung des Originals (1..8).\n"
                         + "Gemessen gibt sie am Flughafen frei:\n"
@@ -1068,7 +1093,7 @@ public partial class MainMenu : Control
         SkirmishSetup.AllUnits = Settings.SkirmishAllUnits;
         _allUnits = new CheckBox
         {
-            Text = "Luftwaffe und ganze Entwurfsliste kaufbar",
+            Text = "Alle Einheiten kaufbar (auch Flugzeuge)",
             ButtonPressed = SkirmishSetup.AllUnits,
             TooltipText = "Gefechtskarten bringen keine Flugzeugvorlagen mit. " +
                           "Mit dieser Option bekommt jeder Spieler alle acht — " +
@@ -1099,12 +1124,18 @@ public partial class MainMenu : Control
             // ⚠ Der Text wechselt mit dem Einstieg (ShowSetup): »GEMETZEL
             // STARTEN« im Gefecht, »PARTIE STARTEN« im Multiplayer. »Gemetzel«
             // passt nicht zu einem Knopf, der erst auf Mitspieler wartet.
-            Text = "GEMETZEL STARTEN", CustomMinimumSize = new Vector2(0, 44),
+            Text = "GEFECHT STARTEN", CustomMinimumSize = new Vector2(0, 44),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
         // ⚠ StartWhenNetIsReady statt OnStart — ohne Netzschalter derselbe
         // Aufruf, mit Netzschalter das Warten auf die Partie (UI/MainMenuNet.cs).
         start.Pressed += StartWhenNetIsReady;
-        box.AddChild(start);
+        // ⭐ 14.11.2026 — Fable C1: bei 1920x1080 war »Zurück zum Menü« angeschnitten und die
+        // Bedienhilfe unter dem Rand. Zurueck und Start stehen jetzt in EINER Zeile (klassisch:
+        // links zurueck, rechts los), das spart eine Knopfhoehe.
+        var knopfZeile = new HBoxContainer();
+        knopfZeile.AddThemeConstantOverride("separation", 10);
+        box.AddChild(knopfZeile);
 
         // ⚠ 11.08.2026 — HIER STAND DIE KAMPAGNE, und sie ist raus. Gemeldet
         // als »unter Gefecht sieht man immer noch Kampagne unten drunter, das
@@ -1120,7 +1151,7 @@ public partial class MainMenu : Control
         // (CampaignScreen). Ein Gefechtsschirm, der nebenbei die Kampagne
         // startet, hat zwei Wege in dieselbe Sache und keinen davon dort, wo
         // man ihn sucht.
-        var back = new Button { Text = "Zurueck zum Menue" };
+        var back = new Button { Text = "Zurück zum Menü", CustomMinimumSize = new Vector2(260, 44) };
         // ⭐ 13.11.2026 — Fable A2: waehrend des Wartens auf eine Netzpartie liess »Zurueck«
         // die Leitung offen; der naechste Kampagnenstart endete dann mit »NETZ-FEHLER: es steht
         // keine Partie« (Rueckgabe 2). Jetzt erst abbrechen wie »Abbrechen«, dann zurueck.
@@ -1129,7 +1160,11 @@ public partial class MainMenu : Control
             if (_netWaiting) BackToLobby("Zurück zum Menü — die Netzpartie ist abgebrochen.");
             ShowStartMenu();
         };
-        box.AddChild(back);
+        knopfZeile.AddChild(back);
+        knopfZeile.AddChild(start);
+        // auf dem deckenden Grund waren die Knoepfe ohne eigenen Rahmen nicht mehr als Knoepfe zu sehen
+        KnopfStil(back, new Color(0.14f, 0.15f, 0.18f), new Color(0.40f, 0.45f, 0.52f));
+        KnopfStil(start, new Color(0.17f, 0.27f, 0.39f), new Color(0.55f, 0.72f, 0.90f));
 
         _hint = new Label
         {
@@ -1137,7 +1172,9 @@ public partial class MainMenu : Control
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.55f, 0.6f, 0.66f),
         };
-        box.AddChild(_hint);
+        // Fable C13: die Zeile erklaerte Spieltasten, nicht diesen Schirm — sie steht jetzt als
+        // Tooltip am Startknopf, wo sie zur Sache gehoert.
+        start.TooltipText = _hint.Text;
 
         BuildStartMenu();
 
@@ -1152,6 +1189,7 @@ public partial class MainMenu : Control
         // bug-733: ohne Moduswahl die erste Karte der Liste (map_NET07)
         if (_ohneModus) SelectMap(0);
         else SelectMode(BusiestMode());
+        GefechtLaden();   // Fable D6
         ReadShotArgs();
         // --setup opens the skirmish panel straight away, so it can be
         // photographed without a click
@@ -2229,6 +2267,53 @@ public partial class MainMenu : Control
         }
     }
 
+    /// <summary>Fable C1: ein Knopf mit eigenem Grund und Rahmen (normal/hover/pressed).</summary>
+    private static void KnopfStil(Button b, Color grund, Color rand)
+    {
+        foreach (var (zustand, hell) in new[] { ("normal", 0f), ("hover", 0.06f), ("pressed", 0.10f), ("focus", 0.06f), ("disabled", -0.4f) })
+        {
+            var sb = new StyleBoxFlat
+            {
+                BgColor = hell < 0 ? grund.Darkened(-hell) : grund.Lightened(hell),
+                BorderColor = hell < 0 ? rand.Darkened(0.5f) : rand,
+            };
+            sb.SetBorderWidthAll(zustand == "focus" ? 2 : 1);
+            if (zustand == "focus") sb.DrawCenter = false;
+            b.AddThemeStyleboxOverride(zustand, sb);
+        }
+    }
+
+    // ---- ⭐ 14.11.2026 — Fable D6: die Einstellungen merken ------------------------------
+    private static bool MerkenAus => System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-merken-aus") >= 0
+                                  || Core.Pruefschutz.Aktiv;
+
+    /// <summary>Gemerkte Werte in den Schirm (beim Aufbau, VOR der Befehlszeile).</summary>
+    private void GefechtLaden()
+    {
+        if (MerkenAus) return;
+        int mi = Maps.FindIndex(m => m.File == Settings.SkirmishMap);
+        if (mi >= 0) { SelectMap(mi); ShowPreview(); }
+        _ai.Value = Settings.SkirmishAi;
+        _level.Selected = Mathf.Clamp(Settings.SkirmishLevel, 0, 2);
+        if (_res != null && Settings.SkirmishResources >= 0 && Settings.SkirmishResources < _res.ItemCount)
+            _res.Selected = Settings.SkirmishResources;
+        if (_konto != null && Settings.SkirmishMoney >= 0) _konto.Value = Settings.SkirmishMoney;
+        if (_netAddr != null && Settings.NetAddress.Length > 0) _netAddr.Text = Settings.NetAddress;
+        if (_netPlayers != null) _netPlayers.Value = Settings.NetHumans;
+    }
+
+    private void GefechtMerken()
+    {
+        if (MerkenAus) return;
+        Settings.SkirmishMap = SkirmishSetup.Map;
+        Settings.SkirmishAi = (int)_ai.Value;
+        Settings.SkirmishLevel = _level.Selected;
+        if (_res != null) Settings.SkirmishResources = _res.Selected;
+        if (_konto != null) Settings.SkirmishMoney = (int)_konto.Value;
+        if (_netAddr != null && _netMode is { Selected: 2 }) Settings.NetAddress = _netAddr.Text;
+        if (_netPlayers != null) Settings.NetHumans = (int)_netPlayers.Value;
+    }
+
     /// <summary>Der gewaehlte Startplatz als Kartenplatz 0..7, -1 = automatisch.</summary>
     private int GewaehlterPlatz()
         => _slot.Selected <= 0 ? -1
@@ -2274,7 +2359,13 @@ public partial class MainMenu : Control
         {
             // bug-733: ohne Moduswahl stehen alle Karten in der Liste
             if (!_ohneModus && MapPreview.ShapeOf(Maps[i].File) != _mode) continue;
-            _mapList.AddItem(Maps[i].Title);
+            // ⭐ 14.11.2026 — Fable D7: Spielerzahl und Groesse gleich in der Liste
+            var pl = MapPreview.Startplaetze(Maps[i].File);
+            var (gw, gh) = MapPreview.Groesse(Maps[i].File);
+            string angabe = MapPreview.StartplatzAlt ? "" :
+                (pl.Count > 0 ? $"  ·  {pl.Count} Spieler" : "") +
+                (gw > 0 && !Maps[i].Title.Contains($"{gw}x{gh}") ? $"  ·  {gw}×{gh}" : "");
+            _mapList.AddItem(Maps[i].Title + angabe);
             _mapList.SetItemTooltip(_mapList.ItemCount - 1, MapPreview.Caption(Maps[i].File));
             _listed.Add(i);
         }
@@ -2326,10 +2417,9 @@ public partial class MainMenu : Control
         // selben Wert — die Zahlen richten sich jetzt nach der Stufe. Ein
         // Hinweistext, der eine ueberholte Zahl nennt, ist schlimmer als keiner.
         _allUnitsHint.Text = on
-            ? "AN — die ganze Entwurfsliste am Boden (601) und alle 10 Schiffe. "
-              + "Die Luft richtet sich nach dem Techstandard. Die Gegner ebenso."
-            : "AUS — am Boden 65 von 601 Entwuerfen. Luft und See richten sich "
-              + "nach dem Techstandard darueber.";
+            ? "AN — alle 601 Bodeneinheiten und 10 Schiffe; welche Flugzeuge, sagt der Techstandard. "
+              + "Gilt auch für die Computergegner."
+            : "AUS — 65 von 601 Bodeneinheiten; Flugzeuge und Schiffe nach dem Techstandard.";
         var akzent = on
             ? new Color(0.45f, 0.60f, 0.78f)
             : new Color(0.92f, 0.72f, 0.42f);
@@ -2453,6 +2543,7 @@ public partial class MainMenu : Control
         if (_konto != null)
             SkirmishSetup.StartMoney = Mathf.Clamp((int)_konto.Value, 0, 10000);
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
+        GefechtMerken();
     }
 
     private void OnStart()

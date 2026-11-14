@@ -376,7 +376,8 @@ public partial class NetworkManager : Node
             ? $"Gastgeber: {Link.ClientCount + 1} von {Instance?._players ?? 2} da. " +
               HostHint()
             : $"Beitreten bei {Instance?._address}:{Instance?._port} " +
-              $"({Link.Status}) — warte auf die Partie des Gastgebers";
+              (Link.Status == MultiplayerPeer.ConnectionStatus.Connected ? "(verbunden)" : "(verbinde …)") +   // Fable C7
+              " — warte auf die Partie des Gastgebers";
     }
 
     /// <summary>
@@ -580,14 +581,24 @@ public partial class NetworkManager : Node
             _letzteEin = Link.PacketsIn;
             _t0 = Time.GetTicksMsec();
         }
+        // ⭐ 14.11.2026 — Fable C7: »dort ist niemand« dauerte 30 s. ENet gibt einen Verbindungsversuch
+        // ins Leere nach rund 5 s auf (Zustand Getrennt) — dann gleich melden. Gegenschalter --netz-grund-alt.
+        if (!_wantHost && !_timedOut && Link.Status == MultiplayerPeer.ConnectionStatus.Disconnected
+            && Link.PacketsIn == 0 && Time.GetTicksMsec() - _t0 > 1000
+            && System.Array.IndexOf(Core.CommandLine.Args, "--netz-grund-alt") < 0)
+            frist = 1;
         if (frist > 0 && !_timedOut && Time.GetTicksMsec() - _t0 > (ulong)frist)
         {
             _timedOut = true;
+            // ⭐ 14.11.2026 — Fable C7: Spielerdeutsch; der technische Rest steht im Protokoll
             Fault = _wantHost
-                ? $"nach {frist} ms sind nur {Link.ClientCount + 1} von {_players} " +
-                  "Mitspielern da — die Partie kommt nicht zustande"
-                : $"nach {frist} ms keine Partie vom Gastgeber ({_address}:{_port}), " +
-                  $"Verbindungszustand {Link.Status}";
+                ? $"Nach {frist / 1000} s sind erst {Link.ClientCount + 1} von {_players} Menschen da — " +
+                  "die Partie kommt nicht zustande"
+                : Link.Status == MultiplayerPeer.ConnectionStatus.Connected
+                    ? $"Der Gastgeber unter {_address}:{_port} antwortet, hat die Partie aber nicht gestartet"
+                    : $"Unter {_address}:{_port} antwortet kein Gastgeber. Adresse prüfen — und hat der Gastgeber " +
+                      "schon »PARTIE STARTEN« gedrückt?";
+            GD.Print($"netz: Frist {frist} ms, Verbindungszustand {Link.Status}");
             GD.PrintErr("netz: " + Fault);
         }
     }

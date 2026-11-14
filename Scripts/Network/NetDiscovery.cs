@@ -269,11 +269,13 @@ public sealed class NetDiscovery
     public string Verdict(int ms)
     {
         if (Fault.Length > 0) return "Suche gescheitert: " + Fault;
+        // ⭐ 14.11.2026 — Fable C7: Spielerdeutsch; die Wege stehen weiter im Protokoll (VerdictLog)
         if (_found.Count == 0)
-            return $"Keine offene Partie im LAN gefunden ({ms} ms gesucht, " +
-                   $"{Asked} von 2 Wegen abgeschickt). Entweder läuft keine — oder der " +
-                   "Rundruf kommt nicht durch (Firewall). ⚠ Über UDP ist das nicht zu " +
-                   "unterscheiden: ein Rundruf, den niemand hört, meldet sich nicht.";
+            return "Keine offene Partie im LAN gefunden. Hat der Gastgeber schon »PARTIE STARTEN« gedrückt? " +
+                   "Wenn ja, hält vielleicht eine Firewall die Suche auf — dann seine Adresse oben von Hand eintragen.";
+        if (System.Array.IndexOf(Core.CommandLine.Args, "--netz-grund-alt") < 0)
+            return _found.Count == 1 ? "1 offene Partie gefunden — anklicken, dann »PARTIE STARTEN«."
+                                     : $"{_found.Count} offene Partien gefunden — eine anklicken, dann »PARTIE STARTEN«.";
         string wege = SawBroadcast && SawLoopback ? "LAN-Rundruf und Rückschleife"
                     : SawBroadcast ? "LAN-Rundruf"
                     : "NUR die Rückschleife (127.0.0.1) — im LAN hat niemand geantwortet. " +

@@ -312,7 +312,15 @@ public sealed class NetLink
     {
         var p = new ENetMultiplayerPeer();
         Error e = p.CreateServer(port, maxClients);
-        if (e != Error.Ok) { Fault = $"CreateServer({port}) -> {e}"; return false; }
+        // ⭐ 14.11.2026 — Fable C7: Spielerdeutsch statt »CreateServer(27033) -> CantCreate«
+        if (e != Error.Ok)
+        {
+            Fault = e is Error.CantCreate or Error.AlreadyInUse
+                ? $"Port {port} ist schon belegt — läuft das Spiel schon in einem zweiten Fenster als Gastgeber? " +
+                  $"Sonst einen anderen Port eintragen, z. B. :{port + 1} (technisch: {e})"
+                : $"Das Netzwerk ließ sich nicht öffnen (Port {port}, {e})";
+            return false;
+        }
         p.TransferMode = MultiplayerPeer.TransferModeEnum.Reliable;
         p.PeerConnected += OnPeerConnected;
         p.PeerDisconnected += OnPeerDisconnected;
@@ -326,9 +334,18 @@ public sealed class NetLink
     {
         var p = new ENetMultiplayerPeer();
         Error e = p.CreateClient(address, port);
-        if (e != Error.Ok) { Fault = $"CreateClient({address}:{port}) -> {e}"; return false; }
+        if (e != Error.Ok) { Fault = $"Mit »{address}:{port}« lässt sich keine Verbindung aufbauen — Adresse prüfen ({e})"; return false; }
         p.TransferMode = MultiplayerPeer.TransferModeEnum.Reliable;
-        Geduldig(p, 1);           // bug-810: die Leitung zum Vermittler
+        // ⭐ 14.11.2026 — Fable C7: WAEHREND DES VERBINDENS eine kurze Grenze (8 s) — mit der geduldigen
+        // (bug-810, 30..60 s) stand »dort ist niemand« erst nach 30 s im Schirm. Die geduldige gilt
+        // ab dem Verbinden (Pump), denn erst dann kann der Vermittler beim Kartenladen schweigen.
+        if (Array.IndexOf(Core.CommandLine.Args, "--netz-grund-alt") >= 0) Geduldig(p, 1);
+        else
+        {
+            try { p.GetPeer(1)?.SetTimeout(32, 4000, 8000); }
+            catch (Exception ex) { GD.PrintErr($"netz: Verbindungsgrenze nicht gesetzt: {ex.Message}"); }
+            _geduldigNachVerbinden = true;
+        }
         _peer = p;
         IsHost = false;
         GD.Print($"netz: Mitspieler, verbinde nach {address}:{port}");
@@ -352,6 +369,7 @@ public sealed class NetLink
         return _peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Disconnected;
     }
     private bool _sanftAngestossen;
+    private bool _geduldigNachVerbinden;
 
     public void Close()
     {
@@ -568,6 +586,8 @@ public sealed class NetLink
             return;
         }
         _peer.Poll();
+        if (_geduldigNachVerbinden && _peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected)
+        { _geduldigNachVerbinden = false; Geduldig(_peer, 1); }   // ab jetzt die geduldige Grenze (bug-810)
         while (_peer.GetAvailablePacketCount() > 0)
         {
             int from = _peer.GetPacketPeer();
