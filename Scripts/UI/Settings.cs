@@ -269,6 +269,8 @@ public static class Settings
     public static int SkirmishMoney { get => I("skirmish_money", -1); set => Set("skirmish_money", value); }
     public static string NetAddress { get => S("net_address", ""); set => Set("net_address", value); }
     public static int NetHumans { get => I("net_humans", 2); set => Set("net_humans", value); }
+    /// <summary>P7 (14.11.2026): die Aufstellung des Gefechts, »art:team« je Platz 0..7.</summary>
+    public static string SkirmishPlaetze { get => S("skirmish_plaetze", ""); set => Set("skirmish_plaetze", value); }
 
     public static bool SkirmishAllUnits
     {

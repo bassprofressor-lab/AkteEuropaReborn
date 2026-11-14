@@ -230,4 +230,78 @@ public static class SkirmishSetup
     /// a later restart does not silently reload the same game.</summary>
     public static string PendingSave = "";
     public const string GameScene = "res://Scenes/Gameplay/MapViewer.tscn";
+
+    // ---- ⭐ 14.11.2026 — P7 (Spielerwunsch): Stärke und Team JE Startplatz ----------------
+    // »ich kann also nicht beliebig sagen, ich nehme ein computergegner leicht, einen normal und
+    // einen schweren … und team bildung wäre gut«. UNSERE ABWEICHUNG (Gefecht = Wettkampfmodus):
+    // statt »Anzahl Gegner + eine Schwierigkeit« eine Zeile je Startplatz der Karte, wie in
+    // klassischen Echtzeitstrategiespielen. Gilt NUR, wenn PlatzListe gesetzt ist (Gefechtsschirm,
+    // --gefecht-plaetze=, Spielstand); Befehlszeile, Editor, Kampagne und Netz bleiben beim Alten.
+    // Gegenschalter --gefecht-plaetze-alt.
+
+    public const int ArtLeer = 0, ArtMensch = 1, ArtLeicht = 2, ArtNormal = 3, ArtSchwer = 4;
+
+    /// <summary>true: <see cref="PlatzArt"/>/<see cref="PlatzTeam"/> bestimmen Gegner, Stufen
+    /// und Bündnisse; <see cref="AiCount"/>/<see cref="Level"/> sind dann nur noch Anzeige.</summary>
+    public static bool PlatzListe;
+    /// <summary>Je Kartenplatz 0..7: <see cref="ArtLeer"/> … <see cref="ArtSchwer"/>.</summary>
+    public static readonly int[] PlatzArt = new int[8];
+    /// <summary>Je Kartenplatz 0..7: 0 = kein Team (jeder gegen jeden), 1..4 = Team.</summary>
+    public static readonly int[] PlatzTeam = new int[8];
+
+    public static bool IstKi(int art) => art is ArtLeicht or ArtNormal or ArtSchwer;
+
+    public static MapEntityLayer.AiLevel StufeVon(int art) => art switch
+    {
+        ArtLeicht => MapEntityLayer.AiLevel.Easy,
+        ArtSchwer => MapEntityLayer.AiLevel.Hard,
+        _ => MapEntityLayer.AiLevel.Normal,
+    };
+
+    public static int ArtVon(MapEntityLayer.AiLevel l) => l switch
+    {
+        MapEntityLayer.AiLevel.Easy => ArtLeicht,
+        MapEntityLayer.AiLevel.Hard => ArtSchwer,
+        _ => ArtNormal,
+    };
+
+    public static bool PlaetzeAlt => System.Array.IndexOf(Core.CommandLine.Args, "--gefecht-plaetze-alt") >= 0;
+
+    /// <summary>Die Aufstellung als Text »art:team« je Platz 0..7, z. B. »1:1,4:1,2:2,3:2,0:0,…«
+    /// — für Spielstand und Einstellungen.</summary>
+    public static string PlaetzeText()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int p = 0; p < 8; p++) sb.Append(p > 0 ? "," : "").Append(PlatzArt[p]).Append(':').Append(PlatzTeam[p]);
+        return sb.ToString();
+    }
+
+    /// <summary>Gegenstück zu <see cref="PlaetzeText"/>; false bei einem unlesbaren Text
+    /// (dann bleibt alles, wie es war).</summary>
+    public static bool PlaetzeAusText(string? text, int[] art, int[] team)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        var teile = text.Split(',');
+        if (teile.Length != 8) return false;
+        var a = new int[8]; var t = new int[8];
+        for (int p = 0; p < 8; p++)
+        {
+            var at = teile[p].Split(':');
+            if (at.Length != 2 || !int.TryParse(at[0], out a[p]) || !int.TryParse(at[1], out t[p])) return false;
+            if (a[p] is < ArtLeer or > ArtSchwer || t[p] is < 0 or > 4) return false;
+        }
+        System.Array.Copy(a, art, 8); System.Array.Copy(t, team, 8);
+        return true;
+    }
+
+    /// <summary>Wer mit wem verbündet ist, nach den Teams (jeder mit sich selbst).</summary>
+    public static bool Verbuendet(int a, int b)
+        => a == b || (a is >= 0 and < 8 && b is >= 0 and < 8 && PlatzTeam[a] > 0 && PlatzTeam[a] == PlatzTeam[b]);
+
+    public static bool HatTeams()
+    {
+        if (!PlatzListe) return false;
+        for (int p = 0; p < 8; p++) if (PlatzArt[p] != ArtLeer && PlatzTeam[p] > 0) return true;
+        return false;
+    }
 }

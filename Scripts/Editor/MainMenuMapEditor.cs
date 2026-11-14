@@ -124,6 +124,7 @@ public partial class MainMenu
         SkirmishSetup.Human = human;
         SkirmishSetup.AiCount = aiCount;
         SkirmishSetup.Level = level;
+        SkirmishSetup.PlatzListe = false;   // P7: der Editor nimmt seine eigene Gegnerzahl
         SkirmishSetup.CampaignMission = 0;
         SkirmishSetup.Active = true;
         // C9 (12.11.2026): nach der Partie zurueck in den Editorschirm, mit dieser Karte

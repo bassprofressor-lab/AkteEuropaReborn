@@ -62,6 +62,10 @@ public partial class MapEntityLayer
         w.Str("mission", _mission);
         w.Num("campaign_mission", UI.SkirmishSetup.CampaignMission);
         w.Bool("skirmish", UI.SkirmishSetup.Active);
+        // ⭐ P7 (14.11.2026): die Aufstellung des Gefechts (Stufe und Team je Platz) — ohne sie
+        // nahm ein geladenes Gefecht die Gegner aus dem, was zuletzt im Schirm stand.
+        if (UI.SkirmishSetup.PlatzListe && UI.SkirmishSetup.CampaignMission == 0 && !UI.SkirmishSetup.PlaetzeAlt)
+            w.Str("gefecht_plaetze", UI.SkirmishSetup.PlaetzeText());
         w.Num("view_player", ViewPlayer);
         w.Num("clock", _clock);
 

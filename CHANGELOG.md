@@ -263,6 +263,34 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Skirmish: strength and team per computer opponent** (player request: "I can't just say I take
+  one easy, one normal and one hard computer opponent … and forming teams would be good"):
+  - **One row per start position** instead of "opponents / start position / difficulty": the
+    skirmish screen lists every start position of the chosen map on the left under the map list,
+    as in classic real-time strategy games. For each position you pick the **player** (You ·
+    Computer easy · Computer normal · Computer hard · empty) and the **team** (– for free-for-all,
+    Team 1 to 4). That also picks your start position: it is the row that says "You". Setting
+    another row to "You" moves you there, and the old row takes what that row had.
+  - **Every computer opponent plays at its own strength**: thinking rate, wave size, pauses between
+    attacks and tech ladder follow the level of its position, no longer one level for all.
+  - **Teams**: same team means allied, using the original's alliance table the game already knows
+    from the campaign. Allies do not attack each other (neither the computer opponents nor your own
+    units on their own), they share vision in the fog, and mines do not hit an ally. The match is
+    won when no enemy team has anything left; your allied computer opponent does not have to
+    survive for that. It is lost, as before, when nothing of yours is left.
+  - Below the list the line-up is shown in one sentence ("Team 1: You + hard vs Team 2: easy +
+    normal"). If there is no enemy because everyone is on your team, it says so and "START SKIRMISH"
+    is disabled.
+  - The line-up is remembered and stored in the **saved game**. So far a loaded skirmish took the
+    number and level of opponents from whatever the screen last showed.
+  - The multiplayer screen and the online room keep one difficulty for all for now; strength and
+    teams over the network are the next step.
+  Measured on NET07, 2 vs 2 (You + computer hard vs computer easy + normal), 15 minutes of
+  game time: 116 kills, none between allies. The team ending is checked by `--gefecht-teams-probe`;
+  saving and loading with teams is identical (`--spielstand-check`). Without teams the skirmish is
+  unchanged: NET07 checksum still `3D49B2EF34977BF8`. New on the command line:
+  `--gefecht-plaetze=du:1,schwer:1,leicht:2,normal:2` (in the order of the start positions);
+  `--skirmish=map,n,level,slot` keeps the old way. Opt-out `--gefecht-plaetze-alt`.
 - **Online: back into the same room after a match, surrender** (Fable review C10, D5):
   - So far the game signed off completely after every online match; you stood in the room list and
     the group had to find each other again. Now you stay signed in and land back in the room — with

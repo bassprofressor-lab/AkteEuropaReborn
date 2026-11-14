@@ -284,6 +284,38 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Gefecht: Stärke und Team je Computergegner** (Spielerwunsch: »ich kann also nicht beliebig
+  sagen, ich nehme ein computergegner leicht, einen normal und einen schweren … und team bildung
+  wäre gut«):
+  - **Eine Zeile je Startplatz** statt »Gegner / Startplatz / Schwierigkeit«: Der Gefechtsschirm
+    zeigt links unter der Kartenliste alle Startplätze der gewählten Karte, wie in klassischen
+    Echtzeitstrategiespielen. Je Platz wählt man den **Spieler** (Du · Computer leicht · Computer
+    normal · Computer schwer · leer) und das **Team** (– für jeder gegen jeden, Team 1 bis 4).
+    Damit ist auch der Startplatz gewählt: Er ist die Zeile, auf der »Du« steht. Stellt man eine
+    andere Zeile auf »Du«, zieht man dorthin um, und die alte Zeile bekommt, was dort stand.
+  - **Jeder Computergegner spielt mit seiner eigenen Stärke**: Denktakt, Wellengröße, Pausen
+    zwischen den Angriffen und Technikleiter richten sich nach der Stufe seines Platzes, nicht
+    mehr nach einer Stufe für alle.
+  - **Teams**: Gleiches Team heißt verbündet, nach der Bündnistafel des Originals, die das Spiel
+    aus der Kampagne schon kennt. Verbündete greifen sich nicht an (weder die Computergegner noch
+    deine Einheiten von selbst), sie teilen die Sicht im Nebel, und Minen treffen den Verbündeten
+    nicht. Gewonnen ist die Partie, wenn kein gegnerisches Team mehr etwas hat; dein verbündeter
+    Computergegner muss dafür nicht stehen bleiben. Verloren ist sie wie bisher, wenn von dir
+    selbst nichts mehr steht.
+  - Unter der Liste steht die Aufstellung in einem Satz (»Team 1: Du + schwer gegen Team 2:
+    leicht + normal«). Gibt es keinen Gegner, weil alle in deinem Team sind, sagt sie das, und
+    »GEFECHT STARTEN« ist gesperrt.
+  - Die Aufstellung wird gemerkt und im **Spielstand** mitgespeichert. Bisher nahm ein geladenes
+    Gefecht die Gegnerzahl und Stufe aus dem, was zuletzt im Schirm stand.
+  - Im Mehrspielerschirm und im Online-Raum bleibt es vorerst bei einer Schwierigkeit für alle;
+    Stärke und Teams im Netz kommen als nächster Schritt.
+  Gemessen auf NET07, 2 gegen 2 (Du + Computer schwer gegen Computer leicht + normal), 15
+  Minuten Spielzeit: 116 Abschüsse, keiner davon unter Verbündeten. Das Ende nach Teams
+  prüft `--gefecht-teams-probe`, Speichern und Laden mit Teams ist deckungsgleich
+  (`--spielstand-check`). Ohne Teams ist das Gefecht unverändert: NET07-Prüfsumme weiter
+  `3D49B2EF34977BF8`. Neu auf der Befehlszeile: `--gefecht-plaetze=du:1,schwer:1,leicht:2,normal:2`
+  (in der Reihenfolge der Startplätze); `--skirmish=karte,n,stufe,platz` geht weiter den alten
+  Weg. Gegenschalter `--gefecht-plaetze-alt`.
 - **Online: nach der Partie zurück in denselben Raum, Aufgeben** (Fable-Prüfung C10, D5):
   - Bisher meldete das Spiel nach jeder Online-Partie ganz ab; man stand in der Raumliste, und die
     Runde musste sich neu finden. Jetzt bleibt man angemeldet und landet wieder im Raum — mit

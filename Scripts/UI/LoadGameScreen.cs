@@ -118,6 +118,11 @@ public partial class LoadGameScreen : Control
         SkirmishSetup.CampaignMission =
             root.TryGetValue("campaign_mission", out var cm) ? cm.AsInt32() : 0;
         SkirmishSetup.Active = root.TryGetValue("skirmish", out var sk) && sk.AsBool();
+        // ⭐ P7: die Aufstellung aus dem Stand; ein alter Stand ohne sie geht den alten Weg
+        SkirmishSetup.PlatzListe = root.TryGetValue("gefecht_plaetze", out var gp)
+            && SkirmishSetup.PlaetzeAusText(gp.AsString(), SkirmishSetup.PlatzArt, SkirmishSetup.PlatzTeam);
+        if (SkirmishSetup.PlatzListe)
+            for (int p = 0; p < 8; p++) if (SkirmishSetup.PlatzArt[p] == SkirmishSetup.ArtMensch) SkirmishSetup.Human = p;
         SkirmishSetup.PendingSave = name;
         // bug-501 (KayelGee R5#15): »Laden im laufenden Spiel => Spiel haengt«.
         // Das Spielmenue haelt den Baum an (MapViewer, Paused = true), und der

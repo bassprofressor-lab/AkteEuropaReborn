@@ -552,6 +552,7 @@ public partial class MainMenu : Control
         if (_startButton != null)
             _startButton.Text = net ? "PARTIE STARTEN" : "GEFECHT STARTEN";
         ApplyNetEntry(net);
+        PlaetzeSichtbar();   // P7
 
         if (_start != null) _start.Visible = false;
         if (_setup != null) _setup.Visible = true;
@@ -909,6 +910,11 @@ public partial class MainMenu : Control
         var leftCol = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         leftCol.AddThemeConstantOverride("separation", 10);
         leftCol.AddChild(left);
+        // ⭐ P7 (14.11.2026): im Gefecht eine Zeile je Startplatz (Stufe + Team) statt der Zeilen
+        // Gegner/Startplatz/Schwierigkeit rechts — LINKS unter der Kartenliste, wo im Gefecht der
+        // (versteckte) Netzkasten steht; rechts haette sie den Startknopf unter den Rand geschoben
+        // (am Bild gesehen). UI/MainMenuPlaetze.cs, Gegenschalter --gefecht-plaetze-alt
+        PlaetzeBauen(leftCol);
         leftCol.AddChild(_netFrame = Accent("Netzwerk", BuildNetRow()));
         lower.AddChild(leftCol);
 
@@ -1211,6 +1217,7 @@ public partial class MainMenu : Control
                     }
                     if (b == "--setup-startplatz-offen") GetTree().CreateTimer(1.0).Timeout += () => _slot.ShowPopup();
                 }
+                PlaetzeAusBefehlszeile();   // P7: Bilder mit einer bestimmten Aufstellung
                 break;
             }
 
@@ -1769,6 +1776,7 @@ public partial class MainMenu : Control
         SkirmishSetup.Map = m.Map;
         SkirmishSetup.Human = 0;
         SkirmishSetup.AiCount = 0;
+        SkirmishSetup.PlatzListe = false;   // P7
         SkirmishSetup.CampaignMission = m.Index;
         SkirmishSetup.Active = true;
         GD.Print($"Kampagne: starte {m.Label} ({m.Map})");
@@ -2214,6 +2222,8 @@ public partial class MainMenu : Control
                 else GD.PrintErr($"skirmish: \"{parts[4]}\" ist keine Rohstoffstufe " +
                                  $"({string.Join("/", names)})");
             }
+            // P7: --skirmish allein bleibt der alte Weg; --gefecht-plaetze= nimmt die Platzliste
+            _plaetzeBefehlszeileAlt = !PlaetzeAusBefehlszeile();
             // ⚠ NICHT mehr OnStart, sondern StartWhenNetIsReady (UI/MainMenuNet.cs).
             // Ohne Netzschalter ist das dasselbe, nur einen Bildlauf später; mit
             // Netzschalter wartet es auf die Partie, denn der Keim des
@@ -2266,6 +2276,7 @@ public partial class MainMenu : Control
             _netPlayers.MaxValue = Mathf.Max(2, pl.Count);
             _netPlayers.TooltipText = $"Wie viele Menschen mitspielen — diese Karte hat {pl.Count} Startplätze.";
         }
+        PlaetzeFuellen(pl);   // P7
     }
 
     /// <summary>Fable C1: ein Knopf mit eigenem Grund und Rahmen (normal/hover/pressed).</summary>
@@ -2343,6 +2354,7 @@ public partial class MainMenu : Control
         if (_konto != null && Settings.SkirmishMoney >= 0) _konto.Value = Settings.SkirmishMoney;
         if (_netAddr != null && Settings.NetAddress.Length > 0) _netAddr.Text = Settings.NetAddress;
         if (_netPlayers != null) _netPlayers.Value = Settings.NetHumans;
+        PlaetzeLaden();   // P7: nach Gegnerzahl und Stufe — ohne gemerkte Liste daraus
     }
 
     private void GefechtMerken()
@@ -2355,6 +2367,7 @@ public partial class MainMenu : Control
         if (_konto != null) Settings.SkirmishMoney = (int)_konto.Value;
         if (_netAddr != null && _netMode is { Selected: 2 }) Settings.NetAddress = _netAddr.Text;
         if (_netPlayers != null) Settings.NetHumans = (int)_netPlayers.Value;
+        PlaetzeMerken();   // P7
     }
 
     /// <summary>Der gewaehlte Startplatz als Kartenplatz 0..7, -1 = automatisch.</summary>
@@ -2586,6 +2599,7 @@ public partial class MainMenu : Control
         if (_konto != null)
             SkirmishSetup.StartMoney = Mathf.Clamp((int)_konto.Value, 0, 10000);
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
+        PlaetzeUebernehmen();                    // P7: die Platzliste (nur im Gefecht)
         GefechtMerken();
     }
 

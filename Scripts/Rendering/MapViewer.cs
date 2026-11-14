@@ -728,6 +728,13 @@ public partial class MapViewer : Node2D
             // Gelesen: berichte/nachladezeit-nachziehen-fable.md §5.1/§5.5.
             //
             // Ein Spielstand ist ausgenommen (siehe oben, Kopfbyte 3).
+            // P7: --gefecht-teams-probe — das Ende nach Teams (Simulation/GefechtTeams.cs)
+            if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--gefecht-teams-probe") >= 0)
+            {
+                GD.Print(_entities.GefechtTeamsProbe());
+                GetTree().Quit();
+                return;
+            }
             if (!ausSpielstand)
                 _entities.NachziehenNachKarte(
                     UI.SkirmishSetup.CampaignMission > 0

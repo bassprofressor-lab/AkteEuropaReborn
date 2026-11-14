@@ -254,7 +254,10 @@ public partial class MapEntityLayer : Node2D
     };
 
     /// <summary>Hand the listed players over to the computer.</summary>
-    public void EnableSkirmishAi(IEnumerable<int> players, AiLevel level = AiLevel.Normal)
+    /// <param name="je">⭐ P7 (14.11.2026): die Stufe JE Spieler (Gefechtsschirm, eine Zeile je
+    /// Startplatz); fehlt ein Spieler darin, gilt <paramref name="level"/>.</param>
+    public void EnableSkirmishAi(IEnumerable<int> players, AiLevel level = AiLevel.Normal,
+                                 IReadOnlyDictionary<int, AiLevel>? je = null)
     {
         _ai.Clear();
         _aiStufe = level;
@@ -263,18 +266,19 @@ public partial class MapEntityLayer : Node2D
         foreach (int p in players)
         {
             if (p is < 0 or > 7) continue;
-            var a = new AiPlayer(p) { Level = level, Think = 0.5f + p * 0.13f };
+            var stufe = je != null && je.TryGetValue(p, out var js) ? js : level;
+            var a = new AiPlayer(p) { Level = stufe, Think = 0.5f + p * 0.13f };
             AiLoadPlan(a);
             KiUhrenUebernehmen(a);   // bug-683: nach dem Laden die Uhren aus dem Stand (KiUhrenSpielstand.cs)
             _ai.Add(a);
             // ⭐ Paket W3 (bug-631): im Gefecht mit Gruppen ist die Betriebsart (sec61,
             // pro_style) der Verteidigerregler der Stufe. UNSERE SETZUNG, siehe
             // Simulation/GefechtKiMarsch.cs. --gefecht-ki-marsch-aus: bleibt 2 wie bisher.
-            if (GefechtKiMarschAn) SetAiBetriebsart(p, GefechtStufe(level).Betriebsart);
+            if (GefechtKiMarschAn) SetAiBetriebsart(p, GefechtStufe(stufe).Betriebsart);
         }
         _aiOn = _ai.Count > 0;
-        GD.Print($"KI aktiv fuer Spieler {string.Join(", ", _ai.Select(a => a.Player))} " +
-                 $"({level})");
+        GD.Print($"KI aktiv fuer Spieler {string.Join(", ", _ai.Select(a => je != null ? $"{a.Player} ({a.Level})" : $"{a.Player}"))} " +
+                 (je != null ? "(Stufe je Platz)" : $"({level})"));
     }
 
     /// <summary>bug-554: einem Spieler die KI wieder nehmen — der Menschplatz einer
@@ -794,6 +798,12 @@ public partial class MapEntityLayer : Node2D
         var foes = new List<int>();
         foreach (int p in live)
             if (p != human && !humans.Contains(p) && foes.Count < aiCount) foes.Add(p);
+        // ⭐ 14.11.2026 — P7: die Aufstellung des Gefechtsschirms (eine Zeile je Startplatz) statt
+        // »die ersten aiCount Plaetze«. Nur ohne Netz (dort bleibt es bei der Partie des Vermittlers).
+        // Gegenschalter --gefecht-plaetze-alt. Simulation/GefechtTeams.cs.
+        Dictionary<int, AiLevel>? stufen = null;
+        if (UI.SkirmishSetup.PlatzListe && humans.Length == 0 && !UI.SkirmishSetup.PlaetzeAlt)
+            (foes, stufen) = GefechtAufstellung(live, human);
         if (humans.Length > 0)
             GD.Print($"Netzspiel: Menschenplätze {string.Join(",", humans)} — " +
                      $"die KI bekommt davon keinen; Computerspieler {string.Join(",", foes)}");
@@ -852,7 +862,9 @@ public partial class MapEntityLayer : Node2D
         // Simulation/GefechtStartbasis.cs. Vor der KI, damit sie auf dem richtigen Besitz
         // plant; ein KI-Platz ohne Bauplatz faellt aus `foes`. --gefecht-startbasis-aus.
         if (welt) GefechtStartbasisAufstellen(mine, foes, UI.SkirmishSetup.Resources);
-        EnableSkirmishAi(foes, level);
+        // P7: die Buendnistafel aus den Teams — VOR der KI, damit sie auf den richtigen Feinden plant
+        if (stufen != null) GefechtTeamsSetzen(mine);
+        EnableSkirmishAi(foes, level, stufen);
         var per = BasesPerSlot();
         float spread = BaseSpread();
         GD.Print($"Gemetzel: Spieler {human} (Startplatz {human + 1}) gegen {foes.Count} KI ({level}); " +
