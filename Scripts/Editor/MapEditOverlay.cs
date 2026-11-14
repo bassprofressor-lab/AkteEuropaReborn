@@ -437,10 +437,10 @@ public partial class MapEditOverlay : Node2D
 
         _mine.Add((cell.X, cell.Y, Brush.Gelaende));
         MapEditSession.Dirty = true;
-        _say = $"({cell.X},{cell.Y}) ist jetzt {GroundName(g)} — {MapEditTerrain.LastRetiled} Zellen " +
-               $"neu gekachelt, {MapEditTerrain.LastMissing} davon aus dem Bodenblock, " +
-               $"{MapEditTerrain.LastShoreFixed} Uferkacheln nachgezogen" +
-               (MapEditTerrain.LastShoreLeft > 0 ? $" (⚠ {MapEditTerrain.LastShoreLeft} nicht)" : "") +
+        _say = $"({cell.X},{cell.Y}) ist jetzt {GroundName(g)} — {MapEditTerrain.Letzter.Retiled} Zellen " +
+               $"neu gekachelt, {MapEditTerrain.Letzter.Missing} davon aus dem Bodenblock, " +
+               $"{MapEditTerrain.Letzter.ShoreFixed} Uferkacheln nachgezogen" +
+               (MapEditTerrain.Letzter.ShoreLeft > 0 ? $" (⚠ {MapEditTerrain.Letzter.ShoreLeft} nicht)" : "") +
                "; sichtbar nach F5";
     }
 
@@ -457,7 +457,7 @@ public partial class MapEditOverlay : Node2D
         _mine.Add((cell.X, cell.Y, Brush.Hoehe));
         MapEditSession.Dirty = true;
         _say = $"({cell.X},{cell.Y}) auf Höhe {_map.ElevAt(cell.X, cell.Y)} — " +
-               $"{MapEditTerrain.LastRetiled} Zellen neu gekachelt; sichtbar nach F5";
+               $"{MapEditTerrain.Letzter.Retiled} Zellen neu gekachelt; sichtbar nach F5";
     }
 
     private void PutBuilding(Vector2I cell)
@@ -741,8 +741,8 @@ public partial class MapEditOverlay : Node2D
                 if (why != null) { _say = why; break; }
                 _mine.RemoveAll(x => x.What == Brush.Gegenstand && x.Col == cell.X && x.Row == cell.Y);
                 MapEditSession.Dirty = true;
-                _say = $"Gegenstand von ({cell.X},{cell.Y}) weg — {MapEditTerrain.LastRetiled} Zellen " +
-                       $"neu gekachelt, {MapEditTerrain.LastPropsKept} Nachbarn mit Gegenstand " +
+                _say = $"Gegenstand von ({cell.X},{cell.Y}) weg — {MapEditTerrain.Letzter.Retiled} Zellen " +
+                       $"neu gekachelt, {MapEditTerrain.Letzter.PropsKept} Nachbarn mit Gegenstand " +
                        "unangetastet; sichtbar nach F5";
                 break;
             }
@@ -771,19 +771,7 @@ public partial class MapEditOverlay : Node2D
     }
 
     /// <summary>Steht in sec5 eine Einheit, deren Rumpf diese Zelle deckt?</summary>
-    private bool UnitAt(Vector2I cell)
-    {
-        var s = _map.Sec(5);
-        if (s == null) return false;
-        for (int o = 0; o + CwmData.EntityStride <= s.Length; o += CwmData.EntityStride)
-        {
-            if (s[o + 0x09] == 0xFF) continue;
-            int side = Simulation.NavGrid.HullSide(s[o + 0x0a]);
-            if (cell.X >= s[o] && cell.Y >= s[o + 1] && cell.X < s[o] + side && cell.Y < s[o + 1] + side)
-                return true;
-        }
-        return false;
-    }
+    private bool UnitAt(Vector2I cell) => MapFactory.EinheitAuf(_map, cell.X, cell.Y) >= 0;
 
     /// <summary>Weggenommene Einheiten bis zum naechsten F5 — ihr Bild steht
     /// noch in der lebenden Liste (sie umzunummern verschoebe die Belegung der

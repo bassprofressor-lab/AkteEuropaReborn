@@ -126,7 +126,7 @@ public partial class MapEditOverlay
             }
         GD.Print($"map-edit-check: Gegenstand wegnehmen -> {gone} von {wanted} weg, " +
                  $"Bodenzelle abgewiesen {refused} von 1 (muss 1 sein), " +
-                 $"{MapEditTerrain.LastPropsKept} Nachbarn mit Gegenstand unangetastet");
+                 $"{MapEditTerrain.Letzter.PropsKept} Nachbarn mit Gegenstand unangetastet");
 
         // 3c. UND DIE ZWEITE GEGENPROBE, die erst durch das Oeffnen vorhandener
         // Karten noetig wurde: ein GELAENDESTRICH darf keinen fremden Gegenstand
@@ -396,8 +396,8 @@ public partial class MapEditOverlay
                 else { rauAbgewiesen++; GD.Print($"map-edit-check: ⚠ rau ({c},{r}): {_say}"); }
             }
         GD.Print($"map-edit-check: Gelände rau -> {rauIst} von {rauSoll} Zellen sind jetzt rau, " +
-                 $"{rauAbgewiesen} abgewiesen; letzter Strich {MapEditTerrain.LastRetiled} Zellen " +
-                 $"neu gekachelt, {MapEditTerrain.LastMissing} davon aus dem Bodenblock");
+                 $"{rauAbgewiesen} abgewiesen; letzter Strich {MapEditTerrain.Letzter.Retiled} Zellen " +
+                 $"neu gekachelt, {MapEditTerrain.Letzter.Missing} davon aus dem Bodenblock");
 
         // ---- 5b. GEGENPROBE: Wasser auf falscher Hoehe muss abgewiesen werden
         int wasserHoehe = -1;

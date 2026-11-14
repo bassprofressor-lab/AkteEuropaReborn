@@ -602,7 +602,9 @@ public static class MapFactory
     /// UNSERE SETZUNG wie der ganze Editor.
     /// </summary>
     /// <returns>Die geleerte Platznummer oder −1.</returns>
-    public static int ClearEntityAt(CwmFile m, int col, int row)
+    /// <summary>⭐ 14.11.2026 — Editor-F: der Platz in sec5, dessen Rumpf (HullSide) die Zelle
+    /// deckt, oder −1. Stand zweimal da (hier und im Ueberzug, MapEditOverlay.UnitAt).</summary>
+    public static int EinheitAuf(CwmFile m, int col, int row)
     {
         var s = m.Sec(5);
         if (s == null) return -1;
@@ -610,9 +612,21 @@ public static class MapFactory
         {
             int o = slot * CwmData.EntityStride;
             if (s[o + 0x09] == 0xFF) continue;
+            int c = s[o], r = s[o + 1];
+            int side = Simulation.NavGrid.HullSide(s[o + 0x0a]);
+            if (col >= c && row >= r && col < c + side && row < r + side) return slot;
+        }
+        return -1;
+    }
+
+    public static int ClearEntityAt(CwmFile m, int col, int row)
+    {
+        var s = m.Sec(5);
+        int slot = EinheitAuf(m, col, row);
+        if (s == null || slot < 0) return -1;
+        {
+            int o = slot * CwmData.EntityStride;
             int c = s[o], r = s[o + 1], art = s[o + 0x0a];
-            int side = Simulation.NavGrid.HullSide(art);
-            if (col < c || row < r || col >= c + side || row >= r + side) continue;
 
             Array.Clear(s, o, CwmData.EntityStride);
             s[o + 0x09] = 0xFF;

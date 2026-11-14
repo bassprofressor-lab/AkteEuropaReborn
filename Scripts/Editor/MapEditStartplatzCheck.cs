@@ -378,7 +378,7 @@ public partial class MapEditOverlay
         var tc = _map.CodeAt(zz.X, zz.Y);
         _brush = Brush.Gelaende; _ground = MapFactory.Ground.Rough; _pinsel = 3;
         StrichBeginnen(true); Anwenden(zz, true); StrichEnden();
-        int ring = MapEditTerrain.LastRingGeaendert, abgelehnt = MapEditTerrain.LastRingAbgelehnt;
+        int ring = MapEditTerrain.Letzter.RingGeaendert, abgelehnt = MapEditTerrain.Letzter.RingAbgelehnt;
         bool rau = MapEditTerrain.ClassAt(_map, zz.X, zz.Y) == 1;
         int codeNach = _map.CodeAt(zz.X, zz.Y);
         bool b1 = await Warten(1);
@@ -418,7 +418,7 @@ public partial class MapEditOverlay
             int vor = _map.CodeAt(s2.X, s2.Y);
             _pinsel = 1;
             StrichBeginnen(true); Anwenden(s2, true); StrichEnden();
-            int ring2 = MapEditTerrain.LastRingGeaendert, abg2 = MapEditTerrain.LastRingAbgelehnt;
+            int ring2 = MapEditTerrain.Letzter.RingGeaendert, abg2 = MapEditTerrain.Letzter.RingAbgelehnt;
             int nach = _map.CodeAt(s2.X, s2.Y);
             int ecken = 0, bruch = 0;
             for (int r = s2.Y - 1; r <= s2.Y + 1; r++)

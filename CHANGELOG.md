@@ -263,6 +263,14 @@ your own copy of the 1997 game.
   a removed harbour frees its link. Also fixed: after removing a harbour the water cells beneath
   it became blocked ground and no ship could pass there any more — they are water again. Test
   bench `--map-edit-hafen-check`, opt-out `--editor-hafen-pinsel-alt`.
+- **Map editor tidied up** (Fable editor review, remainder of F; no visible change for players): the five
+  separate loops over a building's footprint pattern are one (`FussZellen`), the duplicated "is there a
+  unit here" check is one (`MapFactory.EinheitAuf`), the duplicated skirmish start from the editor is one
+  (`SkirmishSetup.EditorGefecht`), and the nine static counters of a brush stroke are one result object
+  (`MapEditTerrain.Letzter`). The other F points (test bench moved out, parameter set instead of a comma
+  string, dead paths, opt-outs for A4/A5) were already done on 12/13 Nov. Checked with all editor test
+  benches (terrain, P5, start positions, mirroring, chassis, forest, instant picture, play, infantry,
+  bridges, harbours: passed) and the old play path.
 - **Online room: choose your own start position** (Fable review D2 remainder, F): click a free position
   and **"MOVE HERE"** — you take that position and start at that start position on the map. So far a
   player could not choose their position (the `move_slot` call was written and unused; now every lobby

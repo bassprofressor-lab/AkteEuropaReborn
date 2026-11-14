@@ -119,14 +119,7 @@ public partial class MainMenu
     private void PlayMade(string mapName, int human, int aiCount, Rendering.MapEntityLayer.AiLevel level)
     {
         MapEditSession.Leave();
-        SkirmishSetup.ViewMap = "";
-        SkirmishSetup.Map = mapName;
-        SkirmishSetup.Human = human;
-        SkirmishSetup.AiCount = aiCount;
-        SkirmishSetup.Level = level;
-        SkirmishSetup.PlatzListe = false;   // P7: der Editor nimmt seine eigene Gegnerzahl
-        SkirmishSetup.CampaignMission = 0;
-        SkirmishSetup.Active = true;
+        SkirmishSetup.EditorGefecht(mapName, human, aiCount, level);
         // C9 (12.11.2026): nach der Partie zurueck in den Editorschirm, mit dieser Karte
         // geoeffnet — derselbe Weg wie Esc aus dem Bearbeitungsmodus (P3/C2).
         if (Array.IndexOf(Core.CommandLine.Args, "--editor-spielen-alt") < 0)

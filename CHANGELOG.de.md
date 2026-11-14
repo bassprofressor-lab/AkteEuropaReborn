@@ -284,6 +284,14 @@ bisher nur dort beschrieben.*
   behoben: nach dem Wegnehmen eines Hafens wurden die Wasserzellen darunter zu gesperrtem Boden,
   und kein Schiff fuhr mehr durch die Stelle — jetzt sind sie wieder Wasser. Prüfstand
   `--map-edit-hafen-check`, Gegenschalter `--editor-hafen-pinsel-alt`.
+- **Karteneditor aufgeräumt** (Fable-Prüfung des Editors, Rest von F; für Spieler ohne sichtbare Änderung):
+  die fünf eigenen Schleifen über das Grundmuster eines Gebäudes sind eine (`FussZellen`), die doppelte
+  Frage »steht hier eine Einheit« ist eine (`MapFactory.EinheitAuf`), der doppelte Gefechtsstart aus dem
+  Editor ist einer (`SkirmishSetup.EditorGefecht`), und die neun statischen Zähler eines Pinselstrichs
+  sind ein Ergebnisobjekt (`MapEditTerrain.Letzter`). Die übrigen F-Punkte (Prüfstand ausgelagert,
+  Parametersatz statt Kommazeile, tote Pfade, Gegenschalter für A4/A5) waren schon am 12./13.11.
+  erledigt. Geprüft mit allen Editor-Prüfständen (Gelände, P5, Startplätze, Spiegeln, Fahrwerk, Wald,
+  Sofortbild, Spielen, Fußvolk, Brücken, Häfen: bestanden) und dem alten Spielen-Weg.
 - **Online-Raum: den eigenen Startplatz wählen** (Fable-Prüfung D2-Rest, F): Einen freien Platz anklicken
   und **»HIERHIN WECHSELN«** — man setzt sich dorthin und startet damit an diesem Startplatz der Karte.
   Bisher konnte ein Mitspieler seinen Platz nicht wählen (der Aufruf `move_slot` war geschrieben und

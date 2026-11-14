@@ -197,6 +197,19 @@ public sealed class CwpFile : IBuildingPatterns
         }
     }
 
+    /// <summary>⭐ 14.11.2026 — Editor-F: die Zellen des Grundmusters einer Gebaeudeart (erstes
+    /// Muster, Kachel != 0), relativ zum Anker. Stand fuenfmal als eigene Schleife im Editor.</summary>
+    public System.Collections.Generic.List<(int Dx, int Dy)> FussZellen(int typ)
+    {
+        var l = new System.Collections.Generic.List<(int, int)>();
+        var bt = GetBuildingType(typ);
+        if (bt.IsEmpty) return l;
+        for (int dx = 0; dx < PatternWidth; dx++)
+            for (int dy = 0; dy < PatternHeight; dy++)
+                if (PatternTile(bt.FirstPattern, dx, dy) != 0) l.Add((dx, dy));
+        return l;
+    }
+
     public BuildingType GetBuildingType(int typ)
     {
         if (!HasBuildings || typ < 0 || typ >= BuildingTypeCount) return default;

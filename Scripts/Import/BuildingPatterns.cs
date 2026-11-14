@@ -41,6 +41,18 @@ public sealed class BuildingPatterns : IBuildingPatterns
 
     public IEnumerable<int> Types => _types.Keys;
 
+    /// <summary>Editor-F: die Zellen des Grundmusters (wie <see cref="CwpFile.FussZellen"/>).</summary>
+    public System.Collections.Generic.List<(int Dx, int Dy)> FussZellen(int typ)
+    {
+        var l = new System.Collections.Generic.List<(int, int)>();
+        var bt = GetBuildingType(typ);
+        if (bt.IsEmpty) return l;
+        for (int dx = 0; dx < CwpFile.PatternWidth; dx++)
+            for (int dy = 0; dy < CwpFile.PatternHeight; dy++)
+                if (PatternTile(bt.FirstPattern, dx, dy) != 0) l.Add((dx, dy));
+        return l;
+    }
+
     public CwpFile.BuildingType GetBuildingType(int typ)
         => _types.TryGetValue(typ, out var t) ? t : default;
 

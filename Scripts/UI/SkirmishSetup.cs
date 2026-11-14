@@ -239,6 +239,20 @@ public static class SkirmishSetup
     // --gefecht-plaetze=, Spielstand); Befehlszeile, Editor, Kampagne und Netz bleiben beim Alten.
     // Gegenschalter --gefecht-plaetze-alt.
 
+    /// <summary>⭐ 14.11.2026 — Editor-F: der Gefechtsstart aus dem Editor (Schirm »Im Gefecht spielen«
+    /// und der alte Weg des Bearbeitungsmodus) — stand zweimal da. Die Szene wechselt der Rufer.</summary>
+    public static void EditorGefecht(string map, int human, int aiCount, MapEntityLayer.AiLevel? level = null)
+    {
+        ViewMap = "";
+        Map = map;
+        Human = human;
+        AiCount = aiCount;
+        if (level is { } l) Level = l;
+        PlatzListe = false;   // P7: der Editor nimmt seine eigene Gegnerzahl
+        CampaignMission = 0;
+        Active = true;
+    }
+
     public const int ArtLeer = 0, ArtMensch = 1, ArtLeicht = 2, ArtNormal = 3, ArtSchwer = 4;
     /// <summary>Nur im Mehrspielerschirm (LAN-Gastgeber): hier startet ein Mitspieler. In der
     /// Sitzung wird daraus <see cref="ArtMensch"/> (besetzt) oder <see cref="ArtLeer"/>.</summary>

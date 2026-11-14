@@ -615,13 +615,7 @@ public partial class MapEditOverlay
             return;
         }
         MapEditSession.Leave();
-        UI.SkirmishSetup.ViewMap = "";
-        UI.SkirmishSetup.Map = made;
-        UI.SkirmishSetup.Human = 0;
-        UI.SkirmishSetup.AiCount = 7;
-        UI.SkirmishSetup.PlatzListe = false;   // P7
-        UI.SkirmishSetup.CampaignMission = 0;
-        UI.SkirmishSetup.Active = true;
+        UI.SkirmishSetup.EditorGefecht(made, 0, 7);
         GD.Print($"map-editor: spielen: {made} im Gefecht (aus dem Bearbeitungsmodus)");
         GetTree().ChangeSceneToFile(UI.SkirmishSetup.GameScene);
     }

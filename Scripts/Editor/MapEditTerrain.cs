@@ -208,19 +208,26 @@ public static class MapEditTerrain
     //  Den Umkreis nachziehen
     // ========================================================================
 
-    /// <summary>Wie viele Zellen der letzte Strich neu gekachelt hat, wie oft
-    /// dabei kein Eintrag zu finden war, und wie oft die Ufer-Nachbedingung
-    /// zugeschlagen hat — fuer den Pruefstand.</summary>
-    public static int LastRetiled { get; private set; }
-    public static int LastMissing { get; private set; }
-    /// <summary>Wie oft der letzte Strich eine Uferzelle mit einem
-    /// Innenland-Code erwischt und ersetzt hat, und wie oft das MISSLANG.</summary>
-    public static int LastShoreFixed { get; private set; }
-    public static int LastShoreLeft { get; private set; }
+    /// <summary>⭐ 14.11.2026 — Editor-F (Fable-Pruefung): DAS ERGEBNIS EINES STRICHS als ein Objekt.
+    /// Bis heute neun einzelne statische Zaehler (Letzter.Retiled, Letzter.Missing, …), die jeder Strich
+    /// zuruecksetzte und hochzaehlte; jetzt ein Satz je Strich (<see cref="Letzter"/>), neu in
+    /// <c>Refresh</c>. Die Bedeutung jedes Feldes ist dieselbe wie vorher.</summary>
+    public sealed class StrichErgebnis
+    {
+        /// <summary>Zellen neu gekachelt / davon ohne Eintrag (aus dem Bodenblock).</summary>
+        public int Retiled, Missing;
+        /// <summary>Uferzellen mit Innenland-Code ersetzt / nicht ersetzbar.</summary>
+        public int ShoreFixed, ShoreLeft;
+        /// <summary>Zellen mit Gegenstand unangetastet (siehe Refresh).</summary>
+        public int PropsKept;
+        /// <summary>bug-819: nach Ecken neu gezogen / liegen gelassen.</summary>
+        public int CornerPicked, CornerKept;
+        /// <summary>bug-827: Kettenring — Ecken umgestofft / Ring abgelehnt.</summary>
+        public int RingGeaendert, RingAbgelehnt;
+    }
 
-    /// <summary>Wie viele Zellen der letzte Strich UNANGETASTET gelassen hat,
-    /// weil auf ihnen ein Gegenstand steht — siehe <see cref="Refresh"/>.</summary>
-    public static int LastPropsKept { get; private set; }
+    /// <summary>Das Ergebnis des letzten Strichs (fuer Meldung und Pruefstand).</summary>
+    public static StrichErgebnis Letzter { get; private set; } = new();
 
     // ========================================================================
     //  Einen Gegenstand wieder wegnehmen
@@ -352,9 +359,7 @@ public static class MapEditTerrain
     private static void Refresh(CwmFile m, TileModel? model, TilePalette? pal,
                                 int col, int row, uint seed, TileSeams? seams, int malKlasse = -1)
     {
-        LastRetiled = LastMissing = LastShoreFixed = LastShoreLeft = LastPropsKept = 0;
-        LastCornerPicked = LastCornerKept = 0;
-        LastRingAbgelehnt = LastRingGeaendert = 0;
+        Letzter = new StrichErgebnis();
         var grid = Grid(m);
         var dist = TileModel.WaterDistance(m.Width, m.Height, grid);
         var inner = pal == null ? new HashSet<int>() : new HashSet<int>(pal.Ground);
@@ -404,14 +409,14 @@ public static class MapEditTerrain
                 // liegen R=4 entfernt und bleiben damit immer, wie sie sind.
                 // ⚠ Wasserecken werden NIE umgestoffen (Wasser ist Klasse und Hoehe,
                 // nicht nur Bild) — muesste eine, bleibt es bei den vier Ecken der
-                // Zelle wie bis gestern (gezaehlt in LastRingAbgelehnt).
+                // Zelle wie bis gestern (gezaehlt in Letzter.RingAbgelehnt).
                 // ⚠ Gemessen 13.11. (--map-edit-check, Zelle (78,5) am Ufer): lehnt der Ring
                 // ab und das Geroellbild setzt trotzdem die vier Ecken, entsteht ein
                 // Wasserfleck im Eckraster (Ecke 79,5). Dann gilt fuer das GEROELLBILD
                 // wieder der Weg von gestern (StoffDerKlasse, fuer rau: keiner).
                 if (tc.IsChain && !KettenringAlt && !RingSetzen(tc, vtx, vw, col - vx0, row - vy0, ziel))
                 {
-                    LastRingAbgelehnt++;
+                    Letzter.RingAbgelehnt++;
                     int vorher = StoffDerKlasse(tc, malKlasse);
                     if (vorher != ziel) ziel = vorher;
                 }
@@ -450,12 +455,12 @@ public static class MapEditTerrain
                 // fiel das nicht auf: die trug bis heute gar keine Gegenstaende.
                 //
                 // ⚠ <b>Die Gegenprobe ist GELAUFEN, nicht behauptet.</b> Ohne
-                // dieses <c>continue</c> (das <c>LastPropsKept++</c> blieb
+                // dieses <c>continue</c> (das <c>Letzter.PropsKept++</c> blieb
                 // stehen, damit sich sonst nichts aendert) meldete
                 // <c>--map-edit-check</c> auf map_01 nach ACHT Gelaendestrichen
                 // <b>634 von 644</b> alten Gegenstandszellen — zehn Baeume weg.
                 // Mit dem <c>continue</c>: <b>653 von 653</b>.
-                if (m.CodeAt(c, r) >= CwpFile.ObjectCodeBase) { LastPropsKept++; continue; }
+                if (m.CodeAt(c, r) >= CwpFile.ObjectCodeBase) { Letzter.PropsKept++; continue; }
                 int i = r * m.Width + c;
                 // ⚠ Gemessen (Kachelsatz 47): »rau« hat KEINEN eigenen Eckstoff — Geroell
                 // gibt es in den Originalen nur am Hang. Fuer die bemalte Zelle selbst
@@ -469,7 +474,7 @@ public static class MapEditTerrain
                     int flag = m.FlagAt(c, r);
                     if (quad >= 0 && tc.Knows(alt) && tc.QuadOf(alt) == quad && tc.Has(quad, flag)
                         && FlagBeimLegen.TryGetValue((c, r), out int f0) && f0 == flag)
-                    { LastCornerKept++; continue; }               // Ecken und Hang wie vorher: liegen lassen
+                    { Letzter.CornerKept++; continue; }               // Ecken und Hang wie vorher: liegen lassen
                     if (quad >= 0 && tc.Has(quad, flag))
                     {
                         uint roll0 = MapTerrain.Hash(c, r, seed ^ 0xC0DEu);
@@ -479,7 +484,7 @@ public static class MapEditTerrain
                         if (k0 >= 0)
                         {
                             m.SetCell(c, r, k0, m.ElevAt(c, r), flag);
-                            LastCornerPicked++; LastRetiled++;
+                            Letzter.CornerPicked++; Letzter.Retiled++;
                             continue;
                         }
                     }
@@ -502,7 +507,7 @@ public static class MapEditTerrain
                     // ⚠ Derselbe Rueckfall wie im Generator: der Bodenblock,
                     // wenn die gemessene Tabelle fuer diesen Schluessel nichts
                     // hat. Er kennt kein Ufer — deshalb wird er GEZAEHLT.
-                    LastMissing++;
+                    Letzter.Missing++;
                     var block = cls == 2 ? TilePalette.Water : pal?.Ground;
                     if (block == null || block.Length == 0) continue;
                     code = block[roll % (uint)block.Length];
@@ -516,22 +521,20 @@ public static class MapEditTerrain
                 {
                     if (model != null && model.TakeMerged(cls, 1, roll, out int rescue)
                         && !inner.Contains(rescue))
-                    { code = rescue; LastShoreFixed++; }
+                    { code = rescue; Letzter.ShoreFixed++; }
                     else if (model != null && model.TakeAnyAt(1, roll, out int any)
                              && !inner.Contains(any))
-                    { code = any; LastShoreFixed++; }
-                    else LastShoreLeft++;
+                    { code = any; Letzter.ShoreFixed++; }
+                    else Letzter.ShoreLeft++;
                 }
 
                 m.SetCell(c, r, code, m.ElevAt(c, r), m.FlagAt(c, r));
-                LastRetiled++;
+                Letzter.Retiled++;
             }
     }
 
     // ---- bug-819: der Eckweg ------------------------------------------------
 
-    /// <summary>Wie viele Zellen der letzte Strich nach Ecken neu zog bzw. liegen liess.</summary>
-    public static int LastCornerPicked, LastCornerKept;
 
     public static bool EckenAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-pinsel-ecken-alt") >= 0;
 
@@ -578,9 +581,6 @@ public static class MapEditTerrain
 
     // ---- bug-827: Geroellbild und Kettenring --------------------------------
 
-    /// <summary>Wie viele Ecken der letzte Strich fuer den Kettenring umgestofft hat,
-    /// und ob der Ring abgelehnt wurde (eine Wasserecke haette sich aendern muessen).</summary>
-    public static int LastRingGeaendert, LastRingAbgelehnt;
 
     public static bool KettenringAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-kettenring-aus") >= 0;
     public static bool GeroellBildAlt => Array.IndexOf(Core.CommandLine.Args, "--editor-geroellbild-aus") >= 0;
@@ -649,7 +649,7 @@ public static class MapEditTerrain
                 geaendert++;
             }
         Array.Copy(neu, vtx, vtx.Length);
-        LastRingGeaendert += geaendert;
+        Letzter.RingGeaendert += geaendert;
         return true;
     }
 

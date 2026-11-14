@@ -192,14 +192,9 @@ public static class MapNeutrals
         var kinds = new List<(Kind K, List<(int Dx, int Dy)> Foot, int FootW, int FootH)>();
         foreach (var k in Kinds)
         {
-            var bt = cwp.GetBuildingType(k.Typ);
-            if (bt.IsEmpty) continue;
-            var foot = new List<(int Dx, int Dy)>();
+            var foot = cwp.FussZellen(k.Typ);
             int fw = 0, fh = 0;
-            for (int dx = 0; dx < CwpFile.PatternWidth; dx++)
-                for (int dy = 0; dy < CwpFile.PatternHeight; dy++)
-                    if (cwp.PatternTile(bt.FirstPattern, dx, dy) != 0)
-                    { foot.Add((dx, dy)); fw = Math.Max(fw, dx + 1); fh = Math.Max(fh, dy + 1); }
+            foreach (var (dx, dy) in foot) { fw = Math.Max(fw, dx + 1); fh = Math.Max(fh, dy + 1); }
             if (foot.Count == 0) continue;
             kinds.Add((k, foot, fw, fh));
         }

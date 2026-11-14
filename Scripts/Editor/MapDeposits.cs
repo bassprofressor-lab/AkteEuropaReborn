@@ -213,14 +213,7 @@ public static class MapDeposits
         // Ankerzelle geprueft — dann sagt die Meldung das auch, statt eine
         // Genauigkeit vorzuspiegeln, die nicht da ist.
         var foot = new List<(int Dx, int Dy)>();
-        if (cwp != null && cwp.HasBuildings)
-        {
-            var bt = cwp.GetBuildingType(TypeFieldMine);
-            if (!bt.IsEmpty)
-                for (int dx = 0; dx < CwpFile.PatternWidth; dx++)
-                    for (int dy = 0; dy < CwpFile.PatternHeight; dy++)
-                        if (cwp.PatternTile(bt.FirstPattern, dx, dy) != 0) foot.Add((dx, dy));
-        }
+        if (cwp != null && cwp.HasBuildings) foot = cwp.FussZellen(TypeFieldMine);
         if (foot.Count == 0) foot.Add((0, 0));
 
         int w = m.Width, h = m.Height;

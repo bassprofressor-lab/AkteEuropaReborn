@@ -194,13 +194,8 @@ public partial class MapEntityLayer
     {
         var p = Patterns;
         if (p == null) return (1, 1);
-        var bt = p.GetBuildingType(typ);
-        if (bt.IsEmpty) return (1, 1);
         int w = 0, h = 0;
-        for (int dx = 0; dx < CwpFile.PatternWidth; dx++)
-            for (int dy = 0; dy < CwpFile.PatternHeight; dy++)
-                if (p.PatternTile(bt.FirstPattern, dx, dy) != 0)
-                { if (dx + 1 > w) w = dx + 1; if (dy + 1 > h) h = dy + 1; }
+        foreach (var (dx, dy) in p.FussZellen(typ)) { if (dx + 1 > w) w = dx + 1; if (dy + 1 > h) h = dy + 1; }
         return (w == 0 ? 1 : w, h == 0 ? 1 : h);
     }
 
@@ -208,15 +203,7 @@ public partial class MapEntityLayer
     /// einzeln, so wie <c>can_build_here</c> @0x4203C0 es tut.</summary>
     public List<(int Dx, int Dy)> EditorFootCells(int typ)
     {
-        var list = new List<(int, int)>();
-        var p = Patterns;
-        if (p == null) return list;
-        var bt = p.GetBuildingType(typ);
-        if (bt.IsEmpty) return list;
-        for (int dx = 0; dx < CwpFile.PatternWidth; dx++)
-            for (int dy = 0; dy < CwpFile.PatternHeight; dy++)
-                if (p.PatternTile(bt.FirstPattern, dx, dy) != 0) list.Add((dx, dy));
-        return list;
+        return Patterns?.FussZellen(typ) ?? new List<(int, int)>();
     }
 
     /// <summary>C4 (12.11.2026): der Name eines Waffenaufsatzes aus der Bauteiltafel
